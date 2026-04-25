@@ -4,3 +4,5 @@ dist/
 .env.local
 chats/
 project/
+.mcp.json
+.claude/settings.local.json

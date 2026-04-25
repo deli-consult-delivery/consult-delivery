@@ -1,8 +1,9 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Icon from '../components/Icon.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
 import UserAvatar from '../components/UserAvatar.jsx';
-import { AGENTS, TENANT_DATA, TENANTS, TASKS } from '../data.js';
+import { AGENTS, TENANTS, TASKS } from '../data.js';
+import { getKPIs, getChart7d, getAgentActions, getTenantBySlug } from '../lib/api.js';
 
 const AGENT_TASKS = {
   deli:  'Priorizando tarefas do dia',
@@ -17,15 +18,121 @@ const AGENT_TASKS = {
 const DAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
 const AGENT_STATUSES = ['working', 'working', 'idle', 'working', 'idle', 'working', 'working'];
 
+const EMPTY_KPIS = {
+  pedidos:       { value: 0,      delta: '—', trend: 'neutral' },
+  ticket:        { value: 'R$ 0', delta: '—', trend: 'neutral' },
+  tarefas:       { value: 0,      delta: '—', trend: 'neutral' },
+  inadimplencia: { value: 'R$ 0', delta: '—', trend: 'neutral' },
+};
+
+function formatBRL(cents) {
+  if (cents == null) return 'R$ 0';
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency', currency: 'BRL', maximumFractionDigits: 2,
+  }).format((cents ?? 0) / 100);
+}
+
+function formatPctDelta(pct) {
+  if (pct == null) return '—';
+  const n = Number(pct);
+  const sign = n > 0 ? '+' : '';
+  return `${sign}${n.toFixed(0)}%`;
+}
+
+function trendFromPct(pct) {
+  if (pct == null) return 'neutral';
+  const n = Number(pct);
+  if (n > 0) return 'up';
+  if (n < 0) return 'down';
+  return 'neutral';
+}
+
+function mapKPIs(row) {
+  if (!row) return EMPTY_KPIS;
+  return {
+    pedidos: {
+      value: row.pedidos_count ?? 0,
+      delta: formatPctDelta(row.pedidos_delta_pct),
+      trend: trendFromPct(row.pedidos_delta_pct),
+    },
+    ticket: {
+      value: formatBRL(row.ticket_medio_cents),
+      delta: formatPctDelta(row.ticket_delta_pct),
+      trend: trendFromPct(row.ticket_delta_pct),
+    },
+    tarefas: {
+      value: row.tarefas_count ?? 0,
+      delta: (row.tarefas_urgentes ?? 0) > 0
+        ? `${row.tarefas_urgentes} urgentes`
+        : 'tudo ok',
+      trend: (row.tarefas_urgentes ?? 0) > 0 ? 'neutral' : 'up',
+    },
+    inadimplencia: {
+      value: formatBRL(row.inadimplencia_cents),
+      delta: `${row.inadimplencia_clientes ?? 0} clientes`,
+      trend: (row.inadimplencia_cents ?? 0) > 0 ? 'down' : 'up',
+    },
+  };
+}
+
+function relativeTime(iso) {
+  if (!iso) return '';
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(diffMs / 60000);
+  if (min < 1) return 'agora';
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  return `${d}d`;
+}
+
 export default function DashboardScreen({ tenant }) {
-  const data = TENANT_DATA[tenant];
   const tenantMeta = TENANTS.find(t => t.id === tenant);
+
+  const [tenantId, setTenantId] = useState(null);
+  const [kpis, setKpis] = useState(EMPTY_KPIS);
+  const [chart7d, setChart7d] = useState([0, 0, 0, 0, 0, 0, 0]);
+  const [recent, setRecent] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    getTenantBySlug(tenant)
+      .then(t => { if (!cancelled) setTenantId(t?.id ?? null); })
+      .catch(err => { console.error('getTenantBySlug', err); if (!cancelled) setTenantId(null); });
+    return () => { cancelled = true; };
+  }, [tenant]);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([
+      getKPIs(tenantId),
+      getChart7d(tenantId),
+      getAgentActions(tenantId, 6),
+    ])
+      .then(([kpiRow, chart, actions]) => {
+        if (cancelled) return;
+        setKpis(mapKPIs(kpiRow));
+        setChart7d(chart);
+        setRecent(actions);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('dashboard fetch', err);
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [tenantId]);
 
   const agentStatus = useMemo(() =>
     AGENTS.map((a, i) => ({ ...a, status: AGENT_STATUSES[i], task: AGENT_TASKS[a.id] })),
   []);
 
-  const max = Math.max(...data.chart7d);
+  const max = Math.max(1, ...chart7d);
 
   return (
     <div className="route-enter" style={{ padding: 32, maxWidth: 1400, margin: '0 auto' }}>
@@ -37,7 +144,7 @@ export default function DashboardScreen({ tenant }) {
             <span style={{ display: 'inline-block', animation: 'dot-pulse 2s infinite' }}>👋</span>
           </h1>
           <p className="page-sub">
-            Aqui está o resumo da <strong style={{ color: 'var(--g-900)' }}>{tenantMeta.name}</strong> hoje · Quinta, 24 de abril
+            Aqui está o resumo da <strong style={{ color: 'var(--g-900)' }}>{tenantMeta?.name}</strong> hoje · Quinta, 24 de abril
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -93,10 +200,10 @@ export default function DashboardScreen({ tenant }) {
 
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 28 }}>
-        <KPI label="Pedidos hoje"       value={data.kpis.pedidos.value}       delta={data.kpis.pedidos.delta}       trend={data.kpis.pedidos.trend}       accent icon="paper" />
-        <KPI label="Ticket médio"       value={data.kpis.ticket.value}        delta={data.kpis.ticket.delta}        trend={data.kpis.ticket.trend}        icon="dollar" />
-        <KPI label="Tarefas pendentes"  value={data.kpis.tarefas.value}       delta={data.kpis.tarefas.delta}       trend={data.kpis.tarefas.trend}       icon="check" />
-        <KPI label="Inadimplência CORA" value={data.kpis.inadimplencia.value} delta={data.kpis.inadimplencia.delta} trend={data.kpis.inadimplencia.trend} icon="dollar" />
+        <KPI label="Pedidos hoje"       value={kpis.pedidos.value}       delta={kpis.pedidos.delta}       trend={kpis.pedidos.trend}       accent icon="paper" />
+        <KPI label="Ticket médio"       value={kpis.ticket.value}        delta={kpis.ticket.delta}        trend={kpis.ticket.trend}        icon="dollar" />
+        <KPI label="Tarefas pendentes"  value={kpis.tarefas.value}       delta={kpis.tarefas.delta}       trend={kpis.tarefas.trend}       icon="check" />
+        <KPI label="Inadimplência CORA" value={kpis.inadimplencia.value} delta={kpis.inadimplencia.delta} trend={kpis.inadimplencia.trend} icon="dollar" />
       </div>
 
       {/* Main split */}
@@ -107,7 +214,7 @@ export default function DashboardScreen({ tenant }) {
             <div>
               <h2 className="card-h3">Pedidos · últimos 7 dias</h2>
               <p style={{ fontSize: 12, color: 'var(--g-500)', marginTop: 4 }}>
-                Total: <strong style={{ color: 'var(--g-900)' }}>{data.chart7d.reduce((s, v) => s + v, 0)}</strong> pedidos
+                Total: <strong style={{ color: 'var(--g-900)' }}>{chart7d.reduce((s, v) => s + v, 0)}</strong> pedidos
               </p>
             </div>
             <div style={{ display: 'flex', gap: 4 }}>
@@ -122,10 +229,10 @@ export default function DashboardScreen({ tenant }) {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, height: 260, paddingBottom: 4 }}>
-            {data.chart7d.map((v, i) => {
+            {chart7d.map((v, i) => {
               const h = (v / max) * 100;
-              const isMax = v === max;
-              const isToday = i === data.chart7d.length - 1;
+              const isMax = v === max && v > 0;
+              const isToday = i === chart7d.length - 1;
               return (
                 <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
                   <div style={{
@@ -164,15 +271,20 @@ export default function DashboardScreen({ tenant }) {
             <span className="live-dot" />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {data.recent.map((r, i) => {
-              const agent = AGENTS.find(a => a.id === r.agent);
+            {recent.length === 0 && !loading && (
+              <div style={{ fontSize: 12, color: 'var(--g-500)', padding: '12px 0' }}>
+                Sem atividade recente.
+              </div>
+            )}
+            {recent.map((r) => {
+              const agent = AGENTS.find(a => a.id === r.agent_id);
               return (
-                <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }} className="slide-up">
-                  <AgentAvatar id={r.agent} size={32} />
+                <div key={r.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }} className="slide-up">
+                  <AgentAvatar id={r.agent_id} size={32} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, color: 'var(--g-900)', lineHeight: 1.4 }}>{r.text}</div>
                     <div style={{ fontSize: 11, color: 'var(--g-500)', marginTop: 4 }}>
-                      <strong style={{ color: agent?.color }}>{agent?.name}</strong> · {r.time}
+                      <strong style={{ color: agent?.color }}>{agent?.name}</strong> · {relativeTime(r.occurred_at)}
                     </div>
                   </div>
                 </div>
