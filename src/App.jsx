@@ -7,6 +7,9 @@ import DashboardScreen from './screens/DashboardScreen.jsx';
 import ChatScreen from './screens/ChatScreen.jsx';
 import KanbanScreen from './screens/KanbanScreen.jsx';
 import CoraScreen from './screens/CoraScreen.jsx';
+import CRMScreen from './screens/CRMScreen.jsx';
+import ReportsScreen from './screens/ReportsScreen.jsx';
+import SettingsScreen from './screens/SettingsScreen.jsx';
 import Placeholder from './screens/Placeholder.jsx';
 import AgentsPage from './screens/AgentsPage.jsx';
 import { CONVERSATIONS, INADIMPLENTES } from './data.js';
@@ -46,10 +49,10 @@ export default function App() {
         {route === 'chat'      && <ChatScreen tenant={tenant} />}
         {route === 'tasks'     && <KanbanScreen tenant={tenant} />}
         {route === 'cora'      && <CoraScreen tenant={tenant} />}
-        {route === 'crm'       && <Placeholder title="Clientes / CRM" desc="Em desenvolvimento — virá no próximo sprint." icon="users" />}
-        {route === 'reports'   && <Placeholder title="Relatórios" desc="VERA está preparando os templates." icon="chart" agent="vera" />}
+        {route === 'crm'       && <CRMScreen tenant={tenant} />}
+        {route === 'reports'   && <ReportsScreen tenant={tenant} />}
         {route === 'agents'    && <AgentsPage />}
-        {route === 'settings'  && <Placeholder title="Configurações" desc="Workspace, integrações, usuários, billing." icon="gear" />}
+        {route === 'settings'  && <SettingsScreen tenant={tenant} />}
       </main>
       <TweaksPanel title="Tweaks">
         <TweakSection title="Marca">
