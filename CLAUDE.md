@@ -112,6 +112,92 @@ Estimativa atual: R$ 560-760/mês
 - Supabase Pro: R$ 130
 - Claude API: R$ 300-500
 
+====================================================
+10. FLUXO GIT — TRABALHO EM EQUIPE
+====================================================
+
+REGRA PRINCIPAL: Nunca trabalhar direto no branch main.
+Cada pessoa cria seu próprio branch antes de começar qualquer tarefa.
+
+----------------------------------------------------
+COMO WANDSON COMEÇA UMA TAREFA
+----------------------------------------------------
+
+1. Abrir o terminal no Antigravity (ou qualquer terminal)
+2. Rodar:
+
+   git checkout main
+   git pull origin main
+   git checkout -b wandson/nome-da-tarefa
+
+   Exemplo: git checkout -b wandson/dashboard-supabase
+
+3. Abrir o Claude Code normalmente — ele vai trabalhar nesse branch
+4. Ao terminar, commitar e empurrar:
+
+   git push -u origin wandson/nome-da-tarefa
+
+5. Ir no GitHub → abrir Pull Request → Yasmin revisa → Merge
+
+----------------------------------------------------
+COMO YASMIN COMEÇA UMA TAREFA
+----------------------------------------------------
+
+1. Abrir o terminal
+2. Rodar:
+
+   git checkout main
+   git pull origin main
+   git checkout -b yasmin/nome-da-tarefa
+
+   Exemplo: git checkout -b yasmin/chat-realtime
+
+3. Abrir o Claude Code — ele vai trabalhar nesse branch
+4. Ao terminar, commitar e empurrar:
+
+   git push -u origin yasmin/nome-da-tarefa
+
+5. Abrir Pull Request no GitHub → Wandson aprova → Merge
+
+----------------------------------------------------
+NOMES DE BRANCH — PADRÃO
+----------------------------------------------------
+
+wandson/dashboard-kpis
+wandson/login-real
+yasmin/chat-unificado
+yasmin/kanban-drag-drop
+fix/bug-topbar
+hotfix/login-erro
+
+----------------------------------------------------
+REGRAS PARA O CLAUDE CODE
+----------------------------------------------------
+
+Ao iniciar uma sessão, SEMPRE verificar em qual branch está:
+
+   git branch --show-current
+
+Se estiver em main: PARAR e pedir para o usuário criar um branch.
+Nunca fazer commit direto no main.
+Nunca fazer push --force no main.
+
+Antes de qualquer trabalho novo, rodar:
+
+   git pull origin main
+
+para garantir que o branch está atualizado com o que a outra pessoa fez.
+
+----------------------------------------------------
+RESOLVENDO CONFLITO (se acontecer)
+----------------------------------------------------
+
+Se o git pull trouxer conflito:
+1. Abrir o arquivo conflitado no editor
+2. Escolher qual versão manter (ou misturar as duas)
+3. Remover as marcações <<<<<<, =======, >>>>>>>
+4. git add . && git commit -m "resolve conflito em X"
+
 ================================================================================
 
 ROADMAP 30 DIAS - MVP PLATAFORMA CONSULT DELIVERY
