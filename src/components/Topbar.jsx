@@ -2,7 +2,7 @@ import { useState } from 'react';
 import Icon from './Icon.jsx';
 import AgentAvatar from './AgentAvatar.jsx';
 import UserAvatar from './UserAvatar.jsx';
-import { TENANTS } from '../data.js';
+import { TENANTS as MOCK_TENANTS } from '../data.js';
 
 const ROUTE_LABELS = {
   dashboard: 'Dashboard',
@@ -21,10 +21,11 @@ const NOTIFICATIONS = [
   { agent: 'deli', text: '3 tarefas foram priorizadas pra hoje', time: '1h' },
 ];
 
-export default function Topbar({ route, tenant, setTenant }) {
+export default function Topbar({ route, tenant, setTenant, tenants }) {
   const [openTenant, setOpenTenant] = useState(false);
   const [openNotif, setOpenNotif] = useState(false);
-  const cur = TENANTS.find(t => t.id === tenant);
+  const list = tenants ?? MOCK_TENANTS;
+  const cur = list.find(t => t.id === tenant) ?? list[0];
 
   return (
     <header className="topbar">
@@ -71,9 +72,9 @@ export default function Topbar({ route, tenant, setTenant }) {
           {openTenant && (
             <div className="dropdown" style={{ right: 0, minWidth: 280 }} onMouseLeave={() => setOpenTenant(false)}>
               <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--g-100)', fontSize: 11, color: 'var(--g-500)', textTransform: 'uppercase', fontWeight: 600, letterSpacing: 0.5 }}>
-                Clientes ({TENANTS.length})
+                Clientes ({list.length})
               </div>
-              {TENANTS.map(t => (
+              {list.map(t => (
                 <div
                   key={t.id}
                   className={`dropdown-item ${tenant === t.id ? 'active' : ''}`}

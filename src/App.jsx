@@ -10,9 +10,10 @@ import CoraScreen from './screens/CoraScreen.jsx';
 import CRMScreen from './screens/CRMScreen.jsx';
 import ReportsScreen from './screens/ReportsScreen.jsx';
 import SettingsScreen from './screens/SettingsScreen.jsx';
-import Placeholder from './screens/Placeholder.jsx';
 import AgentsPage from './screens/AgentsPage.jsx';
-import { CONVERSATIONS, INADIMPLENTES } from './data.js';
+import { CONVERSATIONS, INADIMPLENTES, TENANTS } from './data.js';
+import { supabase } from './lib/supabase.js';
+import { listTenants } from './lib/api.js';
 
 const TWEAK_DEFAULTS = {
   primaryColor: '#B70C00',
@@ -22,17 +23,66 @@ const TWEAK_DEFAULTS = {
 };
 
 export default function App() {
-  const [loggedIn, setLoggedIn] = useState(false);
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [tenants, setTenants] = useState(TENANTS);
   const [route, setRoute] = useState('dashboard');
-  const [tenant, setTenant] = useState('pizza-joao');
+  const [tenant, setTenant] = useState(TENANTS[0].id);
+  const [tenantDbId, setTenantDbId] = useState(null);
   const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    listTenants().then(real => {
+      if (real?.length) {
+        const mapped = real.map(t => ({
+          id: t.slug,
+          dbId: t.id,
+          name: t.name,
+          emoji: t.emoji || '🏪',
+          color: t.color || '#B70C00',
+        }));
+        setTenants(mapped);
+        setTenant(mapped[0].id);
+        setTenantDbId(mapped[0].dbId);
+      }
+    }).catch(() => {});
+  }, [session]);
+
+  useEffect(() => {
+    const cur = tenants.find(t => t.id === tenant);
+    setTenantDbId(cur?.dbId ?? null);
+  }, [tenant, tenants]);
 
   useEffect(() => {
     document.documentElement.style.setProperty('--red', tweaks.primaryColor);
   }, [tweaks.primaryColor]);
 
-  if (!loggedIn) {
-    return <LoginScreen onLogin={() => setLoggedIn(true)} />;
+  if (authLoading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--white)' }}>
+        <svg width="24" height="24" viewBox="0 0 24 24" style={{ animation: 'spin 0.8s linear infinite' }}>
+          <circle cx="12" cy="12" r="10" fill="none" stroke="var(--red)" strokeWidth="3" strokeDasharray="60" strokeDashoffset="20" />
+        </svg>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <LoginScreen onLogin={setSession} />;
   }
 
   const convs = CONVERSATIONS[tenant] || [];
@@ -43,16 +93,16 @@ export default function App() {
   return (
     <div className="app-shell">
       <Sidebar route={route} setRoute={setRoute} counts={counts} />
-      <Topbar route={route} tenant={tenant} setTenant={setTenant} />
+      <Topbar route={route} tenant={tenant} setTenant={setTenant} tenants={tenants} />
       <main className="main scroll" key={route + tenant}>
-        {route === 'dashboard' && <DashboardScreen tenant={tenant} />}
-        {route === 'chat'      && <ChatScreen tenant={tenant} />}
-        {route === 'tasks'     && <KanbanScreen tenant={tenant} />}
-        {route === 'cora'      && <CoraScreen tenant={tenant} />}
-        {route === 'crm'       && <CRMScreen tenant={tenant} />}
-        {route === 'reports'   && <ReportsScreen tenant={tenant} />}
+        {route === 'dashboard' && <DashboardScreen tenant={tenant} tenantDbId={tenantDbId} />}
+        {route === 'chat'      && <ChatScreen tenant={tenant} tenantDbId={tenantDbId} />}
+        {route === 'tasks'     && <KanbanScreen tenant={tenant} tenantDbId={tenantDbId} />}
+        {route === 'cora'      && <CoraScreen tenant={tenant} tenantDbId={tenantDbId} />}
+        {route === 'crm'       && <CRMScreen tenant={tenant} tenantDbId={tenantDbId} />}
+        {route === 'reports'   && <ReportsScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'agents'    && <AgentsPage />}
-        {route === 'settings'  && <SettingsScreen tenant={tenant} />}
+        {route === 'settings'  && <SettingsScreen tenant={tenant} tenantDbId={tenantDbId} />}
       </main>
       <TweaksPanel title="Tweaks">
         <TweakSection title="Marca">

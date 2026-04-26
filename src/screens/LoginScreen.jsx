@@ -1,16 +1,40 @@
 import { useState } from 'react';
 import Icon from '../components/Icon.jsx';
+import { supabase } from '../lib/supabase.js';
 import rocketLogo from '/assets/rocket-logo.png';
 
 export default function LoginScreen({ onLogin }) {
-  const [email, setEmail] = useState('wandson@consultdelivery.com.br');
-  const [pwd, setPwd] = useState('••••••••••');
+  const [email, setEmail] = useState('');
+  const [pwd, setPwd] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
+    setError('');
     setLoading(true);
-    setTimeout(() => onLogin(), 900);
+
+    const { data, error: authError } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password: pwd,
+    });
+
+    if (authError) {
+      setError(authError.message === 'Invalid login credentials'
+        ? 'E-mail ou senha incorretos.'
+        : authError.message);
+      setLoading(false);
+      return;
+    }
+
+    onLogin(data.session);
+  };
+
+  const loginWithGoogle = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    });
   };
 
   return (
@@ -25,7 +49,6 @@ export default function LoginScreen({ onLogin }) {
         display: 'flex',
         flexDirection: 'column',
       }}>
-        {/* Decorative red glow */}
         <div style={{
           position: 'absolute', top: '-30%', left: '-20%',
           width: 600, height: 600, borderRadius: '50%',
@@ -38,7 +61,6 @@ export default function LoginScreen({ onLogin }) {
           background: 'radial-gradient(circle, rgba(183,12,0,0.25) 0%, rgba(183,12,0,0) 60%)',
           pointerEvents: 'none',
         }} />
-        {/* Grid texture */}
         <div style={{
           position: 'absolute', inset: 0,
           backgroundImage: `linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)`,
@@ -98,11 +120,29 @@ export default function LoginScreen({ onLogin }) {
       <div style={{ background: 'var(--white)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 48 }}>
         <form onSubmit={submit} style={{ width: '100%', maxWidth: 400 }}>
           <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--black)', letterSpacing: '-0.5px' }}>Entrar na plataforma</h1>
-          <p style={{ fontSize: 14, color: 'var(--g-500)', marginTop: 8 }}>Bem-vindo de volta, Wandson 👋</p>
+          <p style={{ fontSize: 14, color: 'var(--g-500)', marginTop: 8 }}>Bem-vindo de volta 👋</p>
+
+          {error && (
+            <div style={{
+              marginTop: 16, padding: '10px 14px',
+              background: '#FEF2F2', border: '1px solid #FECACA',
+              borderRadius: 8, fontSize: 13, color: '#DC2626',
+            }}>
+              {error}
+            </div>
+          )}
 
           <div style={{ marginTop: 32 }}>
             <label className="label" style={{ display: 'block', marginBottom: 6 }}>E-mail</label>
-            <input className="input" value={email} onChange={e => setEmail(e.target.value)} type="email" />
+            <input
+              className="input"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              type="email"
+              placeholder="seu@email.com.br"
+              required
+              autoFocus
+            />
           </div>
 
           <div style={{ marginTop: 16 }}>
@@ -110,7 +150,14 @@ export default function LoginScreen({ onLogin }) {
               <label className="label" style={{ display: 'block', marginBottom: 6 }}>Senha</label>
               <a href="#" style={{ fontSize: 12, color: 'var(--red)', fontWeight: 600, textDecoration: 'none' }}>Esqueci a senha</a>
             </div>
-            <input className="input" value={pwd} onChange={e => setPwd(e.target.value)} type="password" />
+            <input
+              className="input"
+              value={pwd}
+              onChange={e => setPwd(e.target.value)}
+              type="password"
+              placeholder="••••••••"
+              required
+            />
           </div>
 
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 20, fontSize: 13, color: 'var(--g-700)', cursor: 'pointer' }}>
@@ -140,7 +187,7 @@ export default function LoginScreen({ onLogin }) {
             <div style={{ flex: 1, height: 1, background: 'var(--g-200)' }} />
           </div>
 
-          <button type="button" className="btn-secondary" style={{ width: '100%', justifyContent: 'center', padding: '12px 20px' }}>
+          <button type="button" className="btn-secondary" onClick={loginWithGoogle} style={{ width: '100%', justifyContent: 'center', padding: '12px 20px' }}>
             <svg width="18" height="18" viewBox="0 0 48 48">
               <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
               <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
