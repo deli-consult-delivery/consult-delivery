@@ -1,14 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Icon from '../components/Icon.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
 import UserAvatar from '../components/UserAvatar.jsx';
 import { SETTINGS_DATA, AGENTS } from '../data.js';
+import { supabase } from '../lib/supabase.js';
+import { setWebhook, getQRCode, getInstanceStatus } from '../lib/evolution.js';
 
 /* ─── Tabs ────────────────────────────────────────────── */
 const TABS = [
   { id: 'workspace',    label: 'Workspace',    icon: 'building'  },
   { id: 'users',        label: 'Usuários',     icon: 'users'     },
   { id: 'integrations', label: 'Integrações',  icon: 'refresh'   },
+  { id: 'whatsapp',     label: 'WhatsApp',     icon: 'whatsapp'  },
   { id: 'agents',       label: 'Agentes IA',   icon: 'bot'       },
   { id: 'billing',      label: 'Billing',      icon: 'dollar'    },
   { id: 'security',     label: 'Segurança',    icon: 'gear'      },
@@ -92,11 +95,391 @@ export default function SettingsScreen({ tenant }) {
           {tab === 'workspace'    && <TabWorkspace workspace={workspace} />}
           {tab === 'users'        && <TabUsers />}
           {tab === 'integrations' && <TabIntegrations />}
+          {tab === 'whatsapp'     && <TabWhatsApp />}
           {tab === 'agents'       && <TabAgents />}
           {tab === 'billing'      && <TabBilling />}
           {tab === 'security'     && <TabSecurity />}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ─── Tab: WhatsApp ───────────────────────────────────── */
+function TabWhatsApp() {
+  const EVO_URL   = import.meta.env.VITE_EVOLUTION_URL;
+  const EVO_KEY   = import.meta.env.VITE_EVOLUTION_KEY;
+  const SUPA_URL  = import.meta.env.VITE_SUPABASE_URL;
+  const WEBHOOK   = SUPA_URL ? `${SUPA_URL}/functions/v1/evolution-webhook` : '';
+  const HAS_EVO   = !!(EVO_URL && EVO_KEY);
+
+  const [instances,    setInstances]    = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [showForm,     setShowForm]     = useState(false);
+  const [savingForm,   setSavingForm]   = useState(false);
+  const [showQR,       setShowQR]       = useState(null); // instance_name
+  const [qrData,       setQrData]       = useState(null);
+  const [qrLoading,    setQrLoading]    = useState(false);
+  const [form, setForm] = useState({ name: '', url: EVO_URL || '', key: '' });
+
+  useEffect(() => {
+    loadInstances();
+    const interval = setInterval(pollStatuses, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Polling do QR code quando modal aberto
+  useEffect(() => {
+    if (!showQR) { setQrData(null); return; }
+    fetchQR(showQR);
+    const interval = setInterval(() => fetchQR(showQR), 5000);
+    return () => clearInterval(interval);
+  }, [showQR]);
+
+  async function loadInstances() {
+    setLoading(true);
+    try {
+      const { data } = await supabase
+        .from('evolution_instances')
+        .select('*')
+        .order('created_at');
+      if (data && data.length > 0) {
+        setInstances(data);
+        setLoading(false);
+        return;
+      }
+    } catch { /* tabela ainda não existe */ }
+
+    // Fallback: mostrar instância padrão das env vars
+    if (HAS_EVO) {
+      setInstances([{
+        id:            'default',
+        instance_name: 'suporte-consult-delivery',
+        evolution_url: EVO_URL,
+        status:        'disconnected',
+        phone:         null,
+        profile_name:  null,
+      }]);
+    }
+    setLoading(false);
+  }
+
+  async function pollStatuses() {
+    if (!HAS_EVO) return;
+    setInstances(prev => prev.map(async inst => {
+      try {
+        const s = await getInstanceStatus(inst.instance_name);
+        const st = s?.instance?.state === 'open' ? 'connected' : 'disconnected';
+        return { ...inst, status: st };
+      } catch { return inst; }
+    }));
+  }
+
+  async function fetchQR(instanceName) {
+    if (!HAS_EVO) return;
+    setQrLoading(true);
+    try {
+      const data = await getQRCode(instanceName);
+      const b64  = data?.base64 || data?.qrcode?.base64 || null;
+      if (b64) setQrData(b64);
+
+      // Verificar se já conectou
+      const status = await getInstanceStatus(instanceName);
+      if (status?.instance?.state === 'open') {
+        await supabase
+          .from('evolution_instances')
+          .update({ status: 'connected' })
+          .eq('instance_name', instanceName);
+        setInstances(prev => prev.map(i =>
+          i.instance_name === instanceName ? { ...i, status: 'connected' } : i,
+        ));
+        setShowQR(null);
+      }
+    } catch { /* ignore */ }
+    setQrLoading(false);
+  }
+
+  async function handleConfigureWebhook(instanceName) {
+    if (!HAS_EVO || !WEBHOOK) {
+      alert('Configure VITE_EVOLUTION_URL e VITE_SUPABASE_URL primeiro.');
+      return;
+    }
+    try {
+      await setWebhook(instanceName, WEBHOOK);
+      alert(`Webhook configurado com sucesso!\n\nURL: ${WEBHOOK}`);
+    } catch (err) {
+      alert('Erro ao configurar webhook: ' + (err?.message || err));
+    }
+  }
+
+  async function handleSaveInstance() {
+    if (!form.name || !form.url || !form.key) return;
+    setSavingForm(true);
+    try {
+      const { data, error } = await supabase
+        .from('evolution_instances')
+        .insert({ instance_name: form.name, evolution_url: form.url, api_key: form.key, status: 'disconnected' })
+        .select()
+        .single();
+      if (data) {
+        setInstances(prev => [...prev.filter(i => i.id !== 'default'), data]);
+        setShowForm(false);
+        setForm({ name: '', url: EVO_URL || '', key: '' });
+      } else {
+        alert('Erro ao salvar: ' + error?.message);
+      }
+    } catch (err) {
+      alert('Erro: ' + err?.message);
+    }
+    setSavingForm(false);
+  }
+
+  const statusBadge = status => ({
+    connected:    { cls: 'badge-green',  label: '● Conectado'    },
+    connecting:   { cls: 'badge-yellow', label: '◌ Conectando'   },
+    disconnected: { cls: 'badge-gray',   label: '○ Desconectado' },
+  }[status] || { cls: 'badge-gray', label: '○ Desconectado' });
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+      {/* Aviso se env vars ausentes */}
+      {!HAS_EVO && (
+        <div className="card" style={{ padding: 16, borderLeft: '3px solid var(--warn)', background: '#fffbeb' }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+            <Icon name="info" size={16} style={{ color: 'var(--warn)', flexShrink: 0, marginTop: 1 }} />
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--g-900)' }}>
+                Variáveis de ambiente não configuradas
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--g-600)', marginTop: 4, lineHeight: 1.6 }}>
+                Adicione <code>VITE_EVOLUTION_URL</code> e <code>VITE_EVOLUTION_KEY</code> no{' '}
+                <code>.env.local</code> para ativar a integração WhatsApp.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lista de instâncias */}
+      <SectionCard title="Instâncias WhatsApp">
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+          <button className="btn-primary" style={{ fontSize: 13 }} onClick={() => setShowForm(v => !v)}>
+            <Icon name="plus" size={13} /> Nova instância
+          </button>
+        </div>
+
+        {/* Formulário de adição */}
+        {showForm && (
+          <div style={{ marginBottom: 16, padding: 16, background: 'var(--g-50)', borderRadius: 'var(--r-md)', border: '1px solid var(--g-200)' }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--g-900)', marginBottom: 14 }}>
+              Nova instância Evolution API
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+              <div>
+                <div className="label" style={{ marginBottom: 6 }}>Nome da instância</div>
+                <input className="input" style={{ fontSize: 13 }} placeholder="ex: minha-loja"
+                  value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+              </div>
+              <div>
+                <div className="label" style={{ marginBottom: 6 }}>URL da Evolution API</div>
+                <input className="input" style={{ fontSize: 13 }} placeholder="https://evo.exemplo.com"
+                  value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} />
+              </div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <div className="label" style={{ marginBottom: 6 }}>API Key</div>
+              <input className="input" type="password" style={{ fontSize: 13 }} placeholder="Sua API key"
+                value={form.key} onChange={e => setForm(f => ({ ...f, key: e.target.value }))} />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn-primary" style={{ fontSize: 13 }} onClick={handleSaveInstance} disabled={savingForm}>
+                {savingForm ? 'Salvando…' : 'Salvar instância'}
+              </button>
+              <button className="btn-secondary" style={{ fontSize: 13 }} onClick={() => setShowForm(false)}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Tabela de instâncias */}
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: 24, color: 'var(--g-400)', fontSize: 13 }}>
+            Carregando instâncias…
+          </div>
+        ) : instances.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 24, color: 'var(--g-400)', fontSize: 13 }}>
+            Nenhuma instância cadastrada. Clique em "Nova instância" para começar.
+          </div>
+        ) : (
+          <div style={{ border: '1px solid var(--g-200)', borderRadius: 'var(--r-md)', overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: 'var(--g-50)', borderBottom: '1px solid var(--g-200)' }}>
+                  {['Instância', 'Status', 'Telefone / Perfil', 'Ações'].map(h => (
+                    <th key={h} style={{
+                      padding: '10px 14px', fontSize: 11, fontWeight: 700,
+                      color: 'var(--g-500)', textTransform: 'uppercase',
+                      letterSpacing: 0.5, textAlign: 'left',
+                    }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {instances.map((inst, i) => {
+                  const sb = statusBadge(inst.status);
+                  return (
+                    <tr key={inst.id} style={{
+                      borderBottom: i < instances.length - 1 ? '1px solid var(--g-100)' : 'none',
+                      background: 'white',
+                    }}>
+                      <td style={{ padding: '14px 14px' }}>
+                        <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--g-900)' }}>
+                          {inst.instance_name}
+                        </div>
+                        <div style={{
+                          fontSize: 11, color: 'var(--g-400)',
+                          fontFamily: 'ui-monospace, monospace', marginTop: 2,
+                        }}>
+                          {(inst.evolution_url || EVO_URL || '').replace('https://', '').split('/')[0]}
+                        </div>
+                      </td>
+                      <td style={{ padding: '14px 14px' }}>
+                        <span className={`badge ${sb.cls}`}>{sb.label}</span>
+                      </td>
+                      <td style={{ padding: '14px 14px', fontSize: 12, color: 'var(--g-600)' }}>
+                        {inst.phone || inst.profile_name || '—'}
+                      </td>
+                      <td style={{ padding: '14px 14px' }}>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {inst.status !== 'connected' && (
+                            <button
+                              className="btn-primary"
+                              style={{ fontSize: 12, padding: '6px 12px' }}
+                              onClick={() => setShowQR(inst.instance_name)}
+                            >
+                              Conectar
+                            </button>
+                          )}
+                          <button
+                            className="btn-secondary"
+                            style={{ fontSize: 12, padding: '6px 12px' }}
+                            onClick={() => handleConfigureWebhook(inst.instance_name)}
+                            title={`Webhook: ${WEBHOOK}`}
+                          >
+                            <Icon name="refresh" size={11} /> Webhook
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SectionCard>
+
+      {/* Edge Function info */}
+      <SectionCard title="Edge Function — Webhook receiver">
+        <p style={{ fontSize: 13, color: 'var(--g-600)', marginBottom: 14, lineHeight: 1.6 }}>
+          O webhook recebe mensagens da Evolution API e as persiste no Supabase.
+          O frontend lê em tempo real via Supabase Realtime. O arquivo está em{' '}
+          <code>supabase/functions/evolution-webhook/index.ts</code>.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '10px 14px', background: 'var(--g-900)', borderRadius: 'var(--r-sm)',
+          }}>
+            <code style={{ fontSize: 12, color: '#22D3EE', flex: 1, wordBreak: 'break-all' }}>
+              {WEBHOOK || 'Configure VITE_SUPABASE_URL para ver a URL'}
+            </code>
+            {WEBHOOK && (
+              <button
+                className="btn-secondary"
+                style={{ fontSize: 11, padding: '4px 8px', flexShrink: 0 }}
+                onClick={() => navigator.clipboard.writeText(WEBHOOK)}
+              >
+                Copiar
+              </button>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--g-500)' }}>
+            Deploy: <code>supabase functions deploy evolution-webhook</code>
+            {' · '}
+            Migration: <code>supabase db push</code>
+          </div>
+        </div>
+      </SectionCard>
+
+      {/* Modal QR Code */}
+      {showQR && (
+        <>
+          <div
+            onClick={() => setShowQR(null)}
+            style={{
+              position: 'fixed', inset: 0,
+              background: 'rgba(13,13,13,0.5)', zIndex: 100,
+              animation: 'fadeIn 180ms ease',
+            }}
+          />
+          <div style={{
+            position: 'fixed', top: '50%', left: '50%',
+            transform: 'translate(-50%,-50%)',
+            background: 'white', borderRadius: 'var(--r-lg)',
+            padding: 32, zIndex: 101, width: 360,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--g-900)' }}>
+                  Conectar {showQR}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--g-500)', marginTop: 2 }}>
+                  Escaneie o QR Code com o WhatsApp
+                </div>
+              </div>
+              <button className="btn-icon" onClick={() => setShowQR(null)}>
+                <Icon name="x" size={16} />
+              </button>
+            </div>
+
+            <div style={{
+              width: '100%', aspectRatio: '1', background: 'var(--g-100)',
+              borderRadius: 'var(--r-md)', display: 'flex',
+              alignItems: 'center', justifyContent: 'center',
+              marginBottom: 16, overflow: 'hidden',
+            }}>
+              {qrLoading && !qrData ? (
+                <div style={{ textAlign: 'center', color: 'var(--g-400)', fontSize: 13 }}>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>⏳</div>
+                  Gerando QR Code…
+                </div>
+              ) : qrData ? (
+                <img
+                  src={`data:image/png;base64,${qrData}`}
+                  alt="QR Code"
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                />
+              ) : (
+                <div style={{ textAlign: 'center', color: 'var(--g-400)', fontSize: 13, padding: 20 }}>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>📱</div>
+                  {!HAS_EVO
+                    ? 'Configure VITE_EVOLUTION_URL e VITE_EVOLUTION_KEY'
+                    : 'Aguardando QR Code da Evolution API…'}
+                </div>
+              )}
+            </div>
+
+            <div style={{ fontSize: 12, color: 'var(--g-500)', textAlign: 'center', lineHeight: 1.5 }}>
+              Verificando conexão a cada 5 segundos.
+              A janela fecha automaticamente ao conectar.
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
