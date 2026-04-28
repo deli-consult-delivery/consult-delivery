@@ -109,6 +109,80 @@ export async function fetchGroups(instanceName) {
   return res.json();
 }
 
+/* ─── Grupos WhatsApp ─────────────────────────────────── */
+
+// Criar grupo (participants = array de números: "5511999990001")
+export async function createWAGroup(instanceName, subject, participants) {
+  const res = await fetch(`${EVO_URL}/group/create/${instanceName}`, {
+    method: 'POST', headers,
+    body: JSON.stringify({ subject, participants }),
+  });
+  return res.json();
+}
+
+// Atualizar nome do grupo
+export async function updateWAGroupSubject(instanceName, groupJid, subject) {
+  const res = await fetch(`${EVO_URL}/group/updateGroupSubject/${instanceName}`, {
+    method: 'PUT', headers,
+    body: JSON.stringify({ groupJid, subject }),
+  });
+  return res.json();
+}
+
+// Adicionar participantes
+export async function addWAGroupParticipants(instanceName, groupJid, participants) {
+  const res = await fetch(`${EVO_URL}/group/addParticipant/${instanceName}`, {
+    method: 'PUT', headers,
+    body: JSON.stringify({ groupJid, participants }),
+  });
+  return res.json();
+}
+
+// Remover participante
+export async function removeWAGroupParticipant(instanceName, groupJid, participants) {
+  const res = await fetch(`${EVO_URL}/group/removeParticipant/${instanceName}`, {
+    method: 'DELETE', headers,
+    body: JSON.stringify({ groupJid, participants }),
+  });
+  return res.json();
+}
+
+// Info detalhada de um grupo
+export async function fetchWAGroupInfo(instanceName, groupJid) {
+  const res = await fetch(
+    `${EVO_URL}/group/findGroupInfos/${instanceName}?groupJid=${encodeURIComponent(groupJid)}`,
+    { headers },
+  );
+  return res.json();
+}
+
+// Participantes de um grupo
+export async function fetchWAGroupParticipants(instanceName, groupJid) {
+  const res = await fetch(
+    `${EVO_URL}/group/participants/${instanceName}?groupJid=${encodeURIComponent(groupJid)}`,
+    { headers },
+  );
+  return res.json();
+}
+
+// Sair / deletar grupo (admin deixa o grupo)
+export async function leaveWAGroup(instanceName, groupJid) {
+  const res = await fetch(`${EVO_URL}/group/leaveGroup/${instanceName}`, {
+    method: 'DELETE', headers,
+    body: JSON.stringify({ groupJid }),
+  });
+  return res.json();
+}
+
+// Enviar mensagem de texto para grupo
+export async function sendGroupTextMessage(instanceName, groupJid, text) {
+  const res = await fetch(`${EVO_URL}/message/sendText/${instanceName}`, {
+    method: 'POST', headers,
+    body: JSON.stringify({ number: groupJid, text }),
+  });
+  return res.json();
+}
+
 // Marcar mensagens como lidas
 export async function markAsRead(instanceName, remoteJid, msgIds) {
   const res = await fetch(`${EVO_URL}/chat/markMessageAsRead/${instanceName}`, {
