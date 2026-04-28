@@ -9,7 +9,7 @@ const HAS_EVO = !!(
   import.meta.env.VITE_EVOLUTION_URL && import.meta.env.VITE_EVOLUTION_KEY
 );
 
-export default function ChatScreen({ tenant }) {
+export default function ChatScreen({ tenant, onNavigate }) {
   const mockConvs = CONVERSATIONS[tenant] || [];
 
   // Instâncias Evolution API
@@ -30,17 +30,70 @@ export default function ChatScreen({ tenant }) {
     mockConvs.forEach(c => { m[c.id] = [...c.messages]; });
     return m;
   });
-  const [typing, setTyping]     = useState(false);
-  const [showInfo, setShowInfo] = useState(false);
-  const [sending, setSending]   = useState(false);
+  const [typing, setTyping]           = useState(false);
+  const [showInfo, setShowInfo]       = useState(false);
+  const [sending, setSending]         = useState(false);
+  const [showEmoji, setShowEmoji]     = useState(false);
+  const [members, setMembers]         = useState([]);
+  const [showNewInternal, setShowNewInternal] = useState(false);
 
-  const scrollRef = useRef(null);
+  const scrollRef   = useRef(null);
+  const textareaRef = useRef(null);
 
   // ── Carregar instâncias ao montar ───────────────────────
   useEffect(() => {
-    if (!HAS_EVO) return;
     loadInstances();
+    loadMembers();
   }, []);
+
+  async function loadMembers() {
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, avatar_url')
+        .order('full_name');
+      if (data?.length) setMembers(data);
+    } catch { /* ignorar */ }
+  }
+
+  function insertEmoji(emoji) {
+    const ta = textareaRef.current;
+    if (!ta) { setDraft(d => d + emoji); return; }
+    const start = ta.selectionStart;
+    const end   = ta.selectionEnd;
+    const newVal = draft.slice(0, start) + emoji + draft.slice(end);
+    setDraft(newVal);
+    setTimeout(() => {
+      ta.selectionStart = start + emoji.length;
+      ta.selectionEnd   = start + emoji.length;
+      ta.focus();
+    }, 0);
+  }
+
+  async function createInternalConv(member) {
+    const tempId = 'int-' + member.id;
+    const initials = (member.full_name || 'TM').split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
+    const conv = {
+      id:       tempId,
+      name:     member.full_name || member.email || 'Membro',
+      avatar:   initials,
+      type:     'internal',
+      preview:  '',
+      time:     '',
+      unread:   0,
+      online:   false,
+      messages: [],
+      memberId: member.id,
+    };
+    setConvs(prev => {
+      if (prev.find(c => c.id === tempId)) return prev;
+      return [conv, ...prev];
+    });
+    setMessages(m => ({ ...m, [tempId]: [] }));
+    setActiveId(tempId);
+    setTab('all');
+    setShowNewInternal(false);
+  }
 
   // ── Reset ao trocar de tenant ───────────────────────────
   useEffect(() => {
@@ -78,15 +131,15 @@ export default function ChatScreen({ tenant }) {
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${activeId}` },
         payload => {
           const msg = payload.new;
-          if (!msg.body) return;
-          const time = new Date(msg.sent_at || Date.now())
+          if (!msg.content) return;
+          const time = new Date(msg.created_at || Date.now())
             .toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
           setMessages(m => ({
             ...m,
             [activeId]: [...(m[activeId] || []), {
               id:   msg.id,
               from: msg.direction === 'outbound' ? 'out' : 'in',
-              text: msg.body,
+              text: msg.content,
               time,
             }],
           }));
@@ -129,30 +182,39 @@ export default function ChatScreen({ tenant }) {
         .eq('instance_name', instanceName)
         .single();
 
-      if (!inst) return fallbackToMock();
+      if (!inst) {
+        const fallback = CONVERSATIONS[tenant] || [];
+        setConvs(fallback);
+        setUsingRealData(false);
+        return;
+      }
 
       const { data: rows } = await supabase
         .from('conversations')
         .select('*')
         .eq('instance_id', inst.id)
-        .order('last_message_at', { ascending: false })
+        .order('updated_at', { ascending: false })
         .limit(50);
 
       if (rows && rows.length > 0) {
-        const mapped = rows.map(c => ({
-          id:               c.id,
-          name:             c.title || c.group_name || 'Desconhecido',
-          avatar:           (c.title || 'X').slice(0, 2).toUpperCase(),
-          type:             c.is_group ? 'group' : 'whatsapp',
-          whatsapp_chat_id: c.whatsapp_chat_id,
-          preview:          c.preview || '',
-          time:             c.last_message_at
-            ? new Date(c.last_message_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-            : '',
-          unread:  c.unread_count || 0,
-          online:  false,
-          messages: [],
-        }));
+        const mapped = rows.map(c => {
+          const phone = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
+          const name  = c.group_name || (phone ? `+${phone}` : 'Desconhecido');
+          return {
+            id:               c.id,
+            name,
+            avatar:           name.slice(0, 2).toUpperCase(),
+            type:             c.is_group ? 'group' : 'whatsapp',
+            whatsapp_chat_id: c.whatsapp_chat_id,
+            preview:          '',
+            time:             c.updated_at
+              ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+              : '',
+            unread:   0,
+            online:   false,
+            messages: [],
+          };
+        });
         setConvs(mapped);
         setActiveId(mapped[0]?.id);
         setUsingRealData(true);
@@ -160,11 +222,8 @@ export default function ChatScreen({ tenant }) {
         return;
       }
     } catch { /* ignore */ }
-    fallbackToMock();
-  }
-
-  function fallbackToMock() {
-    setConvs(CONVERSATIONS[tenant] || []);
+    const fallback = CONVERSATIONS[tenant] || [];
+    setConvs(fallback);
     setUsingRealData(false);
   }
 
@@ -172,21 +231,23 @@ export default function ChatScreen({ tenant }) {
     try {
       const { data } = await supabase
         .from('messages')
-        .select('id, direction, body, sent_at')
+        .select('id, direction, content, body, created_at, sender_name')
         .eq('conversation_id', convId)
-        .order('sent_at')
+        .order('created_at')
         .limit(100);
 
-      if (data && data.length > 0) {
+      if (data) {
         setMessages(m => ({
           ...m,
-          [convId]: data.map(msg => ({
-            id:   msg.id,
-            from: msg.direction === 'outbound' ? 'out' : 'in',
-            text: msg.body || '',
-            time: new Date(msg.sent_at || Date.now())
-              .toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-          })),
+          [convId]: data
+            .filter(msg => msg.content || msg.body)
+            .map(msg => ({
+              id:   msg.id,
+              from: msg.direction === 'outbound' ? 'out' : 'in',
+              text: msg.content || msg.body || '',
+              time: new Date(msg.created_at || Date.now())
+                .toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+            })),
         }));
       }
     } catch { /* ignore */ }
@@ -213,9 +274,8 @@ export default function ChatScreen({ tenant }) {
         await supabase.from('messages').insert({
           conversation_id: active.id,
           direction:       'outbound',
-          sender_kind:     'agent',
-          body:            text,
-          sent_at:         now.toISOString(),
+          content:         text,
+          created_at:      now.toISOString(),
         });
       } catch (err) {
         console.error('Falha ao enviar via Evolution:', err);
@@ -277,11 +337,12 @@ export default function ChatScreen({ tenant }) {
   return (
     <div className="route-enter" style={{
       display: 'grid',
-      gridTemplateColumns: 'minmax(220px, 270px) minmax(0, 1fr)',
+      gridTemplateColumns: showInfo
+        ? 'minmax(220px, 270px) minmax(0, 1fr) 300px'
+        : 'minmax(220px, 270px) minmax(0, 1fr)',
       height: 'calc(100vh - 64px)',
       background: 'var(--g-50)',
       overflow: 'hidden',
-      position: 'relative',
     }}>
 
       {/* ── Col 1: Sidebar conversas ───────────────────── */}
@@ -361,6 +422,19 @@ export default function ChatScreen({ tenant }) {
           </div>
         </div>
 
+        {/* Botão nova conversa interna */}
+        {tab === 'int' && (
+          <div style={{ padding: '8px 16px 0' }}>
+            <button
+              className="btn-secondary"
+              style={{ width: '100%', justifyContent: 'center', fontSize: 12 }}
+              onClick={() => setShowNewInternal(true)}
+            >
+              <Icon name="plus" size={13} /> Nova conversa interna
+            </button>
+          </div>
+        )}
+
         {/* Lista de conversas */}
         <div className="scroll" style={{ flex: 1, overflowY: 'auto', paddingBottom: 16 }}>
           {filtered.map(c => (
@@ -376,7 +450,7 @@ export default function ChatScreen({ tenant }) {
           ))}
           {filtered.length === 0 && (
             <div style={{ textAlign: 'center', padding: 32, color: 'var(--g-400)', fontSize: 13 }}>
-              Nenhuma conversa encontrada
+              {tab === 'int' ? 'Nenhuma conversa interna. Crie uma acima.' : 'Nenhuma conversa encontrada'}
             </div>
           )}
         </div>
@@ -478,6 +552,7 @@ export default function ChatScreen({ tenant }) {
 
           <div className="copilot-wrap">
             <textarea
+              ref={textareaRef}
               value={draft}
               onChange={e => setDraft(e.target.value)}
               onKeyDown={onKeyDown}
@@ -487,7 +562,7 @@ export default function ChatScreen({ tenant }) {
             />
             {showGhost && <div className="copilot-ghost">{suggestion}</div>}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px 10px' }}>
-              <div style={{ display: 'flex', gap: 2 }}>
+              <div style={{ display: 'flex', gap: 2, position: 'relative' }}>
                 <button
                   className="btn-icon"
                   style={{ width: 30, height: 30 }}
@@ -507,9 +582,20 @@ export default function ChatScreen({ tenant }) {
                     e.target.value = '';
                   }}
                 />
-                <button className="btn-icon" style={{ width: 30, height: 30 }}>
+                <button
+                  className="btn-icon"
+                  style={{ width: 30, height: 30, background: showEmoji ? 'var(--g-100)' : 'transparent' }}
+                  title="Emoji"
+                  onClick={() => setShowEmoji(v => !v)}
+                >
                   <Icon name="smile" size={15} />
                 </button>
+                {showEmoji && (
+                  <EmojiPicker
+                    onSelect={insertEmoji}
+                    onClose={() => setShowEmoji(false)}
+                  />
+                )}
                 <button
                   className="btn-icon"
                   style={{ width: 30, height: 30, color: 'var(--red)' }}
@@ -531,35 +617,40 @@ export default function ChatScreen({ tenant }) {
         </div>
       </div>
 
-      {/* ── Drawer: info do contato ─────────────────────── */}
-      {showInfo && (
-        <>
-          <div
-            onClick={() => setShowInfo(false)}
-            style={{
-              position: 'absolute', inset: 0,
-              background: 'rgba(13,13,13,0.25)', zIndex: 10, animation: 'fadeIn 180ms ease',
-            }}
+      {/* ── Modal: nova conversa interna ───────────────── */}
+      {showNewInternal && (
+        <div
+          style={{ position: 'absolute', inset: 0, background: 'rgba(13,13,13,0.35)', zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setShowNewInternal(false)}
+        >
+          <NewInternalModal
+            members={members}
+            onSelect={createInternalConv}
+            onClose={() => setShowNewInternal(false)}
           />
-          <div className="slide-right scroll" style={{
-            position: 'absolute', top: 0, right: 0, bottom: 0, width: 300, maxWidth: '90%',
-            background: 'white', borderLeft: '1px solid var(--g-200)', overflowY: 'auto',
-            zIndex: 11, boxShadow: '-8px 0 24px rgba(0,0,0,0.08)',
+        </div>
+      )}
+
+      {/* ── Col 3: painel de info do contato ───────────── */}
+      {showInfo && (
+        <div className="slide-right scroll" style={{
+          background: 'white', borderLeft: '1px solid var(--g-200)', overflowY: 'auto',
+          display: 'flex', flexDirection: 'column',
+        }}>
+          <div style={{
+            padding: '12px 16px', borderBottom: '1px solid var(--g-200)',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            flexShrink: 0,
           }}>
-            <div style={{
-              padding: '12px 16px', borderBottom: '1px solid var(--g-200)',
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--g-900)' }}>
-                {active.type === 'group' ? 'Informações do grupo' : 'Informações do contato'}
-              </span>
-              <button className="btn-icon" onClick={() => setShowInfo(false)}>
-                <Icon name="x" size={16} />
-              </button>
-            </div>
-            <ContactPanel conv={active} />
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--g-900)' }}>
+              {active.type === 'group' ? 'Informações do grupo' : 'Informações do contato'}
+            </span>
+            <button className="btn-icon" onClick={() => setShowInfo(false)}>
+              <Icon name="x" size={16} />
+            </button>
           </div>
-        </>
+          <ContactPanel conv={active} onNavigate={onNavigate} />
+        </div>
       )}
     </div>
   );
@@ -657,8 +748,17 @@ function ConvItem({ conv, active, onClick }) {
 }
 
 /* ── ContactPanel ─────────────────────────────────────────── */
-function ContactPanel({ conv }) {
+function ContactPanel({ conv, onNavigate }) {
   const isGroup = conv.type === 'group';
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName]   = useState(conv.name);
+  const phone = conv.whatsapp_chat_id
+    ? `+${conv.whatsapp_chat_id.split('@')[0]}`
+    : conv.phone || '';
+  const [editPhone, setEditPhone] = useState(phone);
+  const [editNote, setEditNote]   = useState(
+    conv.type === 'whatsapp' ? 'Cliente sensível a atrasos — oferecer sempre alguma cortesia.' : ''
+  );
 
   return (
     <div style={{ padding: 24 }}>
@@ -667,32 +767,78 @@ function ContactPanel({ conv }) {
         <div style={{ display: 'inline-block' }}>
           <ConvAvatar conv={conv} size={80} />
         </div>
-        <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--g-900)', marginTop: 12 }}>{conv.name}</div>
-        <div style={{ fontSize: 12, color: 'var(--g-500)', marginTop: 4 }}>
-          {isGroup
-            ? 'Grupo WhatsApp'
-            : conv.type === 'whatsapp'
-            ? conv.whatsapp_chat_id
-              ? `+${conv.whatsapp_chat_id.split('@')[0]}`
-              : '+55 11 98765-4321'
-            : conv.role || conv.type}
-        </div>
-        {conv.tags && (
-          <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap', marginTop: 12 }}>
-            {conv.tags.map(t => (
-              <span key={t} className={`badge ${t === 'VIP' ? 'badge-red' : 'badge-gray'}`}>{t}</span>
-            ))}
+
+        {isEditing ? (
+          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <input
+              className="input"
+              style={{ fontSize: 13, textAlign: 'center' }}
+              value={editName}
+              onChange={e => setEditName(e.target.value)}
+              placeholder="Nome"
+            />
+            <input
+              className="input"
+              style={{ fontSize: 13, textAlign: 'center' }}
+              value={editPhone}
+              onChange={e => setEditPhone(e.target.value)}
+              placeholder="Telefone"
+            />
+            <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 4 }}>
+              <button
+                className="btn-primary"
+                style={{ padding: '6px 12px', fontSize: 12 }}
+                onClick={() => setIsEditing(false)}
+              >
+                Salvar
+              </button>
+              <button
+                className="btn-secondary"
+                style={{ padding: '6px 12px', fontSize: 12 }}
+                onClick={() => setIsEditing(false)}
+              >
+                Cancelar
+              </button>
+            </div>
           </div>
-        )}
-        {!isGroup && (
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 16 }}>
-            <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: 12 }}>
-              <Icon name="phone" size={12} /> Ligar
-            </button>
-            <button className="btn-primary" style={{ padding: '6px 12px', fontSize: 12 }}>
-              Ver no CRM
-            </button>
-          </div>
+        ) : (
+          <>
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--g-900)', marginTop: 12 }}>{editName}</div>
+            <div style={{ fontSize: 12, color: 'var(--g-500)', marginTop: 4 }}>
+              {isGroup ? 'Grupo WhatsApp' : editPhone || conv.role || conv.type}
+            </div>
+            {conv.tags && (
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap', marginTop: 12 }}>
+                {conv.tags.map(t => (
+                  <span key={t} className={`badge ${t === 'VIP' ? 'badge-red' : 'badge-gray'}`}>{t}</span>
+                ))}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' }}>
+              {!isGroup && (
+                <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: 12 }}>
+                  <Icon name="phone" size={12} /> Ligar
+                </button>
+              )}
+              {!isGroup && onNavigate && (
+                <button
+                  className="btn-primary"
+                  style={{ padding: '6px 12px', fontSize: 12 }}
+                  onClick={() => onNavigate('crm')}
+                >
+                  Ver no CRM
+                </button>
+              )}
+              <button
+                className="btn-secondary"
+                style={{ padding: '6px 12px', fontSize: 12 }}
+                onClick={() => setIsEditing(true)}
+                title="Editar contato"
+              >
+                <Icon name="edit" size={12} /> Editar
+              </button>
+            </div>
+          </>
         )}
       </div>
 
@@ -721,7 +867,8 @@ function ContactPanel({ conv }) {
           className="input"
           placeholder="Adicione uma nota…"
           style={{ minHeight: 80, resize: 'vertical', fontSize: 12 }}
-          defaultValue={conv.type === 'whatsapp' ? 'Cliente sensível a atrasos — oferecer sempre alguma cortesia.' : ''}
+          value={editNote}
+          onChange={e => setEditNote(e.target.value)}
         />
       </div>
 
@@ -740,12 +887,133 @@ function ContactPanel({ conv }) {
           </div>
           <div style={{ fontSize: 12, color: 'var(--g-700)', lineHeight: 1.5 }}>
             {isGroup
-              ? 'Grupo ativo com membros recorrentes. Nível de engajamento: <strong style={{color:"var(--success)"}}>bom</strong>.'
+              ? <>Grupo ativo com membros recorrentes. Nível de engajamento: <strong style={{ color: 'var(--success)' }}>bom</strong>.</>
               : <>Cliente <strong>frustrado</strong> por atraso repetido. Sentimento: <strong style={{ color: 'var(--warn)' }}>negativo</strong>.{' '}
                 Risco de churn: <strong style={{ color: 'var(--red)' }}>alto</strong>. Recomendo reembolso parcial + cortesia dupla.</>}
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── EmojiPicker ──────────────────────────────────────────── */
+const EMOJIS = [
+  '😀','😂','😊','😍','🤔','😅','😎','😢','😡','🥳',
+  '👍','👎','👋','🙌','🤝','❤️','🔥','✅','⭐','🎉',
+  '🍕','🚀','💪','🎯','💬','🌟','⚡','💡','🎊','🏆',
+  '😆','🤣','😇','🤩','😏','😬','🙄','😴','🤗','😤',
+  '👀','💯','🙏','✨','🎶','📱','💰','🏅','🎁','🌹',
+];
+
+function EmojiPicker({ onSelect, onClose }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) onClose();
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={ref}
+      style={{
+        position: 'absolute', bottom: 'calc(100% + 4px)', left: 0,
+        background: 'white', border: '1px solid var(--g-200)',
+        borderRadius: 10, padding: 10, zIndex: 50,
+        display: 'grid', gridTemplateColumns: 'repeat(10, 30px)',
+        gap: 2, boxShadow: '0 8px 24px rgba(0,0,0,0.14)',
+      }}
+    >
+      {EMOJIS.map(e => (
+        <button
+          key={e}
+          onClick={() => { onSelect(e); onClose(); }}
+          style={{
+            fontSize: 18, background: 'transparent', borderRadius: 4,
+            width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', transition: 'background 100ms',
+          }}
+          onMouseEnter={ev => ev.currentTarget.style.background = 'var(--g-100)'}
+          onMouseLeave={ev => ev.currentTarget.style.background = 'transparent'}
+        >
+          {e}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ── NewInternalModal ─────────────────────────────────────── */
+function NewInternalModal({ members, onSelect, onClose }) {
+  const [search, setSearch] = useState('');
+  const filtered = members.filter(m =>
+    !search || (m.full_name || m.email || '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div
+      onClick={e => e.stopPropagation()}
+      style={{
+        background: 'white', borderRadius: 12, width: 340,
+        boxShadow: '0 16px 40px rgba(0,0,0,0.18)',
+        display: 'flex', flexDirection: 'column', maxHeight: 440,
+      }}
+    >
+      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--g-200)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--g-900)' }}>Nova conversa interna</span>
+        <button className="btn-icon" onClick={onClose}><Icon name="x" size={15} /></button>
+      </div>
+      <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--g-100)' }}>
+        <div style={{ position: 'relative' }}>
+          <Icon name="search" size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--g-400)', pointerEvents: 'none' }} />
+          <input
+            className="input"
+            style={{ paddingLeft: 32, fontSize: 13 }}
+            placeholder="Buscar membro..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            autoFocus
+          />
+        </div>
+      </div>
+      <div className="scroll" style={{ flex: 1, overflowY: 'auto' }}>
+        {filtered.length === 0 && (
+          <div style={{ padding: 32, textAlign: 'center', color: 'var(--g-400)', fontSize: 13 }}>
+            {members.length === 0 ? 'Nenhum membro encontrado no banco.' : 'Nenhum resultado.'}
+          </div>
+        )}
+        {filtered.map(m => {
+          const initials = (m.full_name || 'TM').split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
+          return (
+            <div
+              key={m.id}
+              onClick={() => onSelect(m)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '10px 20px', cursor: 'pointer', transition: 'background 150ms',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--g-50)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              <div style={{
+                width: 36, height: 36, borderRadius: '50%', background: 'var(--g-200)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontWeight: 700, fontSize: 13, color: 'var(--g-700)', flexShrink: 0,
+              }}>
+                {initials}
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--g-900)' }}>{m.full_name || 'Sem nome'}</div>
+                <div style={{ fontSize: 11, color: 'var(--g-500)' }}>{m.email}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

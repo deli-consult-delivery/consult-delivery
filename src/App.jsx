@@ -96,7 +96,7 @@ export default function App() {
       <Topbar route={route} tenant={tenant} setTenant={setTenant} tenants={tenants} />
       <main className="main scroll" key={route + tenant}>
         {route === 'dashboard' && <DashboardScreen tenant={tenant} tenantDbId={tenantDbId} />}
-        {route === 'chat'      && <ChatScreen tenant={tenant} tenantDbId={tenantDbId} />}
+        {route === 'chat'      && <ChatScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={setRoute} />}
         {route === 'tasks'     && <KanbanScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'cora'      && <CoraScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'crm'       && <CRMScreen tenant={tenant} tenantDbId={tenantDbId} />}

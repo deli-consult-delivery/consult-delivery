@@ -38,9 +38,8 @@ const INTEGRATION_STATUS = {
 };
 
 /* ─── Main ────────────────────────────────────────────── */
-export default function SettingsScreen({ tenant }) {
+export default function SettingsScreen({ tenant, tenantDbId }) {
   const [tab, setTab] = useState('workspace');
-  const workspace = SETTINGS_DATA.workspace[tenant] || SETTINGS_DATA.workspace['pizza-joao'];
 
   return (
     <div className="route-enter" style={{ padding: 32, maxWidth: 1200, margin: '0 auto' }}>
@@ -92,8 +91,8 @@ export default function SettingsScreen({ tenant }) {
 
         {/* Content area */}
         <div>
-          {tab === 'workspace'    && <TabWorkspace workspace={workspace} />}
-          {tab === 'users'        && <TabUsers />}
+          {tab === 'workspace'    && <TabWorkspace tenantDbId={tenantDbId} />}
+          {tab === 'users'        && <TabUsers tenantDbId={tenantDbId} />}
           {tab === 'integrations' && <TabIntegrations />}
           {tab === 'whatsapp'     && <TabWhatsApp />}
           {tab === 'agents'       && <TabAgents />}
@@ -176,15 +175,22 @@ function TabWhatsApp() {
   }
 
   async function fetchQR(instanceName) {
-    if (!HAS_EVO) return;
+    const inst   = instances.find(i => i.instance_name === instanceName);
+    const evoUrl = inst?.evolution_url || EVO_URL;
+    const evoKey = inst?.api_key || EVO_KEY;
+    if (!evoUrl || !evoKey) return;
     setQrLoading(true);
     try {
-      const data = await getQRCode(instanceName);
-      const b64  = data?.base64 || data?.qrcode?.base64 || null;
-      if (b64) setQrData(b64);
+      const data = await getQRCode(instanceName, evoUrl, evoKey);
+      let b64 = data?.base64 || data?.qrcode?.base64 || null;
+      if (b64) {
+        // Strip data URI prefix se já estiver presente
+        b64 = b64.replace(/^data:image\/[^;]+;base64,/, '');
+        setQrData(b64);
+      }
 
       // Verificar se já conectou
-      const status = await getInstanceStatus(instanceName);
+      const status = await getInstanceStatus(instanceName, evoUrl, evoKey);
       if (status?.instance?.state === 'open') {
         await supabase
           .from('evolution_instances')
@@ -199,13 +205,19 @@ function TabWhatsApp() {
     setQrLoading(false);
   }
 
-  async function handleConfigureWebhook(instanceName) {
-    if (!HAS_EVO || !WEBHOOK) {
-      alert('Configure VITE_EVOLUTION_URL e VITE_SUPABASE_URL primeiro.');
+  async function handleConfigureWebhook(inst) {
+    if (!WEBHOOK) {
+      alert('Configure VITE_SUPABASE_URL primeiro.');
+      return;
+    }
+    const evoUrl = inst.evolution_url || EVO_URL;
+    const evoKey = inst.api_key || EVO_KEY;
+    if (!evoUrl || !evoKey) {
+      alert('Instância sem URL ou API Key configurados.');
       return;
     }
     try {
-      await setWebhook(instanceName, WEBHOOK);
+      await setWebhook(inst.instance_name, WEBHOOK, evoUrl, evoKey);
       alert(`Webhook configurado com sucesso!\n\nURL: ${WEBHOOK}`);
     } catch (err) {
       alert('Erro ao configurar webhook: ' + (err?.message || err));
@@ -365,7 +377,7 @@ function TabWhatsApp() {
                           <button
                             className="btn-secondary"
                             style={{ fontSize: 12, padding: '6px 12px' }}
-                            onClick={() => handleConfigureWebhook(inst.instance_name)}
+                            onClick={() => handleConfigureWebhook(inst)}
                             title={`Webhook: ${WEBHOOK}`}
                           >
                             <Icon name="refresh" size={11} /> Webhook
@@ -485,43 +497,179 @@ function TabWhatsApp() {
 }
 
 /* ─── Tab: Workspace ──────────────────────────────────── */
-function TabWorkspace({ workspace }) {
+const WS_EMOJIS = ['🏪','🍕','🍔','🌮','🍜','🍱','🍣','🥗','🍰','🧁','🥩','🍗','🍟','🌯','🥙','🍛','🏢','🏬','🏭','🎯','🚀','⭐','💎','🔥','🎉'];
+
+function TabWorkspace({ tenantDbId }) {
+  const [loading, setLoading]       = useState(true);
+  const [saving, setSaving]         = useState(false);
+  const [saved, setSaved]           = useState(false);
+  const [uploading, setUploading]   = useState(false);
+  const [showEmoji, setShowEmoji]   = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
+  const [deleteText, setDeleteText] = useState('');
+  const [slugError, setSlugError]   = useState('');
+  const [form, setForm] = useState({ name: '', segment: '', slug: '', phone: '', city: '', emoji: '🏪', logo_url: '' });
+
+  useEffect(() => {
+    if (!tenantDbId) { setLoading(false); return; }
+    supabase.from('tenants').select('*').eq('id', tenantDbId).single().then(({ data }) => {
+      if (data) setForm({
+        name:     data.name     || '',
+        segment:  data.segment  || '',
+        slug:     data.slug     || '',
+        phone:    data.phone    || '',
+        city:     data.city     || '',
+        emoji:    data.emoji    || '🏪',
+        logo_url: data.logo_url || '',
+      });
+      setLoading(false);
+    });
+  }, [tenantDbId]);
+
+  function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
+
+  function validateSlug(v) {
+    if (!v) return 'Campo obrigatório';
+    if (!/^[a-z0-9-]+$/.test(v)) return 'Apenas letras minúsculas, números e hífens';
+    if (v.length < 3) return 'Mínimo 3 caracteres';
+    return '';
+  }
+
+  async function handleSave() {
+    const err = validateSlug(form.slug);
+    setSlugError(err);
+    if (err) return;
+    setSaving(true);
+    const { error } = await supabase.from('tenants').update({
+      name: form.name, segment: form.segment, slug: form.slug,
+      phone: form.phone, city: form.city,
+    }).eq('id', tenantDbId);
+    setSaving(false);
+    if (error) { alert('Erro ao salvar: ' + error.message); return; }
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  }
+
+  async function handlePickEmoji(emoji) {
+    setShowEmoji(false);
+    set('emoji', emoji);
+    if (tenantDbId) await supabase.from('tenants').update({ emoji }).eq('id', tenantDbId);
+  }
+
+  async function handleLogoUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { alert('Arquivo muito grande. Máximo: 2MB'); return; }
+    setUploading(true);
+    const ext  = file.name.split('.').pop().toLowerCase();
+    const path = `logos/${tenantDbId}.${ext}`;
+    const { error } = await supabase.storage.from('logos').upload(path, file, { upsert: true });
+    if (!error) {
+      const { data: { publicUrl } } = supabase.storage.from('logos').getPublicUrl(path);
+      set('logo_url', publicUrl);
+      await supabase.from('tenants').update({ logo_url: publicUrl }).eq('id', tenantDbId);
+    } else {
+      alert('Erro no upload: ' + error.message);
+    }
+    setUploading(false);
+  }
+
+  async function handleDelete() {
+    if (deleteText !== form.name) return;
+    await supabase.from('tenants').delete().eq('id', tenantDbId);
+    window.location.reload();
+  }
+
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--g-400)', fontSize: 13 }}>Carregando…</div>;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <SectionCard title="Informações do workspace">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <Field label="Nome do restaurante" value={workspace.name} />
-          <Field label="Segmento" value={workspace.segment} />
-          <Field label="Slug (URL)" value={workspace.slug} mono />
-          <Field label="Telefone principal" value={workspace.phone} />
-          <Field label="Cidade" value={workspace.city} />
-          <Field label="Fuso horário" value="America/Sao_Paulo (GMT-3)" />
+          <InputField label="Nome" value={form.name} onChange={v => set('name', v)} />
+          <InputField label="Segmento" value={form.segment} onChange={v => set('segment', v)} placeholder="ex: Pizzaria, Hamburgueria" />
+          <div>
+            <InputField label="Slug (URL)" value={form.slug} onChange={v => { set('slug', v); setSlugError(validateSlug(v)); }} mono placeholder="ex: minha-loja" />
+            {slugError && <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 4 }}>{slugError}</div>}
+          </div>
+          <InputField label="Telefone principal" value={form.phone} onChange={v => set('phone', v)} placeholder="(11) 99999-9999" />
+          <InputField label="Cidade" value={form.city} onChange={v => set('city', v)} placeholder="São Paulo, SP" />
+          <div>
+            <div className="label" style={{ marginBottom: 6 }}>Fuso horário</div>
+            <div style={{ padding: '9px 12px', border: '1px solid var(--g-300)', borderRadius: 'var(--r-sm)', fontSize: 13, color: 'var(--g-500)', background: 'var(--g-50)' }}>
+              America/Sao_Paulo (GMT-3)
+            </div>
+          </div>
         </div>
-        <div style={{ marginTop: 20, display: 'flex', gap: 8 }}>
-          <button className="btn-primary"><Icon name="check" size={14} /> Salvar alterações</button>
-          <button className="btn-secondary">Cancelar</button>
+        <div style={{ marginTop: 20, display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button className="btn-primary" onClick={handleSave} disabled={saving}>
+            <Icon name="check" size={14} /> {saving ? 'Salvando…' : 'Salvar alterações'}
+          </button>
+          <button className="btn-secondary" onClick={() => { setSlugError(''); }}>Cancelar</button>
+          {saved && <span style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>Salvo!</span>}
         </div>
       </SectionCard>
 
       <SectionCard title="Identidade visual">
         <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-          <div style={{
-            width: 72, height: 72, borderRadius: 'var(--r-lg)',
-            background: 'var(--g-100)', border: '2px dashed var(--g-300)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 36,
-          }}>
-            {workspace.emoji}
+          {/* Logo / Emoji preview */}
+          <div style={{ position: 'relative' }}>
+            <div style={{
+              width: 72, height: 72, borderRadius: 'var(--r-lg)',
+              background: 'var(--g-100)', border: '2px dashed var(--g-300)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 36, overflow: 'hidden',
+            }}>
+              {form.logo_url
+                ? <img src={form.logo_url} alt="logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : form.emoji}
+            </div>
           </div>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--g-900)' }}>{workspace.name}</div>
-            <div style={{ fontSize: 12, color: 'var(--g-500)', marginTop: 2 }}>{workspace.segment}</div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-              <button className="btn-secondary" style={{ fontSize: 12, padding: '6px 12px' }}>Trocar emoji</button>
-              <button className="btn-secondary" style={{ fontSize: 12, padding: '6px 12px' }}>Upload logo</button>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--g-900)' }}>{form.name || 'Workspace'}</div>
+            <div style={{ fontSize: 12, color: 'var(--g-500)', marginTop: 2 }}>{form.segment}</div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+              {/* Emoji picker trigger */}
+              <div style={{ position: 'relative' }}>
+                <button className="btn-secondary" style={{ fontSize: 12, padding: '6px 12px' }} onClick={() => setShowEmoji(v => !v)}>
+                  Trocar emoji
+                </button>
+                {showEmoji && (
+                  <>
+                    <div onClick={() => setShowEmoji(false)} style={{ position: 'fixed', inset: 0, zIndex: 49 }} />
+                    <div style={{
+                      position: 'absolute', top: '100%', left: 0, marginTop: 6,
+                      background: 'white', border: '1px solid var(--g-200)',
+                      borderRadius: 'var(--r-md)', padding: 12, zIndex: 50,
+                      display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4,
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                    }}>
+                      {WS_EMOJIS.map(e => (
+                        <button key={e} onClick={() => handlePickEmoji(e)} style={{
+                          fontSize: 22, padding: '4px 6px', borderRadius: 6,
+                          background: form.emoji === e ? 'var(--red-soft)' : 'transparent',
+                          cursor: 'pointer',
+                        }}>{e}</button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+              {/* Logo upload */}
+              <label style={{ cursor: 'pointer' }}>
+                <input type="file" accept="image/png,image/jpeg,image/svg+xml" style={{ display: 'none' }} onChange={handleLogoUpload} />
+                <span className="btn-secondary" style={{ fontSize: 12, padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <Icon name="upload" size={11} /> {uploading ? 'Enviando…' : 'Upload logo'}
+                </span>
+              </label>
             </div>
           </div>
         </div>
+        {form.logo_url && (
+          <div style={{ marginTop: 12, fontSize: 12, color: 'var(--g-500)', wordBreak: 'break-all' }}>
+            Logo: {form.logo_url}
+          </div>
+        )}
       </SectionCard>
 
       <SectionCard title="Zona de perigo" danger>
@@ -530,65 +678,133 @@ function TabWorkspace({ workspace }) {
             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--g-900)' }}>Excluir workspace</div>
             <div style={{ fontSize: 12, color: 'var(--g-500)', marginTop: 2 }}>Esta ação é irreversível e remove todos os dados.</div>
           </div>
-          <button className="btn-secondary" style={{ color: 'var(--red)', borderColor: 'var(--red-soft)' }}>
-            Excluir workspace
+          <button className="btn-secondary" style={{ color: 'var(--red)', borderColor: 'var(--red-soft)' }} onClick={() => setShowDelete(true)}>
+            <Icon name="trash" size={13} /> Excluir workspace
           </button>
         </div>
       </SectionCard>
+
+      {/* Delete confirmation modal */}
+      {showDelete && (
+        <>
+          <div onClick={() => setShowDelete(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(13,13,13,0.5)', zIndex: 100 }} />
+          <div style={{
+            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+            background: 'white', borderRadius: 'var(--r-lg)', padding: 32, zIndex: 101,
+            width: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+          }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--red)', marginBottom: 8 }}>Excluir workspace</div>
+            <div style={{ fontSize: 13, color: 'var(--g-600)', marginBottom: 20, lineHeight: 1.6 }}>
+              Esta ação é <strong>irreversível</strong>. Digite o nome do workspace para confirmar:
+              <br /><strong>{form.name}</strong>
+            </div>
+            <input
+              className="input"
+              placeholder={form.name}
+              value={deleteText}
+              onChange={e => setDeleteText(e.target.value)}
+              style={{ marginBottom: 16, fontSize: 13 }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                className="btn-primary"
+                style={{ background: 'var(--red)', borderColor: 'var(--red)' }}
+                disabled={deleteText !== form.name}
+                onClick={handleDelete}
+              >
+                Excluir permanentemente
+              </button>
+              <button className="btn-secondary" onClick={() => { setShowDelete(false); setDeleteText(''); }}>Cancelar</button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
 /* ─── Tab: Usuários ───────────────────────────────────── */
-function TabUsers() {
+function TabUsers({ tenantDbId }) {
+  const [members, setMembers]       = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [showInvite, setShowInvite] = useState(false);
+  const [editUser, setEditUser]     = useState(null); // member object
+
+  async function loadMembers() {
+    if (!tenantDbId) { setLoading(false); return; }
+    const { data } = await supabase
+      .from('tenant_members')
+      .select('role, created_at, profiles(id, full_name, email, avatar_url)')
+      .eq('tenant_id', tenantDbId);
+    if (data) setMembers(data.map(m => ({
+      userId:    m.profiles?.id,
+      name:      m.profiles?.full_name || m.profiles?.email || 'Usuário',
+      email:     m.profiles?.email     || '',
+      avatar:    m.profiles?.full_name || m.profiles?.email || 'U',
+      role:      m.role || 'operador',
+      semaforo:  'verde',
+      createdAt: m.created_at,
+    })));
+    setLoading(false);
+  }
+
+  useEffect(() => { loadMembers(); }, [tenantDbId]);
+
+  async function handleRemoveMember(userId) {
+    if (!confirm('Remover este membro do workspace?')) return;
+    await supabase.from('tenant_members').delete()
+      .eq('tenant_id', tenantDbId).eq('user_id', userId);
+    await loadMembers();
+  }
+
+  const displayMembers = loading ? [] : members.length > 0 ? members : SETTINGS_DATA.users.map(u => ({
+    userId: u.id, name: u.name, email: u.email, avatar: u.avatar,
+    role: u.role, semaforo: u.semaforo, createdAt: null,
+  }));
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <SectionCard title="Membros da equipe">
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-          <button className="btn-primary" style={{ fontSize: 13 }}>
+          <button className="btn-primary" style={{ fontSize: 13 }} onClick={() => setShowInvite(true)}>
             <Icon name="plus" size={13} /> Convidar membro
           </button>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 0, border: '1px solid var(--g-200)', borderRadius: 'var(--r-md)', overflow: 'hidden' }}>
-          {SETTINGS_DATA.users.map((u, i) => {
-            const role = ROLE_MAP[u.role] || ROLE_MAP.operador;
-            const sem  = SEMAFORO[u.semaforo];
-            return (
-              <div key={u.id} style={{
-                display: 'flex', alignItems: 'center', gap: 14,
-                padding: '14px 16px',
-                borderBottom: i < SETTINGS_DATA.users.length - 1 ? '1px solid var(--g-100)' : 'none',
-                background: 'white',
-                transition: 'background 120ms',
-              }}>
-                <div style={{ position: 'relative' }}>
+
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: 24, color: 'var(--g-400)', fontSize: 13 }}>Carregando membros…</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0, border: '1px solid var(--g-200)', borderRadius: 'var(--r-md)', overflow: 'hidden' }}>
+            {displayMembers.map((u, i) => {
+              const role = ROLE_MAP[u.role] || ROLE_MAP.operador;
+              const sem  = SEMAFORO[u.semaforo] || SEMAFORO.verde;
+              return (
+                <div key={u.userId || i} style={{
+                  display: 'flex', alignItems: 'center', gap: 14,
+                  padding: '14px 16px',
+                  borderBottom: i < displayMembers.length - 1 ? '1px solid var(--g-100)' : 'none',
+                  background: 'white',
+                }}>
                   <UserAvatar name={u.avatar} size={38} />
-                  {u.online && (
-                    <span style={{
-                      position: 'absolute', bottom: 0, right: 0,
-                      width: 10, height: 10, borderRadius: '50%',
-                      background: 'var(--success)', border: '2px solid white',
-                    }} />
-                  )}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--g-900)' }}>{u.name}</div>
-                  <div style={{ fontSize: 12, color: 'var(--g-500)', marginTop: 1 }}>{u.email}</div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span className={`badge ${role.cls}`}>{role.label}</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 'var(--r-xs)', background: 'var(--g-100)' }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: sem.color, display: 'inline-block', flexShrink: 0 }} />
-                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--g-700)' }}>{sem.label}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--g-900)' }}>{u.name}</div>
+                    <div style={{ fontSize: 12, color: 'var(--g-500)', marginTop: 1 }}>{u.email}</div>
                   </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className={`badge ${role.cls}`}>{role.label}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 'var(--r-xs)', background: 'var(--g-100)' }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: sem.color, display: 'inline-block', flexShrink: 0 }} />
+                      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--g-700)' }}>{sem.label}</span>
+                    </div>
+                  </div>
+                  <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setEditUser(u)}>
+                    <Icon name="gear" size={12} /> Editar
+                  </button>
                 </div>
-                <button className="btn-ghost" style={{ fontSize: 12 }}>
-                  <Icon name="gear" size={12} /> Editar
-                </button>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </SectionCard>
 
       <SectionCard title="Semáforo de autonomia (DELI)">
@@ -631,15 +847,152 @@ function TabUsers() {
             }}>
               <div style={{ width: 90, fontWeight: 600, fontSize: 13, color: 'var(--g-900)' }}>{r.role}</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {r.perms.map(p => (
-                  <span key={p} className="badge badge-gray">{p}</span>
-                ))}
+                {r.perms.map(p => (<span key={p} className="badge badge-gray">{p}</span>))}
               </div>
             </div>
           ))}
         </div>
       </SectionCard>
+
+      {showInvite && (
+        <InviteModal
+          tenantDbId={tenantDbId}
+          onClose={() => setShowInvite(false)}
+          onDone={() => { setShowInvite(false); loadMembers(); }}
+        />
+      )}
+      {editUser && (
+        <EditMemberModal
+          member={editUser}
+          tenantDbId={tenantDbId}
+          onClose={() => setEditUser(null)}
+          onRemove={() => { setEditUser(null); handleRemoveMember(editUser.userId); }}
+          onDone={() => { setEditUser(null); loadMembers(); }}
+        />
+      )}
     </div>
+  );
+}
+
+/* Invite modal */
+function InviteModal({ tenantDbId, onClose, onDone }) {
+  const [form, setForm]   = useState({ email: '', name: '', role: 'operador', semaforo: 'verde' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState('');
+
+  async function handleSubmit() {
+    if (!form.email) { setError('E-mail obrigatório'); return; }
+    setSaving(true);
+    setError('');
+    try {
+      // Call Edge Function to invite (requires service role server-side)
+      const { error: fnErr } = await supabase.functions.invoke('invite-user', {
+        body: { email: form.email, name: form.name, role: form.role, semaforo: form.semaforo, tenant_id: tenantDbId },
+      });
+      if (fnErr) throw fnErr;
+      onDone();
+    } catch (err) {
+      setError(err?.message || 'Erro ao convidar. Verifique se a Edge Function invite-user está disponível.');
+    }
+    setSaving(false);
+  }
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(13,13,13,0.5)', zIndex: 100 }} />
+      <div style={{
+        position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+        background: 'white', borderRadius: 'var(--r-lg)', padding: 32, zIndex: 101,
+        width: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--g-900)' }}>Convidar membro</div>
+          <button className="btn-icon" onClick={onClose}><Icon name="x" size={16} /></button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <InputField label="E-mail" value={form.email} onChange={v => setForm(f => ({ ...f, email: v }))} placeholder="colaborador@empresa.com" type="email" />
+          <InputField label="Nome" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} placeholder="Nome completo" />
+          <div>
+            <div className="label" style={{ marginBottom: 6 }}>Papel</div>
+            <select className="input" style={{ fontSize: 13 }} value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
+              {Object.entries(ROLE_MAP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <div className="label" style={{ marginBottom: 6 }}>Semáforo DELI</div>
+            <select className="input" style={{ fontSize: 13 }} value={form.semaforo} onChange={e => setForm(f => ({ ...f, semaforo: e.target.value }))}>
+              {Object.entries(SEMAFORO).map(([k, v]) => <option key={k} value={k}>{v.label} — {v.desc}</option>)}
+            </select>
+          </div>
+          {error && <div style={{ fontSize: 12, color: 'var(--red)', padding: '8px 12px', background: '#fff5f5', borderRadius: 'var(--r-sm)' }}>{error}</div>}
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
+          <button className="btn-primary" onClick={handleSubmit} disabled={saving}>
+            <Icon name="mail" size={13} /> {saving ? 'Enviando…' : 'Enviar convite'}
+          </button>
+          <button className="btn-secondary" onClick={onClose}>Cancelar</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* Edit member modal */
+function EditMemberModal({ member, tenantDbId, onClose, onRemove, onDone }) {
+  const [role, setRole]       = useState(member.role || 'operador');
+  const [semaforo, setSemaforo] = useState(member.semaforo || 'verde');
+  const [saving, setSaving]   = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    await supabase.from('tenant_members')
+      .update({ role })
+      .eq('tenant_id', tenantDbId)
+      .eq('user_id', member.userId);
+    setSaving(false);
+    onDone();
+  }
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(13,13,13,0.5)', zIndex: 100 }} />
+      <div style={{
+        position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+        background: 'white', borderRadius: 'var(--r-lg)', padding: 32, zIndex: 101,
+        width: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--g-900)' }}>Editar membro</div>
+            <div style={{ fontSize: 12, color: 'var(--g-500)', marginTop: 2 }}>{member.name} · {member.email}</div>
+          </div>
+          <button className="btn-icon" onClick={onClose}><Icon name="x" size={16} /></button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <div className="label" style={{ marginBottom: 6 }}>Papel</div>
+            <select className="input" style={{ fontSize: 13 }} value={role} onChange={e => setRole(e.target.value)}>
+              {Object.entries(ROLE_MAP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <div className="label" style={{ marginBottom: 6 }}>Semáforo DELI</div>
+            <select className="input" style={{ fontSize: 13 }} value={semaforo} onChange={e => setSemaforo(e.target.value)}>
+              {Object.entries(SEMAFORO).map(([k, v]) => <option key={k} value={k}>{v.label} — {v.desc}</option>)}
+            </select>
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 20 }}>
+          <button className="btn-secondary" style={{ color: 'var(--red)', borderColor: 'var(--red-soft)', fontSize: 12 }} onClick={onRemove}>
+            <Icon name="trash" size={12} /> Remover do workspace
+          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Salvando…' : 'Salvar'}</button>
+            <button className="btn-secondary" onClick={onClose}>Cancelar</button>
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -876,6 +1229,49 @@ function TabBilling() {
 
 /* ─── Tab: Segurança ──────────────────────────────────── */
 function TabSecurity() {
+  const [mfaActive,    setMfaActive]    = useState(false);
+  const [showMFA,      setShowMFA]      = useState(false);
+  const [factorId,     setFactorId]     = useState('');
+  const [qrSvg,        setQrSvg]        = useState('');
+  const [secret,       setSecret]       = useState('');
+  const [verifyCode,   setVerifyCode]   = useState('');
+  const [verifying,    setVerifying]    = useState(false);
+  const [verifyError,  setVerifyError]  = useState('');
+  const [enrolling,    setEnrolling]    = useState(false);
+
+  async function handleEnroll2FA() {
+    setEnrolling(true);
+    setVerifyError('');
+    try {
+      const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' });
+      if (error) { alert(error.message); setEnrolling(false); return; }
+      setFactorId(data.id);
+      setQrSvg(data.totp.qr_code);    // SVG data URI
+      setSecret(data.totp.secret);
+      setShowMFA(true);
+    } catch (err) {
+      alert(err?.message || 'Erro ao iniciar 2FA');
+    }
+    setEnrolling(false);
+  }
+
+  async function handleVerify() {
+    if (!verifyCode || verifyCode.length !== 6) { setVerifyError('Digite o código de 6 dígitos'); return; }
+    setVerifying(true);
+    setVerifyError('');
+    try {
+      const { data: chal, error: cErr } = await supabase.auth.mfa.challenge({ factorId });
+      if (cErr) { setVerifyError(cErr.message); setVerifying(false); return; }
+      const { error: vErr } = await supabase.auth.mfa.verify({ factorId, challengeId: chal.id, code: verifyCode });
+      if (vErr) { setVerifyError('Código inválido. Tente novamente.'); setVerifying(false); return; }
+      setMfaActive(true);
+      setShowMFA(false);
+    } catch (err) {
+      setVerifyError(err?.message || 'Erro na verificação');
+    }
+    setVerifying(false);
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <SectionCard title="Autenticação">
@@ -894,13 +1290,72 @@ function TabSecurity() {
           />
           <SecurityRow
             title="2FA (autenticação em dois fatores)"
-            desc="Recomendado para contas admin"
-            status="Pendente"
-            statusCls="badge-yellow"
-            action="Ativar"
+            desc="Recomendado para contas admin · TOTP via app autenticador"
+            status={mfaActive ? 'Ativo' : 'Pendente'}
+            statusCls={mfaActive ? 'badge-green' : 'badge-yellow'}
+            action={mfaActive ? null : enrolling ? 'Ativando…' : 'Ativar'}
+            onAction={handleEnroll2FA}
           />
         </div>
       </SectionCard>
+
+      {/* 2FA Modal */}
+      {showMFA && (
+        <>
+          <div onClick={() => setShowMFA(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(13,13,13,0.5)', zIndex: 100 }} />
+          <div style={{
+            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+            background: 'white', borderRadius: 'var(--r-lg)', padding: 32, zIndex: 101,
+            width: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--g-900)' }}>Ativar autenticação 2FA</div>
+                <div style={{ fontSize: 12, color: 'var(--g-500)', marginTop: 2 }}>Escaneie com Google Authenticator ou Authy</div>
+              </div>
+              <button className="btn-icon" onClick={() => setShowMFA(false)}><Icon name="x" size={16} /></button>
+            </div>
+
+            {/* QR Code */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+              {qrSvg
+                ? <img src={qrSvg} alt="QR 2FA" style={{ width: 200, height: 200, borderRadius: 8 }} />
+                : <div style={{ width: 200, height: 200, background: 'var(--g-100)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: 'var(--g-400)' }}>Gerando QR…</div>
+              }
+            </div>
+
+            {/* Manual secret */}
+            {secret && (
+              <div style={{ marginBottom: 16, padding: '10px 12px', background: 'var(--g-50)', borderRadius: 'var(--r-sm)', border: '1px solid var(--g-200)' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--g-500)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Chave manual</div>
+                <code style={{ fontSize: 12, color: 'var(--g-900)', wordBreak: 'break-all', fontFamily: 'ui-monospace, monospace' }}>{secret}</code>
+              </div>
+            )}
+
+            {/* Verify code */}
+            <div style={{ marginBottom: 16 }}>
+              <div className="label" style={{ marginBottom: 6 }}>Código de verificação (6 dígitos)</div>
+              <input
+                className="input"
+                placeholder="000000"
+                maxLength={6}
+                value={verifyCode}
+                onChange={e => { setVerifyCode(e.target.value.replace(/\D/g, '')); setVerifyError(''); }}
+                style={{ fontSize: 20, letterSpacing: 4, textAlign: 'center', fontFamily: 'ui-monospace, monospace' }}
+              />
+              {verifyError && <div style={{ fontSize: 12, color: 'var(--red)', marginTop: 6 }}>{verifyError}</div>}
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn-primary" onClick={handleVerify} disabled={verifying || verifyCode.length !== 6}>
+                {verifying ? 'Verificando…' : 'Confirmar e ativar'}
+              </button>
+              <button className="btn-secondary" onClick={() => setShowMFA(false)}>Cancelar</button>
+            </div>
+          </div>
+        </>
+      )}
+
 
       <SectionCard title="Secrets e API Keys">
         <p style={{ fontSize: 13, color: 'var(--g-600)', marginBottom: 14, lineHeight: 1.6 }}>
@@ -978,7 +1433,23 @@ function Field({ label, value, mono }) {
   );
 }
 
-function SecurityRow({ title, desc, status, statusCls, action }) {
+function InputField({ label, value, onChange, placeholder, mono, type = 'text' }) {
+  return (
+    <div>
+      <div className="label" style={{ marginBottom: 6 }}>{label}</div>
+      <input
+        className="input"
+        type={type}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder || ''}
+        style={{ fontSize: 13, fontFamily: mono ? 'ui-monospace, monospace' : 'inherit' }}
+      />
+    </div>
+  );
+}
+
+function SecurityRow({ title, desc, status, statusCls, action, onAction }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 14,
@@ -991,7 +1462,7 @@ function SecurityRow({ title, desc, status, statusCls, action }) {
       </div>
       <span className={`badge ${statusCls}`}>{status}</span>
       {action && (
-        <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 10px' }}>{action}</button>
+        <button className="btn-secondary" style={{ fontSize: 12, padding: '5px 10px' }} onClick={onAction}>{action}</button>
       )}
     </div>
   );

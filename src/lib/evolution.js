@@ -17,8 +17,12 @@ export async function listInstances() {
 }
 
 // Status de conexão de uma instância
-export async function getInstanceStatus(instanceName) {
-  const res = await fetch(`${EVO_URL}/instance/connectionState/${instanceName}`, { headers });
+export async function getInstanceStatus(instanceName, evolutionUrl, apiKey) {
+  const url = evolutionUrl || EVO_URL;
+  const key = apiKey || EVO_KEY;
+  const res = await fetch(`${url}/instance/connectionState/${instanceName}`, {
+    headers: { 'Content-Type': 'application/json', apikey: key },
+  });
   return res.json();
 }
 
@@ -48,28 +52,31 @@ export async function sendMediaMessage(instanceName, to, mediaUrl, mediaType, ca
 }
 
 // Configurar webhook da instância para apontar para a Supabase Edge Function
-export async function setWebhook(instanceName, webhookUrl) {
-  const res = await fetch(`${EVO_URL}/webhook/set/${instanceName}`, {
+export async function setWebhook(instanceName, webhookUrl, evolutionUrl, apiKey) {
+  const url = evolutionUrl || EVO_URL;
+  const key = apiKey || EVO_KEY;
+  const res = await fetch(`${url}/webhook/set/${instanceName}`, {
     method: 'POST',
-    headers,
+    headers: { 'Content-Type': 'application/json', apikey: key },
     body: JSON.stringify({
-      url:               webhookUrl,
-      webhook_by_events: false,
-      webhook_base64:    false,
-      events: [
-        'MESSAGES_UPSERT',
-        'MESSAGES_UPDATE',
-        'CONNECTION_UPDATE',
-        'QRCODE_UPDATED',
-      ],
+      webhook: {
+        enabled:           true,
+        url:               webhookUrl,
+        webhook_by_events: false,
+        events:            ['MESSAGES_UPSERT'],
+      },
     }),
   });
   return res.json();
 }
 
 // Buscar QR Code para conectar instância
-export async function getQRCode(instanceName) {
-  const res = await fetch(`${EVO_URL}/instance/connect/${instanceName}`, { headers });
+export async function getQRCode(instanceName, evolutionUrl, apiKey) {
+  const url = evolutionUrl || EVO_URL;
+  const key = apiKey || EVO_KEY;
+  const res = await fetch(`${url}/instance/connect/${instanceName}`, {
+    headers: { 'Content-Type': 'application/json', apikey: key },
+  });
   return res.json();
 }
 
