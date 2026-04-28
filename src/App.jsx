@@ -11,6 +11,7 @@ import CRMScreen from './screens/CRMScreen.jsx';
 import ReportsScreen from './screens/ReportsScreen.jsx';
 import SettingsScreen from './screens/SettingsScreen.jsx';
 import AgentsPage from './screens/AgentsPage.jsx';
+import GruposScreen from './screens/GruposScreen.jsx';
 import { CONVERSATIONS, INADIMPLENTES, TENANTS } from './data.js';
 import { supabase } from './lib/supabase.js';
 import { listTenants } from './lib/api.js';
@@ -102,6 +103,7 @@ export default function App() {
         {route === 'crm'       && <CRMScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'reports'   && <ReportsScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'agents'    && <AgentsPage />}
+        {route === 'grupos'    && <GruposScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'settings'  && <SettingsScreen tenant={tenant} tenantDbId={tenantDbId} />}
       </main>
       <TweaksPanel title="Tweaks">
