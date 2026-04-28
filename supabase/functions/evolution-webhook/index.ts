@@ -21,28 +21,42 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { event, instance, data } = body;
 
-    // Só processa mensagens recebidas
-    if (event !== 'messages.upsert') {
+    // Evolution API envia "messages.upsert" (minúsculo, notação ponto)
+    // Normaliza para aceitar ambos os formatos
+    const eventNorm = (event || '').toLowerCase().replace(/[._]/g, '');
+    if (eventNorm !== 'messagesupsert') {
       return new Response('ignored', { status: 200 });
     }
-    if (!data?.key || data.key.fromMe) {
+
+    // data pode chegar como array (Evolution API v2) ou objeto
+    const msgData = Array.isArray(data) ? data[0] : data;
+
+    if (!msgData?.key) {
+      return new Response('no_key', { status: 200 });
+    }
+
+    // Ignora mensagens enviadas pelo próprio número
+    if (msgData.key.fromMe) {
       return new Response('fromMe', { status: 200 });
     }
 
-    const chatId      = data.key.remoteJid; // ex: 5511999@s.whatsapp.net ou grupo@g.us
-    const isGroup     = chatId.endsWith('@g.us');
-    const messageText =
-      data.message?.conversation ||
-      data.message?.extendedTextMessage?.text ||
-      data.message?.imageMessage?.caption ||
-      '';
-    const pushName = data.pushName || 'Desconhecido';
-    const msgId    = data.key.id;
+    const chatId   = msgData.key.remoteJid;             // ex: 5511999@s.whatsapp.net ou grupo@g.us
+    const isGroup  = chatId.endsWith('@g.us');
+    const msgId    = msgData.key.id;
+    const pushName = msgData.pushName || 'Desconhecido';
 
-    // 1. Buscar instância no banco
+    const messageText =
+      msgData.message?.conversation ||
+      msgData.message?.extendedTextMessage?.text ||
+      msgData.message?.imageMessage?.caption ||
+      msgData.message?.videoMessage?.caption ||
+      msgData.message?.documentMessage?.title ||
+      '';
+
+    // 1. Buscar instância no banco (sem tenant_id)
     const { data: instanceData, error: instErr } = await supabase
       .from('evolution_instances')
-      .select('id, tenant_id')
+      .select('id')
       .eq('instance_name', instance)
       .single();
 
@@ -56,36 +70,26 @@ Deno.serve(async (req) => {
 
     const { data: existingConv } = await supabase
       .from('conversations')
-      .select('id, unread_count')
+      .select('id')
       .eq('whatsapp_chat_id', chatId)
       .eq('instance_id', instanceData.id)
       .maybeSingle();
 
     if (existingConv) {
       conversationId = existingConv.id;
+      // Atualiza updated_at para manter ordenação por mais recente
       await supabase
         .from('conversations')
-        .update({
-          unread_count:    (existingConv.unread_count || 0) + 1,
-          last_message_at: new Date().toISOString(),
-          preview:         messageText.slice(0, 80),
-        })
+        .update({ updated_at: new Date().toISOString() })
         .eq('id', conversationId);
     } else {
       const { data: newConv, error: convErr } = await supabase
         .from('conversations')
         .insert({
-          tenant_id:        instanceData.tenant_id,
           instance_id:      instanceData.id,
           whatsapp_chat_id: chatId,
-          type:             'whatsapp',
           is_group:         isGroup,
-          group_name:       isGroup ? chatId : null,
-          title:            isGroup ? chatId : pushName,
-          status:           'open',
-          unread_count:     1,
-          last_message_at:  new Date().toISOString(),
-          preview:          messageText.slice(0, 80),
+          group_name:       isGroup ? (pushName !== 'Desconhecido' ? pushName : chatId) : null,
         })
         .select('id')
         .single();
@@ -97,40 +101,18 @@ Deno.serve(async (req) => {
       conversationId = newConv.id;
     }
 
-    // 3. Buscar ou criar customer (somente para chats individuais)
-    if (!isGroup) {
-      const phone = chatId.split('@')[0];
-      const { data: existingCustomer } = await supabase
-        .from('customers')
-        .select('id')
-        .eq('phone', phone)
-        .eq('tenant_id', instanceData.tenant_id)
-        .maybeSingle();
+    // 3. Salvar mensagem com schema correto
+    const msgTimestamp = msgData.messageTimestamp
+      ? new Date(Number(msgData.messageTimestamp) * 1000).toISOString()
+      : new Date().toISOString();
 
-      if (!existingCustomer) {
-        await supabase.from('customers').insert({
-          tenant_id: instanceData.tenant_id,
-          name:      pushName,
-          phone,
-          avatar:    pushName
-            .split(' ')
-            .map((w: string) => w[0])
-            .join('')
-            .slice(0, 2)
-            .toUpperCase(),
-        });
-      }
-    }
-
-    // 4. Salvar mensagem
     const { error: msgErr } = await supabase.from('messages').insert({
-      tenant_id:       instanceData.tenant_id,
       conversation_id: conversationId,
-      direction:       'inbound',
-      sender_kind:     'customer',
-      body:            messageText,
       whatsapp_msg_id: msgId,
-      sent_at:         new Date((data.messageTimestamp || Date.now() / 1000) * 1000).toISOString(),
+      direction:       'inbound',
+      sender_name:     pushName,
+      content:         messageText,
+      created_at:      msgTimestamp,
     });
 
     if (msgErr) {
