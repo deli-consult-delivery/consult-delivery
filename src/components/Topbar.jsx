@@ -21,9 +21,16 @@ const NOTIFICATIONS = [
   { agent: 'deli', text: '3 tarefas foram priorizadas pra hoje', time: '1h' },
 ];
 
-export default function Topbar({ route, tenant, setTenant, tenants }) {
+const THEMES = [
+  { id: 'claro',  label: 'Claro',  icon: 'sun'      },
+  { id: 'cinza',  label: 'Cinza',  icon: 'contrast' },
+  { id: 'escuro', label: 'Escuro', icon: 'moon'     },
+];
+
+export default function Topbar({ route, tenant, setTenant, tenants, theme = 'claro', setTheme }) {
   const [openTenant, setOpenTenant] = useState(false);
   const [openNotif, setOpenNotif] = useState(false);
+  const [openTheme, setOpenTheme] = useState(false);
   const list = tenants ?? MOCK_TENANTS;
   const cur = list.find(t => t.id === tenant) ?? list[0];
 
@@ -116,6 +123,35 @@ export default function Topbar({ route, tenant, setTenant, tenants }) {
                     <div style={{ fontSize: 12 }}>{n.text}</div>
                     <div style={{ fontSize: 10, color: 'var(--g-500)', marginTop: 2 }}>{n.time}</div>
                   </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Theme switcher */}
+        <div style={{ position: 'relative' }}>
+          <button
+            className="btn-icon"
+            title="Tema"
+            onClick={() => setOpenTheme(v => !v)}
+            style={{ color: theme !== 'claro' ? 'var(--red)' : 'var(--g-600)' }}
+          >
+            <Icon name={THEMES.find(t => t.id === theme)?.icon || 'sun'} size={18} />
+          </button>
+          {openTheme && (
+            <div className="dropdown" style={{ right: 0, minWidth: 160 }} onMouseLeave={() => setOpenTheme(false)}>
+              <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--g-100)', fontSize: 10, fontWeight: 700, color: 'var(--g-500)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                Tema
+              </div>
+              {THEMES.map(t => (
+                <div
+                  key={t.id}
+                  className={`dropdown-item ${theme === t.id ? 'active' : ''}`}
+                  onClick={() => { setTheme?.(t.id); setOpenTheme(false); }}
+                >
+                  <Icon name={t.icon} size={14} />
+                  {t.label}
                 </div>
               ))}
             </div>

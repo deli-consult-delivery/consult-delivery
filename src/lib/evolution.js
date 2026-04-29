@@ -183,6 +183,27 @@ export async function sendGroupTextMessage(instanceName, groupJid, text) {
   return res.json();
 }
 
+// Enviar mensagem de áudio (base64)
+export async function sendAudioMessage(instanceName, to, audioBase64, mimetype = 'audio/webm;codecs=opus') {
+  const res = await fetch(`${EVO_URL}/message/sendMedia/${instanceName}`, {
+    method: 'POST', headers,
+    body: JSON.stringify({
+      number:    to,
+      mediatype: 'audio',
+      mimetype,
+      media:     audioBase64,
+      fileName:  'audio.webm',
+    }),
+  });
+  return res.json();
+}
+
+// Buscar perfil de contato (foto, nome)
+export async function fetchProfile(instanceName, phoneNumber) {
+  const res = await fetch(`${EVO_URL}/chat/fetchProfile/${instanceName}/${phoneNumber}`, { headers });
+  return res.json();
+}
+
 // Marcar mensagens como lidas
 export async function markAsRead(instanceName, remoteJid, msgIds) {
   const res = await fetch(`${EVO_URL}/chat/markMessageAsRead/${instanceName}`, {

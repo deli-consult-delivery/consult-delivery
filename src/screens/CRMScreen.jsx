@@ -393,7 +393,8 @@ function NovoClienteModal({ tenantDbId, onClose, onCreated }) {
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   async function handleSave() {
-    if (!form.name.trim()) { setError('Nome obrigatorio'); return; }
+    if (!form.name.trim()) { setError('Nome obrigatório'); return; }
+    if (!tenantDbId) { setError('Workspace não identificado. Recarregue a página.'); return; }
     setSaving(true);
     setError('');
     try {
@@ -403,8 +404,8 @@ function NovoClienteModal({ tenantDbId, onClose, onCreated }) {
         email:     form.email.trim(),
         is_vip:    form.status === 'vip',
         metadata:  { status: form.status, notes: form.notes },
+        tenant_id: tenantDbId,
       };
-      if (tenantDbId) payload.tenant_id = tenantDbId;
 
       const { data, error: err } = await supabase
         .from('customers')
@@ -412,10 +413,13 @@ function NovoClienteModal({ tenantDbId, onClose, onCreated }) {
         .select('*, orders(id, total_cents, placed_at)')
         .single();
 
-      if (err) throw err;
+      if (err) {
+        console.error('[CRM] Erro ao criar cliente:', err);
+        throw err;
+      }
       onCreated(mapCustomers([data])[0]);
     } catch (e) {
-      setError(e.message || 'Erro ao salvar');
+      setError(e.message || 'Erro ao salvar. Verifique o console.');
     }
     setSaving(false);
   }
