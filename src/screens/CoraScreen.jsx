@@ -252,7 +252,7 @@ function CoraDrawer({ transcript, row, onClose }) {
         onClick={e => e.stopPropagation()}
         className="slide-right"
         style={{
-          width: 900, maxWidth: '95vw', background: 'white', height: '100vh',
+          width: 900, maxWidth: '95vw', background: 'var(--white)', height: '100vh',
           display: 'grid', gridTemplateColumns: '1fr 340px',
           boxShadow: '-20px 0 40px rgba(0,0,0,0.2)',
         }}
@@ -306,7 +306,7 @@ function CoraDrawer({ transcript, row, onClose }) {
           </div>
 
           <div style={{ padding: 12, background: '#F0F2F5', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ flex: 1, padding: '8px 12px', background: 'white', borderRadius: 20, fontSize: 12, color: 'var(--g-400)' }}>
+            <div style={{ flex: 1, padding: '8px 12px', background: 'var(--white)', borderRadius: 20, fontSize: 12, color: 'var(--g-400)' }}>
               CORA está monitorando esta conversa…
             </div>
             <button className="btn-icon" style={{ background: '#075E54', color: 'white' }}><Icon name="send" size={14} /></button>
@@ -314,7 +314,7 @@ function CoraDrawer({ transcript, row, onClose }) {
         </div>
 
         {/* AI analysis side */}
-        <div style={{ borderLeft: '1px solid var(--g-200)', background: 'white', padding: 24, overflowY: 'auto' }} className="scroll">
+        <div style={{ borderLeft: '1px solid var(--g-200)', background: 'var(--white)', padding: 24, overflowY: 'auto' }} className="scroll">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
             <div>
               <div className="label" style={{ color: 'var(--success)' }}>Análise CORA</div>

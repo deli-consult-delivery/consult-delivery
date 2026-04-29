@@ -140,7 +140,7 @@ export default function KanbanScreen({ tenant }) {
               )}
             </button>
             {showFiltDrop && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: 'white', border: '1px solid var(--g-200)', borderRadius: 'var(--r-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 12, zIndex: 200, minWidth: 200 }}>
+              <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: 'var(--white)', border: '1px solid var(--g-200)', borderRadius: 'var(--r-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 12, zIndex: 200, minWidth: 200 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--g-500)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Prioridade</div>
                 {[['all','Todas'],['high','Urgente'],['med','Média'],['low','Baixa']].map(([v, l]) => (
                   <button key={v} onClick={() => { setFilterPriority(v); setShowFiltDrop(false); }}
@@ -173,7 +173,7 @@ export default function KanbanScreen({ tenant }) {
               <Icon name="users" size={14} /> Responsável
             </button>
             {showRespDrop && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: 'white', border: '1px solid var(--g-200)', borderRadius: 'var(--r-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 8, zIndex: 200, minWidth: 180 }}>
+              <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: 'var(--white)', border: '1px solid var(--g-200)', borderRadius: 'var(--r-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 8, zIndex: 200, minWidth: 180 }}>
                 <button onClick={() => { setFilterAssignee('all'); setShowRespDrop(false); }}
                   style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 10px', borderRadius: 'var(--r-sm)', fontSize: 13, fontWeight: filterAssignee === 'all' ? 700 : 400, color: filterAssignee === 'all' ? 'var(--red)' : 'var(--g-800)', background: filterAssignee === 'all' ? 'var(--red-soft)' : 'transparent', textAlign: 'left', marginBottom: 2 }}>
                   Todos
@@ -227,7 +227,7 @@ export default function KanbanScreen({ tenant }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ width: 10, height: 10, borderRadius: '50%', background: col.color }} />
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--g-900)', textTransform: 'uppercase', letterSpacing: 0.3 }}>{col.label}</span>
-                <span style={{ fontSize: 12, color: 'var(--g-500)', background: 'white', padding: '2px 8px', borderRadius: 9999 }}>{byCol[col.id].length}</span>
+                <span style={{ fontSize: 12, color: 'var(--g-500)', background: 'var(--white)', padding: '2px 8px', borderRadius: 9999 }}>{byCol[col.id].length}</span>
               </div>
               <button className="btn-icon" style={{ width: 24, height: 24 }} onClick={() => openNew(col.id)}>
                 <Icon name="plus" size={12} />
@@ -308,7 +308,7 @@ function TaskCard({ task, isDragging, onDragStart, onDrag, onDragEnd, onEdit, on
         }}>
           <button
             onMouseDown={e => { e.stopPropagation(); onEdit(); }}
-            style={{ width: 26, height: 26, borderRadius: 6, background: 'white', border: '1px solid var(--g-200)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 1px 4px rgba(0,0,0,0.1)' }}
+            style={{ width: 26, height: 26, borderRadius: 6, background: 'var(--white)', border: '1px solid var(--g-200)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 1px 4px rgba(0,0,0,0.1)' }}
             title="Editar"
           >
             <Icon name="edit" size={12} style={{ color: 'var(--g-600)' }} />
@@ -316,7 +316,7 @@ function TaskCard({ task, isDragging, onDragStart, onDrag, onDragEnd, onEdit, on
           {!confirmDel ? (
             <button
               onMouseDown={e => { e.stopPropagation(); setConfirmDel(true); }}
-              style={{ width: 26, height: 26, borderRadius: 6, background: 'white', border: '1px solid var(--g-200)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 1px 4px rgba(0,0,0,0.1)' }}
+              style={{ width: 26, height: 26, borderRadius: 6, background: 'var(--white)', border: '1px solid var(--g-200)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 1px 4px rgba(0,0,0,0.1)' }}
               title="Excluir"
             >
               <Icon name="trash" size={12} style={{ color: 'var(--g-600)' }} />
@@ -399,7 +399,7 @@ function TaskModal({ task, defaultCol, onSave, onClose }) {
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(13,13,13,0.45)', zIndex: 300 }} />
       <div style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-        background: 'white', borderRadius: 'var(--r-lg)', padding: 28,
+        background: 'var(--white)', borderRadius: 'var(--r-lg)', padding: 28,
         zIndex: 301, width: 480, boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
         maxHeight: '90vh', overflowY: 'auto',
       }}>

@@ -344,7 +344,7 @@ function TabWhatsApp() {
                   return (
                     <tr key={inst.id} style={{
                       borderBottom: i < instances.length - 1 ? '1px solid var(--g-100)' : 'none',
-                      background: 'white',
+                      background: 'var(--white)',
                     }}>
                       <td style={{ padding: '14px 14px' }}>
                         <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--g-900)' }}>
@@ -440,7 +440,7 @@ function TabWhatsApp() {
           <div style={{
             position: 'fixed', top: '50%', left: '50%',
             transform: 'translate(-50%,-50%)',
-            background: 'white', borderRadius: 'var(--r-lg)',
+            background: 'var(--white)', borderRadius: 'var(--r-lg)',
             padding: 32, zIndex: 101, width: 360,
             boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
           }}>
@@ -639,7 +639,7 @@ function TabWorkspace({ tenantDbId }) {
                     <div onClick={() => setShowEmoji(false)} style={{ position: 'fixed', inset: 0, zIndex: 49 }} />
                     <div style={{
                       position: 'absolute', top: '100%', left: 0, marginTop: 6,
-                      background: 'white', border: '1px solid var(--g-200)',
+                      background: 'var(--white)', border: '1px solid var(--g-200)',
                       borderRadius: 'var(--r-md)', padding: 12, zIndex: 50,
                       display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4,
                       boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
@@ -690,7 +690,7 @@ function TabWorkspace({ tenantDbId }) {
           <div onClick={() => setShowDelete(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(13,13,13,0.5)', zIndex: 100 }} />
           <div style={{
             position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-            background: 'white', borderRadius: 'var(--r-lg)', padding: 32, zIndex: 101,
+            background: 'var(--white)', borderRadius: 'var(--r-lg)', padding: 32, zIndex: 101,
             width: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
           }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--red)', marginBottom: 8 }}>Excluir workspace</div>
@@ -783,7 +783,7 @@ function TabUsers({ tenantDbId }) {
                   display: 'flex', alignItems: 'center', gap: 14,
                   padding: '14px 16px',
                   borderBottom: i < displayMembers.length - 1 ? '1px solid var(--g-100)' : 'none',
-                  background: 'white',
+                  background: 'var(--white)',
                 }}>
                   <UserAvatar name={u.avatar} size={38} />
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -817,7 +817,7 @@ function TabUsers({ tenantDbId }) {
               display: 'flex', alignItems: 'flex-start', gap: 14,
               padding: '14px 16px',
               border: '1px solid var(--g-200)', borderRadius: 'var(--r-md)',
-              background: 'white',
+              background: 'var(--white)',
             }}>
               <span style={{
                 width: 14, height: 14, borderRadius: '50%',
@@ -902,7 +902,7 @@ function InviteModal({ tenantDbId, onClose, onDone }) {
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(13,13,13,0.5)', zIndex: 100 }} />
       <div style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-        background: 'white', borderRadius: 'var(--r-lg)', padding: 32, zIndex: 101,
+        background: 'var(--white)', borderRadius: 'var(--r-lg)', padding: 32, zIndex: 101,
         width: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -958,7 +958,7 @@ function EditMemberModal({ member, tenantDbId, onClose, onRemove, onDone }) {
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(13,13,13,0.5)', zIndex: 100 }} />
       <div style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-        background: 'white', borderRadius: 'var(--r-lg)', padding: 32, zIndex: 101,
+        background: 'var(--white)', borderRadius: 'var(--r-lg)', padding: 32, zIndex: 101,
         width: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -1305,7 +1305,7 @@ function TabSecurity() {
           <div onClick={() => setShowMFA(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(13,13,13,0.5)', zIndex: 100 }} />
           <div style={{
             position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-            background: 'white', borderRadius: 'var(--r-lg)', padding: 32, zIndex: 101,
+            background: 'var(--white)', borderRadius: 'var(--r-lg)', padding: 32, zIndex: 101,
             width: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -1424,7 +1424,7 @@ function Field({ label, value, mono }) {
       <div style={{
         padding: '9px 12px',
         border: '1px solid var(--g-300)', borderRadius: 'var(--r-sm)',
-        fontSize: 13, color: 'var(--g-900)', background: 'white',
+        fontSize: 13, color: 'var(--g-900)', background: 'var(--white)',
         fontFamily: mono ? 'ui-monospace, monospace' : 'inherit',
       }}>
         {value}
@@ -1454,7 +1454,7 @@ function SecurityRow({ title, desc, status, statusCls, action, onAction }) {
     <div style={{
       display: 'flex', alignItems: 'center', gap: 14,
       padding: '12px 16px', border: '1px solid var(--g-200)',
-      borderRadius: 'var(--r-md)', background: 'white',
+      borderRadius: 'var(--r-md)', background: 'var(--white)',
     }}>
       <div style={{ flex: 1 }}>
         <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--g-900)' }}>{title}</div>

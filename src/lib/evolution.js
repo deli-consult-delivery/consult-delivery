@@ -183,18 +183,21 @@ export async function sendGroupTextMessage(instanceName, groupJid, text) {
   return res.json();
 }
 
-// Enviar mensagem de áudio (base64)
-export async function sendAudioMessage(instanceName, to, audioBase64, mimetype = 'audio/webm;codecs=opus') {
-  const res = await fetch(`${EVO_URL}/message/sendMedia/${instanceName}`, {
+// Enviar áudio como PTT (voice note) via sendWhatsAppAudio
+export async function sendAudioMessage(instanceName, to, audioBase64) {
+  // sendWhatsAppAudio espera só os dígitos do número, sem sufixo @s.whatsapp.net
+  const number  = to.split('@')[0];
+  const payload = { number, audio: audioBase64, encoding: true };
+  console.log('[EVO] sendWhatsAppAudio →', instanceName, number, `${audioBase64.length} chars base64`);
+  const res = await fetch(`${EVO_URL}/message/sendWhatsAppAudio/${instanceName}`, {
     method: 'POST', headers,
-    body: JSON.stringify({
-      number:    to,
-      mediatype: 'audio',
-      mimetype,
-      media:     audioBase64,
-      fileName:  'audio.webm',
-    }),
+    body: JSON.stringify(payload),
   });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => res.statusText);
+    console.error('[EVO] sendWhatsAppAudio falhou:', res.status, errText);
+    throw new Error(`Evolution API ${res.status}: ${errText}`);
+  }
   return res.json();
 }
 

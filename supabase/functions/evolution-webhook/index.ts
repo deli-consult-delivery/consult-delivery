@@ -19,6 +19,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
+    console.log('[WEBHOOK] payload:', JSON.stringify(body));
     const { event, instance, data } = body;
 
     // Evolution API envia "messages.upsert" (minúsculo, notação ponto)
@@ -75,13 +76,14 @@ Deno.serve(async (req) => {
       .eq('instance_id', instanceData.id)
       .maybeSingle();
 
+    const validPushName = pushName && pushName !== 'Desconhecido' ? pushName : null;
+
     if (existingConv) {
       conversationId = existingConv.id;
-      // Atualiza updated_at para manter ordenação por mais recente
-      await supabase
-        .from('conversations')
-        .update({ updated_at: new Date().toISOString() })
-        .eq('id', conversationId);
+      // Atualiza updated_at e push_name (se disponível) para manter ordenação por mais recente
+      const upd: Record<string, string | null> = { updated_at: new Date().toISOString() };
+      if (!isGroup && validPushName) upd.push_name = validPushName;
+      await supabase.from('conversations').update(upd).eq('id', conversationId);
     } else {
       const { data: newConv, error: convErr } = await supabase
         .from('conversations')
@@ -89,7 +91,8 @@ Deno.serve(async (req) => {
           instance_id:      instanceData.id,
           whatsapp_chat_id: chatId,
           is_group:         isGroup,
-          group_name:       isGroup ? (pushName !== 'Desconhecido' ? pushName : chatId) : null,
+          group_name:       isGroup ? (validPushName || chatId) : null,
+          push_name:        isGroup ? null : validPushName,
         })
         .select('id')
         .single();

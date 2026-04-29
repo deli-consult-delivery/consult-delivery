@@ -189,7 +189,7 @@ function TabWhatsApp({ tenant, tenantDbId }) {
   return (
     <div>
       {/* Instance selector + Sync */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, padding: 16, background: 'white', borderRadius: 'var(--r-md)', border: '1px solid var(--g-200)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, padding: 16, background: 'var(--white)', borderRadius: 'var(--r-md)', border: '1px solid var(--g-200)' }}>
         <Icon name="whatsapp" size={18} style={{ color: '#25D366', flexShrink: 0 }} />
         <div style={{ flex: 1 }}>
           {instances.length === 0 ? (
@@ -1008,7 +1008,7 @@ function ContactPicker({ tenantDbId, selected, onChange }) {
         </div>
 
         {showDrop && results.length > 0 && (
-          <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'white', border: '1px solid var(--g-200)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 50, maxHeight: 220, overflowY: 'auto' }}>
+          <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'var(--white)', border: '1px solid var(--g-200)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 50, maxHeight: 220, overflowY: 'auto' }}>
             {results.map(c => {
               const alreadyIn = selected.find(s => s.phone === (c.phone || '').replace(/\D/g, ''));
               return (
@@ -1032,7 +1032,7 @@ function ContactPicker({ tenantDbId, selected, onChange }) {
           </div>
         )}
         {showDrop && search.length >= 2 && !searching && results.length === 0 && (
-          <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'white', border: '1px solid var(--g-200)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: 'var(--g-500)', zIndex: 50 }}>
+          <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'var(--white)', border: '1px solid var(--g-200)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: 'var(--g-500)', zIndex: 50 }}>
             Nenhum contato encontrado para "{search}"
           </div>
         )}
@@ -1069,7 +1069,7 @@ function ModalOverlay({ onClose, children }) {
       />
       <div style={{
         position: 'relative', zIndex: 1,
-        background: 'white', borderRadius: 'var(--r-lg)',
+        background: 'var(--white)', borderRadius: 'var(--r-lg)',
         boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
         maxHeight: '90vh', overflowY: 'auto',
       }}>

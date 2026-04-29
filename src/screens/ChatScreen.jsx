@@ -75,25 +75,57 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const photoCacheRef = useRef({});
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
 
-  // Bug 3 — busca foto de perfil do WhatsApp quando uma conversa é aberta
+  // Bug 2/3 — busca foto + nome do WhatsApp quando uma conversa é aberta
   useEffect(() => {
     if (!HAS_EVO || !selectedInstance || !activeId) return;
     const conv = convs.find(c => c.id === activeId);
-    if (!conv || conv.photoUrl || !conv.whatsapp_chat_id) return;
+    if (!conv || !conv.whatsapp_chat_id) return;
     if (conv.type !== 'whatsapp' && conv.type !== 'group') return;
     const phone = conv.whatsapp_chat_id.split('@')[0];
-    if (!phone || photoCacheRef.current[phone] === null) return;
-    if (photoCacheRef.current[phone]) {
-      setConvs(prev => prev.map(c => c.id === activeId ? { ...c, photoUrl: photoCacheRef.current[phone] } : c));
+    if (!phone) return;
+
+    const cached = photoCacheRef.current[phone];
+    if (cached === false) return; // fetch anterior falhou, não tentar de novo
+
+    function applyProfile({ photoUrl, waName }) {
+      setConvs(prev => prev.map(c => {
+        if (c.id !== activeId) return c;
+        const upd = { ...c };
+        if (photoUrl && !c.photoUrl) upd.photoUrl = photoUrl;
+        if (waName && !c.waNameFetched) {
+          upd.name = waName;
+          upd.avatar = waName.slice(0, 2).toUpperCase();
+          upd.waNameFetched = true;
+        }
+        return upd;
+      }));
+    }
+
+    if (cached !== undefined) {
+      applyProfile(cached);
       return;
     }
+
     fetchProfile(selectedInstance, phone)
       .then(data => {
-        const url = data?.picture || data?.profilePictureUrl || data?.imgUrl || null;
-        photoCacheRef.current[phone] = url;
-        if (url) setConvs(prev => prev.map(c => c.id === activeId ? { ...c, photoUrl: url } : c));
+        console.log('[fetchProfile] response:', JSON.stringify(data));
+        const photoUrl = data?.picture || data?.profilePictureUrl || data?.imgUrl
+          || data?.profilePic || data?.profilePicUrl || data?.image || null;
+        const waName   = data?.name || data?.pushName || data?.verifiedName
+          || data?.notify || data?.short_name || null;
+        const profile  = { photoUrl, waName };
+        photoCacheRef.current[phone] = profile;
+        applyProfile(profile);
+        // Persiste nome no banco para próximas cargas
+        if (waName) {
+          supabase.from('conversations')
+            .update({ push_name: waName })
+            .eq('id', activeId)
+            .then(() => {})
+            .catch(() => {});
+        }
       })
-      .catch(() => { photoCacheRef.current[phone] = null; });
+      .catch(() => { photoCacheRef.current[phone] = false; });
   }, [activeId, selectedInstance]);
 
   useEffect(() => {
@@ -400,13 +432,31 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         .order('updated_at', { ascending: false }).limit(50);
 
       if (rows?.length) {
+        // Busca última mensagem de cada conversa em uma só query
+        const convIds = rows.map(r => r.id);
+        const { data: recentMsgs } = await supabase.from('messages')
+          .select('conversation_id, content, body, direction, created_at')
+          .in('conversation_id', convIds)
+          .order('created_at', { ascending: false })
+          .limit(convIds.length * 4);
+
+        // Pega apenas a última mensagem por conversa
+        const lastMsgMap = {};
+        (recentMsgs || []).forEach(msg => {
+          if (!lastMsgMap[msg.conversation_id]) lastMsgMap[msg.conversation_id] = msg;
+        });
+
         const mapped = rows.map(c => {
-          const phone = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
-          const name  = c.push_name || c.contact_name || c.group_name || phone || 'Desconhecido';
+          const phone   = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
+          const name    = c.push_name || c.contact_name || c.group_name || phone || 'Desconhecido';
+          const lm      = lastMsgMap[c.id];
+          const preview = lm ? (lm.content || lm.body || '') : '';
+          const previewFrom = lm?.direction === 'inbound' ? 'in' : 'out';
           return {
             id: c.id, name, avatar: name.slice(0, 2).toUpperCase(),
             type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id,
-            preview: '', time: c.updated_at
+            preview, previewFrom,
+            time: c.updated_at
               ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
             unread: 0, online: false, messages: [],
           };
@@ -511,15 +561,24 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     }));
     if (HAS_EVO && selectedInstance && active.whatsapp_chat_id) {
       try {
-        const ab = await audioPreview.blob.arrayBuffer();
-        const bytes = new Uint8Array(ab);
+        const ab     = await audioPreview.blob.arrayBuffer();
+        const bytes  = new Uint8Array(ab);
         let b64 = '';
         const chunk = 8192;
         for (let i = 0; i < bytes.length; i += chunk) {
           b64 += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunk, bytes.length)));
         }
-        await sendAudioMessage(selectedInstance, active.whatsapp_chat_id, btoa(b64), audioPreview.mimeType);
-      } catch (err) { console.error('Falha ao enviar áudio:', err); }
+        const base64 = btoa(b64);
+        console.log('[Chat] Enviando áudio:', {
+          instance: selectedInstance,
+          to: active.whatsapp_chat_id,
+          bytes: bytes.length,
+          mimeType: audioPreview.mimeType,
+        });
+        await sendAudioMessage(selectedInstance, active.whatsapp_chat_id, base64);
+      } catch (err) {
+        console.error('[Chat] Falha ao enviar áudio:', err?.message || err);
+      }
     }
     setRecState('idle');
     setRecSeconds(0);
@@ -616,7 +675,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     }}>
 
       {/* ── Col 1: Sidebar ────────────────────────────────── */}
-      <div style={{ background: 'white', borderRight: '1px solid var(--g-200)', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div style={{ background: 'var(--white)', borderRight: '1px solid var(--g-200)', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <div style={{ padding: '20px 20px 12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <h2 className="section-h2" style={{ fontSize: 18 }}>Conversas</h2>
@@ -772,7 +831,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           <>
             {/* Header do canal */}
             <div style={{
-              padding: '14px 20px', background: 'white', borderBottom: '1px solid var(--g-200)',
+              padding: '14px 20px', background: 'var(--white)', borderBottom: '1px solid var(--g-200)',
               display: 'flex', alignItems: 'center', gap: 12,
             }}>
               <ConvAvatar conv={active} size={40} />
@@ -851,7 +910,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             </div>
 
             {/* Input do canal */}
-            <div style={{ padding: '12px 20px 20px', background: 'white', borderTop: '1px solid var(--g-200)', flexShrink: 0 }}>
+            <div style={{ padding: '12px 20px 20px', background: 'var(--white)', borderTop: '1px solid var(--g-200)', flexShrink: 0 }}>
               <div className="copilot-wrap">
                 <textarea
                   value={chanDraft}
@@ -881,7 +940,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           <>
             {/* Header do chat */}
             <div style={{
-              padding: '14px 20px', background: 'white', borderBottom: '1px solid var(--g-200)',
+              padding: '14px 20px', background: 'var(--white)', borderBottom: '1px solid var(--g-200)',
               display: 'flex', alignItems: 'center', gap: 12,
             }}>
               <ConvAvatar conv={active} size={40} />
@@ -1068,9 +1127,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                             title={useSignature ? 'Assinar mensagens — clique para desativar' : 'Assinatura desativada — clique para ativar'}
                             style={{
                               fontSize: 11, padding: '3px 8px', borderRadius: 9999, cursor: 'pointer',
-                              background: useSignature ? 'var(--red-soft)' : 'var(--g-100)',
-                              color:      useSignature ? 'var(--red)' : 'var(--g-500)',
-                              border: `1px solid ${useSignature ? 'rgba(183,12,0,0.2)' : 'var(--g-200)'}`,
+                              background: useSignature ? 'var(--red)' : 'var(--g-100)',
+                              color:      useSignature ? 'white' : 'var(--g-500)',
+                              border: `1px solid ${useSignature ? 'var(--red)' : 'var(--g-200)'}`,
                               fontWeight: 600, whiteSpace: 'nowrap',
                             }}
                           >
@@ -1098,7 +1157,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       {/* ── Col 3: Painel de info / mensagens fixadas ─────── */}
       {showInfo && !isChannel && (
         <div className="slide-right scroll" style={{
-          background: 'white', borderLeft: '1px solid var(--g-200)', overflowY: 'auto',
+          background: 'var(--white)', borderLeft: '1px solid var(--g-200)', overflowY: 'auto',
           display: 'flex', flexDirection: 'column',
         }}>
           <div style={{
@@ -1116,7 +1175,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
       {showPinned && isChannel && (
         <div className="slide-right scroll" style={{
-          background: 'white', borderLeft: '1px solid var(--g-200)', overflowY: 'auto',
+          background: 'var(--white)', borderLeft: '1px solid var(--g-200)', overflowY: 'auto',
           display: 'flex', flexDirection: 'column',
         }}>
           <div style={{
@@ -1183,7 +1242,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           <div
             onClick={e => e.stopPropagation()}
             style={{
-              position: 'relative', zIndex: 1, background: 'white', borderRadius: 12,
+              position: 'relative', zIndex: 1, background: 'var(--white)', borderRadius: 12,
               width: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', padding: 24,
             }}
           >
@@ -1422,10 +1481,11 @@ function ConvItem({ conv, active, onClick, lastMsg }) {
   const previewText = lastMsg?.text || conv.preview || '';
   const truncated   = previewText.length > 38 ? previewText.slice(0, 38) + '…' : previewText;
   // 'in' = cliente → vermelho | 'out' = equipe → cinza
-  const previewColor = lastMsg
-    ? (lastMsg.from === 'in' ? 'var(--red)' : 'var(--g-500)')
-    : (conv.unread > 0 ? 'var(--g-900)' : 'var(--g-500)');
-  const previewWeight = lastMsg?.from === 'in' && !active ? 600 : 400;
+  const resolvedFrom = lastMsg?.from || conv.previewFrom || 'out';
+  const previewColor = previewText
+    ? (resolvedFrom === 'in' ? 'var(--red)' : 'var(--g-500)')
+    : 'var(--g-500)';
+  const previewWeight = resolvedFrom === 'in' && !active ? 600 : 400;
 
   return (
     <div
@@ -1437,7 +1497,7 @@ function ConvItem({ conv, active, onClick, lastMsg }) {
         borderLeft: active ? '3px solid var(--red)' : '3px solid transparent',
         transition: 'all 150ms',
       }}
-      onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--g-50)'; }}
+      onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--g-200)'; }}
       onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
     >
       {isChannel ? (
@@ -1478,7 +1538,7 @@ function ConvItem({ conv, active, onClick, lastMsg }) {
                     {conv.groupType}
                   </span>
                 )}
-                {lastMsg?.from === 'in' && (
+                {resolvedFrom === 'in' && previewText && (
                   <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--red)', flexShrink: 0 }}>●</span>
                 )}
                 <div style={{ fontSize: 12, color: previewColor, fontWeight: previewWeight }} className="truncate">
@@ -1845,7 +1905,7 @@ function EmojiPicker({ onSelect, onClose }) {
   return (
     <div ref={ref} style={{
       position: 'absolute', bottom: 'calc(100% + 4px)', left: 0,
-      background: 'white', border: '1px solid var(--g-200)', borderRadius: 10, padding: 10, zIndex: 50,
+      background: 'var(--white)', border: '1px solid var(--g-200)', borderRadius: 10, padding: 10, zIndex: 50,
       display: 'grid', gridTemplateColumns: 'repeat(10, 30px)', gap: 2,
       boxShadow: '0 8px 24px rgba(0,0,0,0.14)',
     }}>
@@ -1872,7 +1932,7 @@ function NewInternalModal({ members, onSelect, onClose }) {
 
   return (
     <div onClick={e => e.stopPropagation()} style={{
-      background: 'white', borderRadius: 12, width: 340,
+      background: 'var(--white)', borderRadius: 12, width: 340,
       boxShadow: '0 16px 40px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', maxHeight: 440,
     }}>
       <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--g-200)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

@@ -61,42 +61,46 @@
   --topbar-h:  64px;
 }
 
-/* ─── TEMA: CINZA ─────────────────────────────────────────── */
+/* ─── TEMA: CINZA (cinza médio) ──────────────────────────── */
 [data-theme="cinza"] {
-  --g-50:       #F0F0F0;
-  --g-100:      #E5E5E5;
-  --g-200:      #D0D0D0;
-  --g-300:      #BBBBBB;
-  --g-400:      #999999;
-  --g-500:      #666666;
-  --g-600:      #555555;
-  --g-700:      #333333;
-  --g-900:      #1A1A1A;
-  --black:      #1A1A1A;
-  --black-soft: #282828;
-  --white:      #EBEBEB;
-  --sh-card:    0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08);
-}
-
-/* ─── TEMA: ESCURO ────────────────────────────────────────── */
-[data-theme="escuro"] {
-  --g-50:       #0F1117;
-  --g-100:      #1C1F26;
-  --g-200:      #2A2F3D;
-  --g-300:      #3D4455;
-  --g-400:      #5A6272;
-  --g-500:      #8892A0;
-  --g-600:      #A8B0BC;
-  --g-700:      #C8D0DA;
-  --g-900:      #EAEDF1;
-  --black:      #EAEDF1;
-  --black-soft: #0D0F14;
-  --white:      #1C1F26;
+  --g-50:       #3D3D3D;   /* fundo geral, sidebar convs, área chat */
+  --g-100:      #464646;   /* bubble-in, kanban col, hover sutil */
+  --g-200:      #555555;   /* bordas e divisores */
+  --g-300:      #555555;   /* bordas fortes */
+  --g-400:      #888888;   /* placeholder, ícones sutis */
+  --g-500:      #BBBBBB;   /* texto secundário */
+  --g-600:      #CCCCCC;   /* texto secundário forte */
+  --g-700:      #D8D8D8;   /* corpo de texto */
+  --g-900:      #F0F0F0;   /* texto principal */
+  --black:      #F0F0F0;
+  --black-soft: #2F2F2F;   /* sidebar esquerda */
+  --white:      #464646;   /* surface: cards, inputs, dropdowns, headers */
   --red-soft:   rgba(183,12,0,0.22);
   --success-soft: rgba(16,185,129,0.18);
   --warn-soft:    rgba(245,158,11,0.18);
   --info-soft:    rgba(59,130,246,0.18);
   --sh-card:    0 1px 4px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+}
+
+/* ─── TEMA: ESCURO ────────────────────────────────────────── */
+[data-theme="escuro"] {
+  --g-50:       #252525;   /* fundo geral, sidebar convs, área chat, header */
+  --g-100:      #333333;   /* bubble-in, hover, kanban col */
+  --g-200:      #3A3A3A;   /* bordas e divisores */
+  --g-300:      #3A3A3A;   /* bordas fortes */
+  --g-400:      #777777;   /* placeholder, ícones sutis */
+  --g-500:      #AAAAAA;   /* texto secundário */
+  --g-600:      #BBBBBB;   /* texto secundário forte */
+  --g-700:      #CCCCCC;   /* corpo de texto */
+  --g-900:      #FFFFFF;   /* texto principal */
+  --black:      #FFFFFF;
+  --black-soft: #1E1E1E;   /* sidebar esquerda */
+  --white:      #2F2F2F;   /* surface: cards, inputs, dropdowns, modais */
+  --red-soft:   rgba(183,12,0,0.22);
+  --success-soft: rgba(16,185,129,0.18);
+  --warn-soft:    rgba(245,158,11,0.18);
+  --info-soft:    rgba(59,130,246,0.18);
+  --sh-card:    0 1px 4px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.4);
 }
 
 * {
@@ -121,7 +125,7 @@ input, textarea { font-family: inherit; }
 /* ─── BUTTONS ─────────────────────────────────────────────── */
 .btn-primary {
   background: var(--red);
-  color: var(--white);
+  color: white;
   padding: 10px 20px;
   border-radius: var(--r-sm);
   font-weight: 600;
@@ -201,7 +205,7 @@ input, textarea { font-family: inherit; }
   letter-spacing: 0.2px;
 }
 .badge-red      { background: var(--red-soft); color: var(--red); }
-.badge-red-solid{ background: var(--red); color: var(--white); }
+.badge-red-solid{ background: var(--red); color: white; }
 .badge-green    { background: var(--success-soft); color: #047857; }
 .badge-yellow   { background: var(--warn-soft); color: #92400E; }
 .badge-blue     { background: var(--info-soft); color: #1E40AF; }
@@ -328,7 +332,7 @@ input, textarea { font-family: inherit; }
   overflow: hidden;
 }
 
-.sidebar { grid-area: sidebar; background: var(--black-soft); color: var(--white); display: flex; flex-direction: column; border-right: 1px solid rgba(255,255,255,0.06); }
+.sidebar { grid-area: sidebar; background: var(--black-soft); color: rgba(255,255,255,0.9); display: flex; flex-direction: column; border-right: 1px solid rgba(255,255,255,0.06); }
 .topbar  { grid-area: topbar;  background: var(--white); border-bottom: 1px solid var(--g-200); display: flex; align-items: center; padding: 0 24px; gap: 16px; }
 .main    { grid-area: main;    overflow: auto; position: relative; }
 
@@ -347,10 +351,10 @@ input, textarea { font-family: inherit; }
   transition: all 150ms var(--ease-out);
   cursor: pointer;
 }
-.side-item:hover { background: rgba(255,255,255,0.06); color: var(--white); }
+.side-item:hover { background: rgba(255,255,255,0.12); color: white; }
 .side-item.active {
   background: var(--red);
-  color: var(--white);
+  color: white;
   box-shadow: 0 4px 12px rgba(183,12,0,0.3);
 }
 .side-item .side-badge {
@@ -505,7 +509,7 @@ input, textarea { font-family: inherit; }
 .dropdown {
   position: absolute;
   top: calc(100% + 6px);
-  background: white;
+  background: var(--white);
   border: 1px solid var(--g-200);
   border-radius: var(--r-md);
   box-shadow: var(--sh-pop);
@@ -575,7 +579,7 @@ input, textarea { font-family: inherit; }
   font-weight: 500;
 }
 .copilot-hint kbd {
-  background: white;
+  background: var(--white);
   border: 1px solid var(--g-300);
   border-radius: 3px;
   padding: 1px 4px;
@@ -632,7 +636,7 @@ input, textarea { font-family: inherit; }
 .text-g700 { color: var(--g-700); }
 .text-g900 { color: var(--g-900); }
 .text-black { color: var(--black); }
-.text-white { color: var(--white); }
+.text-white { color: white; }
 .font-semibold { font-weight: 600; }
 .font-bold { font-weight: 700; }
 .text-xs { font-size: 11px; }

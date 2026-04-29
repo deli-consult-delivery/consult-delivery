@@ -340,7 +340,7 @@ function KanbanView({ clients, onSelect }) {
         const colClients = clients.filter(c => c.status === col.id);
         return (
           <div key={col.id} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'white', border: '1px solid var(--g-200)', borderRadius: 'var(--r-md)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--white)', border: '1px solid var(--g-200)', borderRadius: 'var(--r-md)' }}>
               <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--g-800)' }}>{col.label}</span>
               <span className={`badge ${col.cls}`}>{colClients.length}</span>
             </div>
@@ -950,7 +950,7 @@ function ClientDrawer({ client, tenantDbId, onClose }) {
       <div
         onClick={e => e.stopPropagation()}
         className="slide-right scroll"
-        style={{ width: 440, background: 'white', height: '100vh', display: 'flex', flexDirection: 'column', boxShadow: '-20px 0 40px rgba(0,0,0,0.15)', overflowY: 'auto' }}
+        style={{ width: 440, background: 'var(--white)', height: '100vh', display: 'flex', flexDirection: 'column', boxShadow: '-20px 0 40px rgba(0,0,0,0.15)', overflowY: 'auto' }}
       >
         {/* Header */}
         <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--g-200)', display: 'flex', alignItems: 'center', gap: 16, background: 'var(--g-50)' }}>
@@ -1116,7 +1116,7 @@ function ModalOverlay({ children, onClose }) {
       <div
         onClick={e => e.stopPropagation()}
         className="slide-up"
-        style={{ background: 'white', borderRadius: 'var(--r-lg)', boxShadow: '0 24px 64px rgba(0,0,0,0.2)', maxHeight: '90vh', overflowY: 'auto' }}
+        style={{ background: 'var(--white)', borderRadius: 'var(--r-lg)', boxShadow: '0 24px 64px rgba(0,0,0,0.2)', maxHeight: '90vh', overflowY: 'auto' }}
       >
         {children}
       </div>
