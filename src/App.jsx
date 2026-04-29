@@ -31,6 +31,7 @@ export default function App() {
   const [tenant, setTenant] = useState(TENANTS[0].id);
   const [tenantDbId, setTenantDbId] = useState(null);
   const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [theme, setTheme] = useState(() => localStorage.getItem('cd-theme') || 'claro');
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -72,6 +73,13 @@ export default function App() {
     document.documentElement.style.setProperty('--red', tweaks.primaryColor);
   }, [tweaks.primaryColor]);
 
+  useEffect(() => {
+    const el = document.documentElement;
+    if (theme === 'claro') el.removeAttribute('data-theme');
+    else el.setAttribute('data-theme', theme);
+    localStorage.setItem('cd-theme', theme);
+  }, [theme]);
+
   if (authLoading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--white)' }}>
@@ -94,7 +102,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <Sidebar route={route} setRoute={setRoute} counts={counts} />
-      <Topbar route={route} tenant={tenant} setTenant={setTenant} tenants={tenants} />
+      <Topbar route={route} tenant={tenant} setTenant={setTenant} tenants={tenants} theme={theme} setTheme={setTheme} />
       <main className="main scroll" key={route + tenant}>
         {route === 'dashboard' && <DashboardScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'chat'      && <ChatScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={setRoute} />}

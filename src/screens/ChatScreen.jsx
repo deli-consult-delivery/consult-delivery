@@ -3,11 +3,29 @@ import Icon from '../components/Icon.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
 import { CONVERSATIONS } from '../data.js';
 import { supabase } from '../lib/supabase.js';
-import { sendTextMessage } from '../lib/evolution.js';
+import { sendTextMessage, fetchProfile, sendAudioMessage } from '../lib/evolution.js';
 
 const HAS_EVO = !!(
   import.meta.env.VITE_EVOLUTION_URL && import.meta.env.VITE_EVOLUTION_KEY
 );
+
+// ── Som de notificação via Web Audio API (sem arquivo externo) ──
+function playNotificationSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.setValueAtTime(660, ctx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.35);
+  } catch { /* ignore em browsers que bloqueiam AudioContext */ }
+}
 
 export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const mockConvs = CONVERSATIONS[tenant] || [];
@@ -31,22 +49,57 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [showEmoji, setShowEmoji]                = useState(false);
   const [members, setMembers]                    = useState([]);
   const [showNewInternal, setShowNewInternal]    = useState(false);
+  const [currentUser, setCurrentUser]            = useState(null);
+  const [useSignature, setUseSignature]          = useState(true);
+
+  // ── Gravação de áudio ──────────────────────────────────
+  const [recState, setRecState]     = useState('idle'); // idle | recording | preview
+  const [recSeconds, setRecSeconds] = useState(0);
+  const [audioPreview, setAudioPreview] = useState(null); // { blob, url }
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef   = useRef([]);
+  const recTimerRef      = useRef(null);
 
   // ── Canais Internos state ───────────────────────────────
   const [chanMsgs, setChanMsgs]                  = useState({});
   const [chanDraft, setChanDraft]                = useState('');
   const [showPinned, setShowPinned]              = useState(false);
-  const [taskFromMsg, setTaskFromMsg]            = useState(null); // {text}
+  const [taskFromMsg, setTaskFromMsg]            = useState(null);
   const [taskFromMsgTitle, setTaskFromMsgTitle]  = useState('');
   const [savingTask, setSavingTask]              = useState(false);
 
-  const scrollRef   = useRef(null);
-  const textareaRef = useRef(null);
+  const scrollRef     = useRef(null);
+  const textareaRef   = useRef(null);
   const chanScrollRef = useRef(null);
+  const activeIdRef   = useRef(activeId);
+  const photoCacheRef = useRef({});
+  useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
+
+  // Bug 3 — busca foto de perfil do WhatsApp quando uma conversa é aberta
+  useEffect(() => {
+    if (!HAS_EVO || !selectedInstance || !activeId) return;
+    const conv = convs.find(c => c.id === activeId);
+    if (!conv || conv.photoUrl || !conv.whatsapp_chat_id) return;
+    if (conv.type !== 'whatsapp' && conv.type !== 'group') return;
+    const phone = conv.whatsapp_chat_id.split('@')[0];
+    if (!phone || photoCacheRef.current[phone] === null) return;
+    if (photoCacheRef.current[phone]) {
+      setConvs(prev => prev.map(c => c.id === activeId ? { ...c, photoUrl: photoCacheRef.current[phone] } : c));
+      return;
+    }
+    fetchProfile(selectedInstance, phone)
+      .then(data => {
+        const url = data?.picture || data?.profilePictureUrl || data?.imgUrl || null;
+        photoCacheRef.current[phone] = url;
+        if (url) setConvs(prev => prev.map(c => c.id === activeId ? { ...c, photoUrl: url } : c));
+      })
+      .catch(() => { photoCacheRef.current[phone] = null; });
+  }, [activeId, selectedInstance]);
 
   useEffect(() => {
     loadInstances();
     loadMembers();
+    loadCurrentUser();
   }, []);
 
   useEffect(() => {
@@ -79,6 +132,23 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         .select('id, full_name, email, avatar_url')
         .order('full_name');
       if (data?.length) setMembers(data);
+    } catch { /* ignore */ }
+  }
+
+  async function loadCurrentUser() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name, avatar_url')
+        .eq('id', user.id)
+        .single();
+      setCurrentUser({
+        id: user.id,
+        email: user.email,
+        name: profile?.full_name || user.email?.split('@')[0] || 'Equipe',
+      });
     } catch { /* ignore */ }
   }
 
@@ -140,25 +210,63 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     }
   }, [selectedInstance]);
 
+  // ── Realtime global: todas as mensagens de todas as conversas ──
   useEffect(() => {
-    if (!activeId || !usingRealData) return;
+    if (!usingRealData) return;
+
     const channel = supabase
-      .channel('msgs-' + activeId)
+      .channel('global-messages-realtime')
       .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${activeId}` },
+        { event: 'INSERT', schema: 'public', table: 'messages' },
         payload => {
           const msg = payload.new;
-          if (!msg.content) return;
-          const time = new Date(msg.created_at || Date.now())
+          const text = msg.content || msg.body || '';
+          if (!text && !msg.media_url) return;
+
+          const convId    = msg.conversation_id;
+          const isInbound = msg.direction !== 'outbound';
+          const time      = new Date(msg.created_at || Date.now())
             .toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+          const isActive  = convId === activeIdRef.current;
+
+          const isAudio = msg.media_type?.includes('audio');
+
+          // 1. Atualiza a thread da conversa
           setMessages(m => ({
             ...m,
-            [activeId]: [...(m[activeId] || []), { id: msg.id, from: msg.direction === 'outbound' ? 'out' : 'in', text: msg.content, time }],
+            [convId]: [...(m[convId] || []), {
+              id:        msg.id,
+              from:      isInbound ? 'in' : 'out',
+              text,
+              time,
+              mediaType: isAudio ? 'audio' : null,
+              mediaUrl:  msg.media_url || null,
+            }],
           }));
+
+          // 2. Atualiza sidebar: preview + unread + sobe para o topo
+          setConvs(prev => {
+            const idx = prev.findIndex(c => c.id === convId);
+            if (idx === -1) return prev;
+            const conv    = prev[idx];
+            const updated = {
+              ...conv,
+              preview: text,
+              time,
+              unread: isActive ? 0 : (conv.unread || 0) + (isInbound ? 1 : 0),
+            };
+            return [updated, ...prev.filter(c => c.id !== convId)];
+          });
+
+          // 3. Som + Badge apenas para mensagens recebidas em conversa não ativa
+          if (isInbound && !isActive) {
+            playNotificationSound();
+          }
         })
       .subscribe();
+
     return () => { supabase.removeChannel(channel); };
-  }, [activeId, usingRealData]);
+  }, [usingRealData]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -294,7 +402,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       if (rows?.length) {
         const mapped = rows.map(c => {
           const phone = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
-          const name  = c.group_name || (phone ? `+${phone}` : 'Desconhecido');
+          const name  = c.push_name || c.contact_name || c.group_name || phone || 'Desconhecido';
           return {
             id: c.id, name, avatar: name.slice(0, 2).toUpperCase(),
             type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id,
@@ -315,30 +423,122 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   async function loadMsgs(convId) {
     try {
       const { data } = await supabase.from('messages')
-        .select('id, direction, content, body, created_at, sender_name')
+        .select('id, direction, content, body, created_at, sender_name, media_url, media_type')
         .eq('conversation_id', convId).order('created_at').limit(100);
       if (data) {
         setMessages(m => ({
           ...m,
-          [convId]: data.filter(msg => msg.content || msg.body).map(msg => ({
-            id: msg.id, from: msg.direction === 'outbound' ? 'out' : 'in',
-            text: msg.content || msg.body || '',
-            time: new Date(msg.created_at || Date.now())
-              .toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-          })),
+          [convId]: data
+            .filter(msg => msg.content || msg.body || msg.media_url)
+            .map(msg => {
+              const isAudio = msg.media_type?.includes('audio');
+              return {
+                id:        msg.id,
+                from:      msg.direction === 'outbound' ? 'out' : 'in',
+                text:      msg.content || msg.body || '',
+                time:      new Date(msg.created_at || Date.now())
+                  .toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+                mediaType: isAudio ? 'audio' : null,
+                mediaUrl:  msg.media_url || null,
+              };
+            }),
         }));
       }
     } catch { /* ignore */ }
   }
 
+  // ── Gravação de áudio ──────────────────────────────────
+  function fmtRecTime(s) {
+    const m = Math.floor(s / 60);
+    return `${m}:${String(s % 60).padStart(2, '0')}`;
+  }
+
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+      mr.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(audioChunksRef.current, { type: mr.mimeType || 'audio/webm' });
+        const url  = URL.createObjectURL(blob);
+        setAudioPreview({ blob, url, mimeType: mr.mimeType || 'audio/webm' });
+        setRecState('preview');
+      };
+      mr.start();
+      mediaRecorderRef.current = mr;
+      setRecState('recording');
+      setRecSeconds(0);
+      recTimerRef.current = setInterval(() => setRecSeconds(s => s + 1), 1000);
+    } catch {
+      alert('Permissão de microfone negada ou não disponível.');
+    }
+  }
+
+  function stopRecording() {
+    clearInterval(recTimerRef.current);
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+  }
+
+  function cancelRecording() {
+    clearInterval(recTimerRef.current);
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+    if (audioPreview?.url) URL.revokeObjectURL(audioPreview.url);
+    setAudioPreview(null);
+    setRecState('idle');
+    setRecSeconds(0);
+  }
+
+  async function sendAudio() {
+    if (!audioPreview?.blob || !active || sending) return;
+    setSending(true);
+    const time = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const localUrl = audioPreview.url;
+    setMessages(m => ({
+      ...m,
+      [active.id]: [...(m[active.id] || []), {
+        id: 'tmp-' + Date.now(), from: 'out', text: '', time,
+        mediaType: 'audio', mediaUrl: localUrl,
+      }],
+    }));
+    if (HAS_EVO && selectedInstance && active.whatsapp_chat_id) {
+      try {
+        const ab = await audioPreview.blob.arrayBuffer();
+        const bytes = new Uint8Array(ab);
+        let b64 = '';
+        const chunk = 8192;
+        for (let i = 0; i < bytes.length; i += chunk) {
+          b64 += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunk, bytes.length)));
+        }
+        await sendAudioMessage(selectedInstance, active.whatsapp_chat_id, btoa(b64), audioPreview.mimeType);
+      } catch (err) { console.error('Falha ao enviar áudio:', err); }
+    }
+    setRecState('idle');
+    setRecSeconds(0);
+    setAudioPreview(null);
+    setSending(false);
+  }
+
   const send = async () => {
     const text = (draft || '').trim();
     if (!text || !active || sending) return;
+
+    const isWA = active.type === 'whatsapp' || active.type === 'group';
+    const agentName = (useSignature && currentUser?.name && isWA) ? currentUser.name : null;
+
     const now  = new Date();
     const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     setMessages(m => ({
       ...m,
-      [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text, time }],
+      [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text, time, agentName }],
     }));
     setDraft('');
     if (HAS_EVO && selectedInstance && active.whatsapp_chat_id) {
@@ -688,9 +888,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--g-900)' }}>{active.name}</div>
                 <div style={{ fontSize: 12, color: 'var(--g-500)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  {active.online
-                    ? <><span style={{ width: 7, height: 7, background: 'var(--success)', borderRadius: '50%' }} />online agora</>
-                    : <>visto há 1h</>}
+                  {active.online && (
+                    <><span style={{ width: 7, height: 7, background: 'var(--success)', borderRadius: '50%' }} />online agora</>
+                  )}
                   {active.type === 'whatsapp' && <><span>·</span><Icon name="whatsapp" size={12} style={{ color: '#25D366' }} />WhatsApp</>}
                   {active.type === 'group'    && <><span>·</span><Icon name="users" size={12} />Grupo WhatsApp</>}
                   {active.type === 'internal' && <><span>·</span>Interno</>}
@@ -721,7 +921,21 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             }}>
               {activeMsgs.map((msg, i) => (
                 <div key={msg.id || i} style={{ display: 'flex', flexDirection: 'column', alignItems: msg.from === 'out' ? 'flex-end' : 'flex-start' }} className="slide-up">
-                  <div className={`bubble ${msg.from === 'out' ? 'bubble-out' : 'bubble-in'}`}>{msg.text}</div>
+                  {msg.from === 'out' && msg.agentName && (
+                    <div style={{ fontSize: 10, color: 'var(--red)', fontWeight: 600, marginBottom: 2, paddingRight: 2 }}>
+                      {msg.agentName}
+                    </div>
+                  )}
+                  <div className={`bubble ${msg.from === 'out' ? 'bubble-out' : 'bubble-in'}`}>
+                    {msg.mediaType === 'audio' ? (
+                      <AudioMessage url={msg.mediaUrl} isOut={msg.from === 'out'} />
+                    ) : msg.from === 'out' && msg.agentName ? (
+                      <>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.75)', marginBottom: 4 }}>{msg.agentName}:</div>
+                        <div>{msg.text}</div>
+                      </>
+                    ) : msg.text}
+                  </div>
                   <div className="bubble-meta" style={{ color: 'var(--g-500)' }}>{msg.time}</div>
                 </div>
               ))}
@@ -737,66 +951,145 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             </div>
 
             {/* Área de input */}
-            <div style={{ padding: '12px 20px 20px', background: 'white', borderTop: '1px solid var(--g-200)', flexShrink: 0 }}>
-              {suggestion && (
+            <div style={{ padding: '12px 20px 20px', background: 'var(--white)', borderTop: '1px solid var(--g-200)', flexShrink: 0 }}>
+
+              {/* ── Estado: gravando ───────────────────────── */}
+              {recState === 'recording' && (
                 <div style={{
-                  display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10,
-                  padding: '8px 12px',
-                  background: 'linear-gradient(to right, rgba(183,12,0,0.06), rgba(183,12,0,0.01))',
-                  border: '1px solid rgba(183,12,0,0.2)', borderRadius: 6, fontSize: 12,
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '14px 16px', borderRadius: 'var(--r-sm)',
+                  border: '1px solid rgba(183,12,0,0.25)', background: 'var(--red-soft)',
                 }}>
-                  <AgentAvatar id="deli" size={22} />
-                  <span style={{ color: 'var(--g-700)' }}>
-                    <strong style={{ color: 'var(--red)' }}>DELI sugeriu</strong> uma resposta baseada no histórico
-                  </span>
-                  <span className="copilot-hint" style={{ marginLeft: 'auto' }}>
-                    Pressione <kbd>Tab</kbd> pra aceitar
-                  </span>
-                </div>
-              )}
-              <div className="copilot-wrap">
-                <textarea
-                  ref={textareaRef}
-                  value={draft}
-                  onChange={e => setDraft(e.target.value)}
-                  onKeyDown={onKeyDown}
-                  className="copilot-textarea"
-                  placeholder="Escreva uma mensagem… (Shift+Enter = nova linha)"
-                  rows={2}
-                />
-                {showGhost && <div className="copilot-ghost">{suggestion}</div>}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px 10px' }}>
-                  <div style={{ display: 'flex', gap: 2, position: 'relative' }}>
-                    <button className="btn-icon" style={{ width: 30, height: 30 }} title="Anexar arquivo"
-                      onClick={() => document.getElementById('chat-file-input').click()}>
-                      <Icon name="paperclip" size={15} />
-                    </button>
-                    <input id="chat-file-input" type="file" style={{ display: 'none' }}
-                      accept="image/*,video/*,.pdf,.doc,.docx"
-                      onChange={e => {
-                        const file = e.target.files[0];
-                        if (file) setDraft(d => d ? `${d} [${file.name}]` : `[${file.name}]`);
-                        e.target.value = '';
-                      }} />
-                    <button className="btn-icon" style={{ width: 30, height: 30, background: showEmoji ? 'var(--g-100)' : 'transparent' }}
-                      title="Emoji" onClick={() => setShowEmoji(v => !v)}>
-                      <Icon name="smile" size={15} />
-                    </button>
-                    {showEmoji && <EmojiPicker onSelect={insertEmoji} onClose={() => setShowEmoji(false)} />}
-                    <button className="btn-icon" style={{ width: 30, height: 30, color: 'var(--red)' }} title="Sugerir resposta com DELI">
-                      <Icon name="sparkles" size={15} />
-                    </button>
-                  </div>
+                  <span className="rec-dot" style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--red)', flexShrink: 0 }} />
+                  <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--red)' }}>Gravando…</span>
+                  <span style={{ fontSize: 13, color: 'var(--g-600)', fontVariantNumeric: 'tabular-nums' }}>{fmtRecTime(recSeconds)}</span>
                   <button
-                    onClick={send}
                     className="btn-primary"
-                    style={{ padding: '8px 14px', fontSize: 13, opacity: draft.trim() && !sending ? 1 : 0.5 }}
-                    disabled={!draft.trim() || sending}
+                    style={{ marginLeft: 'auto', padding: '7px 14px', fontSize: 12 }}
+                    onClick={stopRecording}
                   >
-                    {sending ? 'Enviando…' : 'Enviar'} <Icon name="send" size={13} />
+                    <Icon name="squarestop" size={12} /> Parar
+                  </button>
+                  <button className="btn-secondary" style={{ fontSize: 12, padding: '7px 12px' }} onClick={cancelRecording}>
+                    Cancelar
                   </button>
                 </div>
-              </div>
+              )}
+
+              {/* ── Estado: preview do áudio ───────────────── */}
+              {recState === 'preview' && audioPreview && (
+                <div style={{
+                  padding: '14px 16px', borderRadius: 'var(--r-sm)',
+                  border: '1px solid var(--g-200)', background: 'var(--g-50)',
+                  display: 'flex', flexDirection: 'column', gap: 12,
+                }}>
+                  <div style={{ fontSize: 12, color: 'var(--g-500)', fontWeight: 600 }}>Prévia do áudio</div>
+                  <AudioMessage url={audioPreview.url} isOut={false} />
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      className="btn-primary"
+                      style={{ fontSize: 13, padding: '8px 16px' }}
+                      onClick={sendAudio}
+                      disabled={sending}
+                    >
+                      {sending ? 'Enviando…' : <><Icon name="send" size={13} /> Enviar áudio</>}
+                    </button>
+                    <button className="btn-secondary" style={{ fontSize: 13 }} onClick={cancelRecording}>
+                      Descartar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Estado: normal (escrita) ───────────────── */}
+              {recState === 'idle' && (
+                <>
+                  {suggestion && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10,
+                      padding: '8px 12px',
+                      background: 'linear-gradient(to right, rgba(183,12,0,0.06), rgba(183,12,0,0.01))',
+                      border: '1px solid rgba(183,12,0,0.2)', borderRadius: 6, fontSize: 12,
+                    }}>
+                      <AgentAvatar id="deli" size={22} />
+                      <span style={{ color: 'var(--g-700)' }}>
+                        <strong style={{ color: 'var(--red)' }}>DELI sugeriu</strong> uma resposta baseada no histórico
+                      </span>
+                      <span className="copilot-hint" style={{ marginLeft: 'auto' }}>
+                        Pressione <kbd>Tab</kbd> pra aceitar
+                      </span>
+                    </div>
+                  )}
+                  <div className="copilot-wrap">
+                    <textarea
+                      ref={textareaRef}
+                      value={draft}
+                      onChange={e => setDraft(e.target.value)}
+                      onKeyDown={onKeyDown}
+                      className="copilot-textarea"
+                      placeholder="Escreva uma mensagem… (Shift+Enter = nova linha)"
+                      rows={2}
+                    />
+                    {showGhost && <div className="copilot-ghost">{suggestion}</div>}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px 10px' }}>
+                      <div style={{ display: 'flex', gap: 2, position: 'relative' }}>
+                        <button className="btn-icon" style={{ width: 30, height: 30 }} title="Anexar arquivo"
+                          onClick={() => document.getElementById('chat-file-input').click()}>
+                          <Icon name="paperclip" size={15} />
+                        </button>
+                        <input id="chat-file-input" type="file" style={{ display: 'none' }}
+                          accept="image/*,video/*,.pdf,.doc,.docx"
+                          onChange={e => {
+                            const file = e.target.files[0];
+                            if (file) setDraft(d => d ? `${d} [${file.name}]` : `[${file.name}]`);
+                            e.target.value = '';
+                          }} />
+                        <button className="btn-icon" style={{ width: 30, height: 30, background: showEmoji ? 'var(--g-100)' : 'transparent' }}
+                          title="Emoji" onClick={() => setShowEmoji(v => !v)}>
+                          <Icon name="smile" size={15} />
+                        </button>
+                        {showEmoji && <EmojiPicker onSelect={insertEmoji} onClose={() => setShowEmoji(false)} />}
+                        <button
+                          className="btn-icon"
+                          style={{ width: 30, height: 30 }}
+                          title="Gravar áudio"
+                          onClick={startRecording}
+                        >
+                          <Icon name="mic" size={15} />
+                        </button>
+                        <button className="btn-icon" style={{ width: 30, height: 30, color: 'var(--red)' }} title="Sugerir resposta com DELI">
+                          <Icon name="sparkles" size={15} />
+                        </button>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        {currentUser && (active.type === 'whatsapp' || active.type === 'group') && (
+                          <button
+                            onClick={() => setUseSignature(v => !v)}
+                            title={useSignature ? 'Assinar mensagens — clique para desativar' : 'Assinatura desativada — clique para ativar'}
+                            style={{
+                              fontSize: 11, padding: '3px 8px', borderRadius: 9999, cursor: 'pointer',
+                              background: useSignature ? 'var(--red-soft)' : 'var(--g-100)',
+                              color:      useSignature ? 'var(--red)' : 'var(--g-500)',
+                              border: `1px solid ${useSignature ? 'rgba(183,12,0,0.2)' : 'var(--g-200)'}`,
+                              fontWeight: 600, whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {useSignature ? '✍ ' : ''}{currentUser.name}
+                          </button>
+                        )}
+                        <button
+                          onClick={send}
+                          className="btn-primary"
+                          style={{ padding: '8px 14px', fontSize: 13, opacity: draft.trim() && !sending ? 1 : 0.5 }}
+                          disabled={!draft.trim() || sending}
+                        >
+                          {sending ? 'Enviando…' : 'Enviar'} <Icon name="send" size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </>
         )}
@@ -933,6 +1226,78 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   );
 }
 
+/* ── AudioMessage ───────────────────────────────────────── */
+function AudioMessage({ url, isOut }) {
+  const [playing, setPlaying]   = useState(false);
+  const [current, setCurrent]   = useState(0);
+  const [duration, setDuration] = useState(0);
+  const audioRef = useRef(null);
+
+  function fmt(s) {
+    if (!s || !isFinite(s)) return '0:00';
+    const m = Math.floor(s / 60);
+    return `${m}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  }
+
+  function toggle() {
+    const a = audioRef.current;
+    if (!a) return;
+    if (playing) { a.pause(); setPlaying(false); }
+    else { a.play().then(() => setPlaying(true)).catch(() => {}); }
+  }
+
+  function seek(e) {
+    const a = audioRef.current;
+    if (!a || !duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    a.currentTime = ((e.clientX - rect.left) / rect.width) * duration;
+  }
+
+  const pct = duration > 0 ? (current / duration) * 100 : 0;
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 200, maxWidth: 260 }}>
+      <audio
+        ref={audioRef}
+        src={url}
+        preload="metadata"
+        onTimeUpdate={() => setCurrent(audioRef.current?.currentTime || 0)}
+        onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
+        onEnded={() => { setPlaying(false); setCurrent(0); }}
+      />
+      <button
+        onClick={toggle}
+        style={{
+          width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
+          background: isOut ? 'rgba(255,255,255,0.22)' : 'var(--g-200)',
+          border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: isOut ? 'white' : 'var(--g-700)', fontSize: 13,
+        }}
+      >
+        {playing ? '⏸' : '▶'}
+      </button>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
+        <div
+          onClick={seek}
+          style={{
+            height: 4, borderRadius: 2, cursor: 'pointer', overflow: 'hidden',
+            background: isOut ? 'rgba(255,255,255,0.3)' : 'var(--g-300)',
+          }}
+        >
+          <div style={{
+            height: '100%', width: `${pct}%`, borderRadius: 2,
+            background: isOut ? 'white' : 'var(--red)',
+            transition: 'width 100ms linear',
+          }} />
+        </div>
+        <span style={{ fontSize: 10, color: isOut ? 'rgba(255,255,255,0.7)' : 'var(--g-500)' }}>
+          {playing ? fmt(current) : fmt(duration)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 /* ── SidebarSection ─────────────────────────────────────── */
 function SidebarSection({ label, action }) {
   return (
@@ -1008,18 +1373,27 @@ function ConvAvatar({ conv, size = 36 }) {
 
   const isGroup   = conv.type === 'group';
   const isChannel = conv.type === 'internal' && conv.id?.startsWith('chan-');
+  const hasPhoto  = !!conv.photoUrl;
 
   return (
     <div style={{
       width: size, height: size, borderRadius: isChannel ? 10 : '50%',
-      background: isChannel
-        ? (conv.color || '#2563EB')
+      background: hasPhoto ? 'transparent'
+        : isChannel ? (conv.color || '#2563EB')
         : conv.type === 'internal' ? 'var(--g-200)' : isGroup ? '#0559A8' : 'var(--g-900)',
       color: isChannel ? 'white' : conv.type === 'internal' ? 'var(--g-700)' : 'white',
       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
       fontWeight: 700, fontSize: size * 0.36, flexShrink: 0, position: 'relative',
+      overflow: 'hidden',
     }}>
-      {isChannel
+      {hasPhoto ? (
+        <img
+          src={conv.photoUrl}
+          alt={conv.name}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: isChannel ? 10 : '50%' }}
+          onError={e => { e.target.style.display = 'none'; }}
+        />
+      ) : isChannel
         ? <span style={{ fontSize: size * 0.48, fontWeight: 800, lineHeight: 1 }}>#</span>
         : isGroup
         ? <Icon name="users" size={size * 0.42} />
