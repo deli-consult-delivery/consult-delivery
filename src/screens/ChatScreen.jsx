@@ -3,7 +3,7 @@ import Icon from '../components/Icon.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
 import { CONVERSATIONS } from '../data.js';
 import { supabase } from '../lib/supabase.js';
-import { sendTextMessage, fetchProfile, sendAudioMessage } from '../lib/evolution.js';
+import { sendTextMessage, fetchProfile, sendAudioMessage, sendMediaMessage } from '../lib/evolution.js';
 
 const HAS_EVO = !!(
   import.meta.env.VITE_EVOLUTION_URL && import.meta.env.VITE_EVOLUTION_KEY
@@ -67,6 +67,15 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [taskFromMsg, setTaskFromMsg]            = useState(null);
   const [taskFromMsgTitle, setTaskFromMsgTitle]  = useState('');
   const [savingTask, setSavingTask]              = useState(false);
+
+  // ── Mensagens Rápidas ─────────────────────────────────
+  const [quickReplies, setQuickReplies]   = useState([]);
+  const [showQRPopup, setShowQRPopup]     = useState(false);
+  const [qrFilter, setQrFilter]           = useState('');
+  const [showQRManager, setShowQRManager] = useState(false);
+  const [qrEditId, setQrEditId]           = useState(null);
+  const [qrEditTitle, setQrEditTitle]     = useState('');
+  const [qrEditContent, setQrEditContent] = useState('');
 
   const scrollRef     = useRef(null);
   const textareaRef   = useRef(null);
@@ -132,6 +141,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     loadInstances();
     loadMembers();
     loadCurrentUser();
+    loadQuickReplies();
   }, []);
 
   useEffect(() => {
@@ -260,8 +270,12 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           const time      = new Date(msg.created_at || Date.now())
             .toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
           const isActive  = convId === activeIdRef.current;
-
-          const isAudio = msg.media_type?.includes('audio');
+          const mediaType = msg.media_type || null;
+          const preview   = text
+            || (mediaType === 'image'    ? '🖼 Imagem'
+              : mediaType === 'video'    ? '🎬 Vídeo'
+              : mediaType === 'document' ? '📄 Documento'
+              : mediaType?.includes('audio') ? '🎵 Áudio' : '');
 
           // 1. Atualiza a thread da conversa
           setMessages(m => ({
@@ -271,7 +285,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               from:      isInbound ? 'in' : 'out',
               text,
               time,
-              mediaType: isAudio ? 'audio' : null,
+              mediaType,
               mediaUrl:  msg.media_url || null,
             }],
           }));
@@ -283,7 +297,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             const conv    = prev[idx];
             const updated = {
               ...conv,
-              preview: text,
+              preview,
               time,
               unread: isActive ? 0 : (conv.unread || 0) + (isInbound ? 1 : 0),
             };
@@ -294,6 +308,23 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           if (isInbound && !isActive) {
             playNotificationSound();
           }
+        })
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages' },
+        payload => {
+          const msg = payload.new;
+          if (!msg.media_url) return;
+          // Atualiza media_url quando webhook salva base64 após o INSERT
+          setMessages(m => {
+            const convMsgs = m[msg.conversation_id];
+            if (!convMsgs) return m;
+            return {
+              ...m,
+              [msg.conversation_id]: convMsgs.map(ex =>
+                ex.id === msg.id ? { ...ex, mediaUrl: msg.media_url } : ex
+              ),
+            };
+          });
         })
       .subscribe();
 
@@ -421,6 +452,39 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     } catch { /* demo mode */ }
   }
 
+  async function loadQuickReplies() {
+    try {
+      const { data } = await supabase
+        .from('quick_replies')
+        .select('id, title, content')
+        .order('title');
+      if (data) setQuickReplies(data);
+    } catch { /* ignore */ }
+  }
+
+  async function saveQuickReply() {
+    if (!qrEditTitle.trim() || !qrEditContent.trim()) return;
+    try {
+      if (qrEditId) {
+        await supabase.from('quick_replies')
+          .update({ title: qrEditTitle.trim(), content: qrEditContent.trim() })
+          .eq('id', qrEditId);
+      } else {
+        await supabase.from('quick_replies')
+          .insert({ title: qrEditTitle.trim(), content: qrEditContent.trim() });
+      }
+      await loadQuickReplies();
+      setQrEditId(null); setQrEditTitle(''); setQrEditContent('');
+    } catch { /* ignore */ }
+  }
+
+  async function deleteQuickReply(id) {
+    try {
+      await supabase.from('quick_replies').delete().eq('id', id);
+      setQuickReplies(prev => prev.filter(q => q.id !== id));
+    } catch { /* ignore */ }
+  }
+
   async function loadRealtimeConvs(instanceName) {
     try {
       const { data: inst } = await supabase.from('evolution_instances')
@@ -432,25 +496,33 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         .order('updated_at', { ascending: false }).limit(50);
 
       if (rows?.length) {
-        // Busca última mensagem de cada conversa em uma só query
-        const convIds = rows.map(r => r.id);
-        const { data: recentMsgs } = await supabase.from('messages')
-          .select('conversation_id, content, body, direction, created_at')
-          .in('conversation_id', convIds)
-          .order('created_at', { ascending: false })
-          .limit(convIds.length * 4);
-
-        // Pega apenas a última mensagem por conversa
+        // Busca última mensagem de cada conversa individualmente — garante preview para todas
+        const lastMsgResults = await Promise.all(
+          rows.map(r =>
+            supabase.from('messages')
+              .select('conversation_id, content, body, direction, created_at, media_type')
+              .eq('conversation_id', r.id)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle()
+          )
+        );
         const lastMsgMap = {};
-        (recentMsgs || []).forEach(msg => {
-          if (!lastMsgMap[msg.conversation_id]) lastMsgMap[msg.conversation_id] = msg;
+        lastMsgResults.forEach(({ data }) => {
+          if (data) lastMsgMap[data.conversation_id] = data;
         });
 
         const mapped = rows.map(c => {
           const phone   = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
           const name    = c.push_name || c.contact_name || c.group_name || phone || 'Desconhecido';
           const lm      = lastMsgMap[c.id];
-          const preview = lm ? (lm.content || lm.body || '') : '';
+          const preview = lm
+            ? (lm.media_type === 'image'    ? '🖼 Imagem'
+              : lm.media_type === 'video'    ? '🎬 Vídeo'
+              : lm.media_type === 'document' ? '📄 Documento'
+              : lm.media_type?.includes('audio') ? '🎵 Áudio'
+              : lm.content || lm.body || '')
+            : '';
           const previewFrom = lm?.direction === 'inbound' ? 'in' : 'out';
           return {
             id: c.id, name, avatar: name.slice(0, 2).toUpperCase(),
@@ -480,18 +552,15 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           ...m,
           [convId]: data
             .filter(msg => msg.content || msg.body || msg.media_url)
-            .map(msg => {
-              const isAudio = msg.media_type?.includes('audio');
-              return {
-                id:        msg.id,
-                from:      msg.direction === 'outbound' ? 'out' : 'in',
-                text:      msg.content || msg.body || '',
-                time:      new Date(msg.created_at || Date.now())
-                  .toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-                mediaType: isAudio ? 'audio' : null,
-                mediaUrl:  msg.media_url || null,
-              };
-            }),
+            .map(msg => ({
+              id:        msg.id,
+              from:      msg.direction === 'outbound' ? 'out' : 'in',
+              text:      msg.content || msg.body || '',
+              time:      new Date(msg.created_at || Date.now())
+                .toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+              mediaType: msg.media_type || null,
+              mediaUrl:  msg.media_url  || null,
+            })),
         }));
       }
     } catch { /* ignore */ }
@@ -583,6 +652,52 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     setRecState('idle');
     setRecSeconds(0);
     setAudioPreview(null);
+    setSending(false);
+  }
+
+  async function sendFile(file) {
+    if (!file || !active || sending) return;
+    if (file.size > 10 * 1024 * 1024) { alert('Arquivo muito grande. Máximo: 10 MB'); return; }
+
+    const mimeType  = file.type || 'application/octet-stream';
+    const isImage   = mimeType.startsWith('image/');
+    const isVideo   = mimeType.startsWith('video/');
+    const mediaType = isImage ? 'image' : isVideo ? 'video' : 'document';
+
+    // Converter para base64
+    const base64 = await new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.onload  = e => res(e.target.result.split(',')[1]);
+      reader.onerror = rej;
+      reader.readAsDataURL(file);
+    });
+    const dataUrl = `data:${mimeType};base64,${base64}`;
+    const time    = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+    // UI otimista
+    setMessages(m => ({
+      ...m,
+      [active.id]: [...(m[active.id] || []), {
+        id: 'tmp-' + Date.now(), from: 'out', text: file.name, time,
+        mediaType, mediaUrl: dataUrl,
+      }],
+    }));
+    setSending(true);
+    try {
+      if (HAS_EVO && selectedInstance && active.whatsapp_chat_id) {
+        await sendMediaMessage(selectedInstance, active.whatsapp_chat_id, base64, mediaType, mimeType, '', file.name);
+      }
+      await supabase.from('messages').insert({
+        conversation_id: active.id,
+        direction:   'outbound',
+        content:     file.name,
+        media_type:  mediaType,
+        media_url:   dataUrl,
+        created_at:  new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error('[Chat] Falha ao enviar arquivo:', err);
+    }
     setSending(false);
   }
 
@@ -730,7 +845,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             ].map(t => (
               <button key={t.id} onClick={() => setTab(t.id)} style={{
                 flex: 1, padding: '5px 2px', fontSize: 10.5, fontWeight: 600, borderRadius: 4,
-                background: tab === t.id ? 'white' : 'transparent',
+                background: tab === t.id ? 'var(--white)' : 'transparent',
                 color:      tab === t.id ? 'var(--g-900)' : 'var(--g-600)',
                 boxShadow:  tab === t.id ? 'var(--sh-card)' : 'none',
               }}>{t.label}</button>
@@ -986,8 +1101,35 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                     </div>
                   )}
                   <div className={`bubble ${msg.from === 'out' ? 'bubble-out' : 'bubble-in'}`}>
-                    {msg.mediaType === 'audio' ? (
-                      <AudioMessage url={msg.mediaUrl} isOut={msg.from === 'out'} />
+                    {msg.mediaType === 'image' && msg.mediaUrl ? (
+                      <div>
+                        <img
+                          src={msg.mediaUrl}
+                          alt={msg.text || 'imagem'}
+                          style={{ maxWidth: 260, maxHeight: 260, borderRadius: 6, display: 'block', cursor: 'pointer' }}
+                          onClick={() => window.open(msg.mediaUrl)}
+                        />
+                        {msg.text && msg.text !== '🖼 Imagem' && (
+                          <div style={{ marginTop: 4, fontSize: 13 }}>{msg.text}</div>
+                        )}
+                      </div>
+                    ) : msg.mediaType === 'document' && msg.mediaUrl ? (
+                      <a
+                        href={msg.mediaUrl}
+                        download={msg.text || 'arquivo'}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          color: msg.from === 'out' ? 'white' : 'var(--g-900)',
+                          textDecoration: 'none',
+                        }}
+                      >
+                        <span style={{ fontSize: 22, flexShrink: 0 }}>📄</span>
+                        <span style={{ fontSize: 12, wordBreak: 'break-all' }}>{msg.text || 'Arquivo'}</span>
+                      </a>
+                    ) : msg.mediaType?.includes('audio') ? (
+                      msg.mediaUrl
+                        ? <AudioMessage url={msg.mediaUrl} isOut={msg.from === 'out'} />
+                        : <div style={{ fontSize: 12, color: msg.from === 'out' ? 'rgba(255,255,255,0.7)' : 'var(--g-500)', fontStyle: 'italic' }}>🎵 Carregando áudio…</div>
                     ) : msg.from === 'out' && msg.agentName ? (
                       <>
                         <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.75)', marginBottom: 4 }}>{msg.agentName}:</div>
@@ -1079,12 +1221,58 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                       </span>
                     </div>
                   )}
-                  <div className="copilot-wrap">
+                  <div className="copilot-wrap" style={{ position: 'relative' }}>
+                    {/* ── Popup de mensagens rápidas (trigger: "/") ── */}
+                    {showQRPopup && (() => {
+                      const filtered = quickReplies.filter(qr =>
+                        !qrFilter ||
+                        qr.title.toLowerCase().includes(qrFilter) ||
+                        qr.content.toLowerCase().includes(qrFilter)
+                      );
+                      return filtered.length > 0 ? (
+                        <div style={{
+                          position: 'absolute', bottom: '100%', left: 0, right: 0, zIndex: 200,
+                          background: 'var(--white)', border: '1px solid var(--g-200)',
+                          borderRadius: 8, boxShadow: 'var(--sh-card)',
+                          maxHeight: 220, overflowY: 'auto', marginBottom: 4,
+                        }}>
+                          <div style={{ padding: '6px 12px', fontSize: 10, fontWeight: 700, color: 'var(--g-500)', borderBottom: '1px solid var(--g-100)', display: 'flex', justifyContent: 'space-between' }}>
+                            <span>MENSAGENS RÁPIDAS</span>
+                            <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: 'var(--red)', fontWeight: 700 }} onClick={() => setShowQRManager(true)}>Gerenciar</button>
+                          </div>
+                          {filtered.map(qr => (
+                            <div
+                              key={qr.id}
+                              onClick={() => { setDraft(qr.content); setShowQRPopup(false); setQrFilter(''); }}
+                              style={{ padding: '8px 14px', cursor: 'pointer', borderBottom: '1px solid var(--g-100)' }}
+                              onMouseEnter={e => e.currentTarget.style.background = 'var(--g-100)'}
+                              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                            >
+                              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--g-900)' }}>/{qr.title}</div>
+                              <div style={{ fontSize: 11, color: 'var(--g-500)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{qr.content}</div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null;
+                    })()}
                     <textarea
                       ref={textareaRef}
                       value={draft}
-                      onChange={e => setDraft(e.target.value)}
-                      onKeyDown={onKeyDown}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setDraft(val);
+                        if (val.startsWith('/')) {
+                          setQrFilter(val.slice(1).toLowerCase());
+                          setShowQRPopup(true);
+                        } else {
+                          setShowQRPopup(false);
+                          setQrFilter('');
+                        }
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === 'Escape' && showQRPopup) { setShowQRPopup(false); setQrFilter(''); return; }
+                        onKeyDown(e);
+                      }}
                       className="copilot-textarea"
                       placeholder="Escreva uma mensagem… (Shift+Enter = nova linha)"
                       rows={2}
@@ -1098,9 +1286,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                         </button>
                         <input id="chat-file-input" type="file" style={{ display: 'none' }}
                           accept="image/*,video/*,.pdf,.doc,.docx"
-                          onChange={e => {
-                            const file = e.target.files[0];
-                            if (file) setDraft(d => d ? `${d} [${file.name}]` : `[${file.name}]`);
+                          onChange={async e => {
+                            const file = e.target.files?.[0];
+                            if (file) await sendFile(file);
                             e.target.value = '';
                           }} />
                         <button className="btn-icon" style={{ width: 30, height: 30, background: showEmoji ? 'var(--g-100)' : 'transparent' }}
@@ -1118,6 +1306,14 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                         </button>
                         <button className="btn-icon" style={{ width: 30, height: 30, color: 'var(--red)' }} title="Sugerir resposta com DELI">
                           <Icon name="sparkles" size={15} />
+                        </button>
+                        <button
+                          className="btn-icon"
+                          style={{ width: 30, height: 30, fontWeight: 700, fontSize: 14 }}
+                          title="Mensagens rápidas (/atalho)"
+                          onClick={() => setShowQRManager(true)}
+                        >
+                          /
                         </button>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1169,7 +1365,19 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             </span>
             <button className="btn-icon" onClick={() => setShowInfo(false)}><Icon name="x" size={16} /></button>
           </div>
-          <ContactPanel conv={active} onNavigate={onNavigate} members={members} tenantDbId={tenantDbId} />
+          <ContactPanel
+            conv={active}
+            onNavigate={onNavigate}
+            members={members}
+            tenantDbId={tenantDbId}
+            onNameSaved={newName => {
+              setConvs(prev => prev.map(c =>
+                c.id === active.id
+                  ? { ...c, name: newName, avatar: newName.slice(0, 2).toUpperCase() }
+                  : c
+              ));
+            }}
+          />
         </div>
       )}
 
@@ -1281,6 +1489,77 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           </div>
         </div>
       )}
+
+      {/* ── Modal: gerenciador de mensagens rápidas ───────── */}
+      {showQRManager && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(13,13,13,0.45)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={e => { if (e.target === e.currentTarget) setShowQRManager(false); }}
+        >
+          <div style={{ background: 'var(--white)', borderRadius: 12, width: 480, maxWidth: '95vw', maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--g-200)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--g-900)' }}>Mensagens Rápidas</span>
+              <button className="btn-icon" onClick={() => setShowQRManager(false)}><Icon name="x" size={16} /></button>
+            </div>
+
+            {/* Formulário de criação/edição */}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--g-200)', flexShrink: 0 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--g-600)', marginBottom: 8 }}>
+                {qrEditId ? 'EDITAR MENSAGEM' : 'NOVA MENSAGEM RÁPIDA'}
+              </div>
+              <input
+                className="input"
+                style={{ marginBottom: 8, fontSize: 12 }}
+                placeholder="Atalho (ex: saudacao)"
+                value={qrEditTitle}
+                onChange={e => setQrEditTitle(e.target.value.replace(/\s/g, ''))}
+              />
+              <textarea
+                className="input"
+                style={{ fontSize: 12, resize: 'vertical', minHeight: 64, width: '100%', boxSizing: 'border-box' }}
+                placeholder="Texto completo da mensagem…"
+                value={qrEditContent}
+                onChange={e => setQrEditContent(e.target.value)}
+              />
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <button className="btn-primary" style={{ fontSize: 12 }} onClick={saveQuickReply} disabled={!qrEditTitle.trim() || !qrEditContent.trim()}>
+                  {qrEditId ? 'Atualizar' : 'Salvar'}
+                </button>
+                {qrEditId && (
+                  <button className="btn-secondary" style={{ fontSize: 12 }} onClick={() => { setQrEditId(null); setQrEditTitle(''); setQrEditContent(''); }}>
+                    Cancelar edição
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Lista */}
+            <div style={{ overflowY: 'auto', flex: 1 }}>
+              {quickReplies.length === 0 ? (
+                <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--g-500)' }}>
+                  Nenhuma mensagem rápida ainda.<br />Crie uma acima e use <strong>/atalho</strong> no chat.
+                </div>
+              ) : quickReplies.map(qr => (
+                <div key={qr.id} style={{ padding: '10px 20px', borderBottom: '1px solid var(--g-100)', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--g-900)' }}>/{qr.title}</div>
+                    <div style={{ fontSize: 11, color: 'var(--g-500)', marginTop: 2, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{qr.content}</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    <button className="btn-icon" style={{ width: 26, height: 26, fontSize: 12 }}
+                      onClick={() => { setQrEditId(qr.id); setQrEditTitle(qr.title); setQrEditContent(qr.content); }}
+                      title="Editar">✏️</button>
+                    <button className="btn-icon" style={{ width: 26, height: 26, fontSize: 12, color: 'var(--red)' }}
+                      onClick={() => deleteQuickReply(qr.id)}
+                      title="Apagar">🗑</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1290,7 +1569,20 @@ function AudioMessage({ url, isOut }) {
   const [playing, setPlaying]   = useState(false);
   const [current, setCurrent]   = useState(0);
   const [duration, setDuration] = useState(0);
+  const [srcUrl, setSrcUrl]     = useState(null);
   const audioRef = useRef(null);
+
+  // Convert data URIs to blob URLs — <audio> handles blobs more reliably for large files
+  useEffect(() => {
+    if (!url) { setSrcUrl(null); return; }
+    if (!url.startsWith('data:')) { setSrcUrl(url); return; }
+    let blobUrl;
+    fetch(url)
+      .then(r => r.blob())
+      .then(blob => { blobUrl = URL.createObjectURL(blob); setSrcUrl(blobUrl); })
+      .catch(() => setSrcUrl(url)); // fallback: use data URI directly
+    return () => { if (blobUrl) URL.revokeObjectURL(blobUrl); };
+  }, [url]);
 
   function fmt(s) {
     if (!s || !isFinite(s)) return '0:00';
@@ -1318,7 +1610,7 @@ function AudioMessage({ url, isOut }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 200, maxWidth: 260 }}>
       <audio
         ref={audioRef}
-        src={url}
+        src={srcUrl}
         preload="metadata"
         onTimeUpdate={() => setCurrent(audioRef.current?.currentTime || 0)}
         onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
@@ -1561,7 +1853,7 @@ function ConvItem({ conv, active, onClick, lastMsg }) {
 /* ── ContactPanel ───────────────────────────────────────── */
 const PIPELINES = ['Prospecção', 'Negociação', 'Fechamento', 'Pós-venda', 'Reativação'];
 
-function ContactPanel({ conv, onNavigate, members = [], tenantDbId }) {
+function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved }) {
   const isGroup = conv.type === 'group';
 
   // Edição de nome/telefone
@@ -1668,8 +1960,20 @@ function ContactPanel({ conv, onNavigate, members = [], tenantDbId }) {
             <input className="input" style={{ fontSize: 13, textAlign: 'center' }} value={editName} onChange={e => setEditName(e.target.value)} placeholder="Nome" />
             <input className="input" style={{ fontSize: 13, textAlign: 'center' }} value={editPhone} onChange={e => setEditPhone(e.target.value)} placeholder="Telefone" />
             <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 4 }}>
-              <button className="btn-primary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => setIsEditing(false)}>Salvar</button>
-              <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => setIsEditing(false)}>Cancelar</button>
+              <button
+                className="btn-primary"
+                style={{ padding: '6px 12px', fontSize: 12 }}
+                onClick={async () => {
+                  setIsEditing(false);
+                  try {
+                    await supabase.from('conversations')
+                      .update({ push_name: editName, contact_name: editName })
+                      .eq('id', conv.id);
+                    if (onNameSaved) onNameSaved(editName);
+                  } catch { /* ignore */ }
+                }}
+              >Salvar</button>
+              <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => { setIsEditing(false); setEditName(conv.name); }}>Cancelar</button>
             </div>
           </div>
         ) : (

@@ -734,15 +734,15 @@ function TabUsers({ tenantDbId }) {
     if (!tenantDbId) { setLoading(false); return; }
     const { data } = await supabase
       .from('tenant_members')
-      .select('role, created_at, profiles(id, full_name, email, avatar_url)')
+      .select('role, semaforo, display_name, created_at, profiles(id, full_name, email, avatar_url)')
       .eq('tenant_id', tenantDbId);
     if (data) setMembers(data.map(m => ({
       userId:    m.profiles?.id,
-      name:      m.profiles?.full_name || m.profiles?.email || 'Usuário',
-      email:     m.profiles?.email     || '',
-      avatar:    m.profiles?.full_name || m.profiles?.email || 'U',
-      role:      m.role || 'operador',
-      semaforo:  'verde',
+      name:      m.display_name || m.profiles?.full_name || m.profiles?.email || 'Usuário',
+      email:     m.profiles?.email || '',
+      avatar:    m.display_name || m.profiles?.full_name || m.profiles?.email || 'U',
+      role:      m.role     || 'operador',
+      semaforo:  m.semaforo || 'verde',
       createdAt: m.created_at,
     })));
     setLoading(false);
@@ -752,8 +752,20 @@ function TabUsers({ tenantDbId }) {
 
   async function handleRemoveMember(userId) {
     if (!confirm('Remover este membro do workspace?')) return;
-    await supabase.from('tenant_members').delete()
-      .eq('tenant_id', tenantDbId).eq('user_id', userId);
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manage-users`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token}`,
+      },
+      body: JSON.stringify({ action: 'delete', tenant_id: tenantDbId, user_id: userId }),
+    });
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      alert(json.error || 'Erro ao remover membro');
+      return;
+    }
     await loadMembers();
   }
 
@@ -876,23 +888,38 @@ function TabUsers({ tenantDbId }) {
 
 /* Invite modal */
 function InviteModal({ tenantDbId, onClose, onDone }) {
-  const [form, setForm]   = useState({ email: '', name: '', role: 'operador', semaforo: 'verde' });
+  const [form, setForm]     = useState({ email: '', password: '', name: '', role: 'operador', semaforo: 'verde' });
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
 
   async function handleSubmit() {
-    if (!form.email) { setError('E-mail obrigatório'); return; }
+    if (!form.email)    { setError('E-mail obrigatório'); return; }
+    if (!form.password || form.password.length < 6) { setError('Senha obrigatória (mínimo 6 caracteres)'); return; }
     setSaving(true);
     setError('');
     try {
-      // Call Edge Function to invite (requires service role server-side)
-      const { error: fnErr } = await supabase.functions.invoke('invite-user', {
-        body: { email: form.email, name: form.name, role: form.role, semaforo: form.semaforo, tenant_id: tenantDbId },
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manage-users`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          action:    'create',
+          tenant_id: tenantDbId,
+          email:     form.email,
+          password:  form.password,
+          name:      form.name,
+          role:      form.role,
+          semaforo:  form.semaforo,
+        }),
       });
-      if (fnErr) throw fnErr;
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Erro ao criar usuário');
       onDone();
     } catch (err) {
-      setError(err?.message || 'Erro ao convidar. Verifique se a Edge Function invite-user está disponível.');
+      setError(err?.message || 'Erro ao criar usuário.');
     }
     setSaving(false);
   }
@@ -906,11 +933,12 @@ function InviteModal({ tenantDbId, onClose, onDone }) {
         width: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--g-900)' }}>Convidar membro</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--g-900)' }}>Adicionar membro</div>
           <button className="btn-icon" onClick={onClose}><Icon name="x" size={16} /></button>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <InputField label="E-mail" value={form.email} onChange={v => setForm(f => ({ ...f, email: v }))} placeholder="colaborador@empresa.com" type="email" />
+          <InputField label="Senha" value={form.password} onChange={v => setForm(f => ({ ...f, password: v }))} placeholder="Mínimo 6 caracteres" type="password" />
           <InputField label="Nome" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} placeholder="Nome completo" />
           <div>
             <div className="label" style={{ marginBottom: 6 }}>Papel</div>
@@ -928,7 +956,7 @@ function InviteModal({ tenantDbId, onClose, onDone }) {
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
           <button className="btn-primary" onClick={handleSubmit} disabled={saving}>
-            <Icon name="mail" size={13} /> {saving ? 'Enviando…' : 'Enviar convite'}
+            <Icon name="plus" size={13} /> {saving ? 'Criando…' : 'Criar usuário'}
           </button>
           <button className="btn-secondary" onClick={onClose}>Cancelar</button>
         </div>
@@ -939,18 +967,39 @@ function InviteModal({ tenantDbId, onClose, onDone }) {
 
 /* Edit member modal */
 function EditMemberModal({ member, tenantDbId, onClose, onRemove, onDone }) {
-  const [role, setRole]       = useState(member.role || 'operador');
+  const [role, setRole]         = useState(member.role     || 'operador');
   const [semaforo, setSemaforo] = useState(member.semaforo || 'verde');
-  const [saving, setSaving]   = useState(false);
+  const [name, setName]         = useState(member.name     || '');
+  const [saving, setSaving]     = useState(false);
+  const [error, setError]       = useState('');
 
   async function handleSave() {
     setSaving(true);
-    await supabase.from('tenant_members')
-      .update({ role })
-      .eq('tenant_id', tenantDbId)
-      .eq('user_id', member.userId);
+    setError('');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manage-users`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          action:    'update',
+          tenant_id: tenantDbId,
+          user_id:   member.userId,
+          role,
+          semaforo,
+          name,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Erro ao salvar');
+      onDone();
+    } catch (err) {
+      setError(err?.message || 'Erro ao salvar');
+    }
     setSaving(false);
-    onDone();
   }
 
   return (
@@ -964,11 +1013,12 @@ function EditMemberModal({ member, tenantDbId, onClose, onRemove, onDone }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <div>
             <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--g-900)' }}>Editar membro</div>
-            <div style={{ fontSize: 12, color: 'var(--g-500)', marginTop: 2 }}>{member.name} · {member.email}</div>
+            <div style={{ fontSize: 12, color: 'var(--g-500)', marginTop: 2 }}>{member.email}</div>
           </div>
           <button className="btn-icon" onClick={onClose}><Icon name="x" size={16} /></button>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <InputField label="Nome de exibição" value={name} onChange={setName} placeholder={member.email} />
           <div>
             <div className="label" style={{ marginBottom: 6 }}>Papel</div>
             <select className="input" style={{ fontSize: 13 }} value={role} onChange={e => setRole(e.target.value)}>
@@ -981,6 +1031,7 @@ function EditMemberModal({ member, tenantDbId, onClose, onRemove, onDone }) {
               {Object.entries(SEMAFORO).map(([k, v]) => <option key={k} value={k}>{v.label} — {v.desc}</option>)}
             </select>
           </div>
+          {error && <div style={{ fontSize: 12, color: 'var(--red)', padding: '8px 12px', background: '#fff5f5', borderRadius: 'var(--r-sm)' }}>{error}</div>}
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 20 }}>
           <button className="btn-secondary" style={{ color: 'var(--red)', borderColor: 'var(--red-soft)', fontSize: 12 }} onClick={onRemove}>

@@ -36,17 +36,15 @@ export async function sendTextMessage(instanceName, to, text) {
   return res.json();
 }
 
-// Enviar mídia (imagem, vídeo, documento)
-export async function sendMediaMessage(instanceName, to, mediaUrl, mediaType, caption = '') {
+// Enviar mídia (imagem, vídeo, documento) — media pode ser URL ou base64 puro
+export async function sendMediaMessage(instanceName, to, media, mediaType, mimeType = '', caption = '', fileName = '') {
+  const body = { number: to, mediatype: mediaType, media, caption };
+  if (mimeType)  body.mimetype  = mimeType;
+  if (fileName)  body.fileName  = fileName;
   const res = await fetch(`${EVO_URL}/message/sendMedia/${instanceName}`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({
-      number:    to,
-      mediatype: mediaType,
-      media:     mediaUrl,
-      caption,
-    }),
+    body: JSON.stringify(body),
   });
   return res.json();
 }

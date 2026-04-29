@@ -2,7 +2,6 @@
 // TASK-201 — Chat Unificado
 //
 // Deploy: supabase functions deploy evolution-webhook
-// URL:    https://<project>.supabase.co/functions/v1/evolution-webhook
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -12,7 +11,6 @@ const supabase = createClient(
 );
 
 Deno.serve(async (req) => {
-  // Aceita somente POST
   if (req.method !== 'POST') {
     return new Response('ok', { status: 200 });
   }
@@ -22,42 +20,57 @@ Deno.serve(async (req) => {
     console.log('[WEBHOOK] payload:', JSON.stringify(body));
     const { event, instance, data } = body;
 
-    // Evolution API envia "messages.upsert" (minúsculo, notação ponto)
-    // Normaliza para aceitar ambos os formatos
     const eventNorm = (event || '').toLowerCase().replace(/[._]/g, '');
     if (eventNorm !== 'messagesupsert') {
       return new Response('ignored', { status: 200 });
     }
 
-    // data pode chegar como array (Evolution API v2) ou objeto
     const msgData = Array.isArray(data) ? data[0] : data;
 
     if (!msgData?.key) {
       return new Response('no_key', { status: 200 });
     }
 
-    // Ignora mensagens enviadas pelo próprio número
     if (msgData.key.fromMe) {
       return new Response('fromMe', { status: 200 });
     }
 
-    const chatId   = msgData.key.remoteJid;             // ex: 5511999@s.whatsapp.net ou grupo@g.us
+    const chatId   = msgData.key.remoteJid;
     const isGroup  = chatId.endsWith('@g.us');
     const msgId    = msgData.key.id;
     const pushName = msgData.pushName || 'Desconhecido';
 
-    const messageText =
-      msgData.message?.conversation ||
-      msgData.message?.extendedTextMessage?.text ||
-      msgData.message?.imageMessage?.caption ||
-      msgData.message?.videoMessage?.caption ||
-      msgData.message?.documentMessage?.title ||
-      '';
+    const isPtt      = !!msgData.message?.pttMessage;
+    const isAudio    = isPtt || !!msgData.message?.audioMessage;
+    const isImage    = !!msgData.message?.imageMessage;
+    const isVideo    = !!msgData.message?.videoMessage;
+    const isDocument = !!msgData.message?.documentMessage;
+    const isMedia    = isAudio || isImage || isVideo || isDocument;
 
-    // 1. Buscar instância no banco (sem tenant_id)
+    const mediaMsg = msgData.message?.pttMessage
+      || msgData.message?.audioMessage
+      || msgData.message?.imageMessage
+      || msgData.message?.videoMessage
+      || msgData.message?.documentMessage;
+
+    let detectedMediaType: string | null = null;
+    if (isAudio)    detectedMediaType = 'audio';
+    else if (isImage)    detectedMediaType = 'image';
+    else if (isVideo)    detectedMediaType = 'video';
+    else if (isDocument) detectedMediaType = 'document';
+
+    const messageText = isAudio    ? '🎵 Áudio'
+      : isImage    ? (msgData.message?.imageMessage?.caption    || '🖼 Imagem')
+      : isVideo    ? (msgData.message?.videoMessage?.caption    || '🎬 Vídeo')
+      : isDocument ? (msgData.message?.documentMessage?.title   || '📄 Documento')
+      : msgData.message?.conversation ||
+        msgData.message?.extendedTextMessage?.text ||
+        '';
+
+    // 1. Buscar instância — inclui evolution_url e api_key para download de mídia
     const { data: instanceData, error: instErr } = await supabase
       .from('evolution_instances')
-      .select('id')
+      .select('id, evolution_url, api_key')
       .eq('instance_name', instance)
       .single();
 
@@ -80,7 +93,6 @@ Deno.serve(async (req) => {
 
     if (existingConv) {
       conversationId = existingConv.id;
-      // Atualiza updated_at e push_name (se disponível) para manter ordenação por mais recente
       const upd: Record<string, string | null> = { updated_at: new Date().toISOString() };
       if (!isGroup && validPushName) upd.push_name = validPushName;
       await supabase.from('conversations').update(upd).eq('id', conversationId);
@@ -104,26 +116,87 @@ Deno.serve(async (req) => {
       conversationId = newConv.id;
     }
 
-    // 3. Salvar mensagem com schema correto
+    // 3. Salvar mensagem IMEDIATAMENTE — nunca bloquear por causa do áudio
     const msgTimestamp = msgData.messageTimestamp
       ? new Date(Number(msgData.messageTimestamp) * 1000).toISOString()
       : new Date().toISOString();
 
-    const { error: msgErr } = await supabase.from('messages').insert({
-      conversation_id: conversationId,
-      whatsapp_msg_id: msgId,
-      direction:       'inbound',
-      sender_name:     pushName,
-      content:         messageText,
-      created_at:      msgTimestamp,
-    });
+    const { data: savedMsg, error: msgErr } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: conversationId,
+        whatsapp_msg_id: msgId,
+        direction:       'inbound',
+        sender_name:     pushName,
+        content:         messageText,
+        media_type:      detectedMediaType,
+        media_url:       null,
+        created_at:      msgTimestamp,
+      })
+      .select('id')
+      .single();
 
     if (msgErr) {
       console.error('Failed to save message:', msgErr.message);
       return new Response('msg_error', { status: 500 });
     }
 
+    // 4. SEPARADO: tenta buscar base64 de qualquer mídia com timeout de 10s
+    //    Falha aqui NUNCA afeta a mensagem — ela já foi salva acima
+    if (isMedia && savedMsg) {
+      try {
+        let messageType = '';
+        if (isPtt)           messageType = 'pttMessage';
+        else if (isAudio)    messageType = 'audioMessage';
+        else if (isImage)    messageType = 'imageMessage';
+        else if (isVideo)    messageType = 'videoMessage';
+        else if (isDocument) messageType = 'documentMessage';
+
+        const controller = new AbortController();
+        const timer      = setTimeout(() => controller.abort(), 10_000);
+
+        const mediaRes = await fetch(
+          `${instanceData.evolution_url}/chat/getBase64FromMediaMessage/${instance}`,
+          {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', apikey: instanceData.api_key },
+            body:    JSON.stringify({
+              message: { key: msgData.key, messageType },
+              convertToMp4: false,
+            }),
+            signal: controller.signal,
+          },
+        );
+        clearTimeout(timer);
+
+        if (mediaRes.ok) {
+          const mediaJson = await mediaRes.json();
+          const base64    = mediaJson.base64 || mediaJson.data;
+          if (base64) {
+            const defaultMime = isImage ? 'image/jpeg' : isVideo ? 'video/mp4'
+              : isDocument ? 'application/octet-stream' : 'audio/ogg';
+            const mimeRaw  = mediaMsg?.mimetype || defaultMime;
+            const mime     = mimeRaw.split(';')[0].trim();
+            const mediaUrl = `data:${mime};base64,${base64}`;
+            await supabase
+              .from('messages')
+              .update({ media_url: mediaUrl })
+              .eq('id', savedMsg.id);
+            console.log('[WEBHOOK] media ok, type:', detectedMediaType, 'mime:', mime, 'b64 len:', base64.length);
+          } else {
+            console.warn('[WEBHOOK] getBase64 sem campo base64:', JSON.stringify(mediaJson));
+          }
+        } else {
+          console.warn('[WEBHOOK] getBase64 status:', mediaRes.status);
+        }
+      } catch (mediaErr) {
+        // timeout ou erro de rede — mensagem já está salva, tudo bem
+        console.warn('[WEBHOOK] media fetch falhou, mensagem salva sem mídia:', mediaErr);
+      }
+    }
+
     return new Response('ok', { status: 200 });
+
   } catch (err) {
     console.error('Webhook error:', err);
     return new Response('error', { status: 500 });
