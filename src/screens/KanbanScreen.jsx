@@ -115,15 +115,15 @@ export default function KanbanScreen({ tenant }) {
   const activeCount  = tasks.filter(t => t.col !== 'done').length;
 
   return (
-    <div className="route-enter" style={{ padding: 32, height: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column', background: 'var(--g-50)' }}>
+    <div className="route-enter page-container" style={{ padding: 32, height: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column', background: 'var(--g-50)' }}>
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16 }}>
+      <div className="header-wrap" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16 }}>
         <div>
           <h1 className="page-h1">Tarefas</h1>
           <p className="page-sub">{tasks.length} tarefas · {activeCount} ativas</p>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div className="btn-wrap" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
 
           {/* Filtros dropdown */}
           <div ref={filtRef} style={{ position: 'relative' }}>
@@ -212,7 +212,7 @@ export default function KanbanScreen({ tenant }) {
       )}
 
       {/* Board */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, flex: 1, overflow: 'hidden' }}>
+      <div className="kanban-board" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, flex: 1, overflow: 'hidden' }}>
         {COLS.map(col => (
           <div
             key={col.id}

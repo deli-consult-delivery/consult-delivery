@@ -30,14 +30,14 @@ export default function GruposScreen({ tenant, tenantDbId }) {
   const [tab, setTab] = useState('whatsapp');
 
   return (
-    <div className="route-enter" style={{ padding: 32, maxWidth: 1200, margin: '0 auto' }}>
-      <div style={{ marginBottom: 24 }}>
+    <div className="route-enter page-container" style={{ padding: 32, maxWidth: 1200, margin: '0 auto' }}>
+      <div className="header-wrap" style={{ marginBottom: 24 }}>
         <h1 className="page-h1">Grupos</h1>
         <p className="page-sub">Grupos WhatsApp dos restaurantes e canais internos da equipe</p>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 28, borderBottom: '1px solid var(--g-200)', paddingBottom: 0 }}>
+      <div className="tabs-scroll" style={{ display: 'flex', gap: 4, marginBottom: 28, borderBottom: '1px solid var(--g-200)', paddingBottom: 0 }}>
         {[
           { id: 'whatsapp',  label: 'Grupos WhatsApp', icon: 'whatsapp' },
           { id: 'channels',  label: 'Canais Internos',  icon: 'msg'     },
@@ -225,7 +225,7 @@ function TabWhatsApp({ tenant, tenantDbId }) {
       )}
 
       {/* Instance selector + Sync */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, padding: 16, background: 'var(--white)', borderRadius: 'var(--r-md)', border: '1px solid var(--g-200)' }}>
+      <div className="filters-stack" style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, padding: 16, background: 'var(--white)', borderRadius: 'var(--r-md)', border: '1px solid var(--g-200)' }}>
         <Icon name="whatsapp" size={18} style={{ color: '#25D366', flexShrink: 0 }} />
         <div style={{ flex: 1 }}>
           {instances.length === 0 ? (
@@ -257,7 +257,7 @@ function TabWhatsApp({ tenant, tenantDbId }) {
       </div>
 
       {/* Filters */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+      <div className="filters-stack" style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, maxWidth: 280 }}>
           <div style={{ position: 'relative' }}>
             <Icon name="search" size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--g-400)' }} />
@@ -299,7 +299,7 @@ function TabWhatsApp({ tenant, tenantDbId }) {
             : 'Nenhum grupo encontrado para esta busca.'}
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+        <div className="group-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
           {filtered.map(g => (
             <GroupCard
               key={g.id}
@@ -444,7 +444,7 @@ function GroupFormModal({ group, instanceName, tenantDbId, onClose, onSave }) {
 
   return (
     <ModalOverlay onClose={onClose}>
-      <div style={{ width: 460 }}>
+      <div className="modal-mobile" style={{ width: 460 }}>
         <ModalHeader title={isEdit ? 'Editar grupo' : 'Novo grupo WhatsApp'} onClose={onClose} />
         <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
 
@@ -513,7 +513,7 @@ function BroadcastModal({ group, instanceName, onClose }) {
 
   return (
     <ModalOverlay onClose={onClose}>
-      <div style={{ width: 440 }}>
+      <div className="modal-mobile" style={{ width: 440 }}>
         <ModalHeader title={`Mensagem para "${group.name}"`} onClose={onClose} />
         <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ padding: '10px 14px', background: '#f0fdf4', borderRadius: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -604,7 +604,7 @@ function MembersModal({ group, instanceName, onClose }) {
 
   return (
     <ModalOverlay onClose={onClose}>
-      <div style={{ width: 420 }}>
+      <div className="modal-mobile" style={{ width: 420 }}>
         <ModalHeader title={`Participantes — ${group.name}`} onClose={onClose} />
         <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
           {!hasWA ? (
@@ -746,7 +746,7 @@ function TabChannels({ tenantDbId }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
+      <div className="btn-wrap" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
         <button className="btn-primary" onClick={() => setShowCreate(true)}>
           <Icon name="plus" size={14} /> Novo canal
         </button>
@@ -846,7 +846,7 @@ function ChannelFormModal({ channel, members, onClose, onSave }) {
 
   return (
     <ModalOverlay onClose={onClose}>
-      <div style={{ width: 440 }}>
+      <div className="modal-mobile" style={{ width: 440 }}>
         <ModalHeader title={isEdit ? 'Editar canal' : 'Novo canal interno'} onClose={onClose} />
         <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <GField label="Nome do canal *">
@@ -921,7 +921,7 @@ function ChannelMembersModal({ channel, members, onClose }) {
 
   return (
     <ModalOverlay onClose={onClose}>
-      <div style={{ width: 380 }}>
+      <div className="modal-mobile" style={{ width: 380 }}>
         <ModalHeader title={`Membros — #${channel.name}`} onClose={onClose} />
         <div style={{ padding: 24 }}>
           {loading ? (

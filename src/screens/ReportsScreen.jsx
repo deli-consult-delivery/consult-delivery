@@ -30,10 +30,10 @@ export default function ReportsScreen({ tenant }) {
   const generating = data.reports.find(r => r.status === 'generating');
 
   return (
-    <div className="route-enter" style={{ padding: 32, maxWidth: 1400, margin: '0 auto' }}>
+    <div className="route-enter page-container" style={{ padding: 32, maxWidth: 1400, margin: '0 auto' }}>
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24 }}>
+      <div className="header-wrap" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <AgentAvatar id="vera" size={56} />
           <div>
@@ -49,14 +49,14 @@ export default function ReportsScreen({ tenant }) {
             </p>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn-secondary"><Icon name="paper" size={14} /> Exportar PDF</button>
+        <div className="btn-wrap" style={{ display: 'flex', gap: 8 }}>
+          <button className="btn-secondary btn-full-mobile"><Icon name="paper" size={14} /> Exportar PDF</button>
           <button className="btn-primary"><Icon name="plus" size={14} /> Novo relatório</button>
         </div>
       </div>
 
       {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+      <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
         <KPI label="Receita do mês"   value={data.kpis.receita.value}    delta={data.kpis.receita.delta}    trend={data.kpis.receita.trend}    icon="dollar" accent />
         <KPI label="Pedidos do mês"   value={data.kpis.pedidos.value}    delta={data.kpis.pedidos.delta}    trend={data.kpis.pedidos.trend}    icon="paper" />
         <KPI label="Ticket médio"     value={data.kpis.ticket.value}     delta={data.kpis.ticket.delta}     trend={data.kpis.ticket.trend}     icon="chart" />
@@ -64,7 +64,7 @@ export default function ReportsScreen({ tenant }) {
       </div>
 
       {/* Main 2-col layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 24, marginBottom: 28 }}>
+      <div className="two-col" style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 24, marginBottom: 28 }}>
 
         {/* Left */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -98,7 +98,7 @@ export default function ReportsScreen({ tenant }) {
             </div>
 
             {period === '7d' ? (
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, height: 220 }}>
+              <div className="chart-wrap" style={{ display: 'flex', alignItems: 'flex-end', gap: 16, height: 220 }}>
                 {chart.map((v, i) => {
                   const h    = (v / max) * 100;
                   const isMax   = v === max && v > 0;
@@ -284,7 +284,7 @@ export default function ReportsScreen({ tenant }) {
           <h2 className="section-h2">Histórico de relatórios</h2>
           <span style={{ fontSize: 12, color: 'var(--g-500)' }}>{data.reports.length} relatórios</span>
         </div>
-        <div className="card" style={{ overflow: 'hidden' }}>
+        <div className="card tbl-wrap" style={{ overflow: 'hidden' }}>
           <table className="tbl">
             <thead>
               <tr>

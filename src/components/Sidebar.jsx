@@ -14,9 +14,9 @@ const NAV_ITEMS = [
   { id: 'settings',  icon: 'gear',      label: 'Configurações' },
 ];
 
-export default function Sidebar({ route, setRoute, counts }) {
+export default function Sidebar({ route, setRoute, counts, isOpen }) {
   return (
-    <aside className="sidebar dark-scroll">
+    <aside className={`sidebar dark-scroll${isOpen ? ' open' : ''}`}>
       <div style={{ padding: '20px 20px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <Logo />
       </div>

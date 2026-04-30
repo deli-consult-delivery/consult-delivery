@@ -85,13 +85,13 @@ export default function DashboardScreen({ tenant, tenantDbId }) {
   const dateStr = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
 
   return (
-    <div className="route-enter" style={{ padding: 32, maxWidth: 1400, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 28 }}>
+    <div className="route-enter page-container" style={{ padding: 32, maxWidth: 1400, margin: '0 auto' }}>
+      <div className="header-wrap" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 28 }}>
         <div>
           <h1 className="page-h1">Bom dia, Wandson <span style={{ display: 'inline-block', animation: 'dot-pulse 2s infinite' }}>👋</span></h1>
           <p className="page-sub">Aqui está o resumo da <strong style={{ color: 'var(--g-900)' }}>{tenantMeta?.name}</strong> hoje · {dateStr}</p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="btn-wrap" style={{ display: 'flex', gap: 8 }}>
           <button className="btn-secondary" onClick={() => {
             if (!tenantDbId) return;
             getKPIs(tenantDbId).then(r => { if (r) setKpis(mapKPIs(r)); }).catch(() => {});
@@ -109,7 +109,7 @@ export default function DashboardScreen({ tenant, tenantDbId }) {
           </div>
           <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>{agentStatus.filter(a => a.status === 'working').length} de {AGENTS.length} trabalhando agora</span>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 12 }}>
+        <div className="agent-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 12 }}>
           {agentStatus.map(a => (
             <div key={a.id} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: 14, position: 'relative', overflow: 'hidden' }}>
               {a.status === 'working' && <div style={{ position: 'absolute', top: 8, right: 8, width: 6, height: 6, borderRadius: '50%', background: a.color }} className="live-dot" />}
@@ -123,7 +123,7 @@ export default function DashboardScreen({ tenant, tenantDbId }) {
       </div>
 
       {kpis && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 28 }}>
+        <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 28 }}>
           <KPI label="Pedidos hoje"       value={kpis.pedidos.value}       delta={kpis.pedidos.delta}       trend={kpis.pedidos.trend}       accent icon="paper" />
           <KPI label="Ticket médio"       value={kpis.ticket.value}        delta={kpis.ticket.delta}        trend={kpis.ticket.trend}        icon="dollar" />
           <KPI label="Tarefas pendentes"  value={kpis.tarefas.value}       delta={kpis.tarefas.delta}       trend={kpis.tarefas.trend}       icon="check" />
@@ -131,7 +131,7 @@ export default function DashboardScreen({ tenant, tenantDbId }) {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 20 }}>
+      <div className="two-col" style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 20 }}>
         <div className="card" style={{ padding: 24 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
             <div>
@@ -188,7 +188,7 @@ export default function DashboardScreen({ tenant, tenantDbId }) {
           <h2 className="section-h2">Tarefas urgentes</h2>
           <button className="btn-ghost" style={{ fontSize: 13 }}>Ver no Kanban <Icon name="arrowright" size={12} /></button>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+        <div className="card-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
           {urgentTasks.map(t => (
             <div key={t.id} className="card" style={{ padding: 16, borderLeft: '3px solid var(--red)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>

@@ -196,9 +196,9 @@ export default function CRMScreen({ tenant, tenantDbId }) {
   const selectedClient = clients.find(c => c.id === selectedId);
 
   return (
-    <div className="route-enter" style={{ padding: 32, maxWidth: 1400, margin: '0 auto', position: 'relative' }}>
+    <div className="route-enter page-container" style={{ padding: 32, maxWidth: 1400, margin: '0 auto', position: 'relative' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24 }}>
+      <div className="header-wrap" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24 }}>
         <div>
           <h1 className="page-h1">Clientes / CRM</h1>
           <p className="page-sub">
@@ -206,7 +206,7 @@ export default function CRMScreen({ tenant, tenantDbId }) {
             {usingReal && <span style={{ marginLeft: 8, color: 'var(--success)', fontSize: 11 }}>● dados reais</span>}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div className="btn-wrap" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <div style={{ display: 'flex', background: 'var(--g-100)', borderRadius: 6, padding: 3, gap: 2 }}>
             {['list','kanban'].map(v => (
               <button
@@ -233,7 +233,7 @@ export default function CRMScreen({ tenant, tenantDbId }) {
       </div>
 
       {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+      <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
         <div className="kpi">
           <div className="kpi-label">Total de clientes</div>
           <div className="kpi-value" style={{ marginTop: 8 }}>{usingReal ? total : data.kpis.total}</div>
@@ -261,7 +261,7 @@ export default function CRMScreen({ tenant, tenantDbId }) {
 
       {/* Tabs + Search */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 0 }}>
-        <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--g-200)' }}>
+        <div className="tabs-scroll" style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--g-200)' }}>
           {STATUS_TABS.map(t => {
             const count = t.id === 'all' ? clients.length
               : t.id === 'grupos' ? null
@@ -307,7 +307,7 @@ export default function CRMScreen({ tenant, tenantDbId }) {
 
       {/* Sort + Agent + Period controls */}
       {tab !== 'grupos' && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '10px 0 0', alignItems: 'center' }}>
+        <div className="filters-stack" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '10px 0 0', alignItems: 'center' }}>
           <select
             className="input"
             value={sortBy}
@@ -382,7 +382,7 @@ export default function CRMScreen({ tenant, tenantDbId }) {
       ) : tab === 'grupos' ? (
         <GruposView tenantDbId={tenantDbId} clients={clients} />
       ) : view === 'list' ? (
-        <div className="card" style={{ overflow: 'hidden', marginTop: 16 }}>
+        <div className="card tbl-wrap" style={{ overflow: 'hidden', marginTop: 16 }}>
           <table className="tbl">
             <thead>
               <tr>
@@ -508,7 +508,7 @@ const KANBAN_COLS = [
 
 function KanbanView({ clients, onSelect }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginTop: 16, alignItems: 'start' }}>
+    <div className="group-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginTop: 16, alignItems: 'start' }}>
       {KANBAN_COLS.map(col => {
         const colClients = clients.filter(c => c.status === col.id);
         return (

@@ -23,9 +23,9 @@ export default function CoraScreen({ tenant }) {
   }, []);
 
   return (
-    <div className="route-enter" style={{ padding: 32, maxWidth: 1400, margin: '0 auto', position: 'relative' }}>
+    <div className="route-enter page-container" style={{ padding: 32, maxWidth: 1400, margin: '0 auto', position: 'relative' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24 }}>
+      <div className="header-wrap" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <AgentAvatar id="cora" size={56} />
           <div>
@@ -38,14 +38,14 @@ export default function CoraScreen({ tenant }) {
             </p>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="btn-wrap" style={{ display: 'flex', gap: 8 }}>
           <button className="btn-secondary"><Icon name="gear" size={14} /> Configurar CORA</button>
           <button className="btn-primary"><Icon name="plus" size={14} /> Nova régua</button>
         </div>
       </div>
 
       {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+      <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
         <div className="kpi">
           <div className="kpi-label">Total a receber</div>
           <div className="kpi-value accent" style={{ marginTop: 8 }}>{data.kpis.total}</div>
@@ -68,11 +68,11 @@ export default function CoraScreen({ tenant }) {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 24 }}>
+      <div className="two-col" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 24 }}>
         {/* Main */}
         <div>
           {/* Tabs */}
-          <div style={{ display: 'flex', gap: 2, marginBottom: 16, borderBottom: '1px solid var(--g-200)' }}>
+          <div className="tabs-scroll" style={{ display: 'flex', gap: 2, marginBottom: 16, borderBottom: '1px solid var(--g-200)' }}>
             {[
               { id: 'inad',   label: 'Inadimplentes', count: data.rows.length },
               { id: 'reguas', label: 'Réguas de cobrança', count: data.kpis.reguas },
@@ -98,7 +98,7 @@ export default function CoraScreen({ tenant }) {
           </div>
 
           {tab === 'inad' && (
-            <div className="card" style={{ overflow: 'hidden' }}>
+            <div className="card tbl-wrap" style={{ overflow: 'hidden' }}>
               <table className="tbl">
                 <thead>
                   <tr>

@@ -33,6 +33,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [usingRealData, setUsingRealData]        = useState(false);
   const [tab, setTab]                            = useState('all');
   const [activeId, setActiveId]                  = useState(null);
+  const [mobileView, setMobileView]              = useState('list'); // 'list' | 'chat'
+  const [isMobile, setIsMobile]                  = useState(() => window.innerWidth <= 768);
   const [search, setSearch]                      = useState('');
   const [draft, setDraft]                        = useState('');
   const [messages, setMessages]                  = useState({});
@@ -346,6 +348,12 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, activeId, typing]);
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
 
   async function loadWAGroups(instanceName) {
     try {
@@ -802,16 +810,18 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   return (
     <div className="route-enter" style={{
       display: 'grid',
-      gridTemplateColumns: showThirdCol
-        ? 'minmax(220px, 270px) minmax(0, 1fr) 300px'
-        : 'minmax(220px, 270px) minmax(0, 1fr)',
+      gridTemplateColumns: isMobile
+        ? '1fr'
+        : showThirdCol
+          ? 'minmax(220px, 270px) minmax(0, 1fr) 300px'
+          : 'minmax(220px, 270px) minmax(0, 1fr)',
       height: 'calc(100vh - 64px)',
       background: 'var(--g-50)',
       overflow: 'hidden',
     }}>
 
       {/* ── Col 1: Sidebar ────────────────────────────────── */}
-      <div style={{ background: 'var(--white)', borderRight: '1px solid var(--g-200)', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div style={{ background: 'var(--white)', borderRight: '1px solid var(--g-200)', display: isMobile && mobileView === 'chat' ? 'none' : 'flex', flexDirection: 'column', minWidth: 0 }}>
         <div style={{ padding: '20px 20px 12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <h2 className="section-h2" style={{ fontSize: 18 }}>Conversas</h2>
@@ -903,6 +913,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                 return (
                   <ConvItem key={c.id} conv={c} active={c.id === activeId} lastMsg={lastMsg} onClick={() => {
                     setActiveId(c.id);
+                    setMobileView('chat');
                     if (usingRealData && !messages[c.id]?.length) loadMsgs(c.id);
                   }} />
                 );
@@ -933,6 +944,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               {intCanais.map(c => (
                 <ConvItem key={c.id} conv={c} active={c.id === activeId} onClick={() => {
                   setActiveId(c.id);
+                  setMobileView('chat');
                   setShowPinned(false);
                 }} />
               ))}
@@ -944,6 +956,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                 return (
                   <ConvItem key={c.id} conv={c} active={c.id === activeId} lastMsg={lastMsg} onClick={() => {
                     setActiveId(c.id);
+                    setMobileView('chat');
                     if (usingRealData && !messages[c.id]?.length) loadMsgs(c.id);
                     if (c.id.startsWith('chan-')) setShowPinned(false);
                   }} />
@@ -960,7 +973,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       </div>
 
       {/* ── Col 2: Área de chat / canal ───────────────────── */}
-      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, background: 'var(--g-50)', overflow: 'hidden' }}>
+      <div style={{ display: isMobile && mobileView === 'list' ? 'none' : 'flex', flexDirection: 'column', minWidth: 0, background: 'var(--g-50)', overflow: 'hidden' }}>
 
         {isChannel ? (
           /* ── Canal interno ──────────────────────────────── */
@@ -970,6 +983,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               padding: '14px 20px', background: 'var(--white)', borderBottom: '1px solid var(--g-200)',
               display: 'flex', alignItems: 'center', gap: 12,
             }}>
+              {isMobile && (
+                <button className="btn-icon" onClick={() => setMobileView('list')} title="Voltar">
+                  <Icon name="chevleft" size={20} />
+                </button>
+              )}
               <ConvAvatar conv={active} size={40} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--g-900)' }}>{active.name}</div>
@@ -1079,6 +1097,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               padding: '14px 20px', background: 'var(--white)', borderBottom: '1px solid var(--g-200)',
               display: 'flex', alignItems: 'center', gap: 12,
             }}>
+              {isMobile && (
+                <button className="btn-icon" onClick={() => setMobileView('list')} title="Voltar">
+                  <Icon name="chevleft" size={20} />
+                </button>
+              )}
               <ConvAvatar conv={active} size={40} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--g-900)' }}>{active.name}</div>
@@ -1372,7 +1395,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       </div>
 
       {/* ── Col 3: Painel de info / mensagens fixadas ─────── */}
-      {showInfo && !isChannel && (
+      {showInfo && !isChannel && !isMobile && (
         <div className="slide-right scroll" style={{
           background: 'var(--white)', borderLeft: '1px solid var(--g-200)', overflowY: 'auto',
           display: 'flex', flexDirection: 'column',

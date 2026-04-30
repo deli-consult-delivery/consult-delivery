@@ -32,6 +32,7 @@ export default function App() {
   const [tenantDbId, setTenantDbId] = useState(null);
   const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [theme, setTheme] = useState(() => localStorage.getItem('cd-theme') || 'claro');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -101,8 +102,22 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <Sidebar route={route} setRoute={setRoute} counts={counts} />
-      <Topbar route={route} tenant={tenant} setTenant={setTenant} tenants={tenants} theme={theme} setTheme={setTheme} />
+      {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
+      <Sidebar
+        route={route}
+        setRoute={r => { setRoute(r); setSidebarOpen(false); }}
+        counts={counts}
+        isOpen={sidebarOpen}
+      />
+      <Topbar
+        route={route}
+        tenant={tenant}
+        setTenant={setTenant}
+        tenants={tenants}
+        theme={theme}
+        setTheme={setTheme}
+        onMenuToggle={() => setSidebarOpen(v => !v)}
+      />
       <main className="main scroll" key={route + tenant}>
         {route === 'dashboard' && <DashboardScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'chat'      && <ChatScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={setRoute} />}

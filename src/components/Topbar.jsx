@@ -27,7 +27,7 @@ const THEMES = [
   { id: 'escuro', label: 'Escuro', icon: 'moon'     },
 ];
 
-export default function Topbar({ route, tenant, setTenant, tenants, theme = 'claro', setTheme }) {
+export default function Topbar({ route, tenant, setTenant, tenants, theme = 'claro', setTheme, onMenuToggle }) {
   const [openTenant, setOpenTenant] = useState(false);
   const [openNotif, setOpenNotif] = useState(false);
   const [openTheme, setOpenTheme] = useState(false);
@@ -36,13 +36,23 @@ export default function Topbar({ route, tenant, setTenant, tenants, theme = 'cla
 
   return (
     <header className="topbar">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--g-500)', fontSize: 13 }}>
+      {/* Hamburguer — visível só no mobile via CSS */}
+      <button
+        className="btn-icon topbar-menu-btn"
+        onClick={onMenuToggle}
+        title="Menu"
+        style={{ flexShrink: 0 }}
+      >
+        <Icon name="menu" size={20} />
+      </button>
+
+      <div className="topbar-breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--g-500)', fontSize: 13 }}>
         <span>Plataforma</span>
         <Icon name="chevright" size={14} />
         <span style={{ color: 'var(--g-900)', fontWeight: 600 }}>{ROUTE_LABELS[route] || route}</span>
       </div>
 
-      <div style={{ flex: 1, maxWidth: 520, marginLeft: 24, position: 'relative' }}>
+      <div className="topbar-search" style={{ flex: 1, maxWidth: 520, marginLeft: 24, position: 'relative' }}>
         <Icon name="search" size={16} style={{ position: 'absolute', top: 12, left: 14, color: 'var(--g-400)' }} />
         <input
           className="input"
@@ -58,8 +68,8 @@ export default function Topbar({ route, tenant, setTenant, tenants, theme = 'cla
       </div>
 
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-        {/* Tenant selector */}
-        <div style={{ position: 'relative' }}>
+        {/* Tenant selector — oculto no mobile via CSS */}
+        <div className="topbar-tenant" style={{ position: 'relative' }}>
           <button
             className="btn-secondary"
             style={{ padding: '8px 12px', minWidth: 200, justifyContent: 'space-between' }}
