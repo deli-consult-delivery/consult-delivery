@@ -736,8 +736,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     setDraft('');
     if (HAS_EVO && selectedInstance && active.whatsapp_chat_id) {
       setSending(true);
+      const textToSend = agentName ? `${text}\n\n*${agentName}*` : text;
       try {
-        await sendTextMessage(selectedInstance, active.whatsapp_chat_id, text);
+        await sendTextMessage(selectedInstance, active.whatsapp_chat_id, textToSend);
         await supabase.from('messages').insert({
           conversation_id: active.id, direction: 'outbound', content: text, created_at: now.toISOString(),
         });
@@ -1348,7 +1349,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                               fontWeight: 600, whiteSpace: 'nowrap',
                             }}
                           >
-                            {useSignature ? '✍ ' : ''}{currentUser.name}
+                            {useSignature ? '🔥 ' : ''}{currentUser.name}
                           </button>
                         )}
                         <button
