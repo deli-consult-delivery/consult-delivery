@@ -992,8 +992,8 @@ function ContactPicker({ tenantDbId, selected, onChange }) {
           .limit(8),
         supabase
           .from('customers')
-          .select('id, name, phone')
-          .or(`name.ilike.%${search}%,phone.ilike.%${search}%`)
+          .select('id, name, whatsapp_name, phone')
+          .or(`name.ilike.%${search}%,whatsapp_name.ilike.%${search}%,phone.ilike.%${search}%`)
           .not('phone', 'is', null)
           .limit(8),
       ]);
@@ -1005,7 +1005,7 @@ function ContactPicker({ tenantDbId, selected, onChange }) {
       }));
       const fromCustomers = (custRes.data || []).map(c => ({
         id:    c.id,
-        name:  c.name,
+        name:  c.whatsapp_name || c.name,
         phone: (c.phone || '').replace(/\D/g, ''),
       }));
 
