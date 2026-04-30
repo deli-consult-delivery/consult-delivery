@@ -233,8 +233,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
   useEffect(() => {
     if (selectedInstance) {
-      loadRealtimeConvs(selectedInstance);
-      loadWAGroups(selectedInstance);
+      // loadRealtimeConvs faz setConvs(mapped) substituindo tudo — aguarda terminar
+      // antes de loadWAGroups appender os grupos, evitando race condition
+      loadRealtimeConvs(selectedInstance).then(() => loadWAGroups(selectedInstance));
     } else {
       setConvs(prev => prev.filter(c => c.id.startsWith('wag-') || c.id.startsWith('chan-')));
       setUsingRealData(false);
