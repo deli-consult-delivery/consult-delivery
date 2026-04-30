@@ -79,6 +79,12 @@ function TabWhatsApp({ tenant, tenantDbId }) {
   const [membersGrp,   setMembersGrp]  = useState(null);
   const [search,       setSearch]       = useState('');
   const [filterType,   setFilterType]   = useState('all');
+  const [toast,        setToast]        = useState(null); // { type: 'ok'|'err', msg: string }
+
+  function showToast(type, msg) {
+    setToast({ type, msg });
+    setTimeout(() => setToast(null), 4000);
+  }
 
   useEffect(() => { loadInstances(); }, []);
   useEffect(() => { if (selInstance) loadGroups(); }, [selInstance]);
@@ -115,26 +121,29 @@ function TabWhatsApp({ tenant, tenantDbId }) {
     if (!selInstance) return;
     setSyncing(true);
     try {
-      const raw = await fetchGroups(selInstance);
+      const raw = await fetchGroups(selInstance, true);
       const waGroups = Array.isArray(raw) ? raw : (raw?.groups || []);
 
+      let count = 0;
       for (const g of waGroups) {
         const jid   = g.id || g.remoteJid;
         const name  = g.subject || g.name || 'Grupo sem nome';
-        const count = g.participants?.length || g.size || 0;
+        const pCount = g.participants?.length || g.size || 0;
 
         await supabase.from('whatsapp_groups').upsert({
           tenant_id:         tenantDbId,
           instance_name:     selInstance,
           wa_group_id:       jid,
           name,
-          participant_count: count,
+          participant_count: pCount,
           synced_at:         new Date().toISOString(),
         }, { onConflict: 'wa_group_id,instance_name', ignoreDuplicates: false });
+        count++;
       }
       await loadGroups();
+      showToast('ok', `${count} grupo${count !== 1 ? 's' : ''} sincronizado${count !== 1 ? 's' : ''} do WhatsApp!`);
     } catch (e) {
-      alert('Erro ao sincronizar: ' + (e.message || e));
+      showToast('err', 'Erro ao sincronizar: ' + (e.message || e));
     }
     setSyncing(false);
   }
@@ -156,15 +165,29 @@ function TabWhatsApp({ tenant, tenantDbId }) {
         try { await updateWAGroupSubject(selInstance, form.wa_group_id, form.name); } catch { /* ignora */ }
       }
       await supabase.from('whatsapp_groups').update(updates).eq('id', form.id);
+      showToast('ok', 'Grupo atualizado!');
     } else {
-      // Criar novo
+      // Criar novo — formatar participantes como @s.whatsapp.net
       let waGroupId = null;
-      if (form.participants?.length) {
+      const participants = (form.participants || []).map(p => {
+        const digits = String(p).replace(/\D/g, '');
+        return digits.includes('@') ? digits : `${digits}@s.whatsapp.net`;
+      });
+
+      if (participants.length > 0) {
         try {
-          const res = await createWAGroup(selInstance, form.name, form.participants);
-          waGroupId = res?.groupJid || res?.id || null;
-        } catch { /* WA offline — salva só no banco */ }
+          const res = await createWAGroup(selInstance, form.name, participants, form.description);
+          waGroupId = res?.groupJid || res?.id || res?.data?.groupJid || null;
+          if (waGroupId) {
+            showToast('ok', 'Grupo criado no WhatsApp! 🎉');
+          } else {
+            showToast('err', 'API não retornou groupJid — grupo salvo localmente apenas.');
+          }
+        } catch (e) {
+          showToast('err', 'Erro ao criar no WA: ' + (e.message || e));
+        }
       }
+
       await supabase.from('whatsapp_groups').insert({
         tenant_id:         tenantDbId,
         instance_name:     selInstance,
@@ -172,7 +195,7 @@ function TabWhatsApp({ tenant, tenantDbId }) {
         name:              form.name,
         type:              form.type,
         description:       form.description,
-        participant_count: form.participants?.length || 0,
+        participant_count: participants.length,
       });
     }
     setShowCreate(false);
@@ -188,6 +211,19 @@ function TabWhatsApp({ tenant, tenantDbId }) {
 
   return (
     <div>
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
+          padding: '12px 20px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+          background: toast.type === 'ok' ? '#10B981' : '#B70C00',
+          color: '#fff', boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          {toast.type === 'ok' ? '✓' : '✕'} {toast.msg}
+        </div>
+      )}
+
       {/* Instance selector + Sync */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, padding: 16, background: 'var(--white)', borderRadius: 'var(--r-md)', border: '1px solid var(--g-200)' }}>
         <Icon name="whatsapp" size={18} style={{ color: '#25D366', flexShrink: 0 }} />
@@ -945,23 +981,49 @@ function ContactPicker({ tenantDbId, selected, onChange }) {
   async function doSearch() {
     setSearching(true);
     try {
-      let query = supabase
-        .from('customers')
-        .select('id, name, phone')
-        .or(`name.ilike.%${search}%,phone.ilike.%${search}%`)
-        .not('phone', 'is', null)
-        .limit(8);
-      if (tenantDbId) query = query.eq('tenant_id', tenantDbId);
-      const { data } = await query;
-      setResults(data || []);
+      // Busca em conversas WA reais (push_name + número) e customers
+      const [convRes, custRes] = await Promise.all([
+        supabase
+          .from('conversations')
+          .select('id, push_name, whatsapp_chat_id')
+          .eq('is_group', false)
+          .not('whatsapp_chat_id', 'is', null)
+          .or(`push_name.ilike.%${search}%,whatsapp_chat_id.ilike.%${search}%`)
+          .limit(8),
+        supabase
+          .from('customers')
+          .select('id, name, phone')
+          .or(`name.ilike.%${search}%,phone.ilike.%${search}%`)
+          .not('phone', 'is', null)
+          .limit(8),
+      ]);
+
+      const fromConvs = (convRes.data || []).map(c => ({
+        id:    c.id,
+        name:  c.push_name || c.whatsapp_chat_id?.split('@')[0] || '',
+        phone: c.whatsapp_chat_id?.split('@')[0] || '',
+      }));
+      const fromCustomers = (custRes.data || []).map(c => ({
+        id:    c.id,
+        name:  c.name,
+        phone: (c.phone || '').replace(/\D/g, ''),
+      }));
+
+      // Merge deduplicated by phone
+      const seen = new Set();
+      const merged = [...fromConvs, ...fromCustomers].filter(c => {
+        if (!c.phone || seen.has(c.phone)) return false;
+        seen.add(c.phone);
+        return true;
+      });
+      setResults(merged);
     } catch { setResults([]); }
     setSearching(false);
   }
 
   function addContact(c) {
-    const phone = (c.phone || '').replace(/\D/g, '');
-    if (!phone || selected.find(s => s.phone === phone)) return;
-    onChange([...selected, { name: c.name, phone }]);
+    if (!c.phone || selected.find(s => s.phone === c.phone)) return;
+    onChange([...selected, { name: c.name, phone: c.phone }]);
     setSearch('');
     setResults([]);
     setShowDrop(false);

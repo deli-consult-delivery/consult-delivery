@@ -6,25 +6,44 @@ import { CRM_DATA, AGENTS } from '../data.js';
 import { supabase } from '../lib/supabase.js';
 
 const STATUS_MAP = {
-  vip:       { label: 'VIP',        cls: 'badge-yellow' },
-  recurrent: { label: 'Recorrente', cls: 'badge-blue'   },
-  new:       { label: 'Novo',       cls: 'badge-green'  },
-  inactive:  { label: 'Inativo',    cls: 'badge-gray'   },
+  // new DB values
+  novo:           { label: 'Novo',            color: '#3B82F6', bg: '#DBEAFE' },
+  em_atendimento: { label: 'Em atendimento',  color: '#D97706', bg: '#FEF3C7' },
+  aguardando:     { label: 'Aguardando',      color: '#EA580C', bg: '#FED7AA' },
+  resolvido:      { label: 'Resolvido',       color: '#059669', bg: '#D1FAE5' },
+  inativo:        { label: 'Inativo',         color: '#6B7280', bg: '#F3F4F6' },
+  // legacy compat
+  vip:            { label: 'VIP',             color: '#D97706', bg: '#FEF3C7' },
+  recurrent:      { label: 'Recorrente',      color: '#3B82F6', bg: '#DBEAFE' },
+  new:            { label: 'Novo',            color: '#3B82F6', bg: '#DBEAFE' },
+  inactive:       { label: 'Inativo',         color: '#6B7280', bg: '#F3F4F6' },
 };
 
-const TABS = [
-  { id: 'all',       label: 'Todos'      },
-  { id: 'vip',       label: 'VIP'        },
-  { id: 'recurrent', label: 'Recorrentes'},
-  { id: 'new',       label: 'Novos'      },
-  { id: 'inactive',  label: 'Inativos'   },
-  { id: 'grupos',    label: 'Grupos'     },
+function StatusBadge({ status }) {
+  const s = STATUS_MAP[status] || STATUS_MAP.novo;
+  return (
+    <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 9999, fontSize: 11, fontWeight: 700, background: s.bg, color: s.color }}>
+      {s.label}
+    </span>
+  );
+}
+
+const STATUS_TABS = [
+  { id: 'all',           label: 'Todos'           },
+  { id: 'novo',          label: 'Novos'           },
+  { id: 'em_atendimento',label: 'Em atendimento'  },
+  { id: 'aguardando',    label: 'Aguardando'      },
+  { id: 'resolvido',     label: 'Resolvidos'      },
+  { id: 'inativo',       label: 'Inativos'        },
+  { id: 'grupos',        label: 'Grupos'          },
 ];
+
+const TAG_PALETTE = ['#B70C00','#2563EB','#059669','#D97706','#7C3AED','#0D0D0D','#EC4899','#06B6D4','#EA580C','#84CC16'];
 
 const initials = name =>
   (name || '??').split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
 
-function mapCustomers(rows) {
+function mapCustomers(rows, tagMap = {}) {
   return rows.map(c => {
     const orders = c.orders || [];
     const totalOrders = orders.length;
@@ -33,8 +52,11 @@ function mapCustomers(rows) {
     const lastOrderDate = sorted[0]?.placed_at
       ? new Date(sorted[0].placed_at).toLocaleDateString('pt-BR')
       : '—';
-    const status = c.metadata?.status
-      || (c.is_vip ? 'vip' : totalOrders > 5 ? 'recurrent' : 'new');
+    const status = c.status                  // new DB column (primary)
+      || c.metadata?.status                  // legacy fallback
+      || (c.is_vip ? 'vip' : totalOrders > 5 ? 'recurrent' : 'novo');
+    const tagIds = (c.customer_tag_relations || []).map(r => r.tag_id);
+    const tagObjects = tagIds.map(tid => tagMap[tid]).filter(Boolean);
     return {
       id: c.id,
       name: c.name || '',
@@ -43,7 +65,7 @@ function mapCustomers(rows) {
       email: c.email || '',
       status,
       is_vip: c.is_vip || false,
-      tags: c.tags || [],
+      tags: tagObjects,
       totalOrders,
       totalSpent: `R$ ${(totalSpentCents / 100).toFixed(2).replace('.', ',')}`,
       lastOrder: lastOrderDate,
@@ -67,23 +89,38 @@ export default function CRMScreen({ tenant, tenantDbId }) {
   const [view, setView]                 = useState('list');
   const [showNovo, setShowNovo]         = useState(false);
   const [showImportar, setShowImportar] = useState(false);
+  const [tags, setTags]                 = useState([]);         // contact_tags for tenant
+  const [filterTagId, setFilterTagId]   = useState(null);       // tag filter
+  const [showTagMgr, setShowTagMgr]     = useState(false);
 
   // ── Carregar clientes reais ─────────────────────────────────
   useEffect(() => {
     if (!tenantDbId) return;
-    loadCustomers();
+    loadTags().then(() => loadCustomers());
   }, [tenantDbId]);
+
+  async function loadTags() {
+    try {
+      const { data } = await supabase.from('contact_tags').select('*').eq('tenant_id', tenantDbId).order('name');
+      setTags(data || []);
+      return (data || []);
+    } catch { return []; }
+  }
 
   async function loadCustomers() {
     setLoading(true);
     try {
-      const { data } = await supabase
-        .from('customers')
-        .select('*, orders(id, total_cents, placed_at, items_summary, status)')
-        .eq('tenant_id', tenantDbId)
-        .order('updated_at', { ascending: false });
+      const [{ data: tagData }, { data }] = await Promise.all([
+        supabase.from('contact_tags').select('*').eq('tenant_id', tenantDbId),
+        supabase.from('customers')
+          .select('*, orders(id, total_cents, placed_at, items_summary, status), customer_tag_relations(tag_id)')
+          .eq('tenant_id', tenantDbId)
+          .order('updated_at', { ascending: false }),
+      ]);
+      const tagMap = Object.fromEntries((tagData || []).map(t => [t.id, t]));
+      setTags(tagData || []);
       if (data?.length) {
-        setClients(mapCustomers(data));
+        setClients(mapCustomers(data, tagMap));
         setUsingReal(true);
       }
     } catch { /* usar mock */ }
@@ -106,11 +143,10 @@ export default function CRMScreen({ tenant, tenantDbId }) {
   const npsColor = data.kpis.nps >= 80 ? 'var(--success)' : data.kpis.nps >= 60 ? 'var(--warn)' : 'var(--red)';
 
   const filtered = tab === 'grupos' ? [] : clients.filter(c => {
-    const matchesTab = tab === 'all' || c.status === tab;
-    const matchesSearch = !search
-      || c.name.toLowerCase().includes(search.toLowerCase())
-      || c.phone.includes(search);
-    return matchesTab && matchesSearch;
+    const matchesTab    = tab === 'all' || c.status === tab;
+    const matchesSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search);
+    const matchesTag    = !filterTagId || c.tags.some(t => t.id === filterTagId);
+    return matchesTab && matchesSearch && matchesTag;
   });
 
   const selectedClient = clients.find(c => c.id === selectedId);
@@ -182,7 +218,7 @@ export default function CRMScreen({ tenant, tenantDbId }) {
       {/* Tabs + Search */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 0 }}>
         <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--g-200)' }}>
-          {TABS.map(t => {
+          {STATUS_TABS.map(t => {
             const count = t.id === 'all' ? clients.length
               : t.id === 'grupos' ? null
               : clients.filter(c => c.status === t.id).length;
@@ -191,7 +227,7 @@ export default function CRMScreen({ tenant, tenantDbId }) {
                 key={t.id}
                 onClick={() => setTab(t.id)}
                 style={{
-                  padding: '12px 16px', fontSize: 13,
+                  padding: '12px 14px', fontSize: 13,
                   fontWeight: tab === t.id ? 700 : 500,
                   color: tab === t.id ? 'var(--red)' : 'var(--g-600)',
                   borderBottom: tab === t.id ? '2px solid var(--red)' : '2px solid transparent',
@@ -200,25 +236,47 @@ export default function CRMScreen({ tenant, tenantDbId }) {
               >
                 {t.label}
                 {count !== null && (
-                  <span style={{ marginLeft: 6, color: 'var(--g-500)', fontSize: 12 }}>{count}</span>
+                  <span style={{ marginLeft: 5, color: 'var(--g-400)', fontSize: 11 }}>{count}</span>
                 )}
               </button>
             );
           })}
         </div>
         {tab !== 'grupos' && (
-          <div style={{ position: 'relative', marginBottom: -1 }}>
-            <Icon name="search" size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--g-400)', pointerEvents: 'none' }} />
-            <input
-              className="input"
-              style={{ paddingLeft: 34, width: 240, fontSize: 13 }}
-              placeholder="Buscar cliente ou telefone..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: -1 }}>
+            <div style={{ position: 'relative' }}>
+              <Icon name="search" size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--g-400)', pointerEvents: 'none' }} />
+              <input
+                className="input"
+                style={{ paddingLeft: 34, width: 220, fontSize: 13 }}
+                placeholder="Buscar cliente ou telefone..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+            <button className="btn-secondary" style={{ fontSize: 12, padding: '7px 12px' }} onClick={() => setShowTagMgr(true)}>
+              🏷 Tags
+            </button>
           </div>
         )}
       </div>
+
+      {/* Tag filter chips */}
+      {tags.length > 0 && tab !== 'grupos' && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '10px 0 4px' }}>
+          <button
+            onClick={() => setFilterTagId(null)}
+            style={{ padding: '3px 10px', borderRadius: 9999, fontSize: 11, fontWeight: 600, cursor: 'pointer', background: !filterTagId ? 'var(--g-900)' : 'var(--g-100)', color: !filterTagId ? '#fff' : 'var(--g-600)', border: 'none' }}
+          >Todas</button>
+          {tags.map(tag => (
+            <button
+              key={tag.id}
+              onClick={() => setFilterTagId(filterTagId === tag.id ? null : tag.id)}
+              style={{ padding: '3px 10px', borderRadius: 9999, fontSize: 11, fontWeight: 600, cursor: 'pointer', background: filterTagId === tag.id ? tag.color : tag.color + '22', color: filterTagId === tag.id ? '#fff' : tag.color, border: `1px solid ${tag.color}40` }}
+            >{tag.name}</button>
+          ))}
+        </div>
+      )}
 
       {/* Conteudo */}
       {loading ? (
@@ -245,7 +303,6 @@ export default function CRMScreen({ tenant, tenantDbId }) {
             </thead>
             <tbody>
               {filtered.map(c => {
-                const s = STATUS_MAP[c.status] || STATUS_MAP.new;
                 const agent = c.agent ? AGENTS.find(a => a.id === c.agent) : null;
                 return (
                   <tr key={c.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedId(c.id)}>
@@ -255,11 +312,18 @@ export default function CRMScreen({ tenant, tenantDbId }) {
                         <div>
                           <div style={{ fontWeight: 600, color: 'var(--g-900)' }}>{c.name}</div>
                           {c.email && <div style={{ fontSize: 11, color: 'var(--g-400)' }}>{c.email}</div>}
+                          {c.tags?.length > 0 && (
+                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+                              {c.tags.map(t => (
+                                <span key={t.id} style={{ padding: '1px 6px', borderRadius: 9999, fontSize: 10, fontWeight: 700, background: t.color + '22', color: t.color, border: `1px solid ${t.color}40` }}>{t.name}</span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
                     <td style={{ fontSize: 12, color: 'var(--g-600)', fontVariantNumeric: 'tabular-nums' }}>{c.phone}</td>
-                    <td><span className={`badge ${s.cls}`}>{s.label}</span></td>
+                    <td><StatusBadge status={c.status} /></td>
                     <td style={{ fontWeight: 600, color: 'var(--g-900)', textAlign: 'center' }}>{c.totalOrders}</td>
                     <td style={{ fontWeight: 700, color: 'var(--g-900)', fontVariantNumeric: 'tabular-nums' }}>{c.totalSpent}</td>
                     <td style={{ fontSize: 12, color: 'var(--g-600)' }}>{c.lastOrder}</td>
@@ -300,6 +364,12 @@ export default function CRMScreen({ tenant, tenantDbId }) {
       )}
 
       {/* Modais */}
+      {showTagMgr && (
+        <TagManagerModal
+          tenantDbId={tenantDbId}
+          onClose={() => { setShowTagMgr(false); loadCustomers(); }}
+        />
+      )}
       {showNovo && (
         <NovoClienteModal
           tenantDbId={tenantDbId}
@@ -384,9 +454,119 @@ function KanbanView({ clients, onSelect }) {
   );
 }
 
+/* ── TagManagerModal ──────────────────────────────────────── */
+function TagManagerModal({ tenantDbId, onClose }) {
+  const [tags,    setTags]    = useState([]);
+  const [name,    setName]    = useState('');
+  const [color,   setColor]   = useState('#B70C00');
+  const [saving,  setSaving]  = useState(false);
+  const [editId,  setEditId]  = useState(null);
+
+  useEffect(() => { loadTags(); }, []);
+
+  async function loadTags() {
+    const { data } = await supabase.from('contact_tags').select('*').eq('tenant_id', tenantDbId).order('name');
+    setTags(data || []);
+  }
+
+  async function handleSave() {
+    if (!name.trim()) return;
+    setSaving(true);
+    if (editId) {
+      await supabase.from('contact_tags').update({ name: name.trim(), color }).eq('id', editId);
+    } else {
+      await supabase.from('contact_tags').insert({ name: name.trim(), color, tenant_id: tenantDbId });
+    }
+    await loadTags();
+    setName(''); setColor('#B70C00'); setEditId(null);
+    setSaving(false);
+  }
+
+  async function handleDelete(id) {
+    await supabase.from('customer_tag_relations').delete().eq('tag_id', id);
+    await supabase.from('contact_tags').delete().eq('id', id);
+    setTags(prev => prev.filter(t => t.id !== id));
+  }
+
+  return (
+    <ModalOverlay onClose={onClose}>
+      <div style={{ width: 420 }}>
+        <ModalHeader title="Gerenciar Tags" onClose={onClose} />
+        <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--g-500)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              {editId ? 'Editar tag' : 'Nova tag'}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                className="input"
+                placeholder="Nome da tag"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSave()}
+                style={{ flex: 1 }}
+              />
+              <button className="btn-primary" onClick={handleSave} disabled={saving || !name.trim()} style={{ flexShrink: 0 }}>
+                {saving ? '...' : editId ? 'Atualizar' : 'Criar'}
+              </button>
+              {editId && (
+                <button className="btn-secondary" onClick={() => { setEditId(null); setName(''); setColor('#B70C00'); }}>Cancelar</button>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: 11, color: 'var(--g-500)' }}>Cor:</span>
+              {TAG_PALETTE.map(c => (
+                <button
+                  key={c}
+                  onClick={() => setColor(c)}
+                  style={{ width: 24, height: 24, borderRadius: '50%', background: c, border: color === c ? '3px solid var(--g-900)' : '2px solid transparent', boxShadow: color === c ? '0 0 0 2px white, 0 0 0 3px var(--g-900)' : 'none', cursor: 'pointer' }}
+                />
+              ))}
+            </div>
+            {name && (
+              <div>
+                <span style={{ padding: '3px 10px', borderRadius: 9999, fontSize: 12, fontWeight: 700, background: color + '22', color, border: `1px solid ${color}40` }}>
+                  {name}
+                </span>
+                <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--g-400)' }}>prévia</span>
+              </div>
+            )}
+          </div>
+
+          <div style={{ borderTop: '1px solid var(--g-200)', paddingTop: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--g-500)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>Tags existentes</div>
+            {tags.length === 0 ? (
+              <div style={{ fontSize: 13, color: 'var(--g-400)', textAlign: 'center', padding: 24 }}>Nenhuma tag criada ainda.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {tags.map(t => (
+                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'var(--g-50)', borderRadius: 8, border: '1px solid var(--g-200)' }}>
+                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: t.color, flexShrink: 0 }} />
+                    <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--g-900)' }}>{t.name}</span>
+                    <button className="btn-ghost" style={{ fontSize: 12, padding: '3px 8px' }} onClick={() => { setEditId(t.id); setName(t.name); setColor(t.color); }}>
+                      <Icon name="edit" size={12} />
+                    </button>
+                    <button className="btn-ghost" style={{ fontSize: 12, padding: '3px 8px', color: 'var(--red)' }} onClick={() => handleDelete(t.id)}>
+                      <Icon name="trash" size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button className="btn-primary" onClick={onClose}>Fechar</button>
+          </div>
+        </div>
+      </div>
+    </ModalOverlay>
+  );
+}
+
 /* ── NovoClienteModal ─────────────────────────────────────── */
 function NovoClienteModal({ tenantDbId, onClose, onCreated }) {
-  const [form, setForm] = useState({ name: '', phone: '', email: '', status: 'new', notes: '' });
+  const [form, setForm] = useState({ name: '', phone: '', email: '', status: 'novo', notes: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -402,8 +582,9 @@ function NovoClienteModal({ tenantDbId, onClose, onCreated }) {
         name:      form.name.trim(),
         phone:     form.phone.trim(),
         email:     form.email.trim(),
-        is_vip:    form.status === 'vip',
-        metadata:  { status: form.status, notes: form.notes },
+        is_vip:    false,
+        status:    form.status,
+        metadata:  { notes: form.notes },
         tenant_id: tenantDbId,
       };
 
@@ -438,10 +619,11 @@ function NovoClienteModal({ tenantDbId, onClose, onCreated }) {
             </Field>
             <Field label="Status">
               <select className="input" value={form.status} onChange={e => set('status', e.target.value)}>
-                <option value="new">Novo</option>
-                <option value="recurrent">Recorrente</option>
-                <option value="vip">VIP</option>
-                <option value="inactive">Inativo</option>
+                <option value="novo">Novo</option>
+                <option value="em_atendimento">Em atendimento</option>
+                <option value="aguardando">Aguardando</option>
+                <option value="resolvido">Resolvido</option>
+                <option value="inativo">Inativo</option>
               </select>
             </Field>
           </div>

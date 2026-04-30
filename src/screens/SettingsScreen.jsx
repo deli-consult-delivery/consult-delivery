@@ -78,7 +78,7 @@ export default function SettingsScreen({ tenant, tenantDbId }) {
           {/* VPS info */}
           <div style={{
             marginTop: 16, padding: '12px', borderRadius: 'var(--r-sm)',
-            background: 'var(--g-900)', color: 'white',
+            background: '#1a1a1a', color: 'white',
           }}>
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>VPS</div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', lineHeight: 1.5 }}>

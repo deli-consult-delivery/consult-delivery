@@ -99,9 +99,9 @@ export async function fetchContacts(instanceName) {
 }
 
 // Buscar grupos
-export async function fetchGroups(instanceName) {
+export async function fetchGroups(instanceName, getParticipants = false) {
   const res = await fetch(
-    `${EVO_URL}/group/fetchAllGroups/${instanceName}?getParticipants=false`,
+    `${EVO_URL}/group/fetchAllGroups/${instanceName}?getParticipants=${getParticipants}`,
     { headers },
   );
   return res.json();
@@ -109,12 +109,18 @@ export async function fetchGroups(instanceName) {
 
 /* ─── Grupos WhatsApp ─────────────────────────────────── */
 
-// Criar grupo (participants = array de números: "5511999990001")
-export async function createWAGroup(instanceName, subject, participants) {
+// Criar grupo (participants = array de JIDs: "5511999990001@s.whatsapp.net")
+export async function createWAGroup(instanceName, subject, participants, description = '') {
+  const body = { subject, participants };
+  if (description) body.description = description;
   const res = await fetch(`${EVO_URL}/group/create/${instanceName}`, {
     method: 'POST', headers,
-    body: JSON.stringify({ subject, participants }),
+    body: JSON.stringify(body),
   });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => res.statusText);
+    throw new Error(`Evolution API ${res.status}: ${errText}`);
+  }
   return res.json();
 }
 

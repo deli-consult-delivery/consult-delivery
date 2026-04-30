@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import Icon from '../components/Icon.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
-import { CONVERSATIONS } from '../data.js';
 import { supabase } from '../lib/supabase.js';
 import { sendTextMessage, fetchProfile, sendAudioMessage, sendMediaMessage } from '../lib/evolution.js';
 
@@ -28,21 +27,15 @@ function playNotificationSound() {
 }
 
 export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
-  const mockConvs = CONVERSATIONS[tenant] || [];
-
   const [instances, setInstances]               = useState([]);
   const [selectedInstance, setSelectedInstance]  = useState(null);
-  const [convs, setConvs]                        = useState(mockConvs);
+  const [convs, setConvs]                        = useState([]);
   const [usingRealData, setUsingRealData]        = useState(false);
   const [tab, setTab]                            = useState('all');
-  const [activeId, setActiveId]                  = useState(mockConvs[0]?.id);
+  const [activeId, setActiveId]                  = useState(null);
   const [search, setSearch]                      = useState('');
   const [draft, setDraft]                        = useState('');
-  const [messages, setMessages]                  = useState(() => {
-    const m = {};
-    mockConvs.forEach(c => { m[c.id] = [...c.messages]; });
-    return m;
-  });
+  const [messages, setMessages]                  = useState({});
   const [typing, setTyping]                      = useState(false);
   const [showInfo, setShowInfo]                  = useState(false);
   const [sending, setSending]                    = useState(false);
@@ -229,12 +222,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   }
 
   useEffect(() => {
-    const c = CONVERSATIONS[tenant] || [];
-    setConvs(c);
-    setActiveId(c[0]?.id);
-    const m = {};
-    c.forEach(cv => { m[cv.id] = [...cv.messages]; });
-    setMessages(m);
+    setConvs([]);
+    setActiveId(null);
+    setMessages({});
     setDraft('');
     setShowInfo(false);
     setUsingRealData(false);
@@ -246,11 +236,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       loadRealtimeConvs(selectedInstance);
       loadWAGroups(selectedInstance);
     } else {
-      const c = CONVERSATIONS[tenant] || [];
-      setConvs(prev => {
-        const groups = prev.filter(c => c.id.startsWith('wag-') || c.id.startsWith('chan-'));
-        return [...c, ...groups];
-      });
+      setConvs(prev => prev.filter(c => c.id.startsWith('wag-') || c.id.startsWith('chan-')));
       setUsingRealData(false);
     }
   }, [selectedInstance]);
@@ -522,7 +508,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     try {
       const { data: inst } = await supabase.from('evolution_instances')
         .select('id').eq('instance_name', instanceName).single();
-      if (!inst) { setConvs(CONVERSATIONS[tenant] || []); setUsingRealData(false); return; }
+      if (!inst) { setConvs([]); setUsingRealData(false); return; }
 
       const { data: rows } = await supabase.from('conversations')
         .select('*').eq('instance_id', inst.id)
@@ -571,7 +557,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         return;
       }
     } catch { /* ignore */ }
-    setConvs(CONVERSATIONS[tenant] || []);
+    setConvs([]);
     setUsingRealData(false);
   }
 
