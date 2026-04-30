@@ -43,6 +43,20 @@ const TAG_PALETTE = ['#B70C00','#2563EB','#059669','#D97706','#7C3AED','#0D0D0D'
 const initials = name =>
   (name || '??').split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
 
+function relativeTime(dateStr) {
+  if (!dateStr) return null;
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  const hrs  = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  if (mins < 1)  return 'agora';
+  if (mins < 60) return `há ${mins}min`;
+  if (hrs < 24)  return `há ${hrs}h`;
+  if (days < 7)  return `há ${days}d`;
+  if (days < 30) return `há ${Math.floor(days / 7)}sem`;
+  return `há ${Math.floor(days / 30)}m`;
+}
+
 function mapCustomers(rows, tagMap = {}) {
   return rows.map(c => {
     const orders = c.orders || [];
@@ -70,6 +84,8 @@ function mapCustomers(rows, tagMap = {}) {
       totalSpent: `R$ ${(totalSpentCents / 100).toFixed(2).replace('.', ',')}`,
       lastOrder: lastOrderDate,
       since: new Date(c.created_at).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }),
+      lastMessageAt: c.last_message_at || null,
+      assignedTo: c.assigned_to || null,
       agent: null,
       metadata: c.metadata || {},
       _raw: c,
@@ -89,15 +105,27 @@ export default function CRMScreen({ tenant, tenantDbId }) {
   const [view, setView]                 = useState('list');
   const [showNovo, setShowNovo]         = useState(false);
   const [showImportar, setShowImportar] = useState(false);
-  const [tags, setTags]                 = useState([]);         // contact_tags for tenant
-  const [filterTagId, setFilterTagId]   = useState(null);       // tag filter
+  const [tags, setTags]                 = useState([]);
+  const [filterTagId, setFilterTagId]   = useState(null);
   const [showTagMgr, setShowTagMgr]     = useState(false);
+  const [sortBy, setSortBy]             = useState('recent');    // 'recent' | 'name' | 'orders'
+  const [filterAgent, setFilterAgent]   = useState('');          // assigned_to UUID
+  const [filterPeriod, setFilterPeriod] = useState('all');       // 'all' | '7d' | '30d' | '90d'
+  const [teamMembers, setTeamMembers]   = useState([]);
 
   // ── Carregar clientes reais ─────────────────────────────────
   useEffect(() => {
     if (!tenantDbId) return;
+    loadTeamMembers();
     loadTags().then(() => loadCustomers());
   }, [tenantDbId]);
+
+  async function loadTeamMembers() {
+    try {
+      const { data } = await supabase.from('profiles').select('id, full_name, email').order('full_name');
+      setTeamMembers(data || []);
+    } catch { /* ignore */ }
+  }
 
   async function loadTags() {
     try {
@@ -142,12 +170,28 @@ export default function CRMScreen({ tenant, tenantDbId }) {
   const ativos = clients.filter(c => c.status !== 'inactive').length;
   const npsColor = data.kpis.nps >= 80 ? 'var(--success)' : data.kpis.nps >= 60 ? 'var(--warn)' : 'var(--red)';
 
-  const filtered = tab === 'grupos' ? [] : clients.filter(c => {
-    const matchesTab    = tab === 'all' || c.status === tab;
-    const matchesSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search);
-    const matchesTag    = !filterTagId || c.tags.some(t => t.id === filterTagId);
-    return matchesTab && matchesSearch && matchesTag;
-  });
+  const periodMs = { '7d': 7, '30d': 30, '90d': 90 };
+  const periodCutoff = filterPeriod !== 'all' ? Date.now() - (periodMs[filterPeriod] || 0) * 86400000 : null;
+
+  const filtered = tab === 'grupos' ? [] : clients
+    .filter(c => {
+      const matchesTab    = tab === 'all' || c.status === tab;
+      const matchesSearch = !search
+        || c.name.toLowerCase().includes(search.toLowerCase())
+        || c.phone.includes(search);
+      const matchesTag    = !filterTagId || c.tags.some(t => t.id === filterTagId);
+      const matchesAgent  = !filterAgent || c.assignedTo === filterAgent;
+      const matchesPeriod = !periodCutoff
+        || (c.lastMessageAt && new Date(c.lastMessageAt).getTime() > periodCutoff);
+      return matchesTab && matchesSearch && matchesTag && matchesAgent && matchesPeriod;
+    })
+    .sort((a, b) => {
+      if (sortBy === 'name')   return a.name.localeCompare(b.name, 'pt-BR');
+      if (sortBy === 'orders') return b.totalOrders - a.totalOrders;
+      const da = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+      const db = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+      return db - da;
+    });
 
   const selectedClient = clients.find(c => c.id === selectedId);
 
@@ -261,6 +305,58 @@ export default function CRMScreen({ tenant, tenantDbId }) {
         )}
       </div>
 
+      {/* Sort + Agent + Period controls */}
+      {tab !== 'grupos' && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '10px 0 0', alignItems: 'center' }}>
+          <select
+            className="input"
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value)}
+            style={{ fontSize: 12, padding: '5px 8px', width: 'auto' }}
+          >
+            <option value="recent">↓ Mais recentes</option>
+            <option value="name">↓ Nome A–Z</option>
+            <option value="orders">↓ Mais pedidos</option>
+          </select>
+
+          {teamMembers.length > 0 && (
+            <select
+              className="input"
+              value={filterAgent}
+              onChange={e => setFilterAgent(e.target.value)}
+              style={{ fontSize: 12, padding: '5px 8px', width: 'auto' }}
+            >
+              <option value="">Todos os agentes</option>
+              {teamMembers.map(m => (
+                <option key={m.id} value={m.id}>{m.full_name || m.email}</option>
+              ))}
+            </select>
+          )}
+
+          <select
+            className="input"
+            value={filterPeriod}
+            onChange={e => setFilterPeriod(e.target.value)}
+            style={{ fontSize: 12, padding: '5px 8px', width: 'auto' }}
+          >
+            <option value="all">Qualquer período</option>
+            <option value="7d">Últimos 7 dias</option>
+            <option value="30d">Últimos 30 dias</option>
+            <option value="90d">Últimos 90 dias</option>
+          </select>
+
+          {(filterAgent || filterPeriod !== 'all') && (
+            <button
+              className="btn-ghost"
+              style={{ fontSize: 11, padding: '4px 10px', color: 'var(--red)' }}
+              onClick={() => { setFilterAgent(''); setFilterPeriod('all'); }}
+            >
+              ✕ Limpar filtros
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Tag filter chips */}
       {tags.length > 0 && tab !== 'grupos' && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '10px 0 4px' }}>
@@ -310,7 +406,14 @@ export default function CRMScreen({ tenant, tenantDbId }) {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <UserAvatar name={c.avatar} size={34} />
                         <div>
-                          <div style={{ fontWeight: 600, color: 'var(--g-900)' }}>{c.name}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontWeight: 600, color: 'var(--g-900)' }}>{c.name}</span>
+                            {relativeTime(c.lastMessageAt) && (
+                              <span style={{ fontSize: 10, color: 'var(--g-400)', whiteSpace: 'nowrap' }}>
+                                · {relativeTime(c.lastMessageAt)}
+                              </span>
+                            )}
+                          </div>
                           {c.email && <div style={{ fontSize: 11, color: 'var(--g-400)' }}>{c.email}</div>}
                           {c.tags?.length > 0 && (
                             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
@@ -425,19 +528,31 @@ function KanbanView({ clients, onSelect }) {
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <UserAvatar name={c.avatar} size={34} />
-                  <div style={{ minWidth: 0 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--g-900)' }} className="truncate">{c.name}</div>
                     <div style={{ fontSize: 11, color: 'var(--g-500)' }}>{c.phone}</div>
                   </div>
+                  <StatusBadge status={c.status} />
                 </div>
+                {c.tags?.length > 0 && (
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {c.tags.map(t => (
+                      <span key={t.id} style={{ padding: '1px 6px', borderRadius: 9999, fontSize: 10, fontWeight: 700, background: t.color + '22', color: t.color, border: `1px solid ${t.color}40` }}>{t.name}</span>
+                    ))}
+                  </div>
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                   <div style={{ background: 'var(--g-50)', borderRadius: 6, padding: '6px 10px' }}>
-                    <div style={{ fontSize: 10, color: 'var(--g-500)', marginBottom: 2 }}>Ultimo pedido</div>
+                    <div style={{ fontSize: 10, color: 'var(--g-500)', marginBottom: 2 }}>Último pedido</div>
                     <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--g-800)' }}>{c.lastOrder}</div>
                   </div>
                   <div style={{ background: 'var(--g-50)', borderRadius: 6, padding: '6px 10px' }}>
-                    <div style={{ fontSize: 10, color: 'var(--g-500)', marginBottom: 2 }}>Total gasto</div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--red)' }}>{c.totalSpent}</div>
+                    <div style={{ fontSize: 10, color: 'var(--g-500)', marginBottom: 2 }}>
+                      {relativeTime(c.lastMessageAt) ? 'Última interação' : 'Total gasto'}
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: relativeTime(c.lastMessageAt) ? 'var(--g-700)' : 'var(--red)' }}>
+                      {relativeTime(c.lastMessageAt) || c.totalSpent}
+                    </div>
                   </div>
                 </div>
               </div>
