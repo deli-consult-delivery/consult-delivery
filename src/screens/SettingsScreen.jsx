@@ -6,6 +6,15 @@ import { SETTINGS_DATA, AGENTS } from '../data.js';
 import { supabase } from '../lib/supabase.js';
 import { setWebhook, getQRCode, getInstanceStatus } from '../lib/evolution.js';
 
+/* ─── Helpers ───────────────────────────────────────────── */
+async function resolveTenantId(fallbackTenantDbId) {
+  if (fallbackTenantDbId) return fallbackTenantDbId;
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: m } = await supabase
+    .from('tenant_members').select('tenant_id').eq('user_id', user?.id).limit(1).single();
+  return m?.tenant_id ?? null;
+}
+
 /* ─── Tabs ────────────────────────────────────────────── */
 const TABS = [
   { id: 'workspace',    label: 'Workspace',    icon: 'building'  },
@@ -42,7 +51,7 @@ export default function SettingsScreen({ tenant, tenantDbId }) {
   const [tab, setTab] = useState('workspace');
 
   return (
-    <div className="route-enter" style={{ padding: 32, maxWidth: 1200, margin: '0 auto' }}>
+    <div className="route-enter page-container" style={{ padding: 32, maxWidth: 1200, margin: '0 auto' }}>
       {/* Header */}
       <div style={{ marginBottom: 28 }}>
         <h1 className="page-h1">Configurações</h1>
@@ -50,10 +59,10 @@ export default function SettingsScreen({ tenant, tenantDbId }) {
       </div>
 
       {/* Layout: sidebar tabs + conteúdo */}
-      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 24, alignItems: 'start' }}>
+      <div className="settings-layout" style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 24, alignItems: 'start' }}>
 
         {/* Sidebar nav */}
-        <div className="card" style={{ padding: 8, position: 'sticky', top: 16 }}>
+        <div className="card settings-sidebar" style={{ padding: 8, position: 'sticky', top: 16 }}>
           {TABS.map(t => (
             <button
               key={t.id}
@@ -539,11 +548,13 @@ function TabWorkspace({ tenantDbId }) {
     const err = validateSlug(form.slug);
     setSlugError(err);
     if (err) return;
+    const resolvedTenantId = await resolveTenantId(tenantDbId);
+    if (!resolvedTenantId) { alert('Workspace não identificado. Recarregue a página e tente novamente.'); return; }
     setSaving(true);
     const { error } = await supabase.from('tenants').update({
       name: form.name, segment: form.segment, slug: form.slug,
       phone: form.phone, city: form.city,
-    }).eq('id', tenantDbId);
+    }).eq('id', resolvedTenantId);
     setSaving(false);
     if (error) { alert('Erro ao salvar: ' + error.message); return; }
     setSaved(true);
@@ -688,7 +699,7 @@ function TabWorkspace({ tenantDbId }) {
       {showDelete && (
         <>
           <div onClick={() => setShowDelete(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(13,13,13,0.5)', zIndex: 100 }} />
-          <div style={{
+          <div className="modal-mobile" style={{
             position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
             background: 'var(--white)', borderRadius: 'var(--r-lg)', padding: 32, zIndex: 101,
             width: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
@@ -752,6 +763,8 @@ function TabUsers({ tenantDbId }) {
 
   async function handleRemoveMember(userId) {
     if (!confirm('Remover este membro do workspace?')) return;
+    const resolvedTenantId = await resolveTenantId(tenantDbId);
+    if (!resolvedTenantId) { alert('Workspace não identificado. Recarregue a página.'); return; }
     const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manage-users`, {
       method: 'POST',
@@ -759,7 +772,7 @@ function TabUsers({ tenantDbId }) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${session?.access_token}`,
       },
-      body: JSON.stringify({ action: 'delete', tenant_id: tenantDbId, user_id: userId }),
+      body: JSON.stringify({ action: 'delete', tenant_id: resolvedTenantId, user_id: userId }),
     });
     if (!res.ok) {
       const json = await res.json().catch(() => ({}));
@@ -899,6 +912,20 @@ function InviteModal({ tenantDbId, onClose, onDone }) {
     setError('');
     try {
       const { data: { session } } = await supabase.auth.getSession();
+
+      // tenantDbId pode ser null se listTenants() falhou — busca direto do banco
+      let resolvedTenantId = tenantDbId;
+      if (!resolvedTenantId) {
+        const { data: { user } } = await supabase.auth.getUser();
+        const { data: m } = await supabase
+          .from('tenant_members').select('tenant_id').eq('user_id', user?.id).limit(1).single();
+        resolvedTenantId = m?.tenant_id ?? null;
+      }
+      if (!resolvedTenantId) {
+        setError('Workspace não identificado. Recarregue a página e tente novamente.');
+        setSaving(false); return;
+      }
+
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manage-users`, {
         method: 'POST',
         headers: {
@@ -907,7 +934,7 @@ function InviteModal({ tenantDbId, onClose, onDone }) {
         },
         body: JSON.stringify({
           action:    'create',
-          tenant_id: tenantDbId,
+          tenant_id: resolvedTenantId,
           email:     form.email,
           password:  form.password,
           name:      form.name,
@@ -927,7 +954,7 @@ function InviteModal({ tenantDbId, onClose, onDone }) {
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(13,13,13,0.5)', zIndex: 100 }} />
-      <div style={{
+      <div className="modal-mobile" style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
         background: 'var(--white)', borderRadius: 'var(--r-lg)', padding: 32, zIndex: 101,
         width: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
@@ -977,6 +1004,8 @@ function EditMemberModal({ member, tenantDbId, onClose, onRemove, onDone }) {
     setSaving(true);
     setError('');
     try {
+      const resolvedTenantId = await resolveTenantId(tenantDbId);
+      if (!resolvedTenantId) throw new Error('Workspace não identificado. Recarregue a página.');
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manage-users`, {
         method: 'POST',
@@ -986,7 +1015,7 @@ function EditMemberModal({ member, tenantDbId, onClose, onRemove, onDone }) {
         },
         body: JSON.stringify({
           action:    'update',
-          tenant_id: tenantDbId,
+          tenant_id: resolvedTenantId,
           user_id:   member.userId,
           role,
           semaforo,
@@ -1005,7 +1034,7 @@ function EditMemberModal({ member, tenantDbId, onClose, onRemove, onDone }) {
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(13,13,13,0.5)', zIndex: 100 }} />
-      <div style={{
+      <div className="modal-mobile" style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
         background: 'var(--white)', borderRadius: 'var(--r-lg)', padding: 32, zIndex: 101,
         width: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
@@ -1354,7 +1383,7 @@ function TabSecurity() {
       {showMFA && (
         <>
           <div onClick={() => setShowMFA(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(13,13,13,0.5)', zIndex: 100 }} />
-          <div style={{
+          <div className="modal-mobile" style={{
             position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
             background: 'var(--white)', borderRadius: 'var(--r-lg)', padding: 32, zIndex: 101,
             width: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.3)',

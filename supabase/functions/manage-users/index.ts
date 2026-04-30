@@ -38,8 +38,13 @@ Deno.serve(async (req) => {
   try { body = await req.json(); }
   catch { return json({ error: 'Invalid JSON' }, 400); }
 
+  console.log('[manage-users] body recebido:', JSON.stringify(body));
+
   const { action, tenant_id } = body;
-  if (!action || !tenant_id) return json({ error: 'action and tenant_id are required' }, 400);
+  if (!action || !tenant_id) {
+    console.log('[manage-users] erro: action ou tenant_id ausente. action=', action, 'tenant_id=', tenant_id);
+    return json({ error: 'action and tenant_id are required' }, 400);
+  }
 
   // Verify caller is admin/owner of this tenant
   const { data: callerMembership } = await supabaseAdmin
