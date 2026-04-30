@@ -76,6 +76,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [qrEditId, setQrEditId]           = useState(null);
   const [qrEditTitle, setQrEditTitle]     = useState('');
   const [qrEditContent, setQrEditContent] = useState('');
+  const [qrTab, setQrTab]                 = useState('quick');
+  const [qrExpandedId, setQrExpandedId]   = useState(null);
+  const [qrCreating, setQrCreating]       = useState(false);
 
   const scrollRef     = useRef(null);
   const textareaRef   = useRef(null);
@@ -147,6 +150,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   useEffect(() => {
     loadWAGroups(null);
     loadInternalChannels();
+    loadQuickReplies();
   }, [tenant, tenantDbId]);
 
   // ── Load channel messages when switching to a channel ──
@@ -181,15 +185,14 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('full_name, avatar_url')
-        .eq('id', user.id)
-        .single();
+      const [{ data: profile }, { data: member }] = await Promise.all([
+        supabase.from('profiles').select('full_name, avatar_url').eq('id', user.id).single(),
+        supabase.from('tenant_members').select('display_name').eq('user_id', user.id).maybeSingle(),
+      ]);
       setCurrentUser({
-        id: user.id,
+        id:   user.id,
         email: user.email,
-        name: profile?.full_name || user.email?.split('@')[0] || 'Equipe',
+        name: member?.display_name || profile?.full_name || user.email?.split('@')[0] || 'Equipe',
       });
     } catch { /* ignore */ }
   }
@@ -293,7 +296,27 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           // 2. Atualiza sidebar: preview + unread + sobe para o topo
           setConvs(prev => {
             const idx = prev.findIndex(c => c.id === convId);
-            if (idx === -1) return prev;
+
+            // Conversa nova (primeiro contato) — busca do DB e adiciona na sidebar
+            if (idx === -1) {
+              supabase.from('conversations').select('*').eq('id', convId).single()
+                .then(({ data: conv }) => {
+                  if (!conv) return;
+                  const phone = conv.whatsapp_chat_id?.split('@')[0] || '';
+                  const name  = conv.push_name || conv.contact_name || conv.group_name || phone || 'Desconhecido';
+                  setConvs(p => {
+                    if (p.find(c => c.id === conv.id)) return p;
+                    return [{
+                      id: conv.id, name, avatar: name.slice(0, 2).toUpperCase(),
+                      type: conv.is_group ? 'group' : 'whatsapp',
+                      whatsapp_chat_id: conv.whatsapp_chat_id,
+                      preview, previewFrom: 'in', time, unread: 1, online: false, messages: [],
+                    }, ...p];
+                  });
+                });
+              return prev;
+            }
+
             const conv    = prev[idx];
             const updated = {
               ...conv,
@@ -454,28 +477,38 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
   async function loadQuickReplies() {
     try {
-      const { data } = await supabase
+      // RLS handles filtering — SELECT policy allows own agent_id OR tenant_id
+      const { data, error } = await supabase
         .from('quick_replies')
         .select('id, title, content')
         .order('title');
+      if (error) console.error('[QR] load error:', error.message);
       if (data) setQuickReplies(data);
-    } catch { /* ignore */ }
+    } catch (e) { console.error('[QR] load exception:', e); }
   }
 
   async function saveQuickReply() {
     if (!qrEditTitle.trim() || !qrEditContent.trim()) return;
     try {
       if (qrEditId) {
-        await supabase.from('quick_replies')
+        const { error } = await supabase.from('quick_replies')
           .update({ title: qrEditTitle.trim(), content: qrEditContent.trim() })
           .eq('id', qrEditId);
+        if (error) { console.error('[QR] update error:', error.message); return; }
       } else {
-        await supabase.from('quick_replies')
-          .insert({ title: qrEditTitle.trim(), content: qrEditContent.trim() });
+        const row = {
+          title:    qrEditTitle.trim(),
+          content:  qrEditContent.trim(),
+          agent_id: currentUser?.id,
+        };
+        if (tenantDbId) row.tenant_id = tenantDbId;
+        const { error } = await supabase.from('quick_replies').insert(row);
+        if (error) { console.error('[QR] insert error:', error.message); return; }
       }
       await loadQuickReplies();
       setQrEditId(null); setQrEditTitle(''); setQrEditContent('');
-    } catch { /* ignore */ }
+      setQrCreating(false); setQrExpandedId(null);
+    } catch (e) { console.error('[QR] save exception:', e); }
   }
 
   async function deleteQuickReply(id) {
@@ -1490,72 +1523,156 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         </div>
       )}
 
-      {/* ── Modal: gerenciador de mensagens rápidas ───────── */}
+      {/* ── Modal: Templates (mensagens rápidas) ─────────── */}
       {showQRManager && (
         <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(13,13,13,0.45)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          onClick={e => { if (e.target === e.currentTarget) setShowQRManager(false); }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={e => { if (e.target === e.currentTarget) { setShowQRManager(false); setQrExpandedId(null); setQrCreating(false); setQrEditId(null); setQrEditTitle(''); setQrEditContent(''); } }}
         >
-          <div style={{ background: 'var(--white)', borderRadius: 12, width: 480, maxWidth: '95vw', maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
-            onClick={e => e.stopPropagation()}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--g-200)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--g-900)' }}>Mensagens Rápidas</span>
-              <button className="btn-icon" onClick={() => setShowQRManager(false)}><Icon name="x" size={16} /></button>
+          <div
+            style={{ background: 'var(--black-soft)', borderRadius: 14, width: 500, maxWidth: '95vw', maxHeight: '82vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 60px rgba(0,0,0,0.5)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ padding: '18px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>Templates</span>
+              <button
+                onClick={() => { setShowQRManager(false); setQrExpandedId(null); setQrCreating(false); setQrEditId(null); setQrEditTitle(''); setQrEditContent(''); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.5)', fontSize: 20, lineHeight: 1, padding: 4 }}
+              >✕</button>
             </div>
 
-            {/* Formulário de criação/edição */}
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--g-200)', flexShrink: 0 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--g-600)', marginBottom: 8 }}>
-                {qrEditId ? 'EDITAR MENSAGEM' : 'NOVA MENSAGEM RÁPIDA'}
-              </div>
-              <input
-                className="input"
-                style={{ marginBottom: 8, fontSize: 12 }}
-                placeholder="Atalho (ex: saudacao)"
-                value={qrEditTitle}
-                onChange={e => setQrEditTitle(e.target.value.replace(/\s/g, ''))}
-              />
-              <textarea
-                className="input"
-                style={{ fontSize: 12, resize: 'vertical', minHeight: 64, width: '100%', boxSizing: 'border-box' }}
-                placeholder="Texto completo da mensagem…"
-                value={qrEditContent}
-                onChange={e => setQrEditContent(e.target.value)}
-              />
-              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                <button className="btn-primary" style={{ fontSize: 12 }} onClick={saveQuickReply} disabled={!qrEditTitle.trim() || !qrEditContent.trim()}>
-                  {qrEditId ? 'Atualizar' : 'Salvar'}
-                </button>
-                {qrEditId && (
-                  <button className="btn-secondary" style={{ fontSize: 12 }} onClick={() => { setQrEditId(null); setQrEditTitle(''); setQrEditContent(''); }}>
-                    Cancelar edição
-                  </button>
-                )}
+            {/* Tab label */}
+            <div style={{ padding: '12px 20px 0', borderBottom: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
+              <div style={{ display: 'inline-block', padding: '8px 4px', fontSize: 13, fontWeight: 600, color: 'var(--red)', borderBottom: '2px solid var(--red)' }}>
+                Mensagens rápidas
               </div>
             </div>
 
-            {/* Lista */}
+            {/* Content */}
             <div style={{ overflowY: 'auto', flex: 1 }}>
-              {quickReplies.length === 0 ? (
-                <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--g-500)' }}>
-                  Nenhuma mensagem rápida ainda.<br />Crie uma acima e use <strong>/atalho</strong> no chat.
-                </div>
-              ) : quickReplies.map(qr => (
-                <div key={qr.id} style={{ padding: '10px 20px', borderBottom: '1px solid var(--g-100)', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--g-900)' }}>/{qr.title}</div>
-                    <div style={{ fontSize: 11, color: 'var(--g-500)', marginTop: 2, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{qr.content}</div>
+              <>
+                {/* Form: new / edit */}
+                {(qrCreating || qrEditId) && (
+                  <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', marginBottom: 10, letterSpacing: '0.05em' }}>
+                      {qrEditId ? 'EDITAR MENSAGEM' : 'NOVA MENSAGEM RÁPIDA'}
+                    </div>
+                    <input
+                      style={{ display: 'block', width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13, padding: '8px 12px', marginBottom: 8, outline: 'none' }}
+                      placeholder="Atalho (ex: saudacao)"
+                      value={qrEditTitle}
+                      onChange={e => setQrEditTitle(e.target.value.replace(/\s/g, ''))}
+                    />
+                    <textarea
+                      style={{ display: 'block', width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13, padding: '8px 12px', resize: 'vertical', minHeight: 72, outline: 'none' }}
+                      placeholder="Texto completo da mensagem…"
+                      value={qrEditContent}
+                      onChange={e => setQrEditContent(e.target.value)}
+                    />
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                      <button
+                        onClick={saveQuickReply}
+                        disabled={!qrEditTitle.trim() || !qrEditContent.trim()}
+                        style={{ background: 'var(--red)', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (!qrEditTitle.trim() || !qrEditContent.trim()) ? 0.4 : 1 }}
+                      >
+                        {qrEditId ? 'Atualizar' : 'Salvar'}
+                      </button>
+                      <button
+                        onClick={() => { setQrCreating(false); setQrEditId(null); setQrEditTitle(''); setQrEditContent(''); }}
+                        style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                    <button className="btn-icon" style={{ width: 26, height: 26, fontSize: 12 }}
-                      onClick={() => { setQrEditId(qr.id); setQrEditTitle(qr.title); setQrEditContent(qr.content); }}
-                      title="Editar">✏️</button>
-                    <button className="btn-icon" style={{ width: 26, height: 26, fontSize: 12, color: 'var(--red)' }}
-                      onClick={() => deleteQuickReply(qr.id)}
-                      title="Apagar">🗑</button>
+                )}
+
+                {/* Cards list */}
+                {quickReplies.length === 0 && !qrCreating ? (
+                  <div style={{ padding: '40px 24px', textAlign: 'center', fontSize: 13 }}>
+                    <div style={{ fontSize: 32, marginBottom: 12 }}>💬</div>
+                    <div style={{ fontWeight: 600, color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>Nenhuma mensagem rápida</div>
+                    <div style={{ color: 'rgba(255,255,255,0.3)' }}>Crie uma e use <strong style={{ color: 'var(--red)' }}>/atalho</strong> no chat.</div>
                   </div>
-                </div>
-              ))}
+                ) : quickReplies.map(qr => {
+                  const isExpanded = qrExpandedId === qr.id;
+                  const isEditing  = qrEditId === qr.id;
+                  return (
+                    <div key={qr.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+                      {/* Card header row */}
+                      <div
+                        style={{ display: 'flex', alignItems: 'center', padding: '14px 20px', cursor: 'pointer', gap: 12 }}
+                        onClick={() => { setQrExpandedId(isExpanded ? null : qr.id); setQrEditId(null); setQrEditTitle(''); setQrEditContent(''); setQrCreating(false); }}
+                      >
+                        <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(183,12,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>💬</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', marginBottom: 3 }}>/{qr.title}</div>
+                          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.4 }}>
+                            {qr.content}
+                          </div>
+                        </div>
+                        <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12, flexShrink: 0, transition: 'transform 0.2s', transform: isExpanded ? 'rotate(180deg)' : 'none' }}>▼</div>
+                      </div>
+
+                      {/* Expanded: full text + actions */}
+                      {isExpanded && (
+                        <div style={{ padding: '0 20px 16px 68px' }}>
+                          {isEditing ? (
+                            <div>
+                              <input
+                                style={{ display: 'block', width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13, padding: '8px 12px', marginBottom: 8, outline: 'none' }}
+                                value={qrEditTitle}
+                                onChange={e => setQrEditTitle(e.target.value.replace(/\s/g, ''))}
+                              />
+                              <textarea
+                                style={{ display: 'block', width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13, padding: '8px 12px', resize: 'vertical', minHeight: 72, outline: 'none' }}
+                                value={qrEditContent}
+                                onChange={e => setQrEditContent(e.target.value)}
+                              />
+                              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                                <button
+                                  onClick={saveQuickReply}
+                                  disabled={!qrEditTitle.trim() || !qrEditContent.trim()}
+                                  style={{ background: 'var(--red)', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (!qrEditTitle.trim() || !qrEditContent.trim()) ? 0.4 : 1 }}
+                                >Atualizar</button>
+                                <button
+                                  onClick={() => { setQrEditId(null); setQrEditTitle(''); setQrEditContent(''); }}
+                                  style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                                >Cancelar</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginBottom: 12, lineHeight: 1.5 }}>{qr.content}</div>
+                              <div style={{ display: 'flex', gap: 8 }}>
+                                <button
+                                  onClick={() => { setQrEditId(qr.id); setQrEditTitle(qr.title); setQrEditContent(qr.content); setQrCreating(false); }}
+                                  style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.7)', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
+                                >✏️ Editar</button>
+                                <button
+                                  onClick={() => deleteQuickReply(qr.id)}
+                                  style={{ background: 'var(--red-soft)', color: 'var(--red)', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
+                                >🗑 Apagar</button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* Footer: new message button */}
+                {!qrCreating && !qrEditId && (
+                  <div style={{ padding: '14px 20px' }}>
+                    <button
+                      onClick={() => { setQrCreating(true); setQrEditId(null); setQrEditTitle(''); setQrEditContent(''); setQrExpandedId(null); }}
+                      style={{ background: 'var(--red)', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+                    >+ Nova mensagem rápida</button>
+                  </div>
+                )}
+              </>
             </div>
           </div>
         </div>
@@ -1720,19 +1837,25 @@ function ChannelMessage({ msg, onPin, onCreateTask }) {
 
 /* ── ConvAvatar ─────────────────────────────────────────── */
 function ConvAvatar({ conv, size = 36 }) {
+  const [imgErr, setImgErr] = useState(false);
+
   if (conv.type === 'agent') return <AgentAvatar id={conv.name.toLowerCase()} size={size} />;
 
   const isGroup   = conv.type === 'group';
   const isChannel = conv.type === 'internal' && conv.id?.startsWith('chan-');
-  const hasPhoto  = !!conv.photoUrl;
+  const hasPhoto  = !!conv.photoUrl && !imgErr;
+
+  const bg = hasPhoto       ? 'transparent'
+    : isChannel             ? (conv.color || '#2563EB')
+    : conv.type === 'internal' ? '#374151'
+    : isGroup               ? '#0559A8'
+    : '#1e293b'; // fundo fixo escuro para contatos WA — não depende de variável de tema
 
   return (
     <div style={{
       width: size, height: size, borderRadius: isChannel ? 10 : '50%',
-      background: hasPhoto ? 'transparent'
-        : isChannel ? (conv.color || '#2563EB')
-        : conv.type === 'internal' ? 'var(--g-200)' : isGroup ? '#0559A8' : 'var(--g-900)',
-      color: isChannel ? 'white' : conv.type === 'internal' ? 'var(--g-700)' : 'white',
+      background: bg,
+      color: conv.type === 'internal' && !isChannel ? '#d1d5db' : 'white',
       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
       fontWeight: 700, fontSize: size * 0.36, flexShrink: 0, position: 'relative',
       overflow: 'hidden',
@@ -1742,7 +1865,7 @@ function ConvAvatar({ conv, size = 36 }) {
           src={conv.photoUrl}
           alt={conv.name}
           style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: isChannel ? 10 : '50%' }}
-          onError={e => { e.target.style.display = 'none'; }}
+          onError={() => setImgErr(true)}
         />
       ) : isChannel
         ? <span style={{ fontSize: size * 0.48, fontWeight: 800, lineHeight: 1 }}>#</span>
