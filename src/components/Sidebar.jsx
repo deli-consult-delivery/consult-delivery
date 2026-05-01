@@ -3,19 +3,20 @@ import Icon from './Icon.jsx';
 import UserAvatar from './UserAvatar.jsx';
 
 const NAV_ITEMS = [
-  { id: 'dashboard', icon: 'home',   label: 'Dashboard' },
-  { id: 'chat',      icon: 'chat',   label: 'Chat Unificado' },
-  { id: 'tasks',     icon: 'check',  label: 'Tarefas' },
-  { id: 'cora',      icon: 'dollar', label: 'CORA — Cobrança', pulse: true },
-  { id: 'crm',       icon: 'users',  label: 'Clientes / CRM' },
-  { id: 'reports',   icon: 'chart',  label: 'Relatórios' },
-  { id: 'agents',    icon: 'bot',    label: 'Agentes IA' },
-  { id: 'settings',  icon: 'gear',   label: 'Configurações' },
+  { id: 'dashboard', icon: 'home',      label: 'Dashboard' },
+  { id: 'chat',      icon: 'chat',      label: 'Chat Unificado' },
+  { id: 'grupos',    icon: 'whatsapp',  label: 'Grupos' },
+  { id: 'tasks',     icon: 'check',     label: 'Tarefas' },
+  { id: 'cora',      icon: 'dollar',    label: 'CORA — Cobrança', pulse: true },
+  { id: 'crm',       icon: 'users',     label: 'Clientes / CRM' },
+  { id: 'reports',   icon: 'chart',     label: 'Relatórios' },
+  { id: 'agents',    icon: 'bot',       label: 'Agentes IA' },
+  { id: 'settings',  icon: 'gear',      label: 'Configurações' },
 ];
 
-export default function Sidebar({ route, setRoute, counts }) {
+export default function Sidebar({ route, setRoute, counts, isOpen }) {
   return (
-    <aside className="sidebar dark-scroll">
+    <aside className={`sidebar dark-scroll${isOpen ? ' open' : ''}`}>
       <div style={{ padding: '20px 20px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <Logo />
       </div>

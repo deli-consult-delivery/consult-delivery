@@ -7,9 +7,14 @@ import DashboardScreen from './screens/DashboardScreen.jsx';
 import ChatScreen from './screens/ChatScreen.jsx';
 import KanbanScreen from './screens/KanbanScreen.jsx';
 import CoraScreen from './screens/CoraScreen.jsx';
-import Placeholder from './screens/Placeholder.jsx';
+import CRMScreen from './screens/CRMScreen.jsx';
+import ReportsScreen from './screens/ReportsScreen.jsx';
+import SettingsScreen from './screens/SettingsScreen.jsx';
 import AgentsPage from './screens/AgentsPage.jsx';
-import { CONVERSATIONS, INADIMPLENTES } from './data.js';
+import GruposScreen from './screens/GruposScreen.jsx';
+import { CONVERSATIONS, INADIMPLENTES, TENANTS } from './data.js';
+import { supabase } from './lib/supabase.js';
+import { listTenants } from './lib/api.js';
 
 const TWEAK_DEFAULTS = {
   primaryColor: '#B70C00',
@@ -19,17 +24,98 @@ const TWEAK_DEFAULTS = {
 };
 
 export default function App() {
-  const [loggedIn, setLoggedIn] = useState(false);
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [tenants, setTenants] = useState(TENANTS);
   const [route, setRoute] = useState('dashboard');
-  const [tenant, setTenant] = useState('pizza-joao');
+  const [tenant, setTenant] = useState(TENANTS[0].id);
+  const [tenantDbId, setTenantDbId] = useState(null);
   const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [theme, setTheme] = useState(() => localStorage.getItem('cd-theme') || 'claro');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Carrega tenants do banco (usado no mount e quando um workspace novo é criado)
+  async function reloadTenants(preferSlug) {
+    try {
+      const real = await listTenants();
+      if (real?.length) {
+        const mapped = real.map(t => ({
+          id: t.slug,
+          dbId: t.id,
+          name: t.name,
+          emoji: t.emoji || '🏪',
+          color: t.color || '#B70C00',
+        }));
+        setTenants(mapped);
+        const slugToUse = preferSlug || mapped[0].id;
+        setTenant(slugToUse);
+        const selected = mapped.find(t => t.id === slugToUse);
+        setTenantDbId(selected?.dbId ?? mapped[0].dbId);
+        return;
+      }
+    } catch (_) { /* silencioso */ }
+    // fallback se listTenants falhar ou retornar vazio
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: m } = await supabase
+        .from('tenant_members').select('tenant_id').eq('user_id', user?.id).maybeSingle();
+      if (!m?.tenant_id) return;
+      const { data: t } = await supabase
+        .from('tenants').select('id, slug, name, emoji, color').eq('id', m.tenant_id).maybeSingle();
+      if (!t) return;
+      const mapped = { id: t.slug, dbId: t.id, name: t.name, emoji: t.emoji || '🏪', color: t.color || '#B70C00' };
+      setTenants([mapped]);
+      setTenant(t.slug);
+      setTenantDbId(t.id);
+    } catch (_) { /* silencioso */ }
+  }
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    reloadTenants();
+  }, [session]);
+
+  useEffect(() => {
+    const cur = tenants.find(t => t.id === tenant);
+    setTenantDbId(cur?.dbId ?? null);
+  }, [tenant, tenants]);
 
   useEffect(() => {
     document.documentElement.style.setProperty('--red', tweaks.primaryColor);
   }, [tweaks.primaryColor]);
 
-  if (!loggedIn) {
-    return <LoginScreen onLogin={() => setLoggedIn(true)} />;
+  useEffect(() => {
+    const el = document.documentElement;
+    if (theme === 'claro') el.removeAttribute('data-theme');
+    else el.setAttribute('data-theme', theme);
+    localStorage.setItem('cd-theme', theme);
+  }, [theme]);
+
+  if (authLoading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--white)' }}>
+        <svg width="24" height="24" viewBox="0 0 24 24" style={{ animation: 'spin 0.8s linear infinite' }}>
+          <circle cx="12" cy="12" r="10" fill="none" stroke="var(--red)" strokeWidth="3" strokeDasharray="60" strokeDashoffset="20" />
+        </svg>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <LoginScreen onLogin={setSession} />;
   }
 
   const convs = CONVERSATIONS[tenant] || [];
@@ -39,17 +125,38 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <Sidebar route={route} setRoute={setRoute} counts={counts} />
-      <Topbar route={route} tenant={tenant} setTenant={setTenant} />
+      {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
+      <Sidebar
+        route={route}
+        setRoute={r => { setRoute(r); setSidebarOpen(false); }}
+        counts={counts}
+        isOpen={sidebarOpen}
+      />
+      <Topbar
+        route={route}
+        tenant={tenant}
+        setTenant={setTenant}
+        tenants={tenants}
+        theme={theme}
+        setTheme={setTheme}
+        onMenuToggle={() => setSidebarOpen(v => !v)}
+      />
       <main className="main scroll" key={route + tenant}>
-        {route === 'dashboard' && <DashboardScreen tenant={tenant} />}
-        {route === 'chat'      && <ChatScreen tenant={tenant} />}
-        {route === 'tasks'     && <KanbanScreen tenant={tenant} />}
-        {route === 'cora'      && <CoraScreen tenant={tenant} />}
-        {route === 'crm'       && <Placeholder title="Clientes / CRM" desc="Em desenvolvimento — virá no próximo sprint." icon="users" />}
-        {route === 'reports'   && <Placeholder title="Relatórios" desc="VERA está preparando os templates." icon="chart" agent="vera" />}
+        {route === 'dashboard' && <DashboardScreen tenant={tenant} tenantDbId={tenantDbId} />}
+        {route === 'chat'      && <ChatScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={setRoute} />}
+        {route === 'tasks'     && <KanbanScreen tenant={tenant} tenantDbId={tenantDbId} />}
+        {route === 'cora'      && <CoraScreen tenant={tenant} tenantDbId={tenantDbId} />}
+        {route === 'crm'       && <CRMScreen tenant={tenant} tenantDbId={tenantDbId} />}
+        {route === 'reports'   && <ReportsScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'agents'    && <AgentsPage />}
-        {route === 'settings'  && <Placeholder title="Configurações" desc="Workspace, integrações, usuários, billing." icon="gear" />}
+        {route === 'grupos'    && <GruposScreen tenant={tenant} tenantDbId={tenantDbId} />}
+        {route === 'settings'  && <SettingsScreen tenant={tenant} tenantDbId={tenantDbId} onTenantChange={async (newSlug) => {
+          if (newSlug) {
+            setTenant(newSlug);
+          } else {
+            await reloadTenants();
+          }
+        }} />}
       </main>
       <TweaksPanel title="Tweaks">
         <TweakSection title="Marca">

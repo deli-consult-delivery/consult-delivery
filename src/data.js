@@ -211,6 +211,252 @@ export const TASKS = {
   ],
 };
 
+export const SETTINGS_DATA = {
+  workspace: {
+    'pizza-joao': { name: 'Pizzaria do João',  slug: 'pizza-joao', emoji: '🍕', segment: 'Pizzaria',    phone: '(11) 99999-0000', city: 'São Paulo, SP'    },
+    'burger':     { name: 'Burger House',       slug: 'burger',     emoji: '🍔', segment: 'Hamburgueria', phone: '(21) 98888-1111', city: 'Rio de Janeiro, RJ' },
+    'acai':       { name: 'Açaí Premium',       slug: 'acai',       emoji: '🍇', segment: 'Açaíteria',    phone: '(31) 97777-2222', city: 'Belo Horizonte, MG' },
+    'sushi':      { name: 'Sushi Master',        slug: 'sushi',      emoji: '🍣', segment: 'Japonesa',     phone: '(11) 96666-3333', city: 'São Paulo, SP'    },
+    'tapioca':    { name: 'Tapioca da Vovó',    slug: 'tapioca',    emoji: '🥞', segment: 'Tapiocaria',   phone: '(85) 95555-4444', city: 'Fortaleza, CE'    },
+  },
+  users: [
+    { id: 'u1', name: 'Wandson Silva', email: 'wandson@consultdelivery.com.br', role: 'admin',    avatar: 'WS', online: true,  semaforo: 'vermelho' },
+    { id: 'u2', name: 'Yasmin Lima',   email: 'yasmin@consultdelivery.com.br',  role: 'admin',    avatar: 'YL', online: true,  semaforo: 'amarelo'  },
+    { id: 'u3', name: 'Eduardo',       email: 'eduardo@consultdelivery.com.br', role: 'consultor',avatar: 'ED', online: false, semaforo: 'verde'    },
+    { id: 'u4', name: 'Hélida',        email: 'helida@consultdelivery.com.br',  role: 'operador', avatar: 'HE', online: false, semaforo: 'verde'    },
+  ],
+  integrations: [
+    { id: 'anthropic', name: 'Claude API',       desc: 'Motor de IA dos agentes',    status: 'connected', color: '#B70C00', icon: 'sparkles', detail: 'claude-sonnet-4-20250514'   },
+    { id: 'evolution', name: 'Evolution API',    desc: 'WhatsApp Business',           status: 'connected', color: '#25D366', icon: 'whatsapp', detail: 'Instância ativa'            },
+    { id: 'n8n',       name: 'n8n',              desc: 'Automações e workflows',      status: 'connected', color: '#EA580C', icon: 'refresh',  detail: '12 workflows ativos'        },
+    { id: 'gdrive',    name: 'Google Drive',     desc: 'Documentos e arquivos',       status: 'connected', color: '#4285F4', icon: 'paper',    detail: '9 pastas sincronizadas'     },
+    { id: 'gcal',      name: 'Google Calendar',  desc: 'Agenda da equipe',            status: 'connected', color: '#34A853', icon: 'check',    detail: 'Sincronizando'              },
+    { id: 'heygen',    name: 'HeyGen',           desc: 'Vídeos com avatar IA',        status: 'connected', color: '#8B5CF6', icon: 'star',     detail: 'API Key ativa'              },
+    { id: 'metricool', name: 'Metricool',        desc: 'Gestão de redes sociais',     status: 'connected', color: '#EC4899', icon: 'chart',    detail: 'Publicando via LARA'        },
+    { id: 'clickup',   name: 'ClickUp',          desc: 'Gestão de tarefas (legado)',  status: 'connected', color: '#7B68EE', icon: 'check',    detail: 'Migrando para plataforma'   },
+    { id: 'ifood',     name: 'iFood',            desc: 'Pedidos e cardápio online',   status: 'pending',   color: '#EA1D2C', icon: 'phone',    detail: 'Aguardando credenciais'     },
+    { id: 'asaas',     name: 'Asaas',            desc: 'Cobranças e pagamentos',      status: 'sandbox',   color: '#F59E0B', icon: 'dollar',   detail: 'Sandbox — TASK-403'         },
+    { id: 'supabase',  name: 'Supabase',         desc: 'Banco de dados + Auth + RLS', status: 'connected', color: '#3ECF8E', icon: 'building', detail: 'consult-delivery-prod'      },
+    { id: 'vercel',    name: 'Vercel',           desc: 'Deploy e hospedagem',         status: 'connected', color: '#0D0D0D', icon: 'arrowright',detail: 'deli-os.vercel.app'        },
+  ],
+  billing: {
+    plan: 'Pro',
+    budget: 800,
+    current: 680,
+    items: [
+      { name: 'Lovable Pro',    cost: 130, status: 'active',  category: 'Frontend'   },
+      { name: 'Supabase Pro',   cost: 130, status: 'active',  category: 'Backend'    },
+      { name: 'Claude API',     cost: 380, status: 'active',  category: 'IA'         },
+      { name: 'VPS (8GB/6CPU)', cost: 40,  status: 'active',  category: 'Infra'      },
+    ],
+  },
+};
+
+export const REPORTS_DATA = {
+  'pizza-joao': {
+    periodo: 'Abril 2026',
+    kpis: {
+      receita:    { value: 'R$ 41.580,00', delta: '+18%',          trend: 'up'   },
+      pedidos:    { value: '1.247',        delta: '+12%',          trend: 'up'   },
+      ticket:     { value: 'R$ 47,80',     delta: '+5%',           trend: 'up'   },
+      recuperado: { value: 'R$ 42.100,00', delta: '87% taxa CORA', trend: 'up'   },
+    },
+    chart7d:  [62, 71, 58, 83, 74, 91, 87],
+    chart30d: [55, 62, 48, 71, 68, 85, 79, 60, 72, 55, 82, 76, 90, 83, 68, 74, 62, 71, 58, 83, 74, 91, 87, 78, 65, 88, 72, 84, 91, 87],
+    topItems: [
+      { name: 'Pizza Calabresa GG', orders: 312, pct: 100 },
+      { name: 'Pizza Mussarela GG', orders: 287, pct: 92  },
+      { name: 'Borda Recheada',     orders: 198, pct: 63  },
+      { name: 'Pizza 4 Queijos M',  orders: 154, pct: 49  },
+      { name: 'Suco Laranja',       orders: 143, pct: 46  },
+    ],
+    reports: [
+      { id: 'r5', title: 'Relatório Semanal — Semana 17', agent: 'vera', status: 'generating', date: 'Gerando...' },
+      { id: 'r1', title: 'Relatório Semanal — Semana 16', agent: 'vera', status: 'ready',      date: '22/04/2026' },
+      { id: 'r2', title: 'Relatório Financeiro — Março',  agent: 'vera', status: 'ready',      date: '01/04/2026' },
+      { id: 'r3', title: 'Análise de Inadimplência Q1',   agent: 'cora', status: 'ready',      date: '28/03/2026' },
+      { id: 'r4', title: 'Performance iFood — Março',     agent: 'max',  status: 'ready',      date: '25/03/2026' },
+    ],
+    veraActions: [
+      { text: 'Concluiu análise de ticket médio — subiu 5% no mês', time: 'agora' },
+      { text: 'Identificou pico de pedidos nas sextas-feiras',       time: '18 min' },
+      { text: 'Cruzou dados CORA: 87% dos inadimplentes pagaram',   time: '1h' },
+    ],
+    insights: [
+      'Sextas-feiras têm 34% mais pedidos que a média semanal — aumente o estoque.',
+      'Pizza Calabresa GG representa 23% da receita. Destaque no iFood.',
+      'Horário de pico 19h–21h concentra 47% dos pedidos. Garanta equipe completa.',
+      'Clientes VIP geram 3× mais receita que novos clientes. Priorize fidelização.',
+    ],
+  },
+  'burger': {
+    periodo: 'Abril 2026',
+    kpis: {
+      receita:    { value: 'R$ 20.628,00', delta: '-3%',           trend: 'down' },
+      pedidos:    { value: '540',          delta: '-3%',           trend: 'down' },
+      ticket:     { value: 'R$ 38,20',     delta: '+2%',           trend: 'up'   },
+      recuperado: { value: 'R$ 18.400,00', delta: '91% taxa CORA', trend: 'up'   },
+    },
+    chart7d:  [48, 52, 61, 43, 58, 49, 54],
+    chart30d: [60, 55, 48, 52, 61, 43, 58, 49, 54, 62, 48, 55, 43, 58, 52, 49, 61, 54, 48, 52, 61, 43, 58, 49, 54, 60, 55, 48, 52, 54],
+    topItems: [
+      { name: 'Hambúrguer Artesanal', orders: 189, pct: 100 },
+      { name: 'X-Bacon Duplo',        orders: 143, pct: 76  },
+      { name: 'Batata Frita GG',      orders: 134, pct: 71  },
+      { name: 'Milk Shake',           orders: 98,  pct: 52  },
+      { name: 'Combo Família',        orders: 76,  pct: 40  },
+    ],
+    reports: [
+      { id: 'br1', title: 'Relatório Semanal — Semana 16', agent: 'vera', status: 'ready', date: '22/04/2026' },
+      { id: 'br2', title: 'Relatório Financeiro — Março',  agent: 'vera', status: 'ready', date: '01/04/2026' },
+    ],
+    veraActions: [
+      { text: 'Detectou queda de 3% nos pedidos — cruzando com concorrência', time: 'agora' },
+    ],
+    insights: [
+      'Terças-feiras têm queda de 18% — campanha "Dobro" pode reverter isso.',
+      'Combo Família tem crescimento de 12% nas últimas 2 semanas.',
+      'Batata Frita GG é vendida em 71% dos pedidos — cross-sell forte.',
+    ],
+  },
+  'acai': {
+    periodo: 'Abril 2026',
+    kpis: {
+      receita:    { value: 'R$ 41.890,00', delta: '+28%',          trend: 'up' },
+      pedidos:    { value: '1.420',        delta: '+28%',          trend: 'up' },
+      ticket:     { value: 'R$ 29,50',     delta: '+8%',           trend: 'up' },
+      recuperado: { value: 'R$ 28.900,00', delta: '96% taxa CORA', trend: 'up' },
+    },
+    chart7d:  [88, 102, 124, 98, 131, 145, 142],
+    chart30d: [70, 80, 88, 102, 124, 98, 131, 145, 142, 110, 95, 112, 130, 142, 138, 120, 108, 115, 128, 140, 145, 150, 142, 135, 148, 152, 145, 138, 148, 142],
+    topItems: [
+      { name: 'Açaí 500ml Tradicional', orders: 428, pct: 100 },
+      { name: 'Combo Casal',            orders: 312, pct: 73  },
+      { name: 'Açaí 700ml Premium',     orders: 287, pct: 67  },
+      { name: 'Granola Extra',          orders: 198, pct: 46  },
+      { name: 'Topping Frutas',         orders: 195, pct: 46  },
+    ],
+    reports: [
+      { id: 'ar1', title: 'Relatório Semanal — Semana 16', agent: 'vera', status: 'ready',      date: '22/04/2026' },
+      { id: 'ar2', title: 'Relatório de Crescimento Q1',   agent: 'vera', status: 'ready',      date: '01/04/2026' },
+      { id: 'ar3', title: 'Análise de Pico de Pedidos',    agent: 'vera', status: 'generating', date: 'Gerando...' },
+    ],
+    veraActions: [
+      { text: 'Ticket médio bateu recorde histórico — +8% no mês', time: 'agora'  },
+      { text: 'Combo Casal cresceu 22% — sugeriu campanha de pair', time: '30 min' },
+    ],
+    insights: [
+      'Crescimento de 28% é o maior entre todos os clientes da base.',
+      'Finais de semana concentram 58% dos pedidos — escale a equipe.',
+      'Combo Casal tem margem 15% maior que os itens avulsos.',
+    ],
+  },
+  'sushi': {
+    periodo: 'Abril 2026',
+    kpis: {
+      receita:    { value: 'R$ 27.714,00', delta: '-8%',           trend: 'down' },
+      pedidos:    { value: '310',          delta: '-8%',           trend: 'down' },
+      ticket:     { value: 'R$ 89,40',     delta: '+1%',           trend: 'up'   },
+      recuperado: { value: 'R$ 24.100,00', delta: '62% taxa CORA', trend: 'down' },
+    },
+    chart7d:  [42, 38, 29, 35, 33, 28, 31],
+    chart30d: [50, 48, 42, 38, 29, 35, 33, 28, 31, 44, 40, 36, 32, 28, 35, 42, 38, 29, 35, 33, 28, 31, 40, 38, 32, 30, 28, 35, 31, 31],
+    topItems: [
+      { name: 'Combo Sashimi 30 peças', orders: 89,  pct: 100 },
+      { name: 'Hot Roll (8 peças)',      orders: 78,  pct: 88  },
+      { name: 'Temaki Salmão',          orders: 65,  pct: 73  },
+      { name: 'Combinado Família',      orders: 48,  pct: 54  },
+      { name: 'Edamame',               orders: 30,  pct: 34  },
+    ],
+    reports: [
+      { id: 'sr1', title: 'Alerta de Queda — Semana 16', agent: 'vera', status: 'ready', date: '22/04/2026' },
+      { id: 'sr2', title: 'Diagnóstico iFood — Março',   agent: 'max',  status: 'ready', date: '28/03/2026' },
+    ],
+    veraActions: [
+      { text: 'Detectou queda de 8% — cruzando com avaliações do iFood', time: 'agora' },
+      { text: 'Escalou relatório de risco para Wandson',                 time: '20 min' },
+    ],
+    insights: [
+      'Queda de 8% coincide com 5 avaliações ruins — resolver urgente.',
+      'Ticket médio é o maior da base (R$ 89,40) — potencial de recuperação.',
+      'Inadimplência em 38% — CORA precisa intensificar cobranças.',
+    ],
+  },
+  'tapioca': {
+    periodo: 'Abril 2026',
+    kpis: {
+      receita:    { value: 'R$ 5.304,00', delta: '+15%',           trend: 'up' },
+      pedidos:    { value: '240',         delta: '+15%',           trend: 'up' },
+      ticket:     { value: 'R$ 22,10',    delta: '+3%',            trend: 'up' },
+      recuperado: { value: 'R$ 4.200,00', delta: '100% taxa CORA', trend: 'up' },
+    },
+    chart7d:  [18, 15, 21, 19, 22, 26, 24],
+    chart30d: [14, 16, 18, 15, 21, 19, 22, 26, 24, 20, 18, 22, 25, 28, 24, 20, 18, 15, 21, 19, 22, 26, 24, 22, 20, 24, 26, 28, 26, 24],
+    topItems: [
+      { name: 'Tapioca de Queijo',     orders: 88,  pct: 100 },
+      { name: 'Tapioca Coco + Doce Leite', orders: 64, pct: 73 },
+      { name: 'Tapioca de Frango',     orders: 52,  pct: 59  },
+      { name: 'Tapioca Integral',      orders: 36,  pct: 41  },
+    ],
+    reports: [
+      { id: 'tr1', title: 'Relatório Semanal — Semana 16', agent: 'vera', status: 'ready', date: '22/04/2026' },
+    ],
+    veraActions: [
+      { text: 'Zero inadimplência pelo 3o mês consecutivo — parabéns!', time: 'agora' },
+    ],
+    insights: [
+      'Zero inadimplência é o melhor resultado de todos os tenants.',
+      'Post viral da semana passada gerou +22% de pedidos nos 3 dias seguintes.',
+      'Ticket médio crescendo consistentemente +3% ao mês.',
+    ],
+  },
+};
+
+export const CRM_DATA = {
+  'pizza-joao': {
+    kpis: { total: 248, ativos: 187, ticket: 'R$ 47,80', nps: 72 },
+    clients: [
+      { id: 'cl1', name: 'Carlos Mendes',     avatar: 'CM', phone: '(11) 99123-4567', status: 'vip',       tag: 'VIP',        totalOrders: 47, totalSpent: 'R$ 2.240,00', lastOrder: '22/04/2026', since: 'Jan 2024', agent: 'breno' },
+      { id: 'cl2', name: 'Mariana Souza',     avatar: 'MS', phone: '(11) 98765-4321', status: 'recurrent', tag: 'Recorrente', totalOrders: 31, totalSpent: 'R$ 1.480,00', lastOrder: '20/04/2026', since: 'Mar 2024', agent: 'breno' },
+      { id: 'cl3', name: 'Fernanda Oliveira', avatar: 'FO', phone: '(11) 98901-2345', status: 'vip',       tag: 'VIP',        totalOrders: 62, totalSpent: 'R$ 3.100,00', lastOrder: '21/04/2026', since: 'Nov 2023', agent: 'breno' },
+      { id: 'cl4', name: 'João Paulo R.',     avatar: 'JP', phone: '(11) 91234-5678', status: 'new',       tag: 'Novo',       totalOrders: 2,  totalSpent: 'R$ 94,00',    lastOrder: '23/04/2026', since: 'Abr 2026', agent: null    },
+      { id: 'cl5', name: 'Bruno Silva',       avatar: 'BS', phone: '(11) 97654-3210', status: 'recurrent', tag: 'Recorrente', totalOrders: 19, totalSpent: 'R$ 908,00',   lastOrder: '19/04/2026', since: 'Jun 2024', agent: null    },
+      { id: 'cl6', name: 'Patrícia Nunes',    avatar: 'PN', phone: '(11) 95432-1098', status: 'recurrent', tag: 'Recorrente', totalOrders: 14, totalSpent: 'R$ 668,00',   lastOrder: '22/04/2026', since: 'Fev 2025', agent: 'breno' },
+      { id: 'cl7', name: 'Rafael Alves',      avatar: 'RA', phone: '(11) 99876-5432', status: 'inactive',  tag: 'Inativo',    totalOrders: 8,  totalSpent: 'R$ 382,00',   lastOrder: '10/03/2026', since: 'Set 2025', agent: null    },
+      { id: 'cl8', name: 'Ana Paula Ribeiro', avatar: 'AP', phone: '(11) 96543-2109', status: 'inactive',  tag: 'Inativo',    totalOrders: 5,  totalSpent: 'R$ 238,00',   lastOrder: '01/02/2026', since: 'Dez 2025', agent: null    },
+    ],
+  },
+  'burger': {
+    kpis: { total: 124, ativos: 89, ticket: 'R$ 38,20', nps: 64 },
+    clients: [
+      { id: 'bcl1', name: 'Pedro Costa',   avatar: 'PC', phone: '(21) 99111-2233', status: 'vip',       tag: 'VIP',        totalOrders: 28, totalSpent: 'R$ 1.069,60', lastOrder: '23/04/2026', since: 'Ago 2024', agent: 'breno' },
+      { id: 'bcl2', name: 'Henrique Lima', avatar: 'HL', phone: '(21) 98222-3344', status: 'recurrent', tag: 'Recorrente', totalOrders: 15, totalSpent: 'R$ 573,00',   lastOrder: '20/04/2026', since: 'Out 2024', agent: null    },
+      { id: 'bcl3', name: 'Camila Reis',   avatar: 'CR', phone: '(21) 97333-4455', status: 'new',       tag: 'Novo',       totalOrders: 3,  totalSpent: 'R$ 114,60',   lastOrder: '22/04/2026', since: 'Abr 2026', agent: null    },
+    ],
+  },
+  'acai': {
+    kpis: { total: 312, ativos: 298, ticket: 'R$ 29,50', nps: 91 },
+    clients: [
+      { id: 'acl1', name: 'Bia Ramos',    avatar: 'BR', phone: '(31) 99444-5566', status: 'vip',       tag: 'VIP',        totalOrders: 54, totalSpent: 'R$ 1.593,00', lastOrder: '23/04/2026', since: 'Jul 2024', agent: 'breno' },
+      { id: 'acl2', name: 'Livia Santos', avatar: 'LS', phone: '(31) 98555-6677', status: 'recurrent', tag: 'Recorrente', totalOrders: 21, totalSpent: 'R$ 619,50',   lastOrder: '22/04/2026', since: 'Jan 2025', agent: null    },
+    ],
+  },
+  'sushi': {
+    kpis: { total: 87, ativos: 52, ticket: 'R$ 89,40', nps: 48 },
+    clients: [
+      { id: 'scl1', name: 'Lucas Wei',     avatar: 'LW', phone: '(11) 96789-0123', status: 'vip',       tag: 'VIP',        totalOrders: 22, totalSpent: 'R$ 1.966,80', lastOrder: '23/04/2026', since: 'Mar 2024', agent: 'breno' },
+      { id: 'scl2', name: 'Ana Kobayashi', avatar: 'AK', phone: '(11) 94567-8901', status: 'recurrent', tag: 'Recorrente', totalOrders: 17, totalSpent: 'R$ 1.519,80', lastOrder: '18/04/2026', since: 'Fev 2025', agent: 'breno' },
+      { id: 'scl3', name: 'Pedro Iwamoto', avatar: 'PI', phone: '(11) 95678-9012', status: 'inactive',  tag: 'Inativo',    totalOrders: 9,  totalSpent: 'R$ 804,60',   lastOrder: '15/03/2026', since: 'Nov 2024', agent: null    },
+    ],
+  },
+  'tapioca': {
+    kpis: { total: 43, ativos: 41, ticket: 'R$ 22,10', nps: 98 },
+    clients: [
+      { id: 'tcl1', name: 'Dona Zelia', avatar: 'DZ', phone: '(85) 99123-4567', status: 'vip', tag: 'VIP', totalOrders: 88, totalSpent: 'R$ 1.944,80', lastOrder: '23/04/2026', since: 'Jan 2023', agent: 'breno' },
+    ],
+  },
+};
+
 export const INADIMPLENTES = {
   'pizza-joao': {
     kpis: { total: 'R$ 18.450,00', recebido: 'R$ 42.100,00', taxa: '87%', reguas: 4 },
