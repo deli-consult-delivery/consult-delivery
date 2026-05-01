@@ -34,6 +34,42 @@ export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem('cd-theme') || 'claro');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // Carrega tenants do banco (usado no mount e quando um workspace novo é criado)
+  async function reloadTenants(preferSlug) {
+    try {
+      const real = await listTenants();
+      if (real?.length) {
+        const mapped = real.map(t => ({
+          id: t.slug,
+          dbId: t.id,
+          name: t.name,
+          emoji: t.emoji || '🏪',
+          color: t.color || '#B70C00',
+        }));
+        setTenants(mapped);
+        const slugToUse = preferSlug || mapped[0].id;
+        setTenant(slugToUse);
+        const selected = mapped.find(t => t.id === slugToUse);
+        setTenantDbId(selected?.dbId ?? mapped[0].dbId);
+        return;
+      }
+    } catch (_) { /* silencioso */ }
+    // fallback se listTenants falhar ou retornar vazio
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: m } = await supabase
+        .from('tenant_members').select('tenant_id').eq('user_id', user?.id).maybeSingle();
+      if (!m?.tenant_id) return;
+      const { data: t } = await supabase
+        .from('tenants').select('id, slug, name, emoji, color').eq('id', m.tenant_id).maybeSingle();
+      if (!t) return;
+      const mapped = { id: t.slug, dbId: t.id, name: t.name, emoji: t.emoji || '🏪', color: t.color || '#B70C00' };
+      setTenants([mapped]);
+      setTenant(t.slug);
+      setTenantDbId(t.id);
+    } catch (_) { /* silencioso */ }
+  }
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -49,20 +85,7 @@ export default function App() {
 
   useEffect(() => {
     if (!session) return;
-    listTenants().then(real => {
-      if (real?.length) {
-        const mapped = real.map(t => ({
-          id: t.slug,
-          dbId: t.id,
-          name: t.name,
-          emoji: t.emoji || '🏪',
-          color: t.color || '#B70C00',
-        }));
-        setTenants(mapped);
-        setTenant(mapped[0].id);
-        setTenantDbId(mapped[0].dbId);
-      }
-    }).catch(() => {});
+    reloadTenants();
   }, [session]);
 
   useEffect(() => {
@@ -127,7 +150,13 @@ export default function App() {
         {route === 'reports'   && <ReportsScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'agents'    && <AgentsPage />}
         {route === 'grupos'    && <GruposScreen tenant={tenant} tenantDbId={tenantDbId} />}
-        {route === 'settings'  && <SettingsScreen tenant={tenant} tenantDbId={tenantDbId} />}
+        {route === 'settings'  && <SettingsScreen tenant={tenant} tenantDbId={tenantDbId} onTenantChange={async (newSlug) => {
+          if (newSlug) {
+            setTenant(newSlug);
+          } else {
+            await reloadTenants();
+          }
+        }} />}
       </main>
       <TweaksPanel title="Tweaks">
         <TweakSection title="Marca">

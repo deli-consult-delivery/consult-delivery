@@ -9,12 +9,14 @@ import { setWebhook, getQRCode, getInstanceStatus } from '../lib/evolution.js';
 /* ─── Helpers ───────────────────────────────────────────── */
 async function resolveTenantId(fallbackTenantDbId) {
   if (fallbackTenantDbId) return fallbackTenantDbId;
-  const { data: { user } } = await supabase.auth.getUser();
-  const { data: m } = await supabase
-    .from('tenant_members').select('tenant_id').eq('user_id', user?.id).limit(1).single();
-  return m?.tenant_id ?? null;
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: m, error } = await supabase
+      .from('tenant_members').select('tenant_id').eq('user_id', user?.id).maybeSingle();
+    if (error) return null;
+    return m?.tenant_id ?? null;
+  } catch (_) { return null; }
 }
-
 /* ─── Tabs ────────────────────────────────────────────── */
 const TABS = [
   { id: 'workspace',    label: 'Workspace',    icon: 'building'  },
@@ -47,7 +49,7 @@ const INTEGRATION_STATUS = {
 };
 
 /* ─── Main ────────────────────────────────────────────── */
-export default function SettingsScreen({ tenant, tenantDbId }) {
+export default function SettingsScreen({ tenant, tenantDbId, onTenantChange }) {
   const [tab, setTab] = useState('workspace');
 
   return (
@@ -100,7 +102,7 @@ export default function SettingsScreen({ tenant, tenantDbId }) {
 
         {/* Content area */}
         <div>
-          {tab === 'workspace'    && <TabWorkspace tenantDbId={tenantDbId} />}
+          {tab === 'workspace'    && <TabWorkspace tenantDbId={tenantDbId} onTenantChange={onTenantChange} />}
           {tab === 'users'        && <TabUsers tenantDbId={tenantDbId} />}
           {tab === 'integrations' && <TabIntegrations />}
           {tab === 'whatsapp'     && <TabWhatsApp />}
@@ -508,7 +510,7 @@ function TabWhatsApp() {
 /* ─── Tab: Workspace ──────────────────────────────────── */
 const WS_EMOJIS = ['🏪','🍕','🍔','🌮','🍜','🍱','🍣','🥗','🍰','🧁','🥩','🍗','🍟','🌯','🥙','🍛','🏢','🏬','🏭','🎯','🚀','⭐','💎','🔥','🎉'];
 
-function TabWorkspace({ tenantDbId }) {
+function TabWorkspace({ tenantDbId, onTenantChange }) {
   const [loading, setLoading]       = useState(true);
   const [saving, setSaving]         = useState(false);
   const [saved, setSaved]           = useState(false);
@@ -518,22 +520,86 @@ function TabWorkspace({ tenantDbId }) {
   const [deleteText, setDeleteText] = useState('');
   const [slugError, setSlugError]   = useState('');
   const [form, setForm] = useState({ name: '', segment: '', slug: '', phone: '', city: '', emoji: '🏪', logo_url: '' });
+  const [workspaces, setWorkspaces] = useState([]);
+  const [activeTenantId, setActiveTenantId] = useState(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState({ name: '', slug: '', segment: '', emoji: '🏪' });
+  const [createError, setCreateError] = useState('');
+  const [createSaving, setCreateSaving] = useState(false);
+
+  async function loadWorkspaces() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.id) return [];
+    // 1) Buscar memberships
+    const { data: memberships, error: me } = await supabase
+      .from('tenant_members')
+      .select('tenant_id, role')
+      .eq('user_id', user.id);
+    if (me) { console.error('Erro ao buscar memberships:', me); return []; }
+    if (!memberships?.length) { console.warn('Nenhum membership encontrado'); return []; }
+    const tenantIds = memberships.map(m => m.tenant_id);
+    // 2) Buscar dados dos tenants
+    const { data: tenantsData, error: te } = await supabase
+      .from('tenants')
+      .select('id, name, slug, segment, emoji, logo_url, phone, city, color')
+      .in('id', tenantIds);
+    if (te) { console.error('Erro ao buscar tenants:', te); return []; }
+    if (!tenantsData?.length) { console.warn('Nenhum tenant encontrado para os IDs:', tenantIds); return []; }
+    const list = tenantsData.map(t => {
+      const membership = memberships.find(m => m.tenant_id === t.id);
+      return {
+        id: t.id,
+        name: t.name || 'Workspace',
+        slug: t.slug || '',
+        segment: t.segment || '',
+        emoji: t.emoji || '🏪',
+        logo_url: t.logo_url || '',
+        phone: t.phone || '',
+        city: t.city || '',
+        color: t.color || '#B70C00',
+        role: membership?.role || 'operador',
+      };
+    });
+    setWorkspaces(list);
+    return list;
+  }
+
+  async function loadCurrent(tid) {
+    if (!tid) { setLoading(false); return; }
+    const { data } = await supabase.from('tenants').select('*').eq('id', tid).maybeSingle();
+    if (data) setForm({
+      name:     data.name     || '',
+      segment:  data.segment  || '',
+      slug:     data.slug     || '',
+      phone:    data.phone    || '',
+      city:     data.city     || '',
+      emoji:    data.emoji    || '🏪',
+      logo_url: data.logo_url || '',
+    });
+    setLoading(false);
+  }
 
   useEffect(() => {
-    if (!tenantDbId) { setLoading(false); return; }
-    supabase.from('tenants').select('*').eq('id', tenantDbId).single().then(({ data }) => {
-      if (data) setForm({
-        name:     data.name     || '',
-        segment:  data.segment  || '',
-        slug:     data.slug     || '',
-        phone:    data.phone    || '',
-        city:     data.city     || '',
-        emoji:    data.emoji    || '🏪',
-        logo_url: data.logo_url || '',
-      });
-      setLoading(false);
-    });
+    let cancelled = false;
+    (async () => {
+      const list = await loadWorkspaces();
+      if (cancelled) return;
+      // Determinar qual workspace é o ativo: tenantDbId prop, ou primeiro da lista
+      const match = list.find(w => w.id === tenantDbId);
+      const tid = match?.id || list[0]?.id || null;
+      setActiveTenantId(tid);
+      if (tid) await loadCurrent(tid);
+      else setLoading(false);
+    })();
+    return () => { cancelled = true; };
   }, [tenantDbId]);
+
+  // Fallback: se activeTenantId ainda estiver null mas workspaces carregou, usa o primeiro
+  useEffect(() => {
+    if (activeTenantId || workspaces.length === 0) return;
+    setActiveTenantId(workspaces[0].id);
+    loadCurrent(workspaces[0].id);
+  }, [workspaces]);
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
@@ -548,37 +614,47 @@ function TabWorkspace({ tenantDbId }) {
     const err = validateSlug(form.slug);
     setSlugError(err);
     if (err) return;
-    const resolvedTenantId = await resolveTenantId(tenantDbId);
-    if (!resolvedTenantId) { alert('Workspace não identificado. Recarregue a página e tente novamente.'); return; }
+    // Buscar o ID do tenant pelo slug do formulário — não depende de estado
+    const { data: tenantRow } = await supabase
+      .from('tenants')
+      .select('id')
+      .eq('slug', form.slug)
+      .maybeSingle();
+    if (!tenantRow?.id) { alert('Workspace não identificado. Recarregue a página e tente novamente.'); return; }
     setSaving(true);
     const { error } = await supabase.from('tenants').update({
       name: form.name, segment: form.segment, slug: form.slug,
       phone: form.phone, city: form.city,
-    }).eq('id', resolvedTenantId);
+    }).eq('id', tenantRow.id);
     setSaving(false);
     if (error) { alert('Erro ao salvar: ' + error.message); return; }
     setSaved(true);
+    await loadWorkspaces();
+    if (onTenantChange) onTenantChange();
     setTimeout(() => setSaved(false), 2500);
   }
 
   async function handlePickEmoji(emoji) {
     setShowEmoji(false);
     set('emoji', emoji);
-    if (tenantDbId) await supabase.from('tenants').update({ emoji }).eq('id', tenantDbId);
+    const { data: t } = await supabase.from('tenants').select('id').eq('slug', form.slug).maybeSingle();
+    if (t?.id) await supabase.from('tenants').update({ emoji }).eq('id', t.id);
   }
 
   async function handleLogoUpload(e) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) { alert('Arquivo muito grande. Máximo: 2MB'); return; }
+    const { data: t } = await supabase.from('tenants').select('id').eq('slug', form.slug).maybeSingle();
+    if (!t?.id) { alert('Workspace não identificado.'); return; }
     setUploading(true);
     const ext  = file.name.split('.').pop().toLowerCase();
-    const path = `logos/${tenantDbId}.${ext}`;
+    const path = `logos/${t.id}.${ext}`;
     const { error } = await supabase.storage.from('logos').upload(path, file, { upsert: true });
     if (!error) {
       const { data: { publicUrl } } = supabase.storage.from('logos').getPublicUrl(path);
       set('logo_url', publicUrl);
-      await supabase.from('tenants').update({ logo_url: publicUrl }).eq('id', tenantDbId);
+      await supabase.from('tenants').update({ logo_url: publicUrl }).eq('id', t.id);
     } else {
       alert('Erro no upload: ' + error.message);
     }
@@ -587,14 +663,91 @@ function TabWorkspace({ tenantDbId }) {
 
   async function handleDelete() {
     if (deleteText !== form.name) return;
-    await supabase.from('tenants').delete().eq('id', tenantDbId);
+    const { data: t } = await supabase.from('tenants').select('id').eq('slug', form.slug).maybeSingle();
+    if (!t?.id) { alert('Workspace não identificado.'); return; }
+    await supabase.from('tenants').delete().eq('id', t.id);
     window.location.reload();
+  }
+
+  async function handleCreateWorkspace() {
+    setCreateError('');
+    const err = validateSlug(createForm.slug);
+    if (err) { setCreateError(err); return; }
+    if (!createForm.name.trim()) { setCreateError('Nome é obrigatório'); return; }
+    setCreateSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) throw new Error('Usuário não autenticado');
+      const { data: existing } = await supabase.from('tenants').select('id').eq('slug', createForm.slug).maybeSingle();
+      if (existing) { setCreateError('Slug já existe. Escolha outro.'); setCreateSaving(false); return; }
+      const { data: tenantId, error: rpcErr } = await supabase.rpc('create_workspace', {
+        p_name: createForm.name.trim(),
+        p_slug: createForm.slug.trim(),
+        p_segment: createForm.segment.trim(),
+        p_emoji: createForm.emoji,
+        p_user_id: user.id,
+      });
+      if (rpcErr) throw rpcErr;
+      setShowCreate(false);
+      setCreateForm({ name: '', slug: '', segment: '', emoji: '🏪' });
+      const list = await loadWorkspaces();
+      const newWs = list.find(w => w.slug === createForm.slug.trim());
+      if (newWs) {
+        setActiveTenantId(newWs.id);
+        await loadCurrent(newWs.id);
+      }
+      if (onTenantChange) onTenantChange();
+    } catch (err) {
+      setCreateError(err?.message || 'Erro ao criar workspace');
+    }
+    setCreateSaving(false);
+  }
+
+  async function selectWorkspace(ws) {
+    setActiveTenantId(ws.id);
+    await loadCurrent(ws.id);
+    if (onTenantChange) await onTenantChange(ws.slug);
   }
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--g-400)', fontSize: 13 }}>Carregando…</div>;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Lista de workspaces */}
+      <SectionCard title="Meus workspaces">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {workspaces.map(ws => (
+            <div key={ws.id} style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '12px 14px', borderRadius: 'var(--r-md)',
+              border: '1px solid var(--g-200)',
+              background: ws.id === activeTenantId ? 'var(--red-soft)' : 'var(--white)',
+              cursor: 'pointer',
+            }} onClick={() => selectWorkspace(ws)}>
+              <div style={{
+                width: 40, height: 40, borderRadius: 'var(--r-md)',
+                background: 'var(--g-100)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 20,
+              }}>{ws.logo_url ? <img src={ws.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'var(--r-md)' }} /> : ws.emoji}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--g-900)' }}>{ws.name}</div>
+                <div style={{ fontSize: 12, color: 'var(--g-500)' }}>{ws.segment || 'Sem segmento'} · {ws.slug}</div>
+              </div>
+              <div style={{ fontSize: 11, padding: '3px 8px', borderRadius: 'var(--r-sm)', background: 'var(--g-100)', color: 'var(--g-600)', fontWeight: 500 }}>{ws.role}</div>
+              {ws.id === activeTenantId && <div style={{ fontSize: 11, color: 'var(--red)', fontWeight: 600 }}>Atual</div>}
+            </div>
+          ))}
+          {workspaces.length === 0 && (
+            <div style={{ padding: 16, textAlign: 'center', color: 'var(--g-400)', fontSize: 13 }}>Nenhum workspace encontrado.</div>
+          )}
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <button className="btn-primary" style={{ fontSize: 13 }} onClick={() => setShowCreate(true)}>
+            <Icon name="plus" size={13} /> Criar workspace
+          </button>
+        </div>
+      </SectionCard>
+
       <SectionCard title="Informações do workspace">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <InputField label="Nome" value={form.name} onChange={v => set('name', v)} />
@@ -623,7 +776,6 @@ function TabWorkspace({ tenantDbId }) {
 
       <SectionCard title="Identidade visual">
         <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-          {/* Logo / Emoji preview */}
           <div style={{ position: 'relative' }}>
             <div style={{
               width: 72, height: 72, borderRadius: 'var(--r-lg)',
@@ -640,7 +792,6 @@ function TabWorkspace({ tenantDbId }) {
             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--g-900)' }}>{form.name || 'Workspace'}</div>
             <div style={{ fontSize: 12, color: 'var(--g-500)', marginTop: 2 }}>{form.segment}</div>
             <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-              {/* Emoji picker trigger */}
               <div style={{ position: 'relative' }}>
                 <button className="btn-secondary" style={{ fontSize: 12, padding: '6px 12px' }} onClick={() => setShowEmoji(v => !v)}>
                   Trocar emoji
@@ -666,7 +817,6 @@ function TabWorkspace({ tenantDbId }) {
                   </>
                 )}
               </div>
-              {/* Logo upload */}
               <label style={{ cursor: 'pointer' }}>
                 <input type="file" accept="image/png,image/jpeg,image/svg+xml" style={{ display: 'none' }} onChange={handleLogoUpload} />
                 <span className="btn-secondary" style={{ fontSize: 12, padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
@@ -730,6 +880,49 @@ function TabWorkspace({ tenantDbId }) {
           </div>
         </>
       )}
+
+      {/* Create workspace modal */}
+      {showCreate && (
+        <>
+          <div onClick={() => setShowCreate(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(13,13,13,0.5)', zIndex: 100 }} />
+          <div className="modal-mobile" style={{
+            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+            background: 'var(--white)', borderRadius: 'var(--r-lg)', padding: 32, zIndex: 101,
+            width: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+          }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--g-900)', marginBottom: 4 }}>Criar novo workspace</div>
+            <div style={{ fontSize: 12, color: 'var(--g-500)', marginBottom: 20 }}>Cada cliente da sua empresa terá seu próprio workspace isolado.</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <InputField label="Nome do workspace" value={createForm.name} onChange={v => setCreateForm(f => ({ ...f, name: v }))} placeholder="ex: Pizzaria do João" />
+              <div>
+                <InputField label="Slug (URL única)" value={createForm.slug} onChange={v => setCreateForm(f => ({ ...f, slug: v }))} mono placeholder="ex: pizzaria-joao" />
+                <div style={{ fontSize: 11, color: 'var(--g-400)', marginTop: 4 }}>Apenas letras minúsculas, números e hífens. Mínimo 3 caracteres.</div>
+              </div>
+              <InputField label="Segmento" value={createForm.segment} onChange={v => setCreateForm(f => ({ ...f, segment: v }))} placeholder="ex: Pizzaria" />
+              <div>
+                <div className="label" style={{ marginBottom: 6 }}>Emoji</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {WS_EMOJIS.map(e => (
+                    <button key={e} onClick={() => setCreateForm(f => ({ ...f, emoji: e }))} style={{
+                      fontSize: 20, padding: '4px 6px', borderRadius: 6,
+                      background: createForm.emoji === e ? 'var(--red-soft)' : 'transparent',
+                      border: createForm.emoji === e ? '1px solid var(--red)' : '1px solid transparent',
+                      cursor: 'pointer',
+                    }}>{e}</button>
+                  ))}
+                </div>
+              </div>
+              {createError && <div style={{ fontSize: 12, color: 'var(--red)', padding: '8px 12px', background: '#fff5f5', borderRadius: 'var(--r-sm)' }}>{createError}</div>}
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
+              <button className="btn-primary" onClick={handleCreateWorkspace} disabled={createSaving}>
+                <Icon name="check" size={13} /> {createSaving ? 'Criando…' : 'Criar workspace'}
+              </button>
+              <button className="btn-secondary" onClick={() => { setShowCreate(false); setCreateError(''); }}>Cancelar</button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -742,11 +935,12 @@ function TabUsers({ tenantDbId }) {
   const [editUser, setEditUser]     = useState(null); // member object
 
   async function loadMembers() {
-    if (!tenantDbId) { setLoading(false); return; }
+    const resolved = await resolveTenantId(tenantDbId);
+    if (!resolved) { setLoading(false); return; }
     const { data } = await supabase
       .from('tenant_members')
       .select('role, semaforo, display_name, created_at, profiles(id, full_name, email, avatar_url)')
-      .eq('tenant_id', tenantDbId);
+      .eq('tenant_id', resolved);
     if (data) setMembers(data.map(m => ({
       userId:    m.profiles?.id,
       name:      m.display_name || m.profiles?.full_name || m.profiles?.email || 'Usuário',
@@ -913,14 +1107,7 @@ function InviteModal({ tenantDbId, onClose, onDone }) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
 
-      // tenantDbId pode ser null se listTenants() falhou — busca direto do banco
-      let resolvedTenantId = tenantDbId;
-      if (!resolvedTenantId) {
-        const { data: { user } } = await supabase.auth.getUser();
-        const { data: m } = await supabase
-          .from('tenant_members').select('tenant_id').eq('user_id', user?.id).limit(1).single();
-        resolvedTenantId = m?.tenant_id ?? null;
-      }
+      const resolvedTenantId = await resolveTenantId(tenantDbId);
       if (!resolvedTenantId) {
         setError('Workspace não identificado. Recarregue a página e tente novamente.');
         setSaving(false); return;
