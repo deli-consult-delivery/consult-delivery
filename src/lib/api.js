@@ -216,3 +216,47 @@ export function subscribeToAnalise(jobId, callback) {
     .subscribe();
   return () => supabase.removeChannel(channel);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tarefas do Cliente — geradas pelo analista-ifood por análise
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function createTarefasAnalise(analise_id, cliente_id, top5) {
+  const tarefas = top5.map(item => ({
+    analise_id,
+    cliente_id,
+    titulo: item.titulo,
+    descricao: item.problema,
+    acao: item.acao,
+    urgencia: item.urgencia,
+    prioridade: item.ordem,
+    impacto_financeiro: item.impacto_financeiro,
+    status: 'pendente',
+  }));
+  const { data, error } = await supabase
+    .from('tarefas_analise')
+    .insert(tarefas)
+    .select();
+  if (error) throw error;
+  return data;
+}
+
+export async function listTarefasCliente(cliente_id) {
+  const { data, error } = await supabase
+    .from('tarefas_analise')
+    .select('*, analises(created_at, resultado_json)')
+    .eq('cliente_id', cliente_id)
+    .order('prioridade', { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function updateStatusTarefa(tarefa_id, status) {
+  const { data, error } = await supabase
+    .from('tarefas_analise')
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq('id', tarefa_id)
+    .select();
+  if (error) throw error;
+  return data;
+}

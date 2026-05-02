@@ -100,10 +100,10 @@ export default function AnaliseiFoodScreen({ tenant, tenantDbId }) {
       return;
     }
 
-    // Step 2: Fire n8n webhook (fire-and-forget — only confirm 200 OK)
-    const N8N_URL = import.meta.env.VITE_N8N_WEBHOOK_ANALISE;
+    // Step 2: Fire analista-ifood webhook (fire-and-forget — only confirm 200 OK)
+    const WEBHOOK_URL = import.meta.env.VITE_ANALISTA_WEBHOOK_URL;
     try {
-      const res = await fetch(N8N_URL, {
+      const res = await fetch(WEBHOOK_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -114,7 +114,7 @@ export default function AnaliseiFoodScreen({ tenant, tenantDbId }) {
           periodo,
         }),
       });
-      if (!res.ok) throw new Error(`n8n respondeu ${res.status}`);
+      if (!res.ok) throw new Error(`Webhook respondeu ${res.status}`);
       setPhase('processing'); // show processing card, hide form
     } catch (err) {
       // Row already in DB with status=pending — webhook failed
