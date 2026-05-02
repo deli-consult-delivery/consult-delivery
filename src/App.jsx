@@ -7,6 +7,7 @@ import DashboardScreen from './screens/DashboardScreen.jsx';
 import ChatScreen from './screens/ChatScreen.jsx';
 import KanbanScreen from './screens/KanbanScreen.jsx';
 import CoraScreen from './screens/CoraScreen.jsx';
+import AnaliseiFoodScreen from './screens/AnaliseiFoodScreen.jsx';
 import CRMScreen from './screens/CRMScreen.jsx';
 import ReportsScreen from './screens/ReportsScreen.jsx';
 import SettingsScreen from './screens/SettingsScreen.jsx';
@@ -145,8 +146,9 @@ export default function App() {
         {route === 'dashboard' && <DashboardScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'chat'      && <ChatScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={setRoute} />}
         {route === 'tasks'     && <KanbanScreen tenant={tenant} tenantDbId={tenantDbId} />}
-        {route === 'cora'      && <CoraScreen tenant={tenant} tenantDbId={tenantDbId} />}
-        {route === 'crm'       && <CRMScreen tenant={tenant} tenantDbId={tenantDbId} />}
+        {route === 'cora'         && <CoraScreen tenant={tenant} tenantDbId={tenantDbId} />}
+        {route === 'analise-ifood' && <AnaliseiFoodScreen tenant={tenant} tenantDbId={tenantDbId} />}
+        {route === 'crm'          && <CRMScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'reports'   && <ReportsScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'agents'    && <AgentsPage />}
         {route === 'grupos'    && <GruposScreen tenant={tenant} tenantDbId={tenantDbId} />}
