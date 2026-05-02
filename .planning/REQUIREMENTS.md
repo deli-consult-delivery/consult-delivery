@@ -91,14 +91,40 @@
 
 ## Traceability
 
-| REQ-ID | Fase | Status |
-|--------|------|--------|
-| SCHEMA-01–05 | — | Pendente |
-| TRIGGER-01–04 | — | Pendente |
-| PIPE-01–11 | — | Pendente |
-| REPORT-01–06 | — | Pendente |
-| ACTION-01–03 | — | Pendente |
-| HIST-01–03 | — | Pendente |
-| INFRA-01–03 | — | Pendente |
-
-*(preenchido pelo roadmapper)*
+| REQ-ID | Phase | Status |
+|--------|-------|--------|
+| SCHEMA-01 | Phase 1 — Foundation | Pending |
+| SCHEMA-02 | Phase 1 — Foundation | Pending |
+| SCHEMA-03 | Phase 1 — Foundation | Pending |
+| SCHEMA-04 | Phase 1 — Foundation | Pending |
+| SCHEMA-05 | Phase 1 — Foundation | Pending |
+| TRIGGER-01 | Phase 1 — Foundation | Pending |
+| TRIGGER-02 | Phase 1 — Foundation | Pending |
+| TRIGGER-03 | Phase 1 — Foundation | Pending |
+| TRIGGER-04 | Phase 1 — Foundation | Pending |
+| PIPE-01 | Phase 2 — Pipeline n8n | Pending |
+| PIPE-02 | Phase 2 — Pipeline n8n | Pending |
+| PIPE-03 | Phase 2 — Pipeline n8n | Pending |
+| PIPE-04 | Phase 2 — Pipeline n8n | Pending |
+| PIPE-05 | Phase 2 — Pipeline n8n | Pending |
+| PIPE-06 | Phase 2 — Pipeline n8n | Pending |
+| PIPE-07 | Phase 2 — Pipeline n8n | Pending |
+| PIPE-08 | Phase 2 — Pipeline n8n | Pending |
+| PIPE-09 | Phase 2 — Pipeline n8n | Pending |
+| PIPE-10 | Phase 2 — Pipeline n8n | Pending |
+| PIPE-11 | Phase 2 — Pipeline n8n | Pending |
+| INFRA-01 | Phase 2 — Pipeline n8n | Pending |
+| INFRA-02 | Phase 2 — Pipeline n8n | Pending |
+| INFRA-03 | Phase 2 — Pipeline n8n | Pending |
+| REPORT-01 | Phase 3 — Report & Actions UI | Pending |
+| REPORT-02 | Phase 3 — Report & Actions UI | Pending |
+| REPORT-03 | Phase 3 — Report & Actions UI | Pending |
+| REPORT-04 | Phase 3 — Report & Actions UI | Pending |
+| REPORT-05 | Phase 3 — Report & Actions UI | Pending |
+| REPORT-06 | Phase 3 — Report & Actions UI | Pending |
+| ACTION-01 | Phase 3 — Report & Actions UI | Pending |
+| ACTION-02 | Phase 3 — Report & Actions UI | Pending |
+| ACTION-03 | Phase 3 — Report & Actions UI | Pending |
+| HIST-01 | Phase 3 — Report & Actions UI | Pending |
+| HIST-02 | Phase 3 — Report & Actions UI | Pending |
+| HIST-03 | Phase 3 — Report & Actions UI | Pending |
