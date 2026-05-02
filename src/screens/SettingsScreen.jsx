@@ -7,15 +7,17 @@ import { supabase } from '../lib/supabase.js';
 import { setWebhook, getQRCode, getInstanceStatus } from '../lib/evolution.js';
 
 /* ─── Helpers ───────────────────────────────────────────── */
+// Sempre retorna o tenant_id real do usuário logado (fonte de verdade: Supabase)
 async function resolveTenantId(fallbackTenantDbId) {
   if (fallbackTenantDbId) return fallbackTenantDbId;
   try {
     const { data: { user } } = await supabase.auth.getUser();
     const { data: m, error } = await supabase
       .from('tenant_members').select('tenant_id').eq('user_id', user?.id).maybeSingle();
-    if (error) return null;
-    return m?.tenant_id ?? null;
-  } catch (_) { return null; }
+    if (error) { console.error('[resolveTenantId] erro:', error); }
+    if (m?.tenant_id) return m.tenant_id;
+  } catch (err) { console.error('[resolveTenantId] catch:', err); }
+  return null;
 }
 /* ─── Tabs ────────────────────────────────────────────── */
 const TABS = [
@@ -103,7 +105,7 @@ export default function SettingsScreen({ tenant, tenantDbId, onTenantChange }) {
         {/* Content area */}
         <div>
           {tab === 'workspace'    && <TabWorkspace tenantDbId={tenantDbId} onTenantChange={onTenantChange} />}
-          {tab === 'users'        && <TabUsers tenantDbId={tenantDbId} />}
+          {tab === 'users'        && <TabUsers tenantDbId={tenantDbId} tenant={tenant} />}
           {tab === 'integrations' && <TabIntegrations />}
           {tab === 'whatsapp'     && <TabWhatsApp />}
           {tab === 'agents'       && <TabAgents />}
@@ -928,28 +930,37 @@ function TabWorkspace({ tenantDbId, onTenantChange }) {
 }
 
 /* ─── Tab: Usuários ───────────────────────────────────── */
-function TabUsers({ tenantDbId }) {
+function TabUsers({ tenantDbId, tenant }) {
   const [members, setMembers]       = useState([]);
   const [loading, setLoading]       = useState(true);
   const [showInvite, setShowInvite] = useState(false);
   const [editUser, setEditUser]     = useState(null); // member object
 
   async function loadMembers() {
+    setLoading(true);
     const resolved = await resolveTenantId(tenantDbId);
-    if (!resolved) { setLoading(false); return; }
-    const { data } = await supabase
+    console.log('[loadMembers] tenantDbId=', tenantDbId, 'resolved=', resolved);
+    if (!resolved) {
+      console.warn('[loadMembers] workspace não resolvido');
+      setLoading(false); return;
+    }
+    const { data, error } = await supabase
       .from('tenant_members')
       .select('role, semaforo, display_name, created_at, profiles(id, full_name, email, avatar_url)')
       .eq('tenant_id', resolved);
-    if (data) setMembers(data.map(m => ({
-      userId:    m.profiles?.id,
-      name:      m.display_name || m.profiles?.full_name || m.profiles?.email || 'Usuário',
-      email:     m.profiles?.email || '',
-      avatar:    m.display_name || m.profiles?.full_name || m.profiles?.email || 'U',
-      role:      m.role     || 'operador',
-      semaforo:  m.semaforo || 'verde',
-      createdAt: m.created_at,
-    })));
+    if (error) { console.error('[loadMembers] erro:', error); }
+    if (data) {
+      console.log('[loadMembers] membros carregados:', data.length);
+      setMembers(data.map(m => ({
+        userId:    m.profiles?.id,
+        name:      m.display_name || m.profiles?.full_name || m.profiles?.email || 'Usuário',
+        email:     m.profiles?.email || '',
+        avatar:    m.display_name || m.profiles?.full_name || m.profiles?.email || 'U',
+        role:      m.role     || 'operador',
+        semaforo:  m.semaforo || 'verde',
+        createdAt: m.created_at,
+      })));
+    }
     setLoading(false);
   }
 
@@ -957,6 +968,9 @@ function TabUsers({ tenantDbId }) {
 
   async function handleRemoveMember(userId) {
     if (!confirm('Remover este membro do workspace?')) return;
+    const resolvedTenantId = await resolveTenantId(tenantDbId);
+    console.log('[handleRemoveMember] tenantDbId=', tenantDbId, 'resolved=', resolvedTenantId);
+    if (!resolvedTenantId) { alert('Workspace não identificado. Recarregue a página.'); return; }
     const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manage-users`, {
       method: 'POST',
@@ -1074,6 +1088,7 @@ function TabUsers({ tenantDbId }) {
       {showInvite && (
         <InviteModal
           tenantDbId={tenantDbId}
+          tenant={tenant}
           onClose={() => setShowInvite(false)}
           onDone={() => { setShowInvite(false); loadMembers(); }}
         />
@@ -1082,6 +1097,7 @@ function TabUsers({ tenantDbId }) {
         <EditMemberModal
           member={editUser}
           tenantDbId={tenantDbId}
+          tenant={tenant}
           onClose={() => setEditUser(null)}
           onRemove={() => { setEditUser(null); handleRemoveMember(editUser.userId); }}
           onDone={() => { setEditUser(null); loadMembers(); }}
@@ -1092,7 +1108,7 @@ function TabUsers({ tenantDbId }) {
 }
 
 /* Invite modal */
-function InviteModal({ tenantDbId, onClose, onDone }) {
+function InviteModal({ tenantDbId, tenant, onClose, onDone }) {
   const [form, setForm]     = useState({ email: '', password: '', name: '', role: 'operador', semaforo: 'verde' });
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
@@ -1106,8 +1122,9 @@ function InviteModal({ tenantDbId, onClose, onDone }) {
       const { data: { session } } = await supabase.auth.getSession();
 
       const resolvedTenantId = await resolveTenantId(tenantDbId);
+      console.log('[InviteModal] tenantDbId=', tenantDbId, 'resolved=', resolvedTenantId);
       if (!resolvedTenantId) {
-        setError('Workspace não identificado. Recarregue a página e tente novamente.');
+        setError('Workspace não identificado. Verifique se o Supabase está conectado e se você pertence a um workspace.');
         setSaving(false); return;
       }
 
@@ -1178,7 +1195,7 @@ function InviteModal({ tenantDbId, onClose, onDone }) {
 }
 
 /* Edit member modal */
-function EditMemberModal({ member, tenantDbId, onClose, onRemove, onDone }) {
+function EditMemberModal({ member, tenantDbId, tenant, onClose, onRemove, onDone }) {
   const [role, setRole]         = useState(member.role     || 'operador');
   const [semaforo, setSemaforo] = useState(member.semaforo || 'verde');
   const [name, setName]         = useState(member.name     || '');
