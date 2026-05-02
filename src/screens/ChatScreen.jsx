@@ -45,7 +45,6 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [members, setMembers]                    = useState([]);
   const [showNewInternal, setShowNewInternal]    = useState(false);
   const [currentUser, setCurrentUser]            = useState(null);
-  const [useSignature, setUseSignature]          = useState(true);
 
   // ── Gravação de áudio ──────────────────────────────────
   const [recState, setRecState]     = useState('idle'); // idle | recording | preview
@@ -734,7 +733,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     if (!text || !active || sending) return;
 
     const isWA = active.type === 'whatsapp' || active.type === 'group';
-    const agentName = (useSignature && currentUser?.name && isWA) ? currentUser.name : null;
+    const agentName = (currentUser?.name && isWA) ? currentUser.name : null;
 
     const now  = new Date();
     const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -745,7 +744,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     setDraft('');
     if (HAS_EVO && selectedInstance && active.whatsapp_chat_id) {
       setSending(true);
-      const textToSend = agentName ? `${text}\n\n*${agentName}*` : text;
+      const textToSend = agentName ? `*${agentName}*\n\n${text}` : text;
       try {
         await sendTextMessage(selectedInstance, active.whatsapp_chat_id, textToSend);
         await supabase.from('messages').insert({
@@ -1362,19 +1361,18 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         {currentUser && (active.type === 'whatsapp' || active.type === 'group') && (
-                          <button
-                            onClick={() => setUseSignature(v => !v)}
-                            title={useSignature ? 'Assinar mensagens — clique para desativar' : 'Assinatura desativada — clique para ativar'}
+                          <span
+                            title="Assinatura ativa"
                             style={{
-                              fontSize: 11, padding: '3px 8px', borderRadius: 9999, cursor: 'pointer',
-                              background: useSignature ? 'var(--red)' : 'var(--g-100)',
-                              color:      useSignature ? 'white' : 'var(--g-500)',
-                              border: `1px solid ${useSignature ? 'var(--red)' : 'var(--g-200)'}`,
+                              fontSize: 11, padding: '3px 8px', borderRadius: 9999,
+                              background: 'var(--red)',
+                              color:      'white',
+                              border: '1px solid var(--red)',
                               fontWeight: 600, whiteSpace: 'nowrap',
                             }}
                           >
-                            {useSignature ? '🔥 ' : ''}{currentUser.name}
-                          </button>
+                            {currentUser.name}
+                          </span>
                         )}
                         <button
                           onClick={send}
