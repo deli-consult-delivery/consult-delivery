@@ -51,8 +51,8 @@ Deno.serve(async (req) => {
     const { email, password, name, role, semaforo } = body;
     if (!email || !password) return json({ error: 'email and password are required' }, 400);
 
-    // Create Supabase Auth user (auto-confirm email, no invite email)
-    const { data: { user }, error: createErr } =
+    // Try to create Supabase Auth user (auto-confirm email, no invite email)
+    let { data: { user }, error: createErr } =
       await supabaseAdmin.auth.admin.createUser({
         email,
         password,
@@ -60,7 +60,16 @@ Deno.serve(async (req) => {
         user_metadata: { full_name: name || email },
       });
 
-    if (createErr || !user) {
+    // If user already exists, fetch them and reuse
+    if (createErr?.message?.toLowerCase().includes('already been registered')) {
+      const { data: list, error: listErr } = await supabaseAdmin.auth.admin.listUsers({
+        page: 1,
+        perPage: 1000,
+      });
+      if (listErr) return json({ error: listErr.message }, 500);
+      user = list?.users?.find((u) => u.email === email) || null;
+      if (!user) return json({ error: 'User exists but could not be found' }, 500);
+    } else if (createErr || !user) {
       return json({ error: createErr?.message || 'Failed to create auth user' }, 500);
     }
 
@@ -81,12 +90,14 @@ Deno.serve(async (req) => {
     });
 
     if (memberErr) {
-      // Rollback auth user so we don't orphan it
-      await supabaseAdmin.auth.admin.deleteUser(user.id);
+      // Rollback auth user only if we created it (not reused)
+      if (!createErr?.message?.toLowerCase().includes('already been registered')) {
+        await supabaseAdmin.auth.admin.deleteUser(user.id);
+      }
       return json({ error: memberErr.message }, 500);
     }
 
-    console.log('[manage-users] created user', user.id, email, role);
+    console.log('[manage-users] created/reused user', user.id, email, role);
     return json({ user_id: user.id });
   }
 

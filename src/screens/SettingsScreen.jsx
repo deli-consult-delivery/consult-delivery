@@ -988,10 +988,7 @@ function TabUsers({ tenantDbId, tenant }) {
     await loadMembers();
   }
 
-  const displayMembers = loading ? [] : members.length > 0 ? members : SETTINGS_DATA.users.map(u => ({
-    userId: u.id, name: u.name, email: u.email, avatar: u.avatar,
-    role: u.role, semaforo: u.semaforo, createdAt: null,
-  }));
+  const displayMembers = members;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -1004,6 +1001,11 @@ function TabUsers({ tenantDbId, tenant }) {
 
         {loading ? (
           <div style={{ textAlign: 'center', padding: 24, color: 'var(--g-400)', fontSize: 13 }}>Carregando membros…</div>
+        ) : displayMembers.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 32, color: 'var(--g-500)', fontSize: 13 }}>
+            Nenhum membro cadastrado neste workspace.<br />
+            Clique em "Convidar membro" para adicionar alguém.
+          </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 0, border: '1px solid var(--g-200)', borderRadius: 'var(--r-md)', overflow: 'hidden' }}>
             {displayMembers.map((u, i) => {
@@ -1028,9 +1030,14 @@ function TabUsers({ tenantDbId, tenant }) {
                       <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--g-700)' }}>{sem.label}</span>
                     </div>
                   </div>
-                  <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setEditUser(u)}>
-                    <Icon name="gear" size={12} /> Editar
-                  </button>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setEditUser(u)}>
+                      <Icon name="gear" size={12} /> Editar
+                    </button>
+                    <button className="btn-ghost" style={{ fontSize: 12, color: 'var(--red)' }} onClick={() => handleRemoveMember(u.userId)}>
+                      <Icon name="trash" size={12} /> Excluir
+                    </button>
+                  </div>
                 </div>
               );
             })}
