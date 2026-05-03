@@ -320,17 +320,30 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               : mediaType?.includes('audio') ? '🎵 Áudio' : '');
 
           // 1. Atualiza a thread da conversa
-          setMessages(m => ({
-            ...m,
-            [convId]: [...(m[convId] || []), {
-              id:        msg.id,
-              from:      isInbound ? 'in' : 'out',
-              text,
-              time,
-              mediaType,
-              mediaUrl:  msg.media_url || null,
-            }],
-          }));
+          setMessages(m => {
+            const convMsgs = m[convId] || [];
+            // Deduplica outbound: substitui mensagem temporária local pela real do banco
+            if (!isInbound) {
+              const tmpIdx = convMsgs.findIndex(ex => ex.id?.startsWith('tmp-') && ex.text === text && ex.from === 'out');
+              if (tmpIdx !== -1) {
+                return {
+                  ...m,
+                  [convId]: convMsgs.map((ex, i) => i === tmpIdx ? { ...ex, id: msg.id } : ex),
+                };
+              }
+            }
+            return {
+              ...m,
+              [convId]: [...convMsgs, {
+                id:        msg.id,
+                from:      isInbound ? 'in' : 'out',
+                text,
+                time,
+                mediaType,
+                mediaUrl:  msg.media_url || null,
+              }],
+            };
+          });
 
           // 2. Atualiza sidebar: preview + unread + sobe para o topo
           setConvs(prev => {
@@ -791,7 +804,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     setDraft('');
     if (HAS_EVO && selectedInstance && active.whatsapp_chat_id) {
       setSending(true);
-      const textToSend = agentName ? `*${agentName}*\n\n${text}` : text;
+      const textToSend = agentName ? `*${agentName}:*\n${text}` : text;
       try {
         await sendTextMessage(selectedInstance, active.whatsapp_chat_id, textToSend);
         await supabase.from('messages').insert({
@@ -1170,11 +1183,6 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             }}>
               {activeMsgs.map((msg, i) => (
                 <div key={msg.id || i} style={{ display: 'flex', flexDirection: 'column', alignItems: msg.from === 'out' ? 'flex-end' : 'flex-start' }} className="slide-up">
-                  {msg.from === 'out' && msg.agentName && (
-                    <div style={{ fontSize: 10, color: 'var(--red)', fontWeight: 600, marginBottom: 2, paddingRight: 2 }}>
-                      {msg.agentName}
-                    </div>
-                  )}
                   <div className={`bubble ${msg.from === 'out' ? 'bubble-out' : 'bubble-in'}`}>
                     {msg.mediaType === 'image' && msg.mediaUrl ? (
                       <div>
