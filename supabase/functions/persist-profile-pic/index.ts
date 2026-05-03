@@ -51,14 +51,21 @@ Deno.serve(async (req) => {
         'apikey': EVO_KEY,
       },
     });
-    if (!profileRes.ok) throw new Error(`Evolution fetchProfile failed: ${profileRes.status}`);
+
+    // Evolution retorna 404 quando o contato não tem foto ou a instância não está conectada
+    if (!profileRes.ok) {
+      if (profileRes.status === 404) {
+        return json({ success: true, hasPhoto: false, message: 'Contato não tem foto de perfil' });
+      }
+      throw new Error(`Evolution fetchProfile failed: ${profileRes.status}`);
+    }
 
     const profileData = await profileRes.json();
     const photoUrl = profileData?.picture || profileData?.profilePictureUrl || profileData?.imgUrl
       || profileData?.profilePic || profileData?.profilePicUrl || profileData?.image || null;
 
     if (!photoUrl) {
-      return json({ error: 'No profile picture available' }, 404);
+      return json({ success: true, hasPhoto: false, message: 'Contato não tem foto de perfil' });
     }
 
     // 2. Baixa imagem imediatamente (URL ainda fresca)

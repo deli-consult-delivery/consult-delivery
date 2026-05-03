@@ -158,9 +158,14 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         });
         console.log('[ChatScreen] persist-profile-pic status:', res.status);
         if (res.ok) {
-          const { publicUrl } = await res.json();
-          console.log('[ChatScreen] persist-profile-pic OK:', publicUrl);
-          setConvs(prev => prev.map(c => c.id === target.id ? { ...c, photoUrl: publicUrl } : c));
+          const { publicUrl, hasPhoto } = await res.json();
+          if (publicUrl) {
+            console.log('[ChatScreen] persist-profile-pic OK:', publicUrl);
+            setConvs(prev => prev.map(c => c.id === target.id ? { ...c, photoUrl: publicUrl } : c));
+          } else if (hasPhoto === false) {
+            console.log('[ChatScreen] persist-profile-pic: contato sem foto');
+            photoCacheRef.current[phone] = false;
+          }
         } else {
           const errText = await res.text();
           console.error('[ChatScreen] persist-profile-pic error:', res.status, errText);
