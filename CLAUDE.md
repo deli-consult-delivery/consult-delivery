@@ -28,14 +28,17 @@ Módulos planejados:
 
 Frontend: Lovable
 Banco de dados: Supabase (auth + realtime + RLS multi-tenant)
-Agentes IA: VPS 193.202.85.82 via OpenClaw (porta 18789)
-IA: Claude API (claude-sonnet-4-20250514)
+Agentes IA: VPS 45.39.210.183 via OpenClaw (porta 18789)
+IA: Claude API (claude-sonnet-4-6)
 WhatsApp: Evolution API
 Automações: n8n
 Payment: Asaas
 Secrets: Infisical self-hosted (172.18.0.3:8080)
 Deploy: Vercel
 GitHub: consult-delivery-os/deli-os
+
+Bots Telegram ativos:
+- @DeliConsultBot — agente analista-ifood (consultoria de lojas)
 
 ====================================================
 3. STACK DEFINITIVA
@@ -47,15 +50,19 @@ Lovable + Supabase + VPS + Claude API + Evolution API + n8n + Infisical + GitHub
 4. INFRAESTRUTURA EXISTENTE
 ====================================================
 
-VPS: 193.202.85.82 - 8GB RAM / 6 vCPUs / 60GB
+VPS: 45.39.210.183 - Ubuntu 24.04 LTS (anterior: 193.202.85.82)
 Docker v29.4 + Compose v5.1.2
 Node.js v22.22.2
 Ollama instalado
-OpenClaw rodando porta 18789
+OpenClaw 2026.5.2 rodando porta 18789 (systemd persistente)
 Infisical com secrets: ANTHROPIC_API_KEY, HEYGEN_API_KEY
 GitHub com 146 objetos já pushados
 
 Integrações validadas: Anthropic, Evolution, n8n, Google Drive, Calendar, ClickUp, HeyGen, Metricool
+
+Agentes OpenClaw ativos:
+- main (default, genérico)
+- analista-ifood (Co-piloto Delivery — análise de lojas iFood)
 
 ====================================================
 5. AGENTES EXISTENTES
@@ -536,6 +543,76 @@ PRÓXIMO PASSO APÓS CONCLUIR
 =================================================
 Avise a Yasmin que pode iniciar TASK-102 (Supabase).
 Envie para o Claude: "TASK-101 concluída" com print da tela.
+
+================================================================================
+
+====================================================
+11. SKILLS OBRIGATÓRIAS NESTE PROJETO
+====================================================
+
+Este projeto usa três skills que DEVEM ser aproveitadas em todas as sessões:
+
+────────────────────────────────────────────────────
+GSD (Get Shit Done) — gestão de fases e workflow
+────────────────────────────────────────────────────
+
+ANTES de iniciar qualquer trabalho de implementação:
+- Rodar `/gsd-discuss-phase` pra entender contexto da fase atual
+- Verificar em qual milestone estamos
+
+DURANTE o trabalho:
+- Após mudanças significativas: `/gsd-capture` pra registrar
+- Para revisão de código: `/gsd-code-review` antes de PR
+
+AO FINALIZAR:
+- `/gsd-complete-milestone` pra marcar conclusão de fase
+
+NÃO usar GSD para:
+- Tarefas conversacionais simples
+- Dúvidas pontuais que não geram código
+
+────────────────────────────────────────────────────
+GRAPHIFY — mapa de conhecimento do projeto
+────────────────────────────────────────────────────
+
+ANTES de responder qualquer pergunta sobre:
+- Arquitetura ("como funciona X?")
+- Dependências ("o que depende de Y?")
+- Refatoração ("se eu mudar Z, o que quebra?")
+- Estrutura ("onde está implementado W?")
+
+REGRA: SEMPRE consultar `graphify-out/graph.json` PRIMEIRO antes de reler arquivos do zero.
+
+Comandos disponíveis:
+- `/graphify .` — re-mapear projeto após grandes mudanças
+- Visualização: abrir `graphify-out/graph.html` no navegador
+
+NÃO reler 10 arquivos do zero quando o grafo já tem a resposta. Isso queima tokens à toa.
+
+────────────────────────────────────────────────────
+WIKI-BRAIN — segundo cérebro do projeto
+────────────────────────────────────────────────────
+
+Vault em `WikiBrain/` (raw/ ignorado por LGPD).
+
+ANTES de pesquisar conceito ou metodologia já usada antes:
+- Consultar `WikiBrain/wiki/` (páginas extraídas das transcrições)
+- Buscar no `WikiBrain/wiki/index.md` se há página relevante
+
+PARA novas transcrições/conhecimento:
+- Adicionar em `WikiBrain/raw/` (LGPD: não commitar dados de cliente)
+- Pedir ingest com: "ingest the new file in raw/"
+
+────────────────────────────────────────────────────
+ORDEM RECOMENDADA EM CADA SESSÃO
+────────────────────────────────────────────────────
+
+1. Verificar fase atual (GSD)
+2. Consultar grafo (graphify) se a pergunta envolve código existente
+3. Consultar wiki-brain se a pergunta envolve metodologia ou conhecimento de domínio
+4. Só ENTÃO partir para edição/escrita
+
+────────────────────────────────────────────────────
 
 ================================================================================
 
