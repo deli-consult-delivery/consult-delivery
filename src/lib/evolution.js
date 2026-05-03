@@ -207,7 +207,11 @@ export async function sendAudioMessage(instanceName, to, audioBase64) {
 
 // Buscar perfil de contato (foto, nome)
 export async function fetchProfile(instanceName, phoneNumber) {
-  const res = await fetch(`${EVO_URL}/chat/fetchProfile/${instanceName}/${phoneNumber}`, { headers });
+  const res = await fetch(`${EVO_URL}/chat/fetchProfile/${instanceName}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ number: phoneNumber }),
+  });
   return res.json();
 }
 

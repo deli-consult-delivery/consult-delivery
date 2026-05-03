@@ -44,12 +44,14 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // 1. Busca perfil da Evolution API diretamente (URL ainda válida)
-    const profileRes = await fetch(`${EVO_URL}/chat/fetchProfile/${instanceName}/${phone}`, {
+    // 1. Busca perfil da Evolution API via POST (v2 endpoint)
+    const profileRes = await fetch(`${EVO_URL}/chat/fetchProfile/${instanceName}`, {
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'apikey': EVO_KEY,
       },
+      body: JSON.stringify({ number: phone }),
     });
 
     // Evolution retorna 404 quando o contato não tem foto ou a instância não está conectada
