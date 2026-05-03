@@ -120,10 +120,13 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         const profile  = { photoUrl, waName };
         photoCacheRef.current[phone] = profile;
         applyProfile(profile);
-        // Persiste nome no banco para próximas cargas
-        if (waName) {
+        // Persiste nome e foto no banco para próximas cargas
+        if (waName || photoUrl) {
+          const upd = {};
+          if (waName) upd.push_name = waName;
+          if (photoUrl) upd.push_photo_url = photoUrl;
           supabase.from('conversations')
-            .update({ push_name: waName })
+            .update(upd)
             .eq('id', activeId)
             .then(() => {})
             .catch(() => {});
@@ -293,6 +296,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                     if (p.find(c => c.id === conv.id)) return p;
                     return [{
                       id: conv.id, name, avatar: name.slice(0, 2).toUpperCase(),
+                      photoUrl: conv.push_photo_url || null,
                       type: conv.is_group ? 'group' : 'whatsapp',
                       whatsapp_chat_id: conv.whatsapp_chat_id,
                       preview, previewFrom: 'in', time, unread: 1, online: false, messages: [],
@@ -544,6 +548,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           const previewFrom = lm?.direction === 'inbound' ? 'in' : 'out';
           return {
             id: c.id, name, avatar: name.slice(0, 2).toUpperCase(),
+            photoUrl: c.push_photo_url || null,
             type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id,
             preview, previewFrom,
             time: c.updated_at
