@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:dev.to)",
+      "Bash(powershell.exe -Command \"Test-Path 'c:\\\\Users\\\\Consult Delivery\\\\consult-delivery\\\\.planning\\\\research'\")",
+      "Bash(powershell.exe -Command \"\\(Get-Content 'C:\\\\Users\\\\Consult Delivery\\\\consult-delivery\\\\.planning\\\\research\\\\PITFALLS.md'\\).Count\")",
+      "Bash(powershell.exe -Command \"\\(Get-Content 'c:\\\\Users\\\\Consult Delivery\\\\consult-delivery\\\\.planning\\\\research\\\\STACK.md'\\).Count\")",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(npx supabase *)",
+      "PowerShell(Set-Location \"c:\\\\Users\\\\Consult Delivery\\\\consult-delivery\"; [System.IO.File]::WriteAllText\\(\\(Resolve-Path \".env.local\"\\).Path, \"VITE_SUPABASE_URL=https://czyanilrverorwenikqw.supabase.co`nVITE_SUPABASE_ANON_KEY=sb_publishable_MduR9lddqVcBHLkdw13-_g_2NgRaFlK`n\", [System.Text.UTF8Encoding]::new\\($false\\)\\); Write-Output \"Done\")"
+    ]
+  }
+}

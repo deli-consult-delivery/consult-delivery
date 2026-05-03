@@ -9,6 +9,7 @@ import { supabase } from './supabase';
 /** @typedef {Database['public']['Tables']['inadimplencias']['Row']} Inadimplencia */
 /** @typedef {Database['public']['Tables']['agent_actions']['Row']} AgentAction */
 /** @typedef {Database['public']['Views']['v_dashboard_kpis']['Row']} DashboardKpi */
+/** @typedef {Database['public']['Tables']['analises']['Row']} Analise */
 
 export async function listTenants() {
   const { data, error } = await supabase
@@ -150,4 +151,112 @@ export async function listInadimplenciaTranscript(inadimplenciaId) {
     .order('sent_at');
   if (error) throw error;
   return data ?? [];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Módulo Análise iFood — SCHEMA-05
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function createAnalise(payload) {
+  // payload: { tenant_id, cliente_id, drive_link, periodo, criado_por }
+  // Returns: { id, job_id, status }
+  const { data, error } = await supabase
+    .from('analises')
+    .insert({ ...payload, status: 'pending' })
+    .select('id, job_id, status')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function getAnalise(jobId) {
+  const { data, error } = await supabase
+    .from('analises')
+    .select('*')
+    .eq('job_id', jobId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function listAnalises(tenantId) {
+  const { data, error } = await supabase
+    .from('analises')
+    .select(`
+      id, job_id, status, periodo, drive_link, created_at, error_message,
+      cliente:customers(id, name)
+    `)
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function listClientes(tenantId) {
+  const { data, error } = await supabase
+    .from('customers')
+    .select('id, name, phone')
+    .eq('tenant_id', tenantId)
+    .order('name');
+  if (error) throw error;
+  return data ?? [];
+}
+
+// subscribeToAnalise is NOT async — it returns an unsubscribe cleanup function synchronously.
+// REPLICA IDENTITY FULL on the analises table ensures payload.new contains the full row,
+// not just the primary key. Call the returned function in useEffect's cleanup.
+export function subscribeToAnalise(jobId, callback) {
+  const channel = supabase
+    .channel(`analise-${jobId}`)
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'analises', filter: `job_id=eq.${jobId}` },
+      payload => callback(payload.new)
+    )
+    .subscribe();
+  return () => supabase.removeChannel(channel);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tarefas do Cliente — geradas pelo analista-ifood por análise
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function createTarefasAnalise(analise_id, cliente_id, top5) {
+  const tarefas = top5.map(item => ({
+    analise_id,
+    cliente_id,
+    titulo: item.titulo,
+    descricao: item.problema,
+    acao: item.acao,
+    urgencia: item.urgencia,
+    prioridade: item.ordem,
+    impacto_financeiro: item.impacto_financeiro,
+    status: 'pendente',
+  }));
+  const { data, error } = await supabase
+    .from('tarefas_analise')
+    .insert(tarefas)
+    .select();
+  if (error) throw error;
+  return data;
+}
+
+export async function listTarefasCliente(cliente_id) {
+  const { data, error } = await supabase
+    .from('tarefas_analise')
+    .select('*, analises(created_at, resultado_json)')
+    .eq('cliente_id', cliente_id)
+    .order('prioridade', { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function updateStatusTarefa(tarefa_id, status) {
+  const { data, error } = await supabase
+    .from('tarefas_analise')
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq('id', tarefa_id)
+    .select();
+  if (error) throw error;
+  return data;
 }
