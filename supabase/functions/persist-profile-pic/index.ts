@@ -1,5 +1,6 @@
-// Supabase Edge Function — Baixa foto de perfil da Evolution API
+// Supabase Edge Function — Busca foto de perfil da Evolution API
 // e salva no Supabase Storage, retornando URL pública permanente.
+// Busca diretamente da Evolution no momento da chamada, evitando URLs expiradas.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -7,6 +8,9 @@ const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
 );
+
+const EVO_URL = Deno.env.get('EVOLUTION_URL') || '';
+const EVO_KEY = Deno.env.get('EVOLUTION_KEY') || '';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -30,17 +34,34 @@ Deno.serve(async (req) => {
     await supabaseAdmin.auth.getUser(token);
   if (authErr || !caller) return json({ error: 'Unauthorized' }, 401);
 
-  let body: { photoUrl?: string; phone?: string; conversationId?: string };
+  let body: { instanceName?: string; phone?: string; conversationId?: string };
   try { body = await req.json(); }
   catch { return json({ error: 'Invalid JSON' }, 400); }
 
-  const { photoUrl, phone, conversationId } = body;
-  if (!photoUrl || !phone || !conversationId) {
-    return json({ error: 'photoUrl, phone and conversationId are required' }, 400);
+  const { instanceName, phone, conversationId } = body;
+  if (!instanceName || !phone || !conversationId) {
+    return json({ error: 'instanceName, phone and conversationId are required' }, 400);
   }
 
   try {
-    // Download image from Evolution API
+    // 1. Busca perfil da Evolution API diretamente (URL ainda válida)
+    const profileRes = await fetch(`${EVO_URL}/chat/fetchProfile/${instanceName}/${phone}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': EVO_KEY,
+      },
+    });
+    if (!profileRes.ok) throw new Error(`Evolution fetchProfile failed: ${profileRes.status}`);
+
+    const profileData = await profileRes.json();
+    const photoUrl = profileData?.picture || profileData?.profilePictureUrl || profileData?.imgUrl
+      || profileData?.profilePic || profileData?.profilePicUrl || profileData?.image || null;
+
+    if (!photoUrl) {
+      return json({ error: 'No profile picture available' }, 404);
+    }
+
+    // 2. Baixa imagem imediatamente (URL ainda fresca)
     const imgRes = await fetch(photoUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
     if (!imgRes.ok) throw new Error(`Failed to download image: ${imgRes.status}`);
 
@@ -48,13 +69,13 @@ Deno.serve(async (req) => {
     const arrayBuffer = await imgRes.arrayBuffer();
     const bytes = new Uint8Array(arrayBuffer);
 
-    // Generate safe filename
+    // 3. Gera nome do arquivo
     const safePhone = phone.replace(/\D/g, '');
     const ext = contentType.includes('png') ? 'png' : 'jpg';
     const filename = `${safePhone}.${ext}`;
     const bucketPath = `profile-pics/${filename}`;
 
-    // Upload to Supabase Storage
+    // 4. Upload para Supabase Storage
     const { error: uploadErr } = await supabaseAdmin.storage
       .from('public')
       .upload(bucketPath, bytes, {
@@ -64,12 +85,12 @@ Deno.serve(async (req) => {
 
     if (uploadErr) throw uploadErr;
 
-    // Get public URL
+    // 5. Obtém URL pública
     const { data: { publicUrl } } = supabaseAdmin.storage
       .from('public')
       .getPublicUrl(bucketPath);
 
-    // Update conversation in DB
+    // 6. Atualiza conversa no banco
     await supabaseAdmin
       .from('conversations')
       .update({ push_photo_url: publicUrl })

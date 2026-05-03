@@ -95,7 +95,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       setConvs(prev => prev.map(c => {
         if (c.id !== activeId) return c;
         const upd = { ...c };
-        if (photoUrl && !c.photoUrl) upd.photoUrl = photoUrl;
+        // NÃO aplica URL da Evolution diretamente — ela expira.
+        // A foto real será aplicada pela edge function persist-profile-pic.
         if (waName && !c.waNameFetched) {
           upd.name = waName;
           upd.avatar = waName.slice(0, 2).toUpperCase();
@@ -129,33 +130,37 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             .catch(() => {});
         }
 
-        // Persiste foto de perfil via edge function (baixa da Evolution → salva no Storage)
-        if (photoUrl) {
-          (async () => {
-            try {
-              const { data: { session } } = await supabase.auth.getSession();
-              const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/persist-profile-pic`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${session?.access_token}`,
-                },
-                body: JSON.stringify({
-                  photoUrl,
-                  phone,
-                  conversationId: activeId,
-                }),
-              });
-              if (res.ok) {
-                const { publicUrl } = await res.json();
-                // Atualiza estado local com URL permanente do Storage
-                setConvs(prev => prev.map(c => c.id === activeId ? { ...c, photoUrl: publicUrl } : c));
-              }
-            } catch (e) {
-              console.error('[persist-profile-pic] failed:', e);
+        // Persiste foto de perfil via edge function (busca direto na Evolution → salva no Storage)
+        console.log('[ChatScreen] chamando persist-profile-pic para', phone, 'instance:', selectedInstance);
+        (async () => {
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/persist-profile-pic`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session?.access_token}`,
+              },
+              body: JSON.stringify({
+                instanceName: selectedInstance,
+                phone,
+                conversationId: activeId,
+              }),
+            });
+            console.log('[ChatScreen] persist-profile-pic response status:', res.status);
+            if (res.ok) {
+              const { publicUrl } = await res.json();
+              console.log('[ChatScreen] persist-profile-pic publicUrl:', publicUrl);
+              // Atualiza estado local com URL permanente do Storage
+              setConvs(prev => prev.map(c => c.id === activeId ? { ...c, photoUrl: publicUrl } : c));
+            } else {
+              const errText = await res.text();
+              console.error('[ChatScreen] persist-profile-pic error:', res.status, errText);
             }
-          })();
-        }
+          } catch (e) {
+            console.error('[ChatScreen] persist-profile-pic exception:', e);
+          }
+        })();
       })
       .catch(() => { photoCacheRef.current[phone] = false; });
   }, [activeId, selectedInstance]);
