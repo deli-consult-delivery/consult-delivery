@@ -60,14 +60,25 @@ Deno.serve(async (req) => {
         user_metadata: { full_name: name || email },
       });
 
+    // Detect "user already exists" across common Supabase error variants
+    const errMsg = (createErr?.message || '').toLowerCase();
+    const isAlreadyRegistered =
+      createErr?.code === 'email_address_in_use' ||
+      createErr?.code === 'user_already_exists' ||
+      errMsg.includes('already registered') ||
+      errMsg.includes('already exists') ||
+      errMsg.includes('already been registered') ||
+      errMsg.includes('duplicate') ||
+      errMsg.includes('já existe');
+
     // If user already exists, fetch them and reuse
-    if (createErr?.message?.toLowerCase().includes('already been registered')) {
+    if (isAlreadyRegistered) {
       const { data: list, error: listErr } = await supabaseAdmin.auth.admin.listUsers({
         page: 1,
         perPage: 1000,
       });
       if (listErr) return json({ error: listErr.message }, 500);
-      user = list?.users?.find((u) => u.email === email) || null;
+      user = list?.users?.find((u) => u.email?.toLowerCase() === email.toLowerCase()) || null;
       if (!user) return json({ error: 'User exists but could not be found' }, 500);
     } else if (createErr || !user) {
       return json({ error: createErr?.message || 'Failed to create auth user' }, 500);
@@ -91,13 +102,51 @@ Deno.serve(async (req) => {
 
     if (memberErr) {
       // Rollback auth user only if we created it (not reused)
-      if (!createErr?.message?.toLowerCase().includes('already been registered')) {
+      if (!isAlreadyRegistered) {
         await supabaseAdmin.auth.admin.deleteUser(user.id);
       }
       return json({ error: memberErr.message }, 500);
     }
 
     console.log('[manage-users] created/reused user', user.id, email, role);
+    return json({ user_id: user.id });
+  }
+
+  // ── ADOPT (add existing auth user to tenant) ─────────────
+  if (action === 'adopt') {
+    const { email, name, role, semaforo } = body;
+    if (!email) return json({ error: 'email is required' }, 400);
+
+    const { data: list, error: listErr } = await supabaseAdmin.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    });
+    if (listErr) return json({ error: listErr.message }, 500);
+
+    const user = list?.users?.find((u) => u.email?.toLowerCase() === email.toLowerCase()) || null;
+    if (!user) return json({ error: 'Usuário não encontrado no Supabase Auth' }, 404);
+
+    // Upsert profile record
+    await supabaseAdmin.from('profiles').upsert({
+      id:        user.id,
+      full_name: name || user.user_metadata?.full_name || email,
+      email,
+    });
+
+    // Insert tenant membership
+    const { error: memberErr } = await supabaseAdmin.from('tenant_members').insert({
+      tenant_id,
+      user_id:      user.id,
+      role:         role      || 'operador',
+      semaforo:     semaforo  || 'verde',
+      display_name: name      || null,
+    });
+
+    if (memberErr) {
+      return json({ error: memberErr.message }, 500);
+    }
+
+    console.log('[manage-users] adopted user', user.id, email, role);
     return json({ user_id: user.id });
   }
 

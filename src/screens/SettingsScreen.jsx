@@ -1116,13 +1116,16 @@ function TabUsers({ tenantDbId, tenant }) {
 
 /* Invite modal */
 function InviteModal({ tenantDbId, tenant, onClose, onDone }) {
+  const [mode, setMode]       = useState('create'); // 'create' | 'adopt'
   const [form, setForm]     = useState({ email: '', password: '', name: '', role: 'operador', semaforo: 'verde' });
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
 
   async function handleSubmit() {
     if (!form.email)    { setError('E-mail obrigatório'); return; }
-    if (!form.password || form.password.length < 6) { setError('Senha obrigatória (mínimo 6 caracteres)'); return; }
+    if (mode === 'create' && (!form.password || form.password.length < 6)) {
+      setError('Senha obrigatória (mínimo 6 caracteres)'); return;
+    }
     setSaving(true);
     setError('');
     try {
@@ -1142,7 +1145,7 @@ function InviteModal({ tenantDbId, tenant, onClose, onDone }) {
           'Authorization': `Bearer ${session?.access_token}`,
         },
         body: JSON.stringify({
-          action:    'create',
+          action:    mode,
           tenant_id: tenantDbId,
           email:     form.email,
           password:  form.password,
@@ -1172,9 +1175,31 @@ function InviteModal({ tenantDbId, tenant, onClose, onDone }) {
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--g-900)' }}>Adicionar membro</div>
           <button className="btn-icon" onClick={onClose}><Icon name="x" size={16} /></button>
         </div>
+
+        <div style={{ display: 'flex', gap: 0, marginBottom: 16, border: '1px solid var(--g-200)', borderRadius: 'var(--r-sm)', overflow: 'hidden' }}>
+          {[
+            { key: 'create', label: 'Criar novo' },
+            { key: 'adopt',  label: 'Vincular existente' },
+          ].map(m => (
+            <button key={m.key} onClick={() => setMode(m.key)} style={{
+              flex: 1, padding: '8px 12px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
+              background: mode === m.key ? 'var(--accent)' : 'var(--g-50)',
+              color: mode === m.key ? 'white' : 'var(--g-600)',
+            }}>{m.label}</button>
+          ))}
+        </div>
+
+        {mode === 'adopt' && (
+          <div style={{ fontSize: 12, color: 'var(--g-600)', background: 'var(--g-50)', padding: '10px 12px', borderRadius: 'var(--r-sm)', marginBottom: 14 }}>
+            Use esta opção para usuários que já possuem cadastro no Supabase Auth (ex: login Google). Não é necessário informar senha.
+          </div>
+        )}
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <InputField label="E-mail" value={form.email} onChange={v => setForm(f => ({ ...f, email: v }))} placeholder="colaborador@empresa.com" type="email" />
-          <InputField label="Senha" value={form.password} onChange={v => setForm(f => ({ ...f, password: v }))} placeholder="Mínimo 6 caracteres" type="password" />
+          {mode === 'create' && (
+            <InputField label="Senha" value={form.password} onChange={v => setForm(f => ({ ...f, password: v }))} placeholder="Mínimo 6 caracteres" type="password" />
+          )}
           <InputField label="Nome" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} placeholder="Nome completo" />
           <div>
             <div className="label" style={{ marginBottom: 6 }}>Papel</div>
@@ -1192,7 +1217,7 @@ function InviteModal({ tenantDbId, tenant, onClose, onDone }) {
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
           <button className="btn-primary" onClick={handleSubmit} disabled={saving}>
-            <Icon name="plus" size={13} /> {saving ? 'Criando…' : 'Criar usuário'}
+            <Icon name="plus" size={13} /> {saving ? (mode === 'adopt' ? 'Vinculando…' : 'Criando…') : (mode === 'adopt' ? 'Vincular usuário' : 'Criar usuário')}
           </button>
           <button className="btn-secondary" onClick={onClose}>Cancelar</button>
         </div>
