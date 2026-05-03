@@ -79,7 +79,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const photoCacheRef = useRef({});
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
 
-  // Bug 2/3 — busca foto + nome do WhatsApp quando uma conversa é aberta
+  // Busca foto + nome do WhatsApp quando uma conversa é aberta
   useEffect(() => {
     if (!HAS_EVO || !selectedInstance || !activeId) return;
     const conv = convs.find(c => c.id === activeId);
@@ -89,25 +89,19 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     if (!phone) return;
 
     const cached = photoCacheRef.current[phone];
-    if (cached === false) return; // fetch anterior falhou, não tentar de novo
+    if (cached === false) return;
 
-    function applyProfile({ photoUrl, waName }) {
+    function applyName(waName) {
+      if (!waName) return;
       setConvs(prev => prev.map(c => {
         if (c.id !== activeId) return c;
-        const upd = { ...c };
-        // NÃO aplica URL da Evolution diretamente — ela expira.
-        // A foto real será aplicada pela edge function persist-profile-pic.
-        if (waName && !c.waNameFetched) {
-          upd.name = waName;
-          upd.avatar = waName.slice(0, 2).toUpperCase();
-          upd.waNameFetched = true;
-        }
-        return upd;
+        if (c.waNameFetched) return c;
+        return { ...c, name: waName, avatar: waName.slice(0, 2).toUpperCase(), waNameFetched: true };
       }));
     }
 
     if (cached !== undefined) {
-      applyProfile(cached);
+      applyName(cached.waName);
       return;
     }
 
@@ -118,9 +112,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           || data?.profilePic || data?.profilePicUrl || data?.image || null;
         const waName   = data?.name || data?.pushName || data?.verifiedName
           || data?.notify || data?.short_name || null;
-        const profile  = { photoUrl, waName };
-        photoCacheRef.current[phone] = profile;
-        applyProfile(profile);
+        photoCacheRef.current[phone] = { photoUrl, waName };
+        applyName(waName);
+
         // Persiste nome no banco
         if (waName) {
           supabase.from('conversations')
@@ -129,41 +123,53 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             .then(() => {})
             .catch(() => {});
         }
-
-        // Persiste foto de perfil via edge function (busca direto na Evolution → salva no Storage)
-        console.log('[ChatScreen] chamando persist-profile-pic para', phone, 'instance:', selectedInstance);
-        (async () => {
-          try {
-            const { data: { session } } = await supabase.auth.getSession();
-            const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/persist-profile-pic`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${session?.access_token}`,
-              },
-              body: JSON.stringify({
-                instanceName: selectedInstance,
-                phone,
-                conversationId: activeId,
-              }),
-            });
-            console.log('[ChatScreen] persist-profile-pic response status:', res.status);
-            if (res.ok) {
-              const { publicUrl } = await res.json();
-              console.log('[ChatScreen] persist-profile-pic publicUrl:', publicUrl);
-              // Atualiza estado local com URL permanente do Storage
-              setConvs(prev => prev.map(c => c.id === activeId ? { ...c, photoUrl: publicUrl } : c));
-            } else {
-              const errText = await res.text();
-              console.error('[ChatScreen] persist-profile-pic error:', res.status, errText);
-            }
-          } catch (e) {
-            console.error('[ChatScreen] persist-profile-pic exception:', e);
-          }
-        })();
       })
       .catch(() => { photoCacheRef.current[phone] = false; });
-  }, [activeId, selectedInstance]);
+  }, [activeId, selectedInstance, convs]);
+
+  // Persiste foto de perfil em Storage para conversas que não têm foto
+  useEffect(() => {
+    if (!HAS_EVO || !selectedInstance) return;
+    const target = convs.find(c =>
+      (c.type === 'whatsapp' || c.type === 'group')
+      && c.whatsapp_chat_id
+      && !c.photoUrl
+      && !photoCacheRef.current[c.whatsapp_chat_id.split('@')[0]]
+    );
+    if (!target) return;
+
+    const phone = target.whatsapp_chat_id.split('@')[0];
+    console.log('[ChatScreen] auto-persist-profile-pic para', phone, 'conv:', target.id);
+
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/persist-profile-pic`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({
+            instanceName: selectedInstance,
+            phone,
+            conversationId: target.id,
+          }),
+        });
+        console.log('[ChatScreen] persist-profile-pic status:', res.status);
+        if (res.ok) {
+          const { publicUrl } = await res.json();
+          console.log('[ChatScreen] persist-profile-pic OK:', publicUrl);
+          setConvs(prev => prev.map(c => c.id === target.id ? { ...c, photoUrl: publicUrl } : c));
+        } else {
+          const errText = await res.text();
+          console.error('[ChatScreen] persist-profile-pic error:', res.status, errText);
+        }
+      } catch (e) {
+        console.error('[ChatScreen] persist-profile-pic exception:', e);
+      }
+    })();
+  }, [convs, selectedInstance]);
 
   useEffect(() => {
     loadInstances();
