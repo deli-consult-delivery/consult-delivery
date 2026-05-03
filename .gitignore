@@ -6,4 +6,26 @@ chats/
 project/
 .mcp.json
 .claude/settings.local.json
+<<<<<<< HEAD
 supabase/.temp/
+=======
+# === Wiki-brain ===
+# Dados crus (transcrições, PDFs, áudios — podem ter info de clientes)
+WikiBrain/raw/
+
+# === Graphify ===
+# Saída gerada do graphify (recriável, não versionar)
+graphify-out/
+
+# === Credenciais e env ===
+# Nunca commitar credenciais
+.env
+.env.local
+*.key
+*.pem
+secrets/
+
+# === OpenClaw config local ===
+# Configs com tokens
+.openclaw/openclaw.json
+>>>>>>> dc68ded (feat: integrate wiki-brain skill + ignore graphify-out)
