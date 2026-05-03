@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Icon from '../components/Icon.jsx';
 import { createAnalise, listClientes, subscribeToAnalise } from '../lib/api.js';
 import { supabase } from '../lib/supabase.js';
+import AnaliseResultado from '../components/AnaliseResultado.jsx';
 
 // ── Validação ────────────────────────────────────────────
 function isValidDriveLink(url) {
@@ -20,10 +21,11 @@ export default function AnaliseiFoodScreen({ tenant, tenantDbId }) {
   const [loadingClientes, setLoadingClientes] = useState(false);
 
   // ── Async flow ────────────────────────────────────────
-  const [submitting, setSubmitting] = useState(false);
-  const [phase, setPhase]           = useState('idle'); // 'idle' | 'processing'
-  const [jobId, setJobId]           = useState(null);
-  const [error, setError]           = useState(null); // { title, message } | null
+  const [submitting, setSubmitting]     = useState(false);
+  const [phase, setPhase]               = useState('idle'); // 'idle' | 'processing' | 'done'
+  const [jobId, setJobId]               = useState(null);
+  const [error, setError]               = useState(null); // { title, message } | null
+  const [analiseResult, setAnaliseResult] = useState(null);
 
   // ── Validation ────────────────────────────────────────
   const [driveLinkError, setDriveLinkError] = useState('');
@@ -45,9 +47,11 @@ export default function AnaliseiFoodScreen({ tenant, tenantDbId }) {
   useEffect(() => {
     if (!jobId) return;
     const unsubscribe = subscribeToAnalise(jobId, row => {
-      // Phase 3 will handle done/error transitions here.
-      // For Phase 1, we only need the subscription wired.
-      if (row.status === 'error') {
+      if (row.status === 'done') {
+        setAnaliseResult({ resultado_json: row.resultado_json, mensagem_whatsapp: row.mensagem_whatsapp });
+        setPhase('done');
+        setSubmitting(false);
+      } else if (row.status === 'error') {
         setPhase('idle');
         setError({
           title: 'Erro na análise',
@@ -100,21 +104,27 @@ export default function AnaliseiFoodScreen({ tenant, tenantDbId }) {
       return;
     }
 
-    // Step 2: Fire analista-ifood webhook (fire-and-forget — only confirm 200 OK)
-    const WEBHOOK_URL = import.meta.env.VITE_ANALISTA_WEBHOOK_URL;
+    // Step 2: Fire analista-ifood webhook (fire-and-forget — only confirm 202)
+    const WEBHOOK_URL    = import.meta.env.VITE_ANALISTA_WEBHOOK_URL;
+    const BRIDGE_SECRET  = import.meta.env.VITE_BRIDGE_SECRET;
+    const clienteSelecionado = clientes.find(c => c.id === clienteId);
     try {
       const res = await fetch(WEBHOOK_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type':    'application/json',
+          'x-bridge-secret': BRIDGE_SECRET || '',
+        },
         body: JSON.stringify({
-          job_id:     analise.job_id,
-          tenant_id:  tenantDbId,
-          cliente_id: clienteId,
-          drive_link: driveLink,
+          job_id:       analise.job_id,
+          tenant_id:    tenantDbId,
+          cliente_id:   clienteId,
+          cliente_nome: clienteSelecionado?.name || '',
+          drive_link:   driveLink,
           periodo,
         }),
       });
-      if (!res.ok) throw new Error(`Webhook respondeu ${res.status}`);
+      if (res.status !== 200 && res.status !== 202) throw new Error(`Webhook respondeu ${res.status}`);
       setPhase('processing'); // show processing card, hide form
     } catch (err) {
       // Row already in DB with status=pending — webhook failed
@@ -133,6 +143,17 @@ export default function AnaliseiFoodScreen({ tenant, tenantDbId }) {
     setJobId(null);
     setPhase('idle');
     // Field values are preserved — user corrects and resubmits
+  }
+
+  // ── Nova análise ──────────────────────────────────────
+  function handleNovaAnalise() {
+    setAnaliseResult(null);
+    setJobId(null);
+    setPhase('idle');
+    setError(null);
+    setClienteId('');
+    setDriveLink('');
+    setPeriodo('semanal');
   }
 
   // ── Form validity ─────────────────────────────────────
@@ -197,6 +218,15 @@ export default function AnaliseiFoodScreen({ tenant, tenantDbId }) {
             ))}
           </div>
         </div>
+      )}
+
+      {/* Results — visible when phase === 'done' */}
+      {phase === 'done' && analiseResult && (
+        <AnaliseResultado
+          resultado_json={analiseResult.resultado_json}
+          mensagem_whatsapp={analiseResult.mensagem_whatsapp}
+          onNovaAnalise={handleNovaAnalise}
+        />
       )}
 
       {/* Trigger Form — visible when phase === 'idle' */}
