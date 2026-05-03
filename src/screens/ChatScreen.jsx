@@ -77,12 +77,15 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const chanScrollRef = useRef(null);
   const activeIdRef   = useRef(activeId);
   const photoCacheRef = useRef({});
+  const convsRef      = useRef(convs);
+  const persistingRef = useRef(new Set());
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
+  useEffect(() => { convsRef.current = convs; }, [convs]);
 
   // Busca foto + nome do WhatsApp quando uma conversa é aberta
   useEffect(() => {
     if (!HAS_EVO || !selectedInstance || !activeId) return;
-    const conv = convs.find(c => c.id === activeId);
+    const conv = convsRef.current.find(c => c.id === activeId);
     if (!conv || !conv.whatsapp_chat_id) return;
     if (conv.type !== 'whatsapp' && conv.type !== 'group') return;
     const phone = conv.whatsapp_chat_id.split('@')[0];
@@ -125,20 +128,22 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         }
       })
       .catch(() => { photoCacheRef.current[phone] = false; });
-  }, [activeId, selectedInstance, convs]);
+  }, [activeId, selectedInstance]);
 
   // Persiste foto de perfil em Storage para conversas que não têm foto
   useEffect(() => {
     if (!HAS_EVO || !selectedInstance) return;
-    const target = convs.find(c =>
+    const target = convsRef.current.find(c =>
       (c.type === 'whatsapp' || c.type === 'group')
       && c.whatsapp_chat_id
       && !c.photoUrl
       && !photoCacheRef.current[c.whatsapp_chat_id.split('@')[0]]
+      && !persistingRef.current.has(c.id)
     );
     if (!target) return;
 
     const phone = target.whatsapp_chat_id.split('@')[0];
+    persistingRef.current.add(target.id);
     console.log('[ChatScreen] auto-persist-profile-pic para', phone, 'conv:', target.id);
 
     (async () => {
@@ -169,12 +174,17 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         } else {
           const errText = await res.text();
           console.error('[ChatScreen] persist-profile-pic error:', res.status, errText);
+          // Marca cache como false para não tentar de novo na sessão
+          photoCacheRef.current[phone] = false;
         }
       } catch (e) {
         console.error('[ChatScreen] persist-profile-pic exception:', e);
+        photoCacheRef.current[phone] = false;
+      } finally {
+        persistingRef.current.delete(target.id);
       }
     })();
-  }, [convs, selectedInstance]);
+  }, [selectedInstance]);
 
   useEffect(() => {
     loadInstances();
