@@ -15,24 +15,58 @@ const json = (data: unknown, status = 200) =>
     headers: { 'Content-Type': 'application/json' },
   });
 
+const corsJson = (data: unknown, status = 200) =>
+  new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  });
+
+const corsText = (text: string, status = 200) =>
+  new Response(text, {
+    status,
+    headers: {
+      'Content-Type': 'text/plain',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  });
+
 Deno.serve(async (req) => {
-  if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      },
+    });
+  }
+
+  if (req.method !== 'POST') return corsText('Method Not Allowed', 405);
 
   // Verify caller JWT
   const authHeader = req.headers.get('Authorization') || '';
   const token = authHeader.replace('Bearer ', '');
-  if (!token) return json({ error: 'Unauthorized' }, 401);
+  if (!token) return corsJson({ error: 'Unauthorized' }, 401);
 
   const { data: { user: caller }, error: authErr } =
     await supabaseAdmin.auth.getUser(token);
-  if (authErr || !caller) return json({ error: 'Unauthorized' }, 401);
+  if (authErr || !caller) return corsJson({ error: 'Unauthorized' }, 401);
 
   let body: Record<string, string>;
   try { body = await req.json(); }
-  catch { return json({ error: 'Invalid JSON' }, 400); }
+  catch { return corsJson({ error: 'Invalid JSON' }, 400); }
 
   const { action, tenant_id } = body;
-  if (!action || !tenant_id) return json({ error: 'action and tenant_id are required' }, 400);
+  if (!action || !tenant_id) return corsJson({ error: 'action and tenant_id are required' }, 400);
 
   // Verify caller is admin/owner of this tenant
   const { data: callerMembership } = await supabaseAdmin
@@ -43,13 +77,13 @@ Deno.serve(async (req) => {
     .single();
 
   if (!callerMembership || !['owner', 'admin'].includes(callerMembership.role)) {
-    return json({ error: 'Forbidden: admin role required' }, 403);
+    return corsJson({ error: 'Forbidden: admin role required' }, 403);
   }
 
   // ── CREATE ────────────────────────────────────────────────
   if (action === 'create') {
     const { email, password, name, role, semaforo } = body;
-    if (!email || !password) return json({ error: 'email and password are required' }, 400);
+    if (!email || !password) return corsJson({ error: 'email and password are required' }, 400);
 
     // Try to create Supabase Auth user (auto-confirm email, no invite email)
     let { data: { user }, error: createErr } =
@@ -77,11 +111,11 @@ Deno.serve(async (req) => {
         page: 1,
         perPage: 1000,
       });
-      if (listErr) return json({ error: listErr.message }, 500);
+      if (listErr) return corsJson({ error: listErr.message }, 500);
       user = list?.users?.find((u) => u.email?.toLowerCase() === email.toLowerCase()) || null;
-      if (!user) return json({ error: 'User exists but could not be found' }, 500);
+      if (!user) return corsJson({ error: 'User exists but could not be found' }, 500);
     } else if (createErr || !user) {
-      return json({ error: createErr?.message || 'Failed to create auth user' }, 500);
+      return corsJson({ error: createErr?.message || 'Failed to create auth user' }, 500);
     }
 
     // Upsert profile record
@@ -105,26 +139,26 @@ Deno.serve(async (req) => {
       if (!isAlreadyRegistered) {
         await supabaseAdmin.auth.admin.deleteUser(user.id);
       }
-      return json({ error: memberErr.message }, 500);
+      return corsJson({ error: memberErr.message }, 500);
     }
 
     console.log('[manage-users] created/reused user', user.id, email, role);
-    return json({ user_id: user.id });
+    return corsJson({ user_id: user.id });
   }
 
   // ── ADOPT (add existing auth user to tenant) ─────────────
   if (action === 'adopt') {
     const { email, name, role, semaforo } = body;
-    if (!email) return json({ error: 'email is required' }, 400);
+    if (!email) return corsJson({ error: 'email is required' }, 400);
 
     const { data: list, error: listErr } = await supabaseAdmin.auth.admin.listUsers({
       page: 1,
       perPage: 1000,
     });
-    if (listErr) return json({ error: listErr.message }, 500);
+    if (listErr) return corsJson({ error: listErr.message }, 500);
 
     const user = list?.users?.find((u) => u.email?.toLowerCase() === email.toLowerCase()) || null;
-    if (!user) return json({ error: 'Usuário não encontrado no Supabase Auth' }, 404);
+    if (!user) return corsJson({ error: 'Usuário não encontrado no Supabase Auth' }, 404);
 
     // Upsert profile record
     await supabaseAdmin.from('profiles').upsert({
@@ -143,17 +177,17 @@ Deno.serve(async (req) => {
     });
 
     if (memberErr) {
-      return json({ error: memberErr.message }, 500);
+      return corsJson({ error: memberErr.message }, 500);
     }
 
     console.log('[manage-users] adopted user', user.id, email, role);
-    return json({ user_id: user.id });
+    return corsJson({ user_id: user.id });
   }
 
   // ── UPDATE ────────────────────────────────────────────────
   if (action === 'update') {
     const { user_id, role, semaforo, name } = body;
-    if (!user_id) return json({ error: 'user_id required' }, 400);
+    if (!user_id) return corsJson({ error: 'user_id required' }, 400);
 
     const memberUpdates: Record<string, string> = {};
     if (role)     memberUpdates.role     = role;
@@ -174,16 +208,16 @@ Deno.serve(async (req) => {
     }
 
     console.log('[manage-users] updated user', user_id, memberUpdates);
-    return json({ ok: true });
+    return corsJson({ ok: true });
   }
 
   // ── DELETE ────────────────────────────────────────────────
   if (action === 'delete') {
     const { user_id } = body;
-    if (!user_id) return json({ error: 'user_id required' }, 400);
+    if (!user_id) return corsJson({ error: 'user_id required' }, 400);
 
     if (user_id === caller.id) {
-      return json({ error: 'Cannot delete your own account' }, 400);
+      return corsJson({ error: 'Cannot delete your own account' }, 400);
     }
 
     // Remove from this tenant
@@ -205,8 +239,8 @@ Deno.serve(async (req) => {
       console.log('[manage-users] removed from tenant, user has other memberships', user_id);
     }
 
-    return json({ ok: true });
+    return corsJson({ ok: true });
   }
 
-  return json({ error: 'Unknown action' }, 400);
+  return corsJson({ error: 'Unknown action' }, 400);
 });
