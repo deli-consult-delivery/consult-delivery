@@ -102,6 +102,7 @@ export type Database = {
           is_online: boolean
           last_message_at: string | null
           preview: string | null
+          push_photo_url: string | null
           status: string
           tenant_id: string
           title: string | null
@@ -117,6 +118,7 @@ export type Database = {
           is_online?: boolean
           last_message_at?: string | null
           preview?: string | null
+          push_photo_url?: string | null
           status?: string
           tenant_id: string
           title?: string | null
@@ -132,6 +134,7 @@ export type Database = {
           is_online?: boolean
           last_message_at?: string | null
           preview?: string | null
+          push_photo_url?: string | null
           status?: string
           tenant_id?: string
           title?: string | null

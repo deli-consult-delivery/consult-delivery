@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import Icon from '../components/Icon.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
 import { supabase } from '../lib/supabase.js';
-import { sendTextMessage, fetchProfile, sendAudioMessage, sendMediaMessage } from '../lib/evolution.js';
+import { sendTextMessage, fetchProfile, sendAudioMessage, sendMediaMessage, fetchWAGroupParticipants, addWAGroupParticipants, removeWAGroupParticipant, leaveWAGroup } from '../lib/evolution.js';
 
 const HAS_EVO = !!(
   import.meta.env.VITE_EVOLUTION_URL && import.meta.env.VITE_EVOLUTION_KEY
@@ -79,36 +79,34 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const chanScrollRef = useRef(null);
   const activeIdRef   = useRef(activeId);
   const photoCacheRef = useRef({});
+  const convsRef      = useRef(convs);
+  const persistingRef = useRef(new Set());
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
+  useEffect(() => { convsRef.current = convs; }, [convs]);
 
-  // Bug 2/3 — busca foto + nome do WhatsApp quando uma conversa é aberta
+  // Busca foto + nome do WhatsApp quando uma conversa é aberta
   useEffect(() => {
     if (!HAS_EVO || !selectedInstance || !activeId) return;
-    const conv = convs.find(c => c.id === activeId);
+    const conv = convsRef.current.find(c => c.id === activeId);
     if (!conv || !conv.whatsapp_chat_id) return;
     if (conv.type !== 'whatsapp' && conv.type !== 'group') return;
     const phone = conv.whatsapp_chat_id.split('@')[0];
     if (!phone) return;
 
     const cached = photoCacheRef.current[phone];
-    if (cached === false) return; // fetch anterior falhou, não tentar de novo
+    if (cached === false) return;
 
-    function applyProfile({ photoUrl, waName }) {
+    function applyName(waName) {
+      if (!waName) return;
       setConvs(prev => prev.map(c => {
         if (c.id !== activeId) return c;
-        const upd = { ...c };
-        if (photoUrl && !c.photoUrl) upd.photoUrl = photoUrl;
-        if (waName && !c.waNameFetched) {
-          upd.name = waName;
-          upd.avatar = waName.slice(0, 2).toUpperCase();
-          upd.waNameFetched = true;
-        }
-        return upd;
+        if (c.waNameFetched) return c;
+        return { ...c, name: waName, avatar: waName.slice(0, 2).toUpperCase(), waNameFetched: true };
       }));
     }
 
     if (cached !== undefined) {
-      applyProfile(cached);
+      applyName(cached.waName);
       return;
     }
 
@@ -119,10 +117,10 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           || data?.profilePic || data?.profilePicUrl || data?.image || null;
         const waName   = data?.name || data?.pushName || data?.verifiedName
           || data?.notify || data?.short_name || null;
-        const profile  = { photoUrl, waName };
-        photoCacheRef.current[phone] = profile;
-        applyProfile(profile);
-        // Persiste nome no banco para próximas cargas
+        photoCacheRef.current[phone] = { photoUrl, waName };
+        applyName(waName);
+
+        // Persiste nome no banco
         if (waName) {
           supabase.from('conversations')
             .update({ push_name: waName })
@@ -133,6 +131,62 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       })
       .catch(() => { photoCacheRef.current[phone] = false; });
   }, [activeId, selectedInstance]);
+
+  // Persiste foto de perfil em Storage para conversas que não têm foto
+  useEffect(() => {
+    if (!HAS_EVO || !selectedInstance) return;
+    const target = convsRef.current.find(c =>
+      (c.type === 'whatsapp' || c.type === 'group')
+      && c.whatsapp_chat_id
+      && !c.photoUrl
+      && !photoCacheRef.current[c.whatsapp_chat_id.split('@')[0]]
+      && !persistingRef.current.has(c.id)
+    );
+    if (!target) return;
+
+    const phone = target.whatsapp_chat_id.split('@')[0];
+    persistingRef.current.add(target.id);
+    console.log('[ChatScreen] auto-persist-profile-pic para', phone, 'conv:', target.id);
+
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/persist-profile-pic`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({
+            instanceName: selectedInstance,
+            phone,
+            conversationId: target.id,
+          }),
+        });
+        console.log('[ChatScreen] persist-profile-pic status:', res.status);
+        if (res.ok) {
+          const { publicUrl, hasPhoto } = await res.json();
+          if (publicUrl) {
+            console.log('[ChatScreen] persist-profile-pic OK:', publicUrl);
+            setConvs(prev => prev.map(c => c.id === target.id ? { ...c, photoUrl: publicUrl } : c));
+          } else if (hasPhoto === false) {
+            console.log('[ChatScreen] persist-profile-pic: contato sem foto');
+            photoCacheRef.current[phone] = false;
+          }
+        } else {
+          const errText = await res.text();
+          console.error('[ChatScreen] persist-profile-pic error:', res.status, errText);
+          // Marca cache como false para não tentar de novo na sessão
+          photoCacheRef.current[phone] = false;
+        }
+      } catch (e) {
+        console.error('[ChatScreen] persist-profile-pic exception:', e);
+        photoCacheRef.current[phone] = false;
+      } finally {
+        persistingRef.current.delete(target.id);
+      }
+    })();
+  }, [selectedInstance]);
 
   useEffect(() => {
     loadInstances();
@@ -269,17 +323,31 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               : mediaType?.includes('audio') ? '🎵 Áudio' : '');
 
           // 1. Atualiza a thread da conversa
-          setMessages(m => ({
-            ...m,
-            [convId]: [...(m[convId] || []), {
-              id:        msg.id,
-              from:      isInbound ? 'in' : 'out',
-              text,
-              time,
-              mediaType,
-              mediaUrl:  msg.media_url || null,
-            }],
-          }));
+          setMessages(m => {
+            const convMsgs = m[convId] || [];
+            // Deduplica outbound: substitui mensagem temporária local pela real do banco
+            if (!isInbound) {
+              const tmpIdx = convMsgs.findIndex(ex => ex.id?.startsWith('tmp-') && ex.text === text && ex.from === 'out');
+              if (tmpIdx !== -1) {
+                return {
+                  ...m,
+                  [convId]: convMsgs.map((ex, i) => i === tmpIdx ? { ...ex, id: msg.id, agentName: msg.sender_name || ex.agentName || null } : ex),
+                };
+              }
+            }
+            return {
+              ...m,
+              [convId]: [...convMsgs, {
+                id:        msg.id,
+                from:      isInbound ? 'in' : 'out',
+                text,
+                time,
+                mediaType,
+                mediaUrl:  msg.media_url || null,
+                agentName: msg.sender_name || null,
+              }],
+            };
+          });
 
           // 2. Atualiza sidebar: preview + unread + sobe para o topo
           setConvs(prev => {
@@ -296,6 +364,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                     if (p.find(c => c.id === conv.id)) return p;
                     return [{
                       id: conv.id, name, avatar: name.slice(0, 2).toUpperCase(),
+                      photoUrl: conv.push_photo_url || null,
                       type: conv.is_group ? 'group' : 'whatsapp',
                       whatsapp_chat_id: conv.whatsapp_chat_id,
                       preview, previewFrom: 'in', time, unread: 1, online: false, messages: [],
@@ -553,6 +622,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           const previewFrom = lm?.direction === 'inbound' ? 'in' : 'out';
           return {
             id: c.id, name, avatar: name.slice(0, 2).toUpperCase(),
+            photoUrl: c.push_photo_url || null,
             type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id,
             preview, previewFrom,
             time: c.updated_at
@@ -587,6 +657,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                 .toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
               mediaType: msg.media_type || null,
               mediaUrl:  msg.media_url  || null,
+              agentName: msg.sender_name || null,
             })),
         }));
       }
@@ -744,11 +815,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     setDraft('');
     if (HAS_EVO && selectedInstance && active.whatsapp_chat_id) {
       setSending(true);
-      const textToSend = agentName ? `*${agentName}*\n\n${text}` : text;
+      const textToSend = agentName ? `*${agentName}:*\n${text}` : text;
       try {
         await sendTextMessage(selectedInstance, active.whatsapp_chat_id, textToSend);
         await supabase.from('messages').insert({
-          conversation_id: active.id, direction: 'outbound', content: text, created_at: now.toISOString(),
+          conversation_id: active.id, direction: 'outbound', content: text, sender_name: agentName || null, created_at: now.toISOString(),
         });
       } catch (err) { console.error('Falha ao enviar via Evolution:', err); }
       finally { setSending(false); }
@@ -1138,11 +1209,6 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             }}>
               {activeMsgs.map((msg, i) => (
                 <div key={msg.id || i} style={{ display: 'flex', flexDirection: 'column', alignItems: msg.from === 'out' ? 'flex-end' : 'flex-start' }} className="slide-up">
-                  {msg.from === 'out' && msg.agentName && (
-                    <div style={{ fontSize: 10, color: 'var(--red)', fontWeight: 600, marginBottom: 2, paddingRight: 2 }}>
-                      {msg.agentName}
-                    </div>
-                  )}
                   <div className={`bubble ${msg.from === 'out' ? 'bubble-out' : 'bubble-in'}`}>
                     {msg.mediaType === 'image' && msg.mediaUrl ? (
                       <div>
@@ -1412,6 +1478,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             onNavigate={onNavigate}
             members={members}
             tenantDbId={tenantDbId}
+            instanceName={selectedInstance}
             onNameSaved={newName => {
               setConvs(prev => prev.map(c =>
                 c.id === active.id
@@ -1985,7 +2052,7 @@ function ConvItem({ conv, active, onClick, lastMsg }) {
 /* ── ContactPanel ───────────────────────────────────────── */
 const PIPELINES = ['Prospecção', 'Negociação', 'Fechamento', 'Pós-venda', 'Reativação'];
 
-function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved }) {
+function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved, instanceName }) {
   const isGroup = conv.type === 'group';
 
   // Edição de nome/telefone
@@ -2023,6 +2090,25 @@ function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved 
   // Finalizar atendimento
   const [showFinishConfirm, setShowFinishConfirm] = useState(false);
   const [finished, setFinished]                   = useState(false);
+
+  // Grupo: participantes e gerenciamento
+  const [groupParticipants, setGroupParticipants] = useState([]);
+  const [loadingParticipants, setLoadingParticipants] = useState(false);
+  const [showAddParticipant, setShowAddParticipant] = useState(false);
+  const [newParticipantPhone, setNewParticipantPhone] = useState('');
+  const [groupActionLoading, setGroupActionLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isGroup || !conv.whatsapp_chat_id) return;
+    setLoadingParticipants(true);
+    fetchWAGroupParticipants(instanceName || 'teste', conv.whatsapp_chat_id)
+      .then(data => {
+        const list = Array.isArray(data) ? data : (data?.participants || []);
+        setGroupParticipants(list);
+      })
+      .catch(() => setGroupParticipants([]))
+      .finally(() => setLoadingParticipants(false));
+  }, [isGroup, conv.whatsapp_chat_id, instanceName]);
 
   function addTag(e) {
     e.preventDefault();
@@ -2185,9 +2271,45 @@ function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved 
         </div>
       )}
 
+      {/* Membros do grupo */}
+      {isGroup && (
+        <div style={{ marginTop: 20 }}>
+          <div className="label" style={{ marginBottom: 10 }}>Membros do grupo ({groupParticipants.length || conv.preview})</div>
+          {loadingParticipants ? (
+            <div style={{ fontSize: 12, color: 'var(--g-400)', padding: '8px 0' }}>Carregando…</div>
+          ) : groupParticipants.length === 0 ? (
+            <div style={{ fontSize: 12, color: 'var(--g-400)', padding: '8px 0' }}>Nenhum participante encontrado</div>
+          ) : (
+            <div style={{ maxHeight: 240, overflowY: 'auto', border: '1px solid var(--g-200)', borderRadius: 8 }}>
+              {groupParticipants.map((p, i) => {
+                const jid    = typeof p === 'string' ? p : (p.id || p.jid || '');
+                const num    = jid.split('@')[0];
+                const name   = typeof p === 'string' ? '' : (p.name || p.pushName || '');
+                const isAdmin = typeof p === 'string' ? false : (p.admin === true || p.isAdmin === true || p.adminType === 'admin' || p.adminType === 'superadmin');
+                return (
+                  <div key={jid || i} style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                    borderBottom: i < groupParticipants.length - 1 ? '1px solid var(--g-100)' : 'none',
+                  }}>
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--g-200)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--g-700)', flexShrink: 0 }}>
+                      {(name || num).slice(0, 2).toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--g-900)' }}>{name || num}</div>
+                      {name && <div style={{ fontSize: 11, color: 'var(--g-500)' }}>+{num}</div>}
+                    </div>
+                    {isAdmin && <span style={{ fontSize: 10, color: 'var(--red)', fontWeight: 700 }}>ADMIN</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── AÇÕES RÁPIDAS ───────────────────────────────── */}
       <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid var(--g-200)' }}>
-        <div className="label" style={{ marginBottom: 14 }}>Ações rápidas</div>
+        <div className="label" style={{ marginBottom: 14 }}>{isGroup ? 'Gerenciar grupo' : 'Ações rápidas'}</div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
 
@@ -2280,7 +2402,70 @@ function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved 
             </button>
           )}
 
-          {/* 5 · Finalizar atendimento */}
+          {/* 5 · Grupo: adicionar participante */}
+          {isGroup && (
+            <div>
+              {showAddParticipant ? (
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input
+                    className="input" style={{ flex: 1, fontSize: 12, padding: '6px 8px' }}
+                    placeholder="Número do participante…" value={newParticipantPhone}
+                    onChange={e => setNewParticipantPhone(e.target.value)} autoFocus
+                  />
+                  <button
+                    className="btn-primary" style={{ padding: '6px 10px', fontSize: 12 }}
+                    disabled={groupActionLoading || !newParticipantPhone.trim()}
+                    onClick={async () => {
+                      setGroupActionLoading(true);
+                      try {
+                        const phone = newParticipantPhone.replace(/\D/g, '');
+                        if (phone && conv.whatsapp_chat_id) {
+                          await addWAGroupParticipants(instanceName || 'teste', conv.whatsapp_chat_id, [`${phone}@s.whatsapp.net`]);
+                          setNewParticipantPhone('');
+                          setShowAddParticipant(false);
+                          // Recarrega lista
+                          const data = await fetchWAGroupParticipants(instanceName || 'teste', conv.whatsapp_chat_id);
+                          setGroupParticipants(Array.isArray(data) ? data : (data?.participants || []));
+                        }
+                      } catch (err) { console.error('Erro ao adicionar participante:', err); }
+                      finally { setGroupActionLoading(false); }
+                    }}
+                  >
+                    {groupActionLoading ? '…' : 'Adicionar'}
+                  </button>
+                  <button className="btn-icon" onClick={() => { setShowAddParticipant(false); setNewParticipantPhone(''); }}><Icon name="x" size={13} /></button>
+                </div>
+              ) : (
+                <button className="btn-secondary" style={{ justifyContent: 'flex-start', fontSize: 12, gap: 8, width: '100%' }}
+                  onClick={() => setShowAddParticipant(true)}>
+                  <Icon name="plus" size={14} /> Adicionar participante
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* 6 · Grupo: sair do grupo */}
+          {isGroup && (
+            <button
+              className="btn-secondary"
+              style={{ justifyContent: 'flex-start', fontSize: 12, gap: 8, width: '100%', color: 'var(--red)' }}
+              disabled={groupActionLoading}
+              onClick={async () => {
+                if (!confirm('Deseja sair deste grupo?')) return;
+                setGroupActionLoading(true);
+                try {
+                  if (conv.whatsapp_chat_id) {
+                    await leaveWAGroup(instanceName || 'teste', conv.whatsapp_chat_id);
+                  }
+                } catch (err) { console.error('Erro ao sair do grupo:', err); }
+                finally { setGroupActionLoading(false); }
+              }}
+            >
+              <Icon name="logout" size={14} /> Sair do grupo
+            </button>
+          )}
+
+          {/* 7 · Finalizar atendimento */}
           {showFinishConfirm ? (
             <div style={{ background: 'rgba(183,12,0,0.05)', border: '1px solid rgba(183,12,0,0.2)', borderRadius: 8, padding: 12 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--g-900)', marginBottom: 10 }}>

@@ -12,7 +12,7 @@ const STATUS = {
 };
 
 export default function CoraScreen({ tenant }) {
-  const data = INADIMPLENTES[tenant];
+  const data = INADIMPLENTES[tenant] || { kpis: { total: '—', recebido: '—', taxa: '—', reguas: 0 }, rows: [], liveActions: [] };
   const [tab, setTab] = useState('inad');
   const [openDrawer, setOpenDrawer] = useState(false);
   const [liveTick, setLiveTick] = useState(0);

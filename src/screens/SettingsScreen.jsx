@@ -55,7 +55,7 @@ export default function SettingsScreen({ tenant, tenantDbId, onTenantChange }) {
   const [tab, setTab] = useState('workspace');
 
   return (
-    <div className="route-enter page-container" style={{ padding: 32, maxWidth: 1200, margin: '0 auto' }}>
+    <div className="route-enter" style={{ padding: 32, maxWidth: 1200, margin: '0 auto' }}>
       {/* Header */}
       <div style={{ marginBottom: 28 }}>
         <h1 className="page-h1">Configurações</h1>
@@ -63,10 +63,10 @@ export default function SettingsScreen({ tenant, tenantDbId, onTenantChange }) {
       </div>
 
       {/* Layout: sidebar tabs + conteúdo */}
-      <div className="settings-layout" style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 24, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 24, alignItems: 'start' }}>
 
         {/* Sidebar nav */}
-        <div className="card settings-sidebar" style={{ padding: 8, position: 'sticky', top: 16 }}>
+        <div className="card" style={{ padding: 8, position: 'sticky', top: 16 }}>
           {TABS.map(t => (
             <button
               key={t.id}
@@ -851,7 +851,7 @@ function TabWorkspace({ tenantDbId, onTenantChange }) {
       {showDelete && (
         <>
           <div onClick={() => setShowDelete(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(13,13,13,0.5)', zIndex: 100 }} />
-          <div className="modal-mobile" style={{
+          <div style={{
             position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
             background: 'var(--white)', borderRadius: 'var(--r-lg)', padding: 32, zIndex: 101,
             width: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
@@ -978,7 +978,7 @@ function TabUsers({ tenantDbId, tenant }) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${session?.access_token}`,
       },
-      body: JSON.stringify({ action: 'delete', tenant_id: resolvedTenantId, user_id: userId }),
+      body: JSON.stringify({ action: 'delete', tenant_id: tenantDbId, user_id: userId }),
     });
     if (!res.ok) {
       const json = await res.json().catch(() => ({}));
@@ -988,10 +988,7 @@ function TabUsers({ tenantDbId, tenant }) {
     await loadMembers();
   }
 
-  const displayMembers = loading ? [] : members.length > 0 ? members : SETTINGS_DATA.users.map(u => ({
-    userId: u.id, name: u.name, email: u.email, avatar: u.avatar,
-    role: u.role, semaforo: u.semaforo, createdAt: null,
-  }));
+  const displayMembers = members;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -1004,6 +1001,11 @@ function TabUsers({ tenantDbId, tenant }) {
 
         {loading ? (
           <div style={{ textAlign: 'center', padding: 24, color: 'var(--g-400)', fontSize: 13 }}>Carregando membros…</div>
+        ) : displayMembers.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 32, color: 'var(--g-500)', fontSize: 13 }}>
+            Nenhum membro cadastrado neste workspace.<br />
+            Clique em "Convidar membro" para adicionar alguém.
+          </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 0, border: '1px solid var(--g-200)', borderRadius: 'var(--r-md)', overflow: 'hidden' }}>
             {displayMembers.map((u, i) => {
@@ -1028,9 +1030,14 @@ function TabUsers({ tenantDbId, tenant }) {
                       <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--g-700)' }}>{sem.label}</span>
                     </div>
                   </div>
-                  <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setEditUser(u)}>
-                    <Icon name="gear" size={12} /> Editar
-                  </button>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setEditUser(u)}>
+                      <Icon name="gear" size={12} /> Editar
+                    </button>
+                    <button className="btn-ghost" style={{ fontSize: 12, color: 'var(--red)' }} onClick={() => handleRemoveMember(u.userId)}>
+                      <Icon name="trash" size={12} /> Excluir
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -1109,13 +1116,16 @@ function TabUsers({ tenantDbId, tenant }) {
 
 /* Invite modal */
 function InviteModal({ tenantDbId, tenant, onClose, onDone }) {
+  const [mode, setMode]       = useState('create'); // 'create' | 'adopt'
   const [form, setForm]     = useState({ email: '', password: '', name: '', role: 'operador', semaforo: 'verde' });
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState('');
 
   async function handleSubmit() {
     if (!form.email)    { setError('E-mail obrigatório'); return; }
-    if (!form.password || form.password.length < 6) { setError('Senha obrigatória (mínimo 6 caracteres)'); return; }
+    if (mode === 'create' && (!form.password || form.password.length < 6)) {
+      setError('Senha obrigatória (mínimo 6 caracteres)'); return;
+    }
     setSaving(true);
     setError('');
     try {
@@ -1135,8 +1145,8 @@ function InviteModal({ tenantDbId, tenant, onClose, onDone }) {
           'Authorization': `Bearer ${session?.access_token}`,
         },
         body: JSON.stringify({
-          action:    'create',
-          tenant_id: resolvedTenantId,
+          action:    mode,
+          tenant_id: tenantDbId,
           email:     form.email,
           password:  form.password,
           name:      form.name,
@@ -1156,7 +1166,7 @@ function InviteModal({ tenantDbId, tenant, onClose, onDone }) {
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(13,13,13,0.5)', zIndex: 100 }} />
-      <div className="modal-mobile" style={{
+      <div style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
         background: 'var(--white)', borderRadius: 'var(--r-lg)', padding: 32, zIndex: 101,
         width: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
@@ -1165,9 +1175,31 @@ function InviteModal({ tenantDbId, tenant, onClose, onDone }) {
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--g-900)' }}>Adicionar membro</div>
           <button className="btn-icon" onClick={onClose}><Icon name="x" size={16} /></button>
         </div>
+
+        <div style={{ display: 'flex', gap: 0, marginBottom: 16, border: '1px solid var(--g-200)', borderRadius: 'var(--r-sm)', overflow: 'hidden' }}>
+          {[
+            { key: 'create', label: 'Criar novo' },
+            { key: 'adopt',  label: 'Vincular existente' },
+          ].map(m => (
+            <button key={m.key} onClick={() => setMode(m.key)} style={{
+              flex: 1, padding: '8px 12px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
+              background: mode === m.key ? 'var(--accent)' : 'var(--g-50)',
+              color: mode === m.key ? 'white' : 'var(--g-600)',
+            }}>{m.label}</button>
+          ))}
+        </div>
+
+        {mode === 'adopt' && (
+          <div style={{ fontSize: 12, color: 'var(--g-600)', background: 'var(--g-50)', padding: '10px 12px', borderRadius: 'var(--r-sm)', marginBottom: 14 }}>
+            Use esta opção para usuários que já possuem cadastro no Supabase Auth (ex: login Google). Não é necessário informar senha.
+          </div>
+        )}
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <InputField label="E-mail" value={form.email} onChange={v => setForm(f => ({ ...f, email: v }))} placeholder="colaborador@empresa.com" type="email" />
-          <InputField label="Senha" value={form.password} onChange={v => setForm(f => ({ ...f, password: v }))} placeholder="Mínimo 6 caracteres" type="password" />
+          {mode === 'create' && (
+            <InputField label="Senha" value={form.password} onChange={v => setForm(f => ({ ...f, password: v }))} placeholder="Mínimo 6 caracteres" type="password" />
+          )}
           <InputField label="Nome" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} placeholder="Nome completo" />
           <div>
             <div className="label" style={{ marginBottom: 6 }}>Papel</div>
@@ -1185,7 +1217,7 @@ function InviteModal({ tenantDbId, tenant, onClose, onDone }) {
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
           <button className="btn-primary" onClick={handleSubmit} disabled={saving}>
-            <Icon name="plus" size={13} /> {saving ? 'Criando…' : 'Criar usuário'}
+            <Icon name="plus" size={13} /> {saving ? (mode === 'adopt' ? 'Vinculando…' : 'Criando…') : (mode === 'adopt' ? 'Vincular usuário' : 'Criar usuário')}
           </button>
           <button className="btn-secondary" onClick={onClose}>Cancelar</button>
         </div>
@@ -1206,8 +1238,6 @@ function EditMemberModal({ member, tenantDbId, tenant, onClose, onRemove, onDone
     setSaving(true);
     setError('');
     try {
-      const resolvedTenantId = await resolveTenantId(tenantDbId);
-      if (!resolvedTenantId) throw new Error('Workspace não identificado. Recarregue a página.');
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manage-users`, {
         method: 'POST',
@@ -1217,7 +1247,7 @@ function EditMemberModal({ member, tenantDbId, tenant, onClose, onRemove, onDone
         },
         body: JSON.stringify({
           action:    'update',
-          tenant_id: resolvedTenantId,
+          tenant_id: tenantDbId,
           user_id:   member.userId,
           role,
           semaforo,
@@ -1236,7 +1266,7 @@ function EditMemberModal({ member, tenantDbId, tenant, onClose, onRemove, onDone
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(13,13,13,0.5)', zIndex: 100 }} />
-      <div className="modal-mobile" style={{
+      <div style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
         background: 'var(--white)', borderRadius: 'var(--r-lg)', padding: 32, zIndex: 101,
         width: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
@@ -1585,7 +1615,7 @@ function TabSecurity() {
       {showMFA && (
         <>
           <div onClick={() => setShowMFA(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(13,13,13,0.5)', zIndex: 100 }} />
-          <div className="modal-mobile" style={{
+          <div style={{
             position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
             background: 'var(--white)', borderRadius: 'var(--r-lg)', padding: 32, zIndex: 101,
             width: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.3)',

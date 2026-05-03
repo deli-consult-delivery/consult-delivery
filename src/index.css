@@ -204,8 +204,8 @@ input, textarea { font-family: inherit; }
   font-weight: 600;
   letter-spacing: 0.2px;
 }
-.badge-red      { background: var(--red-soft); color: var(--red); }
-.badge-red-solid{ background: var(--red); color: white; }
+.badge-red      { background: var(--red); color: #FFFFFF; }
+.badge-red-solid{ background: var(--red); color: #FFFFFF; }
 .badge-green    { background: var(--success-soft); color: #047857; }
 .badge-yellow   { background: var(--warn-soft); color: #92400E; }
 .badge-blue     { background: var(--info-soft); color: #1E40AF; }
