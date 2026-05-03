@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import Icon from '../components/Icon.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
 import { supabase } from '../lib/supabase.js';
-import { sendTextMessage, fetchProfile, sendAudioMessage, sendMediaMessage } from '../lib/evolution.js';
+import { sendTextMessage, fetchProfile, sendAudioMessage, sendMediaMessage, fetchWAGroupParticipants, addWAGroupParticipants, removeWAGroupParticipant, leaveWAGroup } from '../lib/evolution.js';
 
 const HAS_EVO = !!(
   import.meta.env.VITE_EVOLUTION_URL && import.meta.env.VITE_EVOLUTION_KEY
@@ -328,7 +328,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               if (tmpIdx !== -1) {
                 return {
                   ...m,
-                  [convId]: convMsgs.map((ex, i) => i === tmpIdx ? { ...ex, id: msg.id } : ex),
+                  [convId]: convMsgs.map((ex, i) => i === tmpIdx ? { ...ex, id: msg.id, agentName: msg.sender_name || ex.agentName || null } : ex),
                 };
               }
             }
@@ -341,6 +341,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                 time,
                 mediaType,
                 mediaUrl:  msg.media_url || null,
+                agentName: msg.sender_name || null,
               }],
             };
           });
@@ -647,6 +648,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                 .toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
               mediaType: msg.media_type || null,
               mediaUrl:  msg.media_url  || null,
+              agentName: msg.sender_name || null,
             })),
         }));
       }
@@ -808,7 +810,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       try {
         await sendTextMessage(selectedInstance, active.whatsapp_chat_id, textToSend);
         await supabase.from('messages').insert({
-          conversation_id: active.id, direction: 'outbound', content: text, created_at: now.toISOString(),
+          conversation_id: active.id, direction: 'outbound', content: text, sender_name: agentName || null, created_at: now.toISOString(),
         });
       } catch (err) { console.error('Falha ao enviar via Evolution:', err); }
       finally { setSending(false); }
@@ -1452,6 +1454,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             onNavigate={onNavigate}
             members={members}
             tenantDbId={tenantDbId}
+            instanceName={selectedInstance}
             onNameSaved={newName => {
               setConvs(prev => prev.map(c =>
                 c.id === active.id
@@ -2025,7 +2028,7 @@ function ConvItem({ conv, active, onClick, lastMsg }) {
 /* ── ContactPanel ───────────────────────────────────────── */
 const PIPELINES = ['Prospecção', 'Negociação', 'Fechamento', 'Pós-venda', 'Reativação'];
 
-function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved }) {
+function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved, instanceName }) {
   const isGroup = conv.type === 'group';
 
   // Edição de nome/telefone
@@ -2063,6 +2066,25 @@ function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved 
   // Finalizar atendimento
   const [showFinishConfirm, setShowFinishConfirm] = useState(false);
   const [finished, setFinished]                   = useState(false);
+
+  // Grupo: participantes e gerenciamento
+  const [groupParticipants, setGroupParticipants] = useState([]);
+  const [loadingParticipants, setLoadingParticipants] = useState(false);
+  const [showAddParticipant, setShowAddParticipant] = useState(false);
+  const [newParticipantPhone, setNewParticipantPhone] = useState('');
+  const [groupActionLoading, setGroupActionLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isGroup || !conv.whatsapp_chat_id) return;
+    setLoadingParticipants(true);
+    fetchWAGroupParticipants(instanceName || 'teste', conv.whatsapp_chat_id)
+      .then(data => {
+        const list = Array.isArray(data) ? data : (data?.participants || []);
+        setGroupParticipants(list);
+      })
+      .catch(() => setGroupParticipants([]))
+      .finally(() => setLoadingParticipants(false));
+  }, [isGroup, conv.whatsapp_chat_id, instanceName]);
 
   function addTag(e) {
     e.preventDefault();
@@ -2225,9 +2247,45 @@ function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved 
         </div>
       )}
 
+      {/* Membros do grupo */}
+      {isGroup && (
+        <div style={{ marginTop: 20 }}>
+          <div className="label" style={{ marginBottom: 10 }}>Membros do grupo ({groupParticipants.length || conv.preview})</div>
+          {loadingParticipants ? (
+            <div style={{ fontSize: 12, color: 'var(--g-400)', padding: '8px 0' }}>Carregando…</div>
+          ) : groupParticipants.length === 0 ? (
+            <div style={{ fontSize: 12, color: 'var(--g-400)', padding: '8px 0' }}>Nenhum participante encontrado</div>
+          ) : (
+            <div style={{ maxHeight: 240, overflowY: 'auto', border: '1px solid var(--g-200)', borderRadius: 8 }}>
+              {groupParticipants.map((p, i) => {
+                const jid    = typeof p === 'string' ? p : (p.id || p.jid || '');
+                const num    = jid.split('@')[0];
+                const name   = typeof p === 'string' ? '' : (p.name || p.pushName || '');
+                const isAdmin = typeof p === 'string' ? false : (p.admin === true || p.isAdmin === true || p.adminType === 'admin' || p.adminType === 'superadmin');
+                return (
+                  <div key={jid || i} style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                    borderBottom: i < groupParticipants.length - 1 ? '1px solid var(--g-100)' : 'none',
+                  }}>
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--g-200)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--g-700)', flexShrink: 0 }}>
+                      {(name || num).slice(0, 2).toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--g-900)' }}>{name || num}</div>
+                      {name && <div style={{ fontSize: 11, color: 'var(--g-500)' }}>+{num}</div>}
+                    </div>
+                    {isAdmin && <span style={{ fontSize: 10, color: 'var(--red)', fontWeight: 700 }}>ADMIN</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── AÇÕES RÁPIDAS ───────────────────────────────── */}
       <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid var(--g-200)' }}>
-        <div className="label" style={{ marginBottom: 14 }}>Ações rápidas</div>
+        <div className="label" style={{ marginBottom: 14 }}>{isGroup ? 'Gerenciar grupo' : 'Ações rápidas'}</div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
 
@@ -2320,7 +2378,70 @@ function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved 
             </button>
           )}
 
-          {/* 5 · Finalizar atendimento */}
+          {/* 5 · Grupo: adicionar participante */}
+          {isGroup && (
+            <div>
+              {showAddParticipant ? (
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input
+                    className="input" style={{ flex: 1, fontSize: 12, padding: '6px 8px' }}
+                    placeholder="Número do participante…" value={newParticipantPhone}
+                    onChange={e => setNewParticipantPhone(e.target.value)} autoFocus
+                  />
+                  <button
+                    className="btn-primary" style={{ padding: '6px 10px', fontSize: 12 }}
+                    disabled={groupActionLoading || !newParticipantPhone.trim()}
+                    onClick={async () => {
+                      setGroupActionLoading(true);
+                      try {
+                        const phone = newParticipantPhone.replace(/\D/g, '');
+                        if (phone && conv.whatsapp_chat_id) {
+                          await addWAGroupParticipants(instanceName || 'teste', conv.whatsapp_chat_id, [`${phone}@s.whatsapp.net`]);
+                          setNewParticipantPhone('');
+                          setShowAddParticipant(false);
+                          // Recarrega lista
+                          const data = await fetchWAGroupParticipants(instanceName || 'teste', conv.whatsapp_chat_id);
+                          setGroupParticipants(Array.isArray(data) ? data : (data?.participants || []));
+                        }
+                      } catch (err) { console.error('Erro ao adicionar participante:', err); }
+                      finally { setGroupActionLoading(false); }
+                    }}
+                  >
+                    {groupActionLoading ? '…' : 'Adicionar'}
+                  </button>
+                  <button className="btn-icon" onClick={() => { setShowAddParticipant(false); setNewParticipantPhone(''); }}><Icon name="x" size={13} /></button>
+                </div>
+              ) : (
+                <button className="btn-secondary" style={{ justifyContent: 'flex-start', fontSize: 12, gap: 8, width: '100%' }}
+                  onClick={() => setShowAddParticipant(true)}>
+                  <Icon name="plus" size={14} /> Adicionar participante
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* 6 · Grupo: sair do grupo */}
+          {isGroup && (
+            <button
+              className="btn-secondary"
+              style={{ justifyContent: 'flex-start', fontSize: 12, gap: 8, width: '100%', color: 'var(--red)' }}
+              disabled={groupActionLoading}
+              onClick={async () => {
+                if (!confirm('Deseja sair deste grupo?')) return;
+                setGroupActionLoading(true);
+                try {
+                  if (conv.whatsapp_chat_id) {
+                    await leaveWAGroup(instanceName || 'teste', conv.whatsapp_chat_id);
+                  }
+                } catch (err) { console.error('Erro ao sair do grupo:', err); }
+                finally { setGroupActionLoading(false); }
+              }}
+            >
+              <Icon name="logout" size={14} /> Sair do grupo
+            </button>
+          )}
+
+          {/* 7 · Finalizar atendimento */}
           {showFinishConfirm ? (
             <div style={{ background: 'rgba(183,12,0,0.05)', border: '1px solid rgba(183,12,0,0.2)', borderRadius: 8, padding: 12 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--g-900)', marginBottom: 10 }}>
