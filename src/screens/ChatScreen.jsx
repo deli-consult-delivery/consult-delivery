@@ -120,16 +120,41 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         const profile  = { photoUrl, waName };
         photoCacheRef.current[phone] = profile;
         applyProfile(profile);
-        // Persiste nome e foto no banco para próximas cargas
-        if (waName || photoUrl) {
-          const upd = {};
-          if (waName) upd.push_name = waName;
-          if (photoUrl) upd.push_photo_url = photoUrl;
+        // Persiste nome no banco
+        if (waName) {
           supabase.from('conversations')
-            .update(upd)
+            .update({ push_name: waName })
             .eq('id', activeId)
             .then(() => {})
             .catch(() => {});
+        }
+
+        // Persiste foto de perfil via edge function (baixa da Evolution → salva no Storage)
+        if (photoUrl) {
+          (async () => {
+            try {
+              const { data: { session } } = await supabase.auth.getSession();
+              const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/persist-profile-pic`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${session?.access_token}`,
+                },
+                body: JSON.stringify({
+                  photoUrl,
+                  phone,
+                  conversationId: activeId,
+                }),
+              });
+              if (res.ok) {
+                const { publicUrl } = await res.json();
+                // Atualiza estado local com URL permanente do Storage
+                setConvs(prev => prev.map(c => c.id === activeId ? { ...c, photoUrl: publicUrl } : c));
+              }
+            } catch (e) {
+              console.error('[persist-profile-pic] failed:', e);
+            }
+          })();
         }
       })
       .catch(() => { photoCacheRef.current[phone] = false; });
