@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import Icon from '../components/Icon.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
+import ConversationStatusBar from '../components/ConversationStatusBar.jsx';
+import { useConversationStatus } from '../lib/conversationStatus.js';
 import { supabase } from '../lib/supabase.js';
 import { sendTextMessage, fetchProfile, sendAudioMessage, sendMediaMessage, fetchWAGroupParticipants, addWAGroupParticipants, removeWAGroupParticipant, leaveWAGroup } from '../lib/evolution.js';
 
@@ -46,6 +48,18 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [showNewInternal, setShowNewInternal]    = useState(false);
   const [currentUser, setCurrentUser]            = useState(null);
 
+  // ── Status de atendimento ────────────────────────────────
+  const {
+    status: convStatus,
+    loading: statusLoading,
+    internalNotes,
+    refresh: refreshStatus,
+    changeStatus,
+    finish,
+    reopen,
+    start,
+  } = useConversationStatus(activeId, tenantDbId, currentUser?.id);
+
   // ── Gravação de áudio ──────────────────────────────────
   const [recState, setRecState]     = useState('idle'); // idle | recording | preview
   const [recSeconds, setRecSeconds] = useState(0);
@@ -83,6 +97,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const persistingRef = useRef(new Set());
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
   useEffect(() => { convsRef.current = convs; }, [convs]);
+
+  // Atualiza status de atendimento quando muda de conversa
+  useEffect(() => {
+    refreshStatus();
+  }, [activeId, refreshStatus]);
 
   // Busca foto + nome do WhatsApp quando uma conversa é aberta
   useEffect(() => {
@@ -1201,6 +1220,20 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                 <Icon name="info" size={16} />
               </button>
             </div>
+
+            {/* Status de atendimento */}
+            {(active.type === 'whatsapp' || active.type === 'group') && (
+              <ConversationStatusBar
+                status={convStatus}
+                loading={statusLoading}
+                internalNotes={internalNotes}
+                onChangeStatus={changeStatus}
+                onFinish={finish}
+                onReopen={reopen}
+                onStart={start}
+                onSaveNotes={(notes) => changeStatus(convStatus, notes)}
+              />
+            )}
 
             {/* Mensagens */}
             <div ref={scrollRef} className="scroll" style={{
