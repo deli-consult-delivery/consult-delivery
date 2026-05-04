@@ -260,3 +260,18 @@ export async function updateStatusTarefa(tarefa_id, status) {
   if (error) throw error;
   return data;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sugestões para o desenvolvedor
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function createSugestao({ tenant_id, texto, tela }) {
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data, error } = await supabase
+    .from('sugestoes_plataforma')
+    .insert({ tenant_id, texto, tela, created_by: user?.id })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return data;
+}
