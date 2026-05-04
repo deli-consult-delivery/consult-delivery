@@ -7,8 +7,12 @@ Todos em Markdown com blocos ` ```mermaid ` — diff no git, renderização nati
 
 | Arquivo | Conteúdo |
 |---|---|
-| [arquitetura.md](arquitetura.md) | Stack completa: Frontend, Supabase, VPS, agentes, integrações externas |
+| [arquitetura.md](arquitetura.md) | Stack completa: React/GitHub Pages, Supabase, VPS, agentes, integrações externas |
 | [analise-ifood.md](analise-ifood.md) | Fluxo completo do módulo Análise iFood (consultor → agente → resultado → ações) |
+| [rbac.md](rbac.md) | Schema RBAC, fluxo de autorização React + Bridge Server, matriz de permissões |
+| [memoria-central.md](memoria-central.md) | Memória compartilhada dos agentes: lojas, client_facts, client_timeline, loja_metricas |
+| [whatsapp.md](whatsapp.md) | Modelo WhatsApp: contacts, grupos, membros, mensagens, fluxo do evolution-webhook |
+| [deli.md](deli.md) | DELI COO Digital: semáforo Verde/Amarelo/Vermelho, triggers, drafts, fluxo de aprovação |
 
 ## Como visualizar
 
