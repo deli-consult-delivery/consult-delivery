@@ -5,7 +5,7 @@ import { TweaksPanel, TweakSection, TweakColor, TweakRadio, TweakToggle, useTwea
 import LoginScreen from './screens/LoginScreen.jsx';
 import DashboardScreen from './screens/DashboardScreen.jsx';
 import ChatScreen from './screens/ChatScreen.jsx';
-import KanbanScreen from './screens/KanbanScreen.jsx';
+import TasksScreen from './screens/TasksScreen.jsx';
 import CoraScreen from './screens/CoraScreen.jsx';
 import AnaliseiFoodScreen from './screens/AnaliseiFoodScreen.jsx';
 import TarefasClienteScreen from './screens/TarefasClienteScreen.jsx';
@@ -146,7 +146,7 @@ export default function App() {
       <main className="main scroll" key={route + tenant}>
         {route === 'dashboard' && <DashboardScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'chat'      && <ChatScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={setRoute} />}
-        {route === 'tasks'     && <KanbanScreen tenant={tenant} tenantDbId={tenantDbId} />}
+        {route === 'tasks'     && <TasksScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'cora'         && <CoraScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'analise-ifood'   && <AnaliseiFoodScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'tarefas-cliente' && <TarefasClienteScreen tenant={tenant} tenantDbId={tenantDbId} />}
