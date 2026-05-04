@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Icon from '../components/Icon.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
 import UserAvatar from '../components/UserAvatar.jsx';
+import RequireRole from '../components/auth/RequireRole.jsx';
 import { listInadimplencias, listInadimplenciaTranscript, getAgentActions } from '../lib/api.js';
 
 const STATUS = {
@@ -41,7 +42,7 @@ function mapMessage(m) {
   return { from: isBot ? 'bot' : 'client', text: m.body ?? '', time: fmtTime(m.sent_at) };
 }
 
-export default function CoraScreen({ tenant, tenantDbId }) {
+export default function CoraScreen({ tenant, tenantDbId, userId }) {
   const [rawRows, setRawRows]       = useState([]);
   const [rows, setRows]             = useState([]);
   const [liveActions, setLiveActions] = useState([]);
@@ -99,6 +100,7 @@ export default function CoraScreen({ tenant, tenantDbId }) {
   };
 
   return (
+    <RequireRole resource="cora" action="view" userId={userId}>
     <div className="route-enter page-container" style={{ padding: 32, maxWidth: 1400, margin: '0 auto', position: 'relative' }}>
       {/* Header */}
       <div className="header-wrap" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24 }}>
@@ -299,6 +301,7 @@ export default function CoraScreen({ tenant, tenantDbId }) {
         />
       )}
     </div>
+    </RequireRole>
   );
 }
 

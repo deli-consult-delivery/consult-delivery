@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import Icon from '../components/Icon.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
+import RequireRole from '../components/auth/RequireRole.jsx';
 import { AGENTS } from '../data.js';
 import { getKPIs, getChart7d, getAgentActions } from '../lib/api.js';
 
@@ -31,7 +32,7 @@ function mapKpis(raw) {
   };
 }
 
-export default function ReportsScreen({ tenant, tenantDbId }) {
+export default function ReportsScreen({ tenant, tenantDbId, userId }) {
   const [kpis, setKpis]           = useState(mapKpis(null));
   const [chart7d, setChart7d]     = useState([0,0,0,0,0,0,0]);
   const [veraActions, setVeraActions] = useState([]);
@@ -54,6 +55,7 @@ export default function ReportsScreen({ tenant, tenantDbId }) {
   const max   = Math.max(1, ...chart);
 
   return (
+    <RequireRole resource="reports" action="view" userId={userId}>
     <div className="route-enter page-container" style={{ padding: 32, maxWidth: 1400, margin: '0 auto' }}>
 
       {/* Header */}
@@ -233,6 +235,7 @@ export default function ReportsScreen({ tenant, tenantDbId }) {
         </div>
       </div>
     </div>
+    </RequireRole>
   );
 }
 

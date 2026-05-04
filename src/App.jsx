@@ -147,11 +147,11 @@ export default function App() {
         {route === 'dashboard' && <DashboardScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'chat'      && <ChatScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={setRoute} />}
         {route === 'tasks'     && <TasksScreen tenant={tenant} tenantDbId={tenantDbId} />}
-        {route === 'cora'         && <CoraScreen tenant={tenant} tenantDbId={tenantDbId} />}
+        {route === 'cora'         && <CoraScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'analise-ifood'   && <AnaliseiFoodScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'tarefas-cliente' && <TarefasClienteScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'crm'             && <CRMScreen tenant={tenant} tenantDbId={tenantDbId} />}
-        {route === 'reports'   && <ReportsScreen tenant={tenant} tenantDbId={tenantDbId} />}
+        {route === 'reports'   && <ReportsScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'agents'    && <AgentsPage />}
         {route === 'grupos'    && <GruposScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'settings'  && <SettingsScreen tenant={tenant} tenantDbId={tenantDbId} onTenantChange={async (newSlug) => {
