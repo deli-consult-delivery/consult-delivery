@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import Icon from '../components/Icon.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
 import UserAvatar from '../components/UserAvatar.jsx';
+import RequireRole from '../components/auth/RequireRole.jsx';
+import { usePermissions } from '../hooks/usePermissions.js';
 import { SETTINGS_DATA, AGENTS } from '../data.js';
 import { supabase } from '../lib/supabase.js';
 import { setWebhook, getQRCode, getInstanceStatus } from '../lib/evolution.js';
@@ -51,8 +53,12 @@ const INTEGRATION_STATUS = {
 };
 
 /* ─── Main ────────────────────────────────────────────── */
-export default function SettingsScreen({ tenant, tenantDbId, onTenantChange }) {
+const ADMIN_TABS = new Set(['workspace', 'users', 'billing', 'security']);
+
+export default function SettingsScreen({ tenant, tenantDbId, onTenantChange, userId }) {
   const [tab, setTab] = useState('workspace');
+  const { can } = usePermissions(userId);
+  const isAdmin = can('tenant_admin', 'view');
 
   return (
     <div className="route-enter" style={{ padding: 32, maxWidth: 1200, margin: '0 auto' }}>
@@ -67,26 +73,31 @@ export default function SettingsScreen({ tenant, tenantDbId, onTenantChange }) {
 
         {/* Sidebar nav */}
         <div className="card" style={{ padding: 8, position: 'sticky', top: 16 }}>
-          {TABS.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              style={{
-                width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                padding: '10px 12px', borderRadius: 'var(--r-sm)',
-                fontWeight: tab === t.id ? 700 : 500,
-                fontSize: 14,
-                color: tab === t.id ? 'var(--red)' : 'var(--g-700)',
-                background: tab === t.id ? 'var(--red-soft)' : 'transparent',
-                textAlign: 'left',
-                transition: 'all 150ms var(--ease-out)',
-                marginBottom: 2,
-              }}
-            >
-              <Icon name={t.icon} size={15} style={{ color: tab === t.id ? 'var(--red)' : 'var(--g-400)' }} />
-              {t.label}
-            </button>
-          ))}
+          {TABS.map(t => {
+            const locked = ADMIN_TABS.has(t.id) && !isAdmin;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '10px 12px', borderRadius: 'var(--r-sm)',
+                  fontWeight: tab === t.id ? 700 : 500,
+                  fontSize: 14,
+                  color: locked ? 'var(--g-400)' : tab === t.id ? 'var(--red)' : 'var(--g-700)',
+                  background: tab === t.id ? (locked ? 'var(--g-100)' : 'var(--red-soft)') : 'transparent',
+                  textAlign: 'left',
+                  transition: 'all 150ms var(--ease-out)',
+                  marginBottom: 2,
+                  opacity: locked ? 0.6 : 1,
+                }}
+              >
+                <Icon name={t.icon} size={15} style={{ color: locked ? 'var(--g-300)' : tab === t.id ? 'var(--red)' : 'var(--g-400)' }} />
+                {t.label}
+                {locked && <Icon name="gear" size={11} style={{ marginLeft: 'auto', color: 'var(--g-400)', opacity: 0.6 }} />}
+              </button>
+            );
+          })}
 
           {/* VPS info */}
           <div style={{
@@ -104,13 +115,13 @@ export default function SettingsScreen({ tenant, tenantDbId, onTenantChange }) {
 
         {/* Content area */}
         <div>
-          {tab === 'workspace'    && <TabWorkspace tenantDbId={tenantDbId} onTenantChange={onTenantChange} />}
-          {tab === 'users'        && <TabUsers tenantDbId={tenantDbId} tenant={tenant} />}
+          {tab === 'workspace'    && <RequireRole resource="tenant_admin" action="view" userId={userId}><TabWorkspace tenantDbId={tenantDbId} onTenantChange={onTenantChange} /></RequireRole>}
+          {tab === 'users'        && <RequireRole resource="tenant_admin" action="view" userId={userId}><TabUsers tenantDbId={tenantDbId} tenant={tenant} /></RequireRole>}
           {tab === 'integrations' && <TabIntegrations />}
           {tab === 'whatsapp'     && <TabWhatsApp />}
           {tab === 'agents'       && <TabAgents />}
-          {tab === 'billing'      && <TabBilling />}
-          {tab === 'security'     && <TabSecurity />}
+          {tab === 'billing'      && <RequireRole resource="tenant_admin" action="view" userId={userId}><TabBilling /></RequireRole>}
+          {tab === 'security'     && <RequireRole resource="tenant_admin" action="view" userId={userId}><TabSecurity /></RequireRole>}
         </div>
       </div>
     </div>

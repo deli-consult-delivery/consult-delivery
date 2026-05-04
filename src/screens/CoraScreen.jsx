@@ -100,7 +100,7 @@ export default function CoraScreen({ tenant, tenantDbId, userId }) {
   };
 
   return (
-    <RequireRole resource="cora" action="view" userId={userId}>
+    <RequireRole resource="cobranca" action="view" userId={userId}>
     <div className="route-enter page-container" style={{ padding: 32, maxWidth: 1400, margin: '0 auto', position: 'relative' }}>
       {/* Header */}
       <div className="header-wrap" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24 }}>

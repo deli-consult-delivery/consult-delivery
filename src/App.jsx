@@ -154,7 +154,7 @@ export default function App() {
         {route === 'reports'   && <ReportsScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'agents'    && <AgentsPage />}
         {route === 'grupos'    && <GruposScreen tenant={tenant} tenantDbId={tenantDbId} />}
-        {route === 'settings'  && <SettingsScreen tenant={tenant} tenantDbId={tenantDbId} onTenantChange={async (newSlug) => {
+        {route === 'settings'  && <SettingsScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} onTenantChange={async (newSlug) => {
           if (newSlug) {
             setTenant(newSlug);
           } else {
