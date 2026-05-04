@@ -16,8 +16,21 @@
               "icon": "lucide-git-fork",
               "title": "Visualização em gráfico"
             }
+          },
+          {
+            "id": "18cf33a397d7d524",
+            "type": "leaf",
+            "state": {
+              "type": "excalidraw",
+              "state": {
+                "file": "Excalidraw/fluxo-telegram-copiloto.excalidraw"
+              },
+              "icon": "excalidraw-icon",
+              "title": "fluxo-telegram-copiloto"
+            }
           }
-        ]
+        ],
+        "currentTab": 1
       }
     ],
     "direction": "vertical"
@@ -173,11 +186,16 @@
       "daily-notes:Abrir a nota de hoje": false,
       "templates:Inserir modelo": false,
       "command-palette:Abrir paleta de comandos": false,
-      "bases:Criar nova base": false
+      "bases:Criar nova base": false,
+      "obsidian-excalidraw-plugin:New drawing": false
     }
   },
-  "active": "2d3376d66868810f",
+  "active": "18cf33a397d7d524",
   "lastOpenFiles": [
+    "Excalidraw/Drawing 2026-05-04 00.46.10.excalidraw.md",
+    "Excalidraw/fluxo-telegram-copiloto.excalidraw",
+    "log.md",
+    "Excalidraw",
     "wiki/campanha-inteligente-ifood.md"
   ]
 }

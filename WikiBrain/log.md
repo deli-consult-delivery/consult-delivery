@@ -8,6 +8,12 @@ Chronological, append-only record of everything that's happened in this wiki.
 <optional detail line>
 ```
 
+## [2026-05-04 18:00] session | Reestruturação estratégica v2 — migrations + RBAC + componentes
+Touched: none (decisões técnicas — schema já está no git e CLAUDE.md)
+
+## [2026-05-03 23:05] session | Sprint 2 análise iFood — treinamento + kanban real
+Touched: none
+
 **Types:** `session`, `ingest`, `query`, `lint`, `rebuild`
 
 **Quick access:** `grep "^## \[" log.md | tail -5` gives you the last 5 entries.
