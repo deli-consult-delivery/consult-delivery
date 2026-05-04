@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import Icon from '../components/Icon.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
+import ConversationStatusBar from '../components/ConversationStatusBar.jsx';
+import { useConversationStatus, STATUS_LABELS, STATUS_COLORS } from '../lib/conversationStatus.js';
 import { supabase } from '../lib/supabase.js';
 import { sendTextMessage, fetchProfile, sendAudioMessage, sendMediaMessage, fetchWAGroupParticipants, addWAGroupParticipants, removeWAGroupParticipant, leaveWAGroup } from '../lib/evolution.js';
 
@@ -8,21 +10,37 @@ const HAS_EVO = !!(
   import.meta.env.VITE_EVOLUTION_URL && import.meta.env.VITE_EVOLUTION_KEY
 );
 
-// ── Som de notificação via Web Audio API (sem arquivo externo) ──
+// ── Som de notificação via Web Audio API — beep duplo nítido ──
 function playNotificationSound() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc  = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(880, ctx.currentTime);
-    osc.frequency.setValueAtTime(660, ctx.currentTime + 0.1);
-    gain.gain.setValueAtTime(0.25, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.35);
+    const now = ctx.currentTime;
+
+    // Oscilador 1: tom principal (alto)
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(1046, now);        // C6 — mais agudo e perceptível
+    osc1.frequency.exponentialRampToValueAtTime(523, now + 0.18);
+    gain1.gain.setValueAtTime(0.9, now);             // volume alto (0.9)
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.35);
+
+    // Oscilador 2: harmônico sutil para "corpo"
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(784, now + 0.08);  // G5 — segundo beep levemente atrasado
+    gain2.gain.setValueAtTime(0, now);
+    gain2.gain.linearRampToValueAtTime(0.5, now + 0.10);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.40);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(now + 0.08);
+    osc2.stop(now + 0.40);
   } catch { /* ignore em browsers que bloqueiam AudioContext */ }
 }
 
@@ -45,6 +63,20 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [members, setMembers]                    = useState([]);
   const [showNewInternal, setShowNewInternal]    = useState(false);
   const [currentUser, setCurrentUser]            = useState(null);
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
+  const [statusFilter, setStatusFilter]             = useState(null); // 'aguardando' | 'em_atendimento' | ...
+
+  // ── Status de atendimento ────────────────────────────────
+  const {
+    status: convStatus,
+    loading: statusLoading,
+    internalNotes,
+    refresh: refreshStatus,
+    changeStatus,
+    finish,
+    reopen,
+    start,
+  } = useConversationStatus(activeId, tenantDbId, currentUser?.id);
 
   // ── Gravação de áudio ──────────────────────────────────
   const [recState, setRecState]     = useState('idle'); // idle | recording | preview
@@ -83,6 +115,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const persistingRef = useRef(new Set());
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
   useEffect(() => { convsRef.current = convs; }, [convs]);
+
+  // Atualiza status de atendimento quando muda de conversa
+  useEffect(() => {
+    refreshStatus();
+  }, [activeId, refreshStatus]);
 
   // Busca foto + nome do WhatsApp quando uma conversa é aberta
   useEffect(() => {
@@ -368,6 +405,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                       type: conv.is_group ? 'group' : 'whatsapp',
                       whatsapp_chat_id: conv.whatsapp_chat_id,
                       preview, previewFrom: 'in', time, unread: 1, online: false, messages: [],
+                      status: conv.status,
                     }, ...p];
                   });
                 });
@@ -628,6 +666,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             time: c.updated_at
               ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
             unread: 0, online: false, messages: [],
+            status: c.status,
           };
         });
         setConvs(mapped); setActiveId(mapped[0]?.id); setUsingRealData(true);
@@ -821,6 +860,10 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         await supabase.from('messages').insert({
           conversation_id: active.id, direction: 'outbound', content: text, sender_name: agentName || null, created_at: now.toISOString(),
         });
+        // Mudar status automaticamente se estava aguardando
+        if (convStatus === 'aguardando') {
+          await changeStatus('em_atendimento');
+        }
       } catch (err) { console.error('Falha ao enviar via Evolution:', err); }
       finally { setSending(false); }
     } else if (active.type === 'whatsapp' || active.type === 'group') {
@@ -864,8 +907,21 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     if (tab === 'groups' && c.type !== 'group')    return false;
     if (tab === 'int'    && !(c.type === 'internal' || c.type === 'agent')) return false;
     if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (statusFilter) {
+      const convStatus = c.status || 'aguardando';
+      if (convStatus !== statusFilter) return false;
+    }
     return true;
   });
+
+  // Contagens por status para os badges
+  const statusCounts = {
+    aguardando:         convs.filter(c => c.status === 'aguardando' || !c.status).length,
+    em_atendimento:     convs.filter(c => c.status === 'em_atendimento').length,
+    atendimento_aberto: convs.filter(c => c.status === 'atendimento_aberto').length,
+    finalizado:         convs.filter(c => c.status === 'finalizado').length,
+    automacao:          convs.filter(c => c.status === 'automacao').length,
+  };
 
   // Dentro da tab "int", separar DMs de canais
   const intDireto  = filtered.filter(c => c.type === 'internal' && !c.id.startsWith('chan-'));
@@ -937,6 +993,39 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             />
           </div>
 
+          {/* Badges de filtros por status */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+            {[
+              { key: 'aguardando',         icon: '📩', label: 'Aguardando',         bg: '#FEF3C7', text: '#92400E', border: '#F59E0B' },
+              { key: 'em_atendimento',     icon: '⏱',  label: 'Em atendimento',     bg: '#FEF3C7', text: '#92400E', border: '#F59E0B' },
+              { key: 'atendimento_aberto', icon: '📂', label: 'Aberto',             bg: '#DBEAFE', text: '#1E40AF', border: '#3B82F6' },
+              { key: 'finalizado',         icon: '✅', label: 'Finalizado',         bg: '#D1FAE5', text: '#065F46', border: '#10B981' },
+              { key: 'automacao',          icon: '⚠',  label: 'Automação',          bg: '#F3F4F6', text: '#4B5563', border: '#9CA3AF' },
+            ].map(b => {
+              const count = statusCounts[b.key] || 0;
+              const isActive = statusFilter === b.key;
+              return (
+                <button
+                  key={b.key}
+                  onClick={() => setStatusFilter(isActive ? null : b.key)}
+                  title={b.label}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 3,
+                    padding: '3px 8px', borderRadius: 999,
+                    border: `1px solid ${isActive ? b.border : 'transparent'}`,
+                    background: isActive ? b.bg : 'var(--g-100)',
+                    color: isActive ? b.text : 'var(--g-500)',
+                    fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                    transition: 'all 150ms',
+                  }}
+                >
+                  <span>{b.icon}</span>
+                  <span>{count}</span>
+                </button>
+              );
+            })}
+          </div>
+
           <div style={{ display: 'flex', gap: 3, padding: 3, background: 'var(--g-100)', borderRadius: 6 }}>
             {[
               { id: 'wa',     label: 'WhatsApp' },
@@ -981,7 +1070,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               {intDireto.map(c => {
                 const lastMsg = messages[c.id]?.slice(-1)[0];
                 return (
-                  <ConvItem key={c.id} conv={c} active={c.id === activeId} lastMsg={lastMsg} onClick={() => {
+                  <ConvItem key={c.id} conv={c} active={c.id === activeId} lastMsg={lastMsg} members={members} onClick={() => {
                     setActiveId(c.id);
                     setMobileView('chat');
                     if (usingRealData && !messages[c.id]?.length) loadMsgs(c.id);
@@ -1012,7 +1101,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                 </div>
               )}
               {intCanais.map(c => (
-                <ConvItem key={c.id} conv={c} active={c.id === activeId} onClick={() => {
+                <ConvItem key={c.id} conv={c} active={c.id === activeId} members={members} onClick={() => {
                   setActiveId(c.id);
                   setMobileView('chat');
                   setShowPinned(false);
@@ -1024,7 +1113,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               {filtered.map(c => {
                 const lastMsg = messages[c.id]?.slice(-1)[0];
                 return (
-                  <ConvItem key={c.id} conv={c} active={c.id === activeId} lastMsg={lastMsg} onClick={() => {
+                  <ConvItem key={c.id} conv={c} active={c.id === activeId} lastMsg={lastMsg} members={members} onClick={() => {
                     setActiveId(c.id);
                     setMobileView('chat');
                     if (usingRealData && !messages[c.id]?.length) loadMsgs(c.id);
@@ -1162,9 +1251,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         ) : (
           /* ── WhatsApp / DM ─────────────────────────────── */
           <>
-            {/* Header do chat */}
+            {/* Header do chat — modelo reformulado */}
             <div style={{
-              padding: '14px 20px', background: 'var(--white)', borderBottom: '1px solid var(--g-200)',
+              padding: '12px 20px', background: 'var(--white)', borderBottom: '1px solid var(--g-200)',
               display: 'flex', alignItems: 'center', gap: 12,
             }}>
               {isMobile && (
@@ -1174,24 +1263,113 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               )}
               <ConvAvatar conv={active} size={40} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--g-900)' }}>{active.name}</div>
-                <div style={{ fontSize: 12, color: 'var(--g-500)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                {/* Nome + status dropdown */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--g-900)' }}>{active.name}</span>
+                  {/* Dropdown de status integrado */}
+                  {(active.type === 'whatsapp' || active.type === 'group') && (
+                    <div style={{ position: 'relative' }}>
+                      <button
+                        onClick={() => setStatusDropdownOpen(v => !v)}
+                        disabled={statusLoading}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 4,
+                          padding: '2px 8px', borderRadius: 999,
+                          border: '1px solid var(--g-200)',
+                          background: 'var(--g-50)', color: 'var(--g-600)',
+                          fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                        }}
+                      >
+                        {STATUS_LABELS[convStatus] || convStatus}
+                        <Icon name="chevdown" size={10} />
+                      </button>
+                      {statusDropdownOpen && (
+                        <div style={{
+                          position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 50,
+                          background: 'var(--white)', border: '1px solid var(--g-200)',
+                          borderRadius: 'var(--r-sm)', boxShadow: 'var(--sh-dropdown)',
+                          minWidth: 200, padding: '4px 0',
+                        }}>
+                          {Object.entries(STATUS_LABELS).map(([key, label]) => (
+                            <button
+                              key={key}
+                              onClick={() => { changeStatus(key); setStatusDropdownOpen(false); }}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: 8,
+                                width: '100%', padding: '6px 12px', border: 'none',
+                                background: convStatus === key ? 'var(--g-50)' : 'transparent',
+                                cursor: 'pointer', fontSize: 12, color: 'var(--g-800)', textAlign: 'left',
+                              }}
+                            >
+                              <span style={{
+                                width: 8, height: 8, borderRadius: '50%',
+                                background: STATUS_COLORS[key]?.dot || '#9CA3AF', flexShrink: 0,
+                              }} />
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {/* Subtítulo: canal + número */}
+                <div style={{ fontSize: 12, color: 'var(--g-500)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
                   {active.online && (
                     <><span style={{ width: 7, height: 7, background: 'var(--success)', borderRadius: '50%' }} />online agora</>
                   )}
-                  {active.type === 'whatsapp' && <><span>·</span><Icon name="whatsapp" size={12} style={{ color: '#25D366' }} />WhatsApp</>}
-                  {active.type === 'group'    && <><span>·</span><Icon name="users" size={12} />Grupo WhatsApp</>}
-                  {active.type === 'internal' && <><span>·</span>Interno</>}
-                  {active.type === 'agent'    && <><span>·</span>Agente IA</>}
+                  {active.type === 'whatsapp' && <><Icon name="whatsapp" size={12} style={{ color: '#25D366' }} />WhatsApp</>}
+                  {active.type === 'group' && <><Icon name="users" size={12} />Grupo WhatsApp</>}
                   {active.whatsapp_chat_id && (
-                    <><span>·</span>
-                    <code style={{ fontSize: 10, background: 'var(--g-100)', padding: '1px 5px', borderRadius: 3 }}>
-                      {active.whatsapp_chat_id.split('@')[0]}
-                    </code></>
+                    <><span>·</span><code style={{ fontSize: 10, background: 'var(--g-100)', padding: '1px 5px', borderRadius: 3 }}>{active.whatsapp_chat_id.split('@')[0]}</code></>
                   )}
                 </div>
               </div>
-              <button className="btn-icon" title="Ligar"><Icon name="phone" size={16} /></button>
+
+              {/* ID da conversa */}
+              <span style={{ fontSize: 11, color: 'var(--g-400)', fontFamily: 'monospace', flexShrink: 0 }}>
+                #{active.id?.slice(-5) || '00000'}
+              </span>
+
+              {/* Botão Finalizar / Reabrir */}
+              {(active.type === 'whatsapp' || active.type === 'group') && (
+                convStatus === 'finalizado' ? (
+                  <button
+                    onClick={reopen}
+                    disabled={statusLoading}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '6px 12px', borderRadius: 'var(--r-sm)',
+                      border: '1px solid var(--info)', background: 'var(--info-soft)',
+                      color: 'var(--info)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                    }}
+                  >
+                    <Icon name="refresh" size={13} /> Reabrir
+                  </button>
+                ) : (
+                  <button
+                    onClick={finish}
+                    disabled={statusLoading}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '6px 12px', borderRadius: 'var(--r-sm)',
+                      border: '1px solid var(--success)', background: 'var(--success-soft)',
+                      color: 'var(--success)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                    }}
+                  >
+                    <Icon name="checkcircle" size={13} /> Finalizar
+                  </button>
+                )
+              )}
+
+              {/* Menu 3 pontos */}
+              <button className="btn-icon" title="Mais ações" style={{ color: 'var(--g-500)' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <circle cx="12" cy="6" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="18" r="2"/>
+                </svg>
+              </button>
+
+              {/* Info toggle */}
               <button
                 className="btn-icon"
                 onClick={() => setShowInfo(v => !v)}
@@ -1484,6 +1662,12 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                 c.id === active.id
                   ? { ...c, name: newName, avatar: newName.slice(0, 2).toUpperCase() }
                   : c
+              ));
+            }}
+            onStatusChange={newStatus => {
+              changeStatus(newStatus);
+              setConvs(prev => prev.map(c =>
+                c.id === active.id ? { ...c, status: newStatus } : c
               ));
             }}
           />
@@ -1965,18 +2149,26 @@ function ConvAvatar({ conv, size = 36 }) {
 }
 
 /* ── ConvItem ───────────────────────────────────────────── */
-function ConvItem({ conv, active, onClick, lastMsg }) {
+function ConvItem({ conv, active, onClick, lastMsg, members = [] }) {
   const isChannel = conv.type === 'internal' && conv.id?.startsWith('chan-');
 
   // Preview: usa a última mensagem real se disponível
   const previewText = lastMsg?.text || conv.preview || '';
-  const truncated   = previewText.length > 38 ? previewText.slice(0, 38) + '…' : previewText;
+  const truncated   = previewText.length > 34 ? previewText.slice(0, 34) + '…' : previewText;
   // 'in' = cliente → vermelho | 'out' = equipe → cinza
   const resolvedFrom = lastMsg?.from || conv.previewFrom || 'out';
   const previewColor = previewText
     ? (resolvedFrom === 'in' ? 'var(--red)' : 'var(--g-500)')
     : 'var(--g-500)';
   const previewWeight = resolvedFrom === 'in' && !active ? 600 : 400;
+
+  // Status badge
+  const status = conv.status || 'aguardando';
+  const sColor = STATUS_COLORS[status] || STATUS_COLORS.aguardando;
+  const sLabel = STATUS_LABELS[status] || STATUS_LABELS.aguardando;
+
+  // Assignee badge
+  const assigneeName = members.find(m => m.id === conv.assigned_to)?.full_name || null;
 
   return (
     <div
@@ -2012,16 +2204,18 @@ function ConvItem({ conv, active, onClick, lastMsg }) {
           )}
         </>
       ) : (
-        /* DM / WA / Grupo: layout padrão com preview */
+        /* DM / WA / Grupo: card reformulado com status + atendente */
         <>
           <ConvAvatar conv={conv} size={40} />
           <div style={{ flex: 1, minWidth: 0 }}>
+            {/* Linha 1: nome + tempo */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <div style={{ fontSize: 13, fontWeight: active ? 700 : 600, color: 'var(--g-900)' }} className="truncate">
                 {conv.name}
               </div>
               <div style={{ fontSize: 10, color: 'var(--g-500)', flexShrink: 0 }}>{conv.time}</div>
             </div>
+            {/* Linha 2: preview + unread */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flex: 1 }}>
                 {conv.type === 'group' && conv.groupType && (
@@ -2042,6 +2236,25 @@ function ConvItem({ conv, active, onClick, lastMsg }) {
                 </span>
               )}
             </div>
+            {/* Linha 3: tags de status + atendente */}
+            <div style={{ display: 'flex', gap: 6, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{
+                fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                background: sColor.bg, color: sColor.text, border: `1px solid ${sColor.dot}`,
+                flexShrink: 0, textTransform: 'uppercase', letterSpacing: 0.3,
+              }}>
+                {sLabel}
+              </span>
+              {assigneeName && (
+                <span style={{
+                  fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 4,
+                  background: 'var(--g-100)', color: 'var(--g-600)', border: '1px solid var(--g-200)',
+                  flexShrink: 0,
+                }}>
+                  {assigneeName}
+                </span>
+              )}
+            </div>
           </div>
         </>
       )}
@@ -2049,10 +2262,31 @@ function ConvItem({ conv, active, onClick, lastMsg }) {
   );
 }
 
+/* ── CollapsibleSection ───────────────────────────────── */
+function CollapsibleSection({ title, children, defaultOpen = true }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div style={{ marginTop: 4, borderBottom: '1px solid var(--g-200)', paddingBottom: 14 }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: 'none', border: 'none', cursor: 'pointer', padding: '8px 0',
+          fontSize: 11, fontWeight: 700, color: 'var(--g-600)', textTransform: 'uppercase', letterSpacing: 0.6,
+        }}
+      >
+        {title}
+        <span style={{ fontSize: 13, color: 'var(--g-500)' }}>{open ? '▾' : '▸'}</span>
+      </button>
+      {open && <div style={{ marginTop: 6 }}>{children}</div>}
+    </div>
+  );
+}
+
 /* ── ContactPanel ───────────────────────────────────────── */
 const PIPELINES = ['Prospecção', 'Negociação', 'Fechamento', 'Pós-venda', 'Reativação'];
 
-function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved, instanceName }) {
+function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved, instanceName, onStatusChange }) {
   const isGroup = conv.type === 'group';
 
   // Edição de nome/telefone
@@ -2089,7 +2323,6 @@ function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved,
 
   // Finalizar atendimento
   const [showFinishConfirm, setShowFinishConfirm] = useState(false);
-  const [finished, setFinished]                   = useState(false);
 
   // Grupo: participantes e gerenciamento
   const [groupParticipants, setGroupParticipants] = useState([]);
@@ -2154,79 +2387,154 @@ function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved,
   }
 
   function finishAtendimento() {
-    setFinished(true);
+    if (onStatusChange) onStatusChange('finalizado');
     setShowFinishConfirm(false);
   }
 
-  if (finished) {
-    return (
-      <div style={{ padding: 40, textAlign: 'center' }}>
-        <div style={{ fontSize: 32, marginBottom: 12 }}>✅</div>
-        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--g-900)', marginBottom: 6 }}>Atendimento finalizado</div>
-        <div style={{ fontSize: 12, color: 'var(--g-500)' }}>Conversa arquivada e marcada como resolvida.</div>
-      </div>
-    );
-  }
-
   return (
-    <div style={{ padding: 24 }}>
-      {/* Avatar e info */}
-      <div style={{ textAlign: 'center', paddingBottom: 20, borderBottom: '1px solid var(--g-200)' }}>
-        <div style={{ display: 'inline-block' }}><ConvAvatar conv={conv} size={80} /></div>
-        {isEditing ? (
-          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <input className="input" style={{ fontSize: 13, textAlign: 'center' }} value={editName} onChange={e => setEditName(e.target.value)} placeholder="Nome" />
-            <input className="input" style={{ fontSize: 13, textAlign: 'center' }} value={editPhone} onChange={e => setEditPhone(e.target.value)} placeholder="Telefone" />
-            <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 4 }}>
-              <button
-                className="btn-primary"
-                style={{ padding: '6px 12px', fontSize: 12 }}
-                onClick={async () => {
-                  setIsEditing(false);
-                  try {
-                    await supabase.from('conversations')
-                      .update({ push_name: editName, contact_name: editName })
-                      .eq('id', conv.id);
-                    if (onNameSaved) onNameSaved(editName);
-                  } catch { /* ignore */ }
-                }}
-              >Salvar</button>
-              <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => { setIsEditing(false); setEditName(conv.name); }}>Cancelar</button>
-            </div>
-          </div>
-        ) : (
-          <>
-            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--g-900)', marginTop: 12 }}>{editName}</div>
-            <div style={{ fontSize: 12, color: 'var(--g-500)', marginTop: 4 }}>
-              {isGroup ? 'Grupo WhatsApp' : editPhone || conv.role || conv.type}
-            </div>
-            {/* Tags do contato */}
-            {tags.length > 0 && (
-              <div style={{ display: 'flex', gap: 5, justifyContent: 'center', flexWrap: 'wrap', marginTop: 10 }}>
-                {tags.map(t => (
-                  <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}
-                    className={`badge ${t === 'VIP' ? 'badge-red' : 'badge-gray'}`}>
-                    {t}
-                    <button onClick={() => removeTag(t)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1, opacity: 0.6, fontSize: 10 }}>×</button>
-                  </span>
-                ))}
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' }}>
-              {!isGroup && <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: 12 }}><Icon name="phone" size={12} /> Ligar</button>}
-              {!isGroup && onNavigate && (
-                <button className="btn-primary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => onNavigate('crm')}>Ver no CRM</button>
-              )}
-              <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => setIsEditing(true)}><Icon name="edit" size={12} /> Editar</button>
-            </div>
-          </>
-        )}
-      </div>
+    <div style={{ padding: '12px 16px' }}>
 
-      {/* Últimos pedidos */}
+      {/* ── PERFIL ─────────────────────────────────────────── */}
+      <CollapsibleSection title="Perfil" defaultOpen={true}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ display: 'inline-block' }}><ConvAvatar conv={conv} size={72} /></div>
+          {isEditing ? (
+            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <input className="input" style={{ fontSize: 13, textAlign: 'center' }} value={editName} onChange={e => setEditName(e.target.value)} placeholder="Nome" />
+              <input className="input" style={{ fontSize: 13, textAlign: 'center' }} value={editPhone} onChange={e => setEditPhone(e.target.value)} placeholder="Telefone" />
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 4 }}>
+                <button
+                  className="btn-primary"
+                  style={{ padding: '6px 12px', fontSize: 12 }}
+                  onClick={async () => {
+                    setIsEditing(false);
+                    try {
+                      await supabase.from('conversations')
+                        .update({ push_name: editName, contact_name: editName })
+                        .eq('id', conv.id);
+                      if (onNameSaved) onNameSaved(editName);
+                    } catch { /* ignore */ }
+                  }}
+                >Salvar</button>
+                <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => { setIsEditing(false); setEditName(conv.name); }}>Cancelar</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--g-900)', marginTop: 10 }}>{editName}</div>
+              <div style={{ fontSize: 12, color: 'var(--g-500)', marginTop: 4 }}>
+                {isGroup ? 'Grupo WhatsApp' : editPhone || conv.role || conv.type}
+              </div>
+              {tags.length > 0 && (
+                <div style={{ display: 'flex', gap: 5, justifyContent: 'center', flexWrap: 'wrap', marginTop: 10 }}>
+                  {tags.map(t => (
+                    <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}
+                      className={`badge ${t === 'VIP' ? 'badge-red' : 'badge-gray'}`}>
+                      {t}
+                      <button onClick={() => removeTag(t)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1, opacity: 0.6, fontSize: 10 }}>×</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 14, flexWrap: 'wrap' }}>
+                {!isGroup && <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: 12 }}><Icon name="phone" size={12} /> Ligar</button>}
+                {!isGroup && onNavigate && (
+                  <button className="btn-primary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => onNavigate('crm')}>Ver no CRM</button>
+                )}
+                <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => setIsEditing(true)}><Icon name="edit" size={12} /> Editar</button>
+              </div>
+            </>
+          )}
+        </div>
+      </CollapsibleSection>
+
+      {/* ── NOTAS ──────────────────────────────────────────── */}
+      <CollapsibleSection title="Notas" defaultOpen={false}>
+        <textarea
+          className="input" placeholder="Adicione uma nota interna…"
+          style={{ minHeight: 80, resize: 'vertical', fontSize: 12, width: '100%' }}
+          value={editNote} onChange={e => setEditNote(e.target.value)}
+        />
+      </CollapsibleSection>
+
+      {/* ── ENDEREÇO ───────────────────────────────────────── */}
+      <CollapsibleSection title="Endereço" defaultOpen={false}>
+        <div style={{ fontSize: 12, color: 'var(--g-500)', padding: '6px 0' }}>
+          Endereço não cadastrado.
+        </div>
+      </CollapsibleSection>
+
+      {/* ── DADOS DO LEAD ────────────────────────────────── */}
+      <CollapsibleSection title="Dados do Lead" defaultOpen={true}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* Pipeline */}
+          {pipelineOk ? (
+            <div style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600, padding: '4px 0' }}>✅ Adicionado ao pipeline "{pipeline}"</div>
+          ) : showPipeline ? (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <select className="input" style={{ flex: 1, fontSize: 12, padding: '6px 8px' }}
+                value={pipeline} onChange={e => setPipeline(e.target.value)}>
+                <option value="">Selecionar pipeline…</option>
+                {PIPELINES.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+              <button className="btn-primary" style={{ padding: '6px 10px', fontSize: 12 }} onClick={confirmPipeline}>OK</button>
+              <button className="btn-icon" onClick={() => setShowPipeline(false)}><Icon name="x" size={13} /></button>
+            </div>
+          ) : (
+            <button className="btn-secondary" style={{ justifyContent: 'flex-start', fontSize: 12, gap: 8, width: '100%' }}
+              onClick={() => setShowPipeline(true)}>
+              <Icon name="chart" size={14} /> Adicionar ao Pipeline
+            </button>
+          )}
+
+          {/* Tag */}
+          <div>
+            {showTagInput ? (
+              <form onSubmit={addTag} style={{ display: 'flex', gap: 6 }}>
+                <input
+                  className="input" style={{ flex: 1, fontSize: 12, padding: '6px 8px' }}
+                  placeholder="Nome da tag…" value={tagInput} onChange={e => setTagInput(e.target.value)}
+                  autoFocus list="tag-suggestions"
+                />
+                <datalist id="tag-suggestions">
+                  {['VIP', 'Recorrente', 'Inadimplente', 'Novo', 'Parceiro'].map(s => <option key={s} value={s} />)}
+                </datalist>
+                <button type="submit" className="btn-primary" style={{ padding: '6px 10px', fontSize: 12 }}>OK</button>
+                <button type="button" className="btn-icon" onClick={() => setShowTagInput(false)}><Icon name="x" size={13} /></button>
+              </form>
+            ) : (
+              <button className="btn-secondary" style={{ justifyContent: 'flex-start', fontSize: 12, gap: 8, width: '100%' }}
+                onClick={() => setShowTagInput(true)}>
+                <Icon name="plus" size={14} /> Adicionar Tag
+              </button>
+            )}
+          </div>
+
+          {/* Análise DELI */}
+          {(conv.type === 'whatsapp' || conv.type === 'group') && (
+            <div style={{
+              marginTop: 6, padding: 12,
+              background: 'linear-gradient(135deg, rgba(183,12,0,0.05), rgba(183,12,0,0.01))',
+              border: '1px solid rgba(183,12,0,0.15)', borderRadius: 8,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <Icon name="sparkles" size={14} style={{ color: 'var(--red)' }} />
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--red)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Análise DELI</span>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--g-700)', lineHeight: 1.5 }}>
+                {isGroup
+                  ? <>Grupo ativo com membros recorrentes. Nível de engajamento: <strong style={{ color: 'var(--success)' }}>bom</strong>.</>
+                  : <>Cliente <strong>frustrado</strong> por atraso repetido. Sentimento: <strong style={{ color: 'var(--warn)' }}>negativo</strong>.{' '}
+                    Risco de churn: <strong style={{ color: 'var(--red)' }}>alto</strong>. Recomendo reembolso parcial + cortesia dupla.</>}
+              </div>
+            </div>
+          )}
+        </div>
+      </CollapsibleSection>
+
+      {/* ── IFOOD ──────────────────────────────────────────── */}
       {conv.orders && (
-        <div style={{ marginTop: 20 }}>
-          <div className="label" style={{ marginBottom: 10 }}>Últimos pedidos</div>
+        <CollapsibleSection title="iFood" defaultOpen={false}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {conv.orders.map((o, i) => (
               <div key={i} style={{ padding: 10, background: 'var(--g-50)', borderRadius: 6 }}>
@@ -2238,43 +2546,12 @@ function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved,
               </div>
             ))}
           </div>
-        </div>
+        </CollapsibleSection>
       )}
 
-      {/* Notas internas */}
-      <div style={{ marginTop: 20 }}>
-        <div className="label" style={{ marginBottom: 10 }}>Notas internas</div>
-        <textarea
-          className="input" placeholder="Adicione uma nota…"
-          style={{ minHeight: 80, resize: 'vertical', fontSize: 12 }}
-          value={editNote} onChange={e => setEditNote(e.target.value)}
-        />
-      </div>
-
-      {/* Análise DELI */}
-      {(conv.type === 'whatsapp' || conv.type === 'group') && (
-        <div style={{
-          marginTop: 20, padding: 14,
-          background: 'linear-gradient(135deg, rgba(183,12,0,0.05), rgba(183,12,0,0.01))',
-          border: '1px solid rgba(183,12,0,0.15)', borderRadius: 8,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <Icon name="sparkles" size={14} style={{ color: 'var(--red)' }} />
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--red)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Análise DELI</span>
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--g-700)', lineHeight: 1.5 }}>
-            {isGroup
-              ? <>Grupo ativo com membros recorrentes. Nível de engajamento: <strong style={{ color: 'var(--success)' }}>bom</strong>.</>
-              : <>Cliente <strong>frustrado</strong> por atraso repetido. Sentimento: <strong style={{ color: 'var(--warn)' }}>negativo</strong>.{' '}
-                Risco de churn: <strong style={{ color: 'var(--red)' }}>alto</strong>. Recomendo reembolso parcial + cortesia dupla.</>}
-          </div>
-        </div>
-      )}
-
-      {/* Membros do grupo */}
+      {/* ── MEMBROS DO GRUPO ───────────────────────────────── */}
       {isGroup && (
-        <div style={{ marginTop: 20 }}>
-          <div className="label" style={{ marginBottom: 10 }}>Membros do grupo ({groupParticipants.length || conv.preview})</div>
+        <CollapsibleSection title="Membros do Grupo" defaultOpen={false}>
           {loadingParticipants ? (
             <div style={{ fontSize: 12, color: 'var(--g-400)', padding: '8px 0' }}>Carregando…</div>
           ) : groupParticipants.length === 0 ? (
@@ -2304,61 +2581,15 @@ function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved,
               })}
             </div>
           )}
-        </div>
+        </CollapsibleSection>
       )}
 
-      {/* ── AÇÕES RÁPIDAS ───────────────────────────────── */}
-      <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid var(--g-200)' }}>
-        <div className="label" style={{ marginBottom: 14 }}>{isGroup ? 'Gerenciar grupo' : 'Ações rápidas'}</div>
-
+      {/* ── NEGÓCIO ────────────────────────────────────────── */}
+      <CollapsibleSection title="Negócio" defaultOpen={true}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-
-          {/* 1 · Pipeline */}
-          {pipelineOk ? (
-            <div style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600, padding: '6px 0' }}>✅ Adicionado ao pipeline "{pipeline}"</div>
-          ) : showPipeline ? (
-            <div style={{ display: 'flex', gap: 6 }}>
-              <select className="input" style={{ flex: 1, fontSize: 12, padding: '6px 8px' }}
-                value={pipeline} onChange={e => setPipeline(e.target.value)}>
-                <option value="">Selecionar pipeline…</option>
-                {PIPELINES.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
-              <button className="btn-primary" style={{ padding: '6px 10px', fontSize: 12 }} onClick={confirmPipeline}>OK</button>
-              <button className="btn-icon" onClick={() => setShowPipeline(false)}><Icon name="x" size={13} /></button>
-            </div>
-          ) : (
-            <button className="btn-secondary" style={{ justifyContent: 'flex-start', fontSize: 12, gap: 8 }}
-              onClick={() => setShowPipeline(true)}>
-              <Icon name="chart" size={14} /> Adicionar ao Pipeline
-            </button>
-          )}
-
-          {/* 2 · Tag */}
-          <div>
-            {showTagInput ? (
-              <form onSubmit={addTag} style={{ display: 'flex', gap: 6 }}>
-                <input
-                  className="input" style={{ flex: 1, fontSize: 12, padding: '6px 8px' }}
-                  placeholder="Nome da tag…" value={tagInput} onChange={e => setTagInput(e.target.value)}
-                  autoFocus list="tag-suggestions"
-                />
-                <datalist id="tag-suggestions">
-                  {['VIP', 'Recorrente', 'Inadimplente', 'Novo', 'Parceiro'].map(s => <option key={s} value={s} />)}
-                </datalist>
-                <button type="submit" className="btn-primary" style={{ padding: '6px 10px', fontSize: 12 }}>OK</button>
-                <button type="button" className="btn-icon" onClick={() => setShowTagInput(false)}><Icon name="x" size={13} /></button>
-              </form>
-            ) : (
-              <button className="btn-secondary" style={{ justifyContent: 'flex-start', fontSize: 12, gap: 8, width: '100%' }}
-                onClick={() => setShowTagInput(true)}>
-                <Icon name="plus" size={14} /> Adicionar Tag
-              </button>
-            )}
-          </div>
-
-          {/* 3 · Transferir */}
+          {/* Transferir */}
           {transferOk ? (
-            <div style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600, padding: '6px 0' }}>✅ Conversa transferida com sucesso</div>
+            <div style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600, padding: '4px 0' }}>✅ Conversa transferida com sucesso</div>
           ) : showTransfer ? (
             <div style={{ display: 'flex', gap: 6 }}>
               <select className="input" style={{ flex: 1, fontSize: 12, padding: '6px 8px' }}
@@ -2370,15 +2601,15 @@ function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved,
               <button className="btn-icon" onClick={() => setShowTransfer(false)}><Icon name="x" size={13} /></button>
             </div>
           ) : (
-            <button className="btn-secondary" style={{ justifyContent: 'flex-start', fontSize: 12, gap: 8 }}
+            <button className="btn-secondary" style={{ justifyContent: 'flex-start', fontSize: 12, gap: 8, width: '100%' }}
               onClick={() => setShowTransfer(true)}>
               <Icon name="users" size={14} /> Transferir conversa
             </button>
           )}
 
-          {/* 4 · Criar Tarefa */}
+          {/* Criar Tarefa */}
           {taskOk ? (
-            <div style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600, padding: '6px 0' }}>✅ Tarefa criada com sucesso</div>
+            <div style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600, padding: '4px 0' }}>✅ Tarefa criada com sucesso</div>
           ) : showTaskForm ? (
             <div style={{ background: 'var(--g-50)', border: '1px solid var(--g-200)', borderRadius: 8, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
               <input className="input" style={{ fontSize: 12, padding: '6px 8px' }} placeholder="Título da tarefa *" value={taskTitle} onChange={e => setTaskTitle(e.target.value)} autoFocus />
@@ -2396,13 +2627,13 @@ function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved,
               </div>
             </div>
           ) : (
-            <button className="btn-secondary" style={{ justifyContent: 'flex-start', fontSize: 12, gap: 8 }}
+            <button className="btn-secondary" style={{ justifyContent: 'flex-start', fontSize: 12, gap: 8, width: '100%' }}
               onClick={() => setShowTaskForm(true)}>
               <Icon name="check" size={14} /> Criar Tarefa
             </button>
           )}
 
-          {/* 5 · Grupo: adicionar participante */}
+          {/* Grupo: adicionar participante */}
           {isGroup && (
             <div>
               {showAddParticipant ? (
@@ -2423,7 +2654,6 @@ function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved,
                           await addWAGroupParticipants(instanceName || 'teste', conv.whatsapp_chat_id, [`${phone}@s.whatsapp.net`]);
                           setNewParticipantPhone('');
                           setShowAddParticipant(false);
-                          // Recarrega lista
                           const data = await fetchWAGroupParticipants(instanceName || 'teste', conv.whatsapp_chat_id);
                           setGroupParticipants(Array.isArray(data) ? data : (data?.participants || []));
                         }
@@ -2444,7 +2674,7 @@ function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved,
             </div>
           )}
 
-          {/* 6 · Grupo: sair do grupo */}
+          {/* Grupo: sair do grupo */}
           {isGroup && (
             <button
               className="btn-secondary"
@@ -2465,7 +2695,7 @@ function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved,
             </button>
           )}
 
-          {/* 7 · Finalizar atendimento */}
+          {/* Finalizar atendimento */}
           {showFinishConfirm ? (
             <div style={{ background: 'rgba(183,12,0,0.05)', border: '1px solid rgba(183,12,0,0.2)', borderRadius: 8, padding: 12 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--g-900)', marginBottom: 10 }}>
@@ -2501,7 +2731,7 @@ function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved,
             </button>
           )}
         </div>
-      </div>
+      </CollapsibleSection>
     </div>
   );
 }
