@@ -105,6 +105,7 @@ Deno.serve(async (req) => {
           is_group:         isGroup,
           group_name:       isGroup ? (validPushName || chatId) : null,
           push_name:        isGroup ? null : validPushName,
+          status:           'aguardando',
         })
         .select('id')
         .single();

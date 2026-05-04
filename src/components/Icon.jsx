@@ -45,6 +45,7 @@ export default function Icon({ name, size = 18, ...p }) {
     calendar: <><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></>,
     mic:      <><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8"/></>,
     squarestop:<><rect x="3" y="3" width="18" height="18" rx="2"/></>,
+    checkcircle:<><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></>,
     sun:      <><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></>,
     moon:     <><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></>,
     contrast: <><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20z"/></>,

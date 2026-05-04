@@ -96,51 +96,84 @@ export type Database = {
       conversations: {
         Row: {
           agent_id: string | null
+          assigned_to: string | null
           created_at: string
           customer_id: string | null
+          finished_at: string | null
+          finished_by: string | null
+          group_name: string | null
           id: string
+          instance_id: string | null
+          internal_notes: string | null
+          is_group: boolean | null
           is_online: boolean
           last_message_at: string | null
           preview: string | null
           push_photo_url: string | null
+          reopened_at: string | null
+          reopened_by: string | null
+          started_at: string | null
           status: string
           tenant_id: string
           title: string | null
           type: string
           unread_count: number
           updated_at: string
+          whatsapp_chat_id: string | null
         }
         Insert: {
           agent_id?: string | null
+          assigned_to?: string | null
           created_at?: string
           customer_id?: string | null
+          finished_at?: string | null
+          finished_by?: string | null
+          group_name?: string | null
           id?: string
+          instance_id?: string | null
+          internal_notes?: string | null
+          is_group?: boolean | null
           is_online?: boolean
           last_message_at?: string | null
           preview?: string | null
           push_photo_url?: string | null
+          reopened_at?: string | null
+          reopened_by?: string | null
+          started_at?: string | null
           status?: string
           tenant_id: string
           title?: string | null
           type: string
           unread_count?: number
           updated_at?: string
+          whatsapp_chat_id?: string | null
         }
         Update: {
           agent_id?: string | null
+          assigned_to?: string | null
           created_at?: string
           customer_id?: string | null
+          finished_at?: string | null
+          finished_by?: string | null
+          group_name?: string | null
           id?: string
+          instance_id?: string | null
+          internal_notes?: string | null
+          is_group?: boolean | null
           is_online?: boolean
           last_message_at?: string | null
           preview?: string | null
           push_photo_url?: string | null
+          reopened_at?: string | null
+          reopened_by?: string | null
+          started_at?: string | null
           status?: string
           tenant_id?: string
           title?: string | null
           type?: string
           unread_count?: number
           updated_at?: string
+          whatsapp_chat_id?: string | null
         }
         Relationships: [
           {
@@ -159,6 +192,81 @@ export type Database = {
           },
           {
             foreignKeyName: "conversations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_finished_by_fkey"
+            columns: ["finished_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_reopened_by_fkey"
+            columns: ["reopened_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "evolution_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      evolution_instances: {
+        Row: {
+          api_key: string
+          created_at: string
+          evolution_url: string
+          id: string
+          instance_name: string
+          phone: string | null
+          profile_name: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          api_key: string
+          created_at?: string
+          evolution_url: string
+          id?: string
+          instance_name: string
+          phone?: string | null
+          profile_name?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          api_key?: string
+          created_at?: string
+          evolution_url?: string
+          id?: string
+          instance_name?: string
+          phone?: string | null
+          profile_name?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "evolution_instances_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
