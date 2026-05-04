@@ -1,6 +1,7 @@
-DOCUMENTO MESTRE - PLATAFORMA CONSULT DELIVERY v1.0
+DOCUMENTO MESTRE - PLATAFORMA CONSULT DELIVERY v2.0
 ====================================================
 Data de aprovação: 23/04/2026
+Última revisão: 04/05/2026
 Status: APROVADO - em execução
 
 ====================================================
@@ -26,7 +27,7 @@ Módulos planejados:
 2. ARQUITETURA APROVADA
 ====================================================
 
-Frontend: Lovable
+Frontend: React 18 + Vite
 Banco de dados: Supabase (auth + realtime + RLS multi-tenant)
 Agentes IA: VPS 45.39.210.183 via OpenClaw (porta 18789)
 IA: Claude API (claude-sonnet-4-6)
@@ -34,8 +35,9 @@ WhatsApp: Evolution API
 Automações: n8n
 Payment: Asaas
 Secrets: Infisical self-hosted (172.18.0.3:8080)
-Deploy: Vercel
-GitHub: consult-delivery-os/deli-os
+Deploy: GitHub Actions → GitHub Pages
+Domínio: app.consultdelivery.com.br
+GitHub: github.com/deli-consult-delivery/consult-delivery
 
 Bots Telegram ativos:
 - @DeliConsultBot — agente analista-ifood (consultoria de lojas)
@@ -44,60 +46,83 @@ Bots Telegram ativos:
 3. STACK DEFINITIVA
 ====================================================
 
-Lovable + Supabase + VPS + Claude API + Evolution API + n8n + Infisical + GitHub + Vercel
+React 18 + Vite + Supabase + VPS + Claude API + Evolution API + n8n + Infisical + GitHub + GitHub Pages
 
 ====================================================
 4. INFRAESTRUTURA EXISTENTE
 ====================================================
 
-VPS: 45.39.210.183 - Ubuntu 24.04 LTS (anterior: 193.202.85.82)
+VPS: 45.39.210.183 - Ubuntu 24.04 LTS
 Docker v29.4 + Compose v5.1.2
 Node.js v22.22.2
-Ollama instalado
 OpenClaw 2026.5.2 rodando porta 18789 (systemd persistente)
+Bridge Server Node.js/Express porta 3001 (systemd persistente)
 Infisical com secrets: ANTHROPIC_API_KEY, HEYGEN_API_KEY
-GitHub com 146 objetos já pushados
+GitHub: github.com/deli-consult-delivery/consult-delivery
 
-Integrações validadas: Anthropic, Evolution, n8n, Google Drive, Calendar, ClickUp, HeyGen, Metricool
+Integrações validadas: Anthropic, Evolution, n8n, Google Drive, Asaas
 
 Agentes OpenClaw ativos:
 - main (default, genérico)
 - analista-ifood (Co-piloto Delivery — análise de lojas iFood)
 
-====================================================
-5. AGENTES EXISTENTES
-====================================================
-
-DELI - COO digital, orquestradora
-LARA - marketing e conteúdo
-CORA - cobrança inteligente (entra no MVP v1)
-SOFIA - SDR/prospecção
-BRENO - atendimento e suporte
-MAX - consultor técnico
-VERA - BI e relatórios
+Agentes planejados (a ativar no OpenClaw):
+- deli (COO digital — Milestone v1 Fase 1E)
+- lara (marketing — Milestone v2)
+- cora (cobrança — Milestone v2)
+- sofia (SDR — Milestone v2)
+- breno (atendimento — futuro)
+- max (consultor técnico — futuro)
+- vera (BI — futuro)
 
 ====================================================
-6. MVP v1 - 30 DIAS (23/04/2026 a 22/05/2026)
+5. AGENTES — IDENTIDADES
 ====================================================
 
-4 entregas prioritárias:
-1. Autenticação multi-usuário (login, papéis, permissões)
-2. Chat unificado (WhatsApp via Evolution + interno)
-3. Kanban de tarefas (substituto ClickUp interno)
-4. Integração da CORA (cobrança inteligente)
+DELI  - COO digital, orquestradora (ativa no Milestone v1 Fase 1E)
+LARA  - marketing e conteúdo (Milestone v2)
+CORA  - cobrança inteligente (Milestone v2)
+SOFIA - SDR/prospecção (Milestone v2)
+BRENO - atendimento e suporte (futuro)
+MAX   - consultor técnico (futuro)
+VERA  - BI e relatórios (futuro)
 
-Capacidade: Wandson 2-4h/dia + Yasmin tempo integral
-Divisão por módulo
+Princípio: DELI é COO, não chatbot. Monitora tudo, aciona especialistas,
+propõe ações com semáforo Verde/Amarelo/Vermelho. NUNCA responde clientes.
+Ver seção 16 para detalhes de triggers e autonomia.
+
+====================================================
+6. ROADMAP
+====================================================
+
+Milestone v1 — Operacional Interno (até 22/05/2026)
+----------------------------------------------------
+Fase 1A - Fundação: RBAC + Memória Central + WhatsApp + Drafts/DELI (migrations)
+Fase 1B - RBAC aplicado: RequireRole/RequireAgent no React + middleware Bridge Server
+Fase 1C - Telas reais: CoraScreen e ReportsScreen sem mock + tela DraftsPendentes
+Fase 1D - ClickUp Light: Sidebar hierárquica + TasksScreen multi-view (Lista/Board/Calendário)
+Fase 1E - DELI ativa: agente no OpenClaw + escutando Realtime + DeliPainel
+Fase 1F - WhatsApp evoluído: webhook grupo/PV/menção + identificação de remetente
+Fase 1G - AgentsPage como painel de controle real + notificações
+
+Milestone v2 — ClickUp Médio + Crescimento (jun-jul/2026)
+----------------------------------------------------------
+Custom fields, Automations, Dashboard builder
+CRM completo, SOFIA e LARA ativos, Asaas integrado
+
+Milestone v3 — Revenda (ago/2026+)
+------------------------------------
+Onboarding self-service, planos/billing, white-label, marketplace de agentes
 
 ====================================================
 7. EQUIPE
 ====================================================
 
-Wandson Silva - CEO, aprova decisões, visão estratégica
-Yasmin - dev frontend (Lovable, tempo integral)
-Eduardo - colaborador interno
-Hélida - colaboradora interna
-DELI - orquestradora IA, VPS
+Wandson Silva - CEO, aprova decisões, visão estratégica (role: admin + deli_owner)
+Yasmin        - dev frontend (role: dev)
+Wélida        - marketing e CRM (role: marketing)
+Eduardo       - atendimento, consultoria e suporte (role: atendimento)
+DELI          - COO digital, agente IA no OpenClaw (role: deli_owner via sistema)
 
 Emails: @consultdelivery.com.br
 
@@ -114,10 +139,10 @@ Vermelho: aprovação explícita 'APROVADO VERMELHO apr-xxx'
 ====================================================
 
 Orçamento máximo stack: R$ 800/mês
-Estimativa atual: R$ 560-760/mês
-- Lovable Pro: R$ 130
+Estimativa atual: R$ 430-630/mês
 - Supabase Pro: R$ 130
 - Claude API: R$ 300-500
+- GitHub Pages: gratuito
 
 ====================================================
 10. FLUXO GIT — TRABALHO EM EQUIPE
@@ -619,6 +644,138 @@ ORDEM RECOMENDADA EM CADA SESSÃO
 ====================================================
 12. CONVENÇÃO DE DIAGRAMAS
 ====================================================
+
+Diagramas formais e versionados (que o time inteiro consulta):
+→ Mermaid em docs/fluxos/
+→ Texto markdown, renderiza no GitHub e VS Code
+→ Diff do git mostra mudanças linha a linha
+→ Pode ser editado diretamente pelo Claude Code
+
+Rascunhos rápidos (pensar, brainstormar):
+→ Excalidraw via plugin do Obsidian (vault WikiBrain)
+→ Exports PNG/SVG vão pra docs/rascunhos/ se quiser commitar
+→ Não substituem o Mermaid (são pra ideação)
+
+Workflow recomendado:
+1. Bate ideia → desenha rápido no Excalidraw
+2. Aprova mentalmente → pede pro Claude Code converter pra Mermaid
+3. Mermaid fica em docs/fluxos/, versionado, time todo vê
+
+Arquivos existentes:
+- docs/fluxos/arquitetura.md    — stack completa (Frontend, VPS, agentes, integrações)
+- docs/fluxos/analise-ifood.md  — fluxo do módulo Análise iFood
+- docs/rascunhos/               — exports Excalidraw (PNG/SVG)
+
+================================================================================
+
+====================================================
+13. RBAC — PAPÉIS E PERMISSÕES
+====================================================
+
+Toda ação sensível é protegida por papéis. Schema em:
+supabase/migrations/20260504_001_rbac.sql
+
+Papéis disponíveis (dentro de cada tenant):
+- admin       → acesso total
+- dev         → chat, kanban, crm (view), reports, analista-ifood — SEM financeiro
+- marketing   → chat, kanban, crm, reports, lara — SEM financeiro
+- atendimento → chat, grupos_whatsapp, kanban, analise_ifood (view), analista-ifood
+- financeiro  → cobranca, inadimplencias, cora — SEM dev/marketing
+- viewer      → kanban (view), reports (view) — sem execução
+- deli_owner  → deli (invoke, approve_drafts), approve_high_autonomy
+
+No React: usar <RequireRole resource="x" action="y"> e <RequireAgent agent="x">
+No Bridge Server: middleware requireAgentAccess valida JWT + user_agent_access
+Toda ação é logada em audit_log.
+
+====================================================
+14. MEMÓRIA CENTRAL DOS AGENTES
+====================================================
+
+Fatos sobre clientes vivem no Supabase, NÃO em memory/*.md na VPS.
+Schema em: supabase/migrations/20260504_002_memoria_central.sql
+
+Tabelas principais:
+- lojas          → loja iFood associada a um customer (cliente)
+- client_facts   → fatos key-value por loja (qualquer agente lê/escreve)
+- client_timeline → linha do tempo imutável de eventos por loja
+- loja_metricas  → snapshot diário de métricas (populado pelo n8n)
+
+Agentes leem contexto ANTES de agir:
+  SELECT * FROM client_facts WHERE loja_id = $1;
+  SELECT * FROM client_timeline WHERE loja_id = $1 ORDER BY ts DESC LIMIT 20;
+
+Agentes registram fatos novos:
+  INSERT INTO client_facts ... ON CONFLICT DO UPDATE SET value = ..., ts = NOW();
+
+====================================================
+15. MODELO WHATSAPP
+====================================================
+
+Realidade da operação:
+- 1 número oficial Evolution API
+- 1 grupo por loja cliente (ex: "Consultoria - Pizza do Zé")
+- PVs separados (cliente que chama no PV = conversa independente)
+- Múltiplos remetentes no grupo: dono, esposa, sócio, gerente, equipe Consult
+- DELI MONITORA mas NUNCA RESPONDE grupos/PVs de cliente
+- Agentes só agem quando MENCIONADOS no grupo (ex: "@analista faz análise")
+- Resumo sob demanda: "@DELI resume últimos 3 dias" → vai para canal INTERNO
+
+Schema em: supabase/migrations/20260504_003_whatsapp.sql
+Tabelas: whatsapp_contacts, whatsapp_groups, whatsapp_group_members, whatsapp_messages
+
+Edge Function evolution-webhook diferencia:
+- JID terminando em @g.us → grupo → associar a whatsapp_groups + loja
+- JID terminando em @s.whatsapp.net → PV individual
+- Detecta menção a agente (regex) → enfileira invoke no Bridge Server
+
+====================================================
+16. DRAFTS E DELI
+====================================================
+
+NENHUM agente envia mensagem para CLIENTE sem aprovação humana.
+Fluxo: Agente cria draft → notifica humano → humano aprova/edita/rejeita → sistema envia
+
+Exceção: channel = 'telegram_interno' ou 'painel' → vai direto (é para a equipe).
+
+Schema em: supabase/migrations/20260504_004_drafts_deli.sql
+Tabelas: agent_drafts, deli_triggers, deli_pending_approvals, deli_actions_log
+
+DELI usa semáforo de autonomia:
+  Verde    → DELI executa e reporta (ex: atualizar timeline, gerar resumo interno)
+  Amarelo  → DELI propõe, Wandson aprova com 'ok'
+  Vermelho → aprovação explícita 'APROVADO VERMELHO apr-xxx'
+
+Triggers iniciais (seed em deli_triggers):
+  - Verde:   cliente sumiu 7 dias → notifica equipe internamente
+  - Verde:   mensagem recebida → atualizar client_timeline
+  - Amarelo: métrica caiu 20%+ → invocar analista-ifood + propor draft para cliente
+  - Vermelho: mudança em config OpenClaw → aguardar APROVADO VERMELHO
+
+====================================================
+17. VISÃO CLICKUP — REFERÊNCIA UX
+====================================================
+
+A plataforma é INSPIRADA no ClickUp em nível MÉDIO.
+ClickUp é referência de UX e funcionalidade. NÃO de estética.
+Identidade visual Consult Delivery (logo foguete vermelho, cores, dark mode) é preservada 100%.
+
+O que copiar:
+  ✅ Multi-views: Lista, Board (Kanban), Calendário
+  ✅ Sidebar hierárquica com agrupamento por cliente
+  ✅ TopbarFilter (cliente, prioridade, responsável, prazo)
+  ✅ Task cards compactos
+  ✅ Custom fields (Milestone v2)
+  ✅ Automations rules (Milestone v2)
+  ✅ Dashboard builder (Milestone v2)
+
+O que NÃO copiar (fora do escopo):
+  ❌ Goals, Whiteboards, Docs colaborativos, Mind Maps, Gantt, Time tracking
+
+Diferencial exclusivo sobre o ClickUp:
+  ⭐ Chat WhatsApp integrado (o ClickUp não tem)
+
+================================================================================
 
 Diagramas formais e versionados (que o time inteiro consulta):
 → Mermaid em docs/fluxos/
