@@ -52,7 +52,7 @@ function relTime(iso) {
   return `${Math.floor(m / 60)}h`;
 }
 
-export default function DashboardScreen({ tenant, tenantDbId }) {
+export default function DashboardScreen({ tenant, tenantDbId, onNavigate }) {
   const mock = TENANT_DATA[tenant];
   const tenantMeta = TENANTS.find(t => t.id === tenant);
 
@@ -97,7 +97,7 @@ export default function DashboardScreen({ tenant, tenantDbId }) {
             getKPIs(tenantDbId).then(r => { if (r) setKpis(mapKPIs(r)); }).catch(() => {});
             getChart7d(tenantDbId).then(r => { if (r?.length) setChart(r); }).catch(() => {});
           }}><Icon name="refresh" size={14} /> Atualizar</button>
-          <button className="btn-primary"><Icon name="plus" size={14} /> Nova tarefa</button>
+          <button className="btn-primary" onClick={() => onNavigate?.('tasks')}><Icon name="plus" size={14} /> Nova tarefa</button>
         </div>
       </div>
 

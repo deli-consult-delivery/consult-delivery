@@ -994,6 +994,21 @@ input, textarea { font-family: inherit; }
   .kanban-board  { display: flex !important; flex-wrap: nowrap !important; gap: 12px !important; overflow-x: auto !important; padding-bottom: 8px !important; }
   .kanban-board .kanban-col { min-width: 260px !important; flex: 0 0 260px !important; }
 
+  /* Task list table — scroll on mobile */
+  .task-tbl thead th:nth-child(3),
+  .task-tbl thead th:nth-child(4),
+  .task-tbl tbody td:nth-child(3),
+  .task-tbl tbody td:nth-child(4) { display: none !important; }
+
+  /* Task calendar — compact on mobile */
+  .cal-grid { grid-template-columns: repeat(7, 1fr) !important; }
+  .cal-cell { min-height: 48px !important; padding: 3px !important; }
+  .cal-task-chip { font-size: 8px !important; padding: 1px 3px !important; }
+  .cal-day-num { font-size: 10px !important; }
+
+  /* MultiView switch — compact labels on mobile */
+  .mv-btn { padding: 5px 8px !important; font-size: 11px !important; }
+
   /* Table scroll wrapper */
   .tbl-wrap      { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
   .tbl-wrap table { min-width: 640px !important; }

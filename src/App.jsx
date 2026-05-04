@@ -144,7 +144,7 @@ export default function App() {
         onMenuToggle={() => setSidebarOpen(v => !v)}
       />
       <main className="main scroll" key={route + tenant}>
-        {route === 'dashboard' && <DashboardScreen tenant={tenant} tenantDbId={tenantDbId} />}
+        {route === 'dashboard' && <DashboardScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={setRoute} />}
         {route === 'chat'      && <ChatScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={setRoute} />}
         {route === 'tasks'     && <TasksScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'cora'         && <CoraScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />}
