@@ -1,0 +1,191 @@
+# ============================================================
+# BASE DE REGRAS - ANÁLISE DE LOJAS IFOOD
+# Extraída da transcrição "Salgados da Mônica"
+# Versão: 1.0 | Editar livremente conforme novas transcrições
+# ============================================================
+
+identidade_visual:
+  logo:
+    fundo_preto:
+      avaliacao: ruim
+      contexto: "Aparência de produto caro, não combina com público classe C/popular"
+      acao: "Sugerir logo com cores mais leves"
+    nome_loja_diferente_visual:
+      avaliacao: critico
+      acao: "Trocar imediatamente - confunde o cliente"
+    palavras_chave_no_nome:
+      avaliacao: oportunidade
+      contexto: "Adicionar palavras como 'Coxinha', 'Kibe', 'Esfiha' etc ajuda no rankeamento"
+      acao: "Sugerir palavras-chave do produto principal"
+
+desempenho_vendas:
+  faturamento_mensal:
+    referencia_salgados: "10 mil+ é loja boa"
+  ticket_medio:
+    salgados:
+      baixo: "<25"
+      ideal: "25-45"
+      alto: ">45"
+      observacao: "R$40 é considerado alto para salgado"
+  novos_clientes_30d:
+    critico: "<50"
+    atencao: "50-100"
+    bom: ">100"
+    acao_critico:
+      - "Cupom para primeiro pedido"
+      - "Frete grátis primeira compra"
+      - "Estratégia agressiva de aquisição"
+  
+  dias_da_semana:
+    analise: "Identificar dias fracos e fazer ofertas especificas"
+    palavra_evitar: "Promoção"
+    palavra_usar: "Oferta"
+    contexto: "Clientes odeiam a palavra 'promoção'"
+
+operacao:
+  cancelamento:
+    impacto: "Perde visibilidade e elegibilidade em campanhas"
+    referencia: "Mesmo com selo Super, alto cancelamento prejudica"
+  
+  tempo_aberto:
+    critico: "<70%"
+    atencao: "70-90%"
+    bom: ">90%"
+    causas_comuns:
+      - "Aplicativo no celular fica em segundo plano"
+      - "Internet instável"
+      - "Loja no celular único sem backup"
+    acoes:
+      - "Instalar aplicativo no computador"
+      - "Ter o app em 2 celulares"
+      - "Não deixar app em segundo plano"
+    frase_cliente: "A senhora está perdendo venda - sua loja fica fechada X% do tempo"
+  
+  reclamacoes_principais:
+    item_faltando_no_despacho:
+      acao: "Criar checklist de conferência antes do despacho"
+    pedido_atrasado:
+      acao: "Revisar tempo de preparo cadastrado"
+
+visitas_e_conversao:
+  visitas_30d:
+    loja_2anos_plataforma_minimo: 3000
+    acao_baixo: "Trabalhar visibilidade (anúncio + campanha inteligente)"
+  
+  conversao_cardapio:
+    ideal: ">50%"
+    causas_baixa_conversao:
+      - "Fotos ruins ou ausentes"
+      - "Sem mais pedidos no topo"
+      - "Sem complementos configurados"
+      - "Descrições genéricas ou ausentes"
+      - "Cardápio mal estruturado"
+
+cardapio:
+  estrutura_ideal:
+    topo: "Mais Pedidos (produtos validados pela venda)"
+    sequencia: "Combos com bebida → Categorias principais → Sobremesas"
+  
+  fotos:
+    qualidade_minima: "boa iluminação, fundo limpo, produto centralizado"
+    capa_loja: "Imagem com vários produtos do principal carro-chefe"
+    capa_destaque: "Aparece quando cliente pesquisa pelo nome da loja"
+  
+  complementos:
+    obrigatorio: true
+    impacto: "Aumenta ticket médio e melhora conversão"
+    exemplos:
+      - "Maionese / molhos como complemento pago"
+      - "Bebida como complemento"
+  
+  combos:
+    estrategia: "Usar produtos validados (mais vendidos) em combos"
+    posicionamento: "Combos caros (>R$150) ficam embaixo"
+    monte_seu_kit:
+      contexto: "Para salgados, oferecer kits sortidos (5 de cada sabor)"
+      avaliacao: oportunidade_alta
+  
+  descricoes:
+    obrigatorio: true
+    incluir:
+      - "Ingredientes principais"
+      - "Quantidade/peso quando aplicável"
+      - "Quantas pessoas serve (kits grandes)"
+
+concorrencia_e_mapa:
+  bolinhas_verdes_proximas:
+    significado: "Clientes que compram em concorrentes mas não na loja"
+    avaliacao: oportunidade_alta
+    acao: "Trabalhar visibilidade e ofertas para conquistar"
+  
+  ausencia_de_clientes_proximos:
+    significado: "Localização ruim, sem demanda na região"
+    avaliacao: critico
+    contexto: "Difícil melhorar resultado se não há cliente próximo"
+  
+  ticket_medio_vs_concorrencia:
+    avaliacao: "Comparar e ajustar se muito acima"
+
+marketing:
+  campanha_inteligente:
+    avaliacao_quando_ativa: positivo_critico
+    regra_ouro: "Nunca desabilitar se ROI > 5"
+    contexto: "iFood prioriza essas lojas para clube"
+    pedido_minimo_alto: 
+      problema: "Pode estar configurado errado e prejudicar a campanha"
+      acao: "Reduzir pedido mínimo (15-18 reais para salgados)"
+  
+  anuncio:
+    quando_ativar: "Campanha inteligente performando bem (ROI > 5)"
+    objetivo: "Potencializar visibilidade para clientes do clube"
+    promocionado_inicial:
+      acao: "Ativar e desativar logo para sair desse estágio"
+      motivo: "Período promocionado tem visibilidade muito baixa"
+  
+  investimento_ifood:
+    significado: "iFood vendo potencial na loja"
+    avaliacao: positivo_critico
+    acao: "Aproveitar e potencializar com outras alavancas"
+
+avaliacoes:
+  selo_super:
+    quando_tem: "Manter com respostas rápidas e bonitas"
+    quando_nao_tem: "Trabalhar para conquistar - aumenta visibilidade"
+
+financeiro:
+  divisao_ifood_vs_loja:
+    saudavel: "Loja fica com >50% do faturamento"
+    contexto_logistica_ifood: "50/50 ainda é aceitável"
+
+configuracoes:
+  horario_funcionamento:
+    regra: "Comparar com concorrentes diretos do mesmo segmento"
+    contexto: "Salgados que abrem o dia todo vendem mais"
+    acao: "Sugerir ampliar horário mesmo se cliente trabalha sozinho"
+  
+  formas_pagamento:
+    obrigatorio_habilitar:
+      - "Vale-refeição (todas as bandeiras)"
+      - "Pix"
+      - "Cartões"
+    impacto: "Vale-refeição dá destaque na busca"
+  
+  tempo_preparo:
+    ideal: "Mais rápido possível"
+    impacto: "Reduz cancelamentos e melhora ranking"
+
+prioridades_diagnostico:
+  ordem_etapas_funil:
+    - "Visitas (visibilidade)"
+    - "Conversão de cardápio"
+    - "Conversão final"
+  regra_geral: "Sempre começar pelo gargalo do funil mais alto"
+
+linguagem_cliente:
+  proibido_usar:
+    - "Promoção"
+    - "Termos muito técnicos sem explicação"
+  preferir:
+    - "Oferta"
+    - "Explicação simples com exemplo prático"
+  tom: "Amigável, consultivo, direto, pé no chão"

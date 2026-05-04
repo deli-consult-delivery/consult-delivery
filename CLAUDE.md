@@ -28,14 +28,17 @@ Módulos planejados:
 
 Frontend: Lovable
 Banco de dados: Supabase (auth + realtime + RLS multi-tenant)
-Agentes IA: VPS 193.202.85.82 via OpenClaw (porta 18789)
-IA: Claude API (claude-sonnet-4-20250514)
+Agentes IA: VPS 45.39.210.183 via OpenClaw (porta 18789)
+IA: Claude API (claude-sonnet-4-6)
 WhatsApp: Evolution API
 Automações: n8n
 Payment: Asaas
 Secrets: Infisical self-hosted (172.18.0.3:8080)
 Deploy: Vercel
 GitHub: consult-delivery-os/deli-os
+
+Bots Telegram ativos:
+- @DeliConsultBot — agente analista-ifood (consultoria de lojas)
 
 ====================================================
 3. STACK DEFINITIVA
@@ -47,15 +50,19 @@ Lovable + Supabase + VPS + Claude API + Evolution API + n8n + Infisical + GitHub
 4. INFRAESTRUTURA EXISTENTE
 ====================================================
 
-VPS: 193.202.85.82 - 8GB RAM / 6 vCPUs / 60GB
+VPS: 45.39.210.183 - Ubuntu 24.04 LTS (anterior: 193.202.85.82)
 Docker v29.4 + Compose v5.1.2
 Node.js v22.22.2
 Ollama instalado
-OpenClaw rodando porta 18789
+OpenClaw 2026.5.2 rodando porta 18789 (systemd persistente)
 Infisical com secrets: ANTHROPIC_API_KEY, HEYGEN_API_KEY
 GitHub com 146 objetos já pushados
 
 Integrações validadas: Anthropic, Evolution, n8n, Google Drive, Calendar, ClickUp, HeyGen, Metricool
+
+Agentes OpenClaw ativos:
+- main (default, genérico)
+- analista-ifood (Co-piloto Delivery — análise de lojas iFood)
 
 ====================================================
 5. AGENTES EXISTENTES
@@ -536,3 +543,157 @@ PRÓXIMO PASSO APÓS CONCLUIR
 =================================================
 Avise a Yasmin que pode iniciar TASK-102 (Supabase).
 Envie para o Claude: "TASK-101 concluída" com print da tela.
+
+================================================================================
+
+====================================================
+11. SKILLS OBRIGATÓRIAS NESTE PROJETO
+====================================================
+
+Este projeto usa três skills que DEVEM ser aproveitadas em todas as sessões:
+
+────────────────────────────────────────────────────
+GSD (Get Shit Done) — gestão de fases e workflow
+────────────────────────────────────────────────────
+
+ANTES de iniciar qualquer trabalho de implementação:
+- Rodar `/gsd-discuss-phase` pra entender contexto da fase atual
+- Verificar em qual milestone estamos
+
+DURANTE o trabalho:
+- Após mudanças significativas: `/gsd-capture` pra registrar
+- Para revisão de código: `/gsd-code-review` antes de PR
+
+AO FINALIZAR:
+- `/gsd-complete-milestone` pra marcar conclusão de fase
+
+NÃO usar GSD para:
+- Tarefas conversacionais simples
+- Dúvidas pontuais que não geram código
+
+────────────────────────────────────────────────────
+GRAPHIFY — mapa de conhecimento do projeto
+────────────────────────────────────────────────────
+
+ANTES de responder qualquer pergunta sobre:
+- Arquitetura ("como funciona X?")
+- Dependências ("o que depende de Y?")
+- Refatoração ("se eu mudar Z, o que quebra?")
+- Estrutura ("onde está implementado W?")
+
+REGRA: SEMPRE consultar `graphify-out/graph.json` PRIMEIRO antes de reler arquivos do zero.
+
+Comandos disponíveis:
+- `/graphify .` — re-mapear projeto após grandes mudanças
+- Visualização: abrir `graphify-out/graph.html` no navegador
+
+NÃO reler 10 arquivos do zero quando o grafo já tem a resposta. Isso queima tokens à toa.
+
+────────────────────────────────────────────────────
+WIKI-BRAIN — segundo cérebro do projeto
+────────────────────────────────────────────────────
+
+Vault em `WikiBrain/` (raw/ ignorado por LGPD).
+
+ANTES de pesquisar conceito ou metodologia já usada antes:
+- Consultar `WikiBrain/wiki/` (páginas extraídas das transcrições)
+- Buscar no `WikiBrain/wiki/index.md` se há página relevante
+
+PARA novas transcrições/conhecimento:
+- Adicionar em `WikiBrain/raw/` (LGPD: não commitar dados de cliente)
+- Pedir ingest com: "ingest the new file in raw/"
+
+────────────────────────────────────────────────────
+ORDEM RECOMENDADA EM CADA SESSÃO
+────────────────────────────────────────────────────
+
+1. Verificar fase atual (GSD)
+2. Consultar grafo (graphify) se a pergunta envolve código existente
+3. Consultar wiki-brain se a pergunta envolve metodologia ou conhecimento de domínio
+4. Só ENTÃO partir para edição/escrita
+
+────────────────────────────────────────────────────
+
+================================================================================
+
+====================================================
+12. CONVENÇÃO DE DIAGRAMAS
+====================================================
+
+Diagramas formais e versionados (que o time inteiro consulta):
+→ Mermaid em docs/fluxos/
+→ Texto markdown, renderiza no GitHub e VS Code
+→ Diff do git mostra mudanças linha a linha
+→ Pode ser editado diretamente pelo Claude Code
+
+Rascunhos rápidos (pensar, brainstormar):
+→ Excalidraw via plugin do Obsidian (vault WikiBrain)
+→ Exports PNG/SVG vão pra docs/rascunhos/ se quiser commitar
+→ Não substituem o Mermaid (são pra ideação)
+
+Workflow recomendado:
+1. Bate ideia → desenha rápido no Excalidraw
+2. Aprova mentalmente → pede pro Claude Code converter pra Mermaid
+3. Mermaid fica em docs/fluxos/, versionado, time todo vê
+
+Arquivos existentes:
+- docs/fluxos/arquitetura.md    — stack completa (Frontend, VPS, agentes, integrações)
+- docs/fluxos/analise-ifood.md  — fluxo do módulo Análise iFood
+- docs/rascunhos/               — exports Excalidraw (PNG/SVG)
+
+================================================================================
+
+## Context Navigation (Wiki-Brain)
+
+You have access to a personal wiki at `C:\Users\Consult Delivery\consult-delivery\WikiBrain`. This is the user's
+compounding knowledge base. Use it as your primary context source.
+
+When you need to understand the codebase, docs, past work, or any stored
+knowledge:
+
+1. **ALWAYS query the knowledge graph first:** `graphify query "your question"`
+   (run from `C:\Users\Consult Delivery\consult-delivery\WikiBrain`).
+2. **Use `C:\Users\Consult Delivery\consult-delivery\WikiBrain\wiki\index.md`** as your navigation entrypoint for
+   browsing the wiki structure.
+3. **Use `C:\Users\Consult Delivery\consult-delivery\WikiBrain\graphify-out\wiki\index.md`** if it exists — it's
+   the auto-generated Graphify wiki index.
+4. **Only read raw files in `C:\Users\Consult Delivery\consult-delivery\WikiBrain\raw\`** if the user explicitly
+   says "read the raw file" or the graph query doesn't have the answer.
+
+## Wiki-Brain Session Rules
+
+**Ingesting sources.** When the user drops a file into `C:\Users\Consult Delivery\consult-delivery\WikiBrain\raw\`
+and asks you to ingest it, follow `/wiki-brain ingest` — read the source,
+summarize, create/update wiki pages, cross-link aggressively, update
+`wiki\index.md`, append to `log.md`.
+
+**Every session must end with a log entry.** Before ending a session, append
+one line to `C:\Users\Consult Delivery\consult-delivery\WikiBrain\log.md` in this exact format:
+
+```
+## [YYYY-MM-DD HH:MM] session | <3-8 word session title>
+Touched: <comma-separated wiki pages, or "none">
+```
+
+**If the session produced durable knowledge** (decisions made, things learned,
+project state changed, problems solved) — update or create relevant wiki
+pages with that knowledge before ending. Cross-link with `[[Page Name]]`.
+Update `wiki\index.md`.
+
+**If the session was trivial** (one-off fix, routine task, exploratory
+chatter) — skip the wiki update. Just append the log line.
+
+**Never modify files in `raw\`.** Sources are immutable.
+**Claude owns `wiki\` entirely.** Update it, don't ask permission for each page — just report what changed.
+**Always update `wiki\index.md`** when you create or rename a wiki page.
+**Cross-link aggressively.** `[[Page Name]]` Obsidian syntax. A page with no inbound links is a dead-end.
+
+## Wiki-Brain Commands Available
+
+- `/wiki-brain` — status menu
+- `/wiki-brain ingest <file>` — ingest a source
+- `/wiki-brain query "<q>"` — query the graph + wiki
+- `/wiki-brain lint` — health-check the wiki
+- `/wiki-brain rebuild` — force a Graphify rebuild
+- `/wiki-brain doctor` — verify install
+- `/recall` — show last 5 activities + read linked pages

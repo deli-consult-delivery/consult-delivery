@@ -184,6 +184,7 @@ export async function listAnalises(tenantId) {
     .from('analises')
     .select(`
       id, job_id, status, periodo, drive_link, created_at, error_message,
+      resultado_json, mensagem_whatsapp,
       cliente:customers(id, name)
     `)
     .eq('tenant_id', tenantId)
@@ -257,6 +258,106 @@ export async function updateStatusTarefa(tarefa_id, status) {
     .update({ status, updated_at: new Date().toISOString() })
     .eq('id', tarefa_id)
     .select();
+  if (error) throw error;
+  return data;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Treinamento do agente — correções aprendidas
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function createCorrecao({ tenant_id, bloco, instrucao }) {
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data, error } = await supabase
+    .from('agent_corrections')
+    .insert({ tenant_id, bloco, instrucao, created_by: user?.id })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function listCorrecoes(tenantId) {
+  const { data, error } = await supabase
+    .from('agent_corrections')
+    .select('id, bloco, instrucao, ativo, created_at')
+    .eq('tenant_id', tenantId)
+    .eq('ativo', true)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function desativarCorrecao(id) {
+  const { error } = await supabase
+    .from('agent_corrections')
+    .update({ ativo: false })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tasks (Kanban) — CRUD completo
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function createTask(payload) {
+  const { data, error } = await supabase
+    .from('tasks')
+    .insert(payload)
+    .select('id')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateTask(taskId, updates) {
+  const { error } = await supabase
+    .from('tasks')
+    .update(updates)
+    .eq('id', taskId);
+  if (error) throw error;
+}
+
+export async function deleteTask(taskId) {
+  const { error } = await supabase
+    .from('tasks')
+    .delete()
+    .eq('id', taskId);
+  if (error) throw error;
+}
+
+export async function createTasksFromAnalise({ tenantId, analiseId, clienteId, pontos }) {
+  const rows = pontos.map((p, i) => ({
+    tenant_id:   tenantId,
+    analise_id:  analiseId,
+    cliente_id:  clienteId,
+    title:       p.titulo,
+    description: [p.descricao, p.acao ? `Ação: ${p.acao}` : ''].filter(Boolean).join('\n\n'),
+    col:         'todo',
+    priority:    p.status === 'critico' ? 'high' : p.status === 'atencao' ? 'med' : 'low',
+    due_label:   '',
+    position:    i,
+    fonte:       'analise',
+  }));
+  const { data, error } = await supabase
+    .from('tasks')
+    .insert(rows)
+    .select('id');
+  if (error) throw error;
+  return data ?? [];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sugestões para o desenvolvedor
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function createSugestao({ tenant_id, texto, tela }) {
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data, error } = await supabase
+    .from('sugestoes_plataforma')
+    .insert({ tenant_id, texto, tela, created_by: user?.id })
+    .select('id')
+    .single();
   if (error) throw error;
   return data;
 }

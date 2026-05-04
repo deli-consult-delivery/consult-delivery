@@ -8,7 +8,11 @@
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
       "Bash(npx supabase *)",
-      "PowerShell(Set-Location \"c:\\\\Users\\\\Consult Delivery\\\\consult-delivery\"; [System.IO.File]::WriteAllText\\(\\(Resolve-Path \".env.local\"\\).Path, \"VITE_SUPABASE_URL=https://czyanilrverorwenikqw.supabase.co`nVITE_SUPABASE_ANON_KEY=sb_publishable_MduR9lddqVcBHLkdw13-_g_2NgRaFlK`n\", [System.Text.UTF8Encoding]::new\\($false\\)\\); Write-Output \"Done\")"
+      "PowerShell(Set-Location \"c:\\\\Users\\\\Consult Delivery\\\\consult-delivery\"; [System.IO.File]::WriteAllText\\(\\(Resolve-Path \".env.local\"\\).Path, \"VITE_SUPABASE_URL=https://czyanilrverorwenikqw.supabase.co`nVITE_SUPABASE_ANON_KEY=sb_publishable_MduR9lddqVcBHLkdw13-_g_2NgRaFlK`n\", [System.Text.UTF8Encoding]::new\\($false\\)\\); Write-Output \"Done\")",
+      "Read(//c/Users/Consult Delivery/.openclaw/**)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\Consult Delivery\\.openclaw"
     ]
   }
 }
