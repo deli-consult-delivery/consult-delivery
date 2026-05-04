@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import Icon from '../components/Icon.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
 import UserAvatar from '../components/UserAvatar.jsx';
-import { INADIMPLENTES } from '../data.js';
+import { listInadimplencias, listInadimplenciaTranscript, getAgentActions } from '../lib/api.js';
 
 const STATUS = {
   trying:      { label: 'CORA tentando',  cls: 'badge-yellow', pulse: 'pulse-amber' },
@@ -11,16 +11,92 @@ const STATUS = {
   critical:    { label: 'Crítico',        cls: 'badge-red',    pulse: 'pulse-red' },
 };
 
-export default function CoraScreen({ tenant }) {
-  const data = INADIMPLENTES[tenant] || { kpis: { total: '—', recebido: '—', taxa: '—', reguas: 0 }, rows: [], liveActions: [] };
-  const [tab, setTab] = useState('inad');
+function fmtCurrency(cents) {
+  return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+}
+function fmtTime(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+function mapRow(r) {
+  return {
+    id:     r.id,
+    name:   r.customer?.name   ?? 'Cliente',
+    avatar: r.customer?.avatar ?? r.customer?.name ?? '??',
+    value:  fmtCurrency(r.amount_cents ?? 0),
+    days:   r.days_late ?? 0,
+    last:   fmtDate(r.last_action_at),
+    status: r.status ?? 'trying',
+  };
+}
+function mapAction(a) {
+  return { client: a.agent_id ?? 'CORA', action: a.text ?? '', time: fmtTime(a.occurred_at) };
+}
+function mapMessage(m) {
+  const isBot = m.from_kind === 'bot' || m.from_kind === 'agent';
+  return { from: isBot ? 'bot' : 'client', text: m.body ?? '', time: fmtTime(m.sent_at) };
+}
+
+export default function CoraScreen({ tenant, tenantDbId }) {
+  const [rawRows, setRawRows]       = useState([]);
+  const [rows, setRows]             = useState([]);
+  const [liveActions, setLiveActions] = useState([]);
+  const [transcript, setTranscript] = useState(null);
+  const [tab, setTab]               = useState('inad');
   const [openDrawer, setOpenDrawer] = useState(false);
-  const [liveTick, setLiveTick] = useState(0);
+  const [liveTick, setLiveTick]     = useState(0);
+
+  useEffect(() => {
+    if (!tenantDbId) return;
+    Promise.all([
+      listInadimplencias(tenantDbId),
+      getAgentActions(tenantDbId, 6),
+    ]).then(([inad, actions]) => {
+      setRawRows(inad);
+      setRows(inad.map(mapRow));
+      setLiveActions(actions.map(mapAction));
+    }).catch(err => console.error('[CoraScreen]', err));
+  }, [tenantDbId]);
 
   useEffect(() => {
     const id = setInterval(() => setLiveTick(t => t + 1), 3000);
     return () => clearInterval(id);
   }, []);
+
+  async function handleOpenDrawer(rowId) {
+    setOpenDrawer(rowId);
+    const raw = rawRows.find(r => r.id === rowId);
+    if (!raw) return;
+    try {
+      const msgs = await listInadimplenciaTranscript(rowId);
+      setTranscript({
+        client:     raw.customer?.name ?? 'Cliente',
+        value:      fmtCurrency(raw.amount_cents ?? 0),
+        days:       raw.days_late ?? 0,
+        sentiment:  raw.sentiment_score  ?? 50,
+        payProb:    raw.pay_probability  ?? 50,
+        nextAction: raw.next_action ?? 'Aguardando próxima ação da CORA.',
+        messages:   msgs.map(mapMessage),
+      });
+    } catch (err) {
+      console.error('[CoraScreen] transcript', err);
+    }
+  }
+
+  const totalCents = rawRows
+    .filter(r => r.status !== 'paid')
+    .reduce((s, r) => s + (r.amount_cents ?? 0), 0);
+
+  const kpis = {
+    total:    totalCents ? fmtCurrency(totalCents) : '—',
+    recebido: '—',
+    taxa:     '—',
+    reguas:   4,
+  };
 
   return (
     <div className="route-enter page-container" style={{ padding: 32, maxWidth: 1400, margin: '0 auto', position: 'relative' }}>
@@ -48,22 +124,22 @@ export default function CoraScreen({ tenant }) {
       <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
         <div className="kpi">
           <div className="kpi-label">Total a receber</div>
-          <div className="kpi-value accent" style={{ marginTop: 8 }}>{data.kpis.total}</div>
+          <div className="kpi-value accent" style={{ marginTop: 8 }}>{kpis.total}</div>
           <div className="kpi-delta down" style={{ marginTop: 10 }}><Icon name="info" size={11} />Em aberto</div>
         </div>
         <div className="kpi">
           <div className="kpi-label">Recebido este mês</div>
-          <div className="kpi-value" style={{ marginTop: 8, color: 'var(--success)' }}>{data.kpis.recebido}</div>
+          <div className="kpi-value" style={{ marginTop: 8, color: 'var(--success)' }}>{kpis.recebido}</div>
           <div className="kpi-delta up" style={{ marginTop: 10 }}><Icon name="arrowup" size={11} />CORA recuperou</div>
         </div>
         <div className="kpi">
           <div className="kpi-label">Taxa de recuperação</div>
-          <div className="kpi-value" style={{ marginTop: 8 }}>{data.kpis.taxa}</div>
+          <div className="kpi-value" style={{ marginTop: 8 }}>{kpis.taxa}</div>
           <div className="kpi-delta up" style={{ marginTop: 10 }}><Icon name="arrowup" size={11} />+4% vs mês passado</div>
         </div>
         <div className="kpi">
           <div className="kpi-label">Réguas ativas</div>
-          <div className="kpi-value" style={{ marginTop: 8 }}>{data.kpis.reguas}</div>
+          <div className="kpi-value" style={{ marginTop: 8 }}>{kpis.reguas}</div>
           <div className="kpi-delta neutral" style={{ marginTop: 10 }}><Icon name="info" size={11} />Todas funcionando</div>
         </div>
       </div>
@@ -74,8 +150,8 @@ export default function CoraScreen({ tenant }) {
           {/* Tabs */}
           <div className="tabs-scroll" style={{ display: 'flex', gap: 2, marginBottom: 16, borderBottom: '1px solid var(--g-200)' }}>
             {[
-              { id: 'inad',   label: 'Inadimplentes', count: data.rows.length },
-              { id: 'reguas', label: 'Réguas de cobrança', count: data.kpis.reguas },
+              { id: 'inad',   label: 'Inadimplentes', count: rows.length },
+              { id: 'reguas', label: 'Réguas de cobrança', count: kpis.reguas },
               { id: 'hist',   label: 'Histórico' },
               { id: 'config', label: 'Config' },
             ].map(t => (
@@ -111,10 +187,10 @@ export default function CoraScreen({ tenant }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.rows.map(r => {
-                    const s = STATUS[r.status];
+                  {rows.map(r => {
+                    const s = STATUS[r.status] ?? STATUS.trying;
                     return (
-                      <tr key={r.id} onClick={() => setOpenDrawer(r.id)}>
+                      <tr key={r.id} onClick={() => handleOpenDrawer(r.id)}>
                         <td>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <UserAvatar name={r.avatar} size={32} />
@@ -141,7 +217,7 @@ export default function CoraScreen({ tenant }) {
                           <button
                             className="btn-ghost"
                             style={{ fontSize: 12 }}
-                            onClick={(e) => { e.stopPropagation(); setOpenDrawer(r.id); }}
+                            onClick={(e) => { e.stopPropagation(); handleOpenDrawer(r.id); }}
                           >
                             <Icon name="eye" size={12} /> Ver conversa
                           </button>
@@ -149,10 +225,10 @@ export default function CoraScreen({ tenant }) {
                       </tr>
                     );
                   })}
-                  {data.rows.length === 0 && (
+                  {rows.length === 0 && (
                     <tr>
                       <td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--g-500)' }}>
-                        🎉 Sem inadimplentes por aqui!
+                        Sem inadimplentes por aqui!
                       </td>
                     </tr>
                   )}
@@ -178,7 +254,7 @@ export default function CoraScreen({ tenant }) {
               <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>CORA em ação agora</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {data.liveActions.map((a, i) => (
+              {liveActions.map((a, i) => (
                 <div key={`${liveTick}-${i}`} style={{
                   padding: 12,
                   background: 'rgba(255,255,255,0.04)',
@@ -192,7 +268,7 @@ export default function CoraScreen({ tenant }) {
                   <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', lineHeight: 1.45 }}>{a.action}</div>
                 </div>
               ))}
-              {data.liveActions.length === 0 && (
+              {liveActions.length === 0 && (
                 <div style={{ padding: 20, textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
                   Nada acontecendo agora.
                 </div>
@@ -215,11 +291,11 @@ export default function CoraScreen({ tenant }) {
       </div>
 
       {/* Drawer */}
-      {openDrawer && data.transcript && (
+      {openDrawer && transcript && (
         <CoraDrawer
-          transcript={data.transcript}
-          row={data.rows.find(r => r.id === openDrawer)}
-          onClose={() => setOpenDrawer(false)}
+          transcript={transcript}
+          row={rows.find(r => r.id === openDrawer)}
+          onClose={() => { setOpenDrawer(false); setTranscript(null); }}
         />
       )}
     </div>
@@ -261,7 +337,7 @@ function CoraDrawer({ transcript, row, onClose }) {
         <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, background: '#F0F2F5' }}>
           <div style={{ padding: '16px 20px', background: '#075E54', color: 'white', display: 'flex', alignItems: 'center', gap: 12 }}>
             <button className="btn-icon" style={{ color: 'white' }} onClick={onClose}><Icon name="chevleft" size={18} /></button>
-            <UserAvatar name={(row || {}).avatar || t.client.split(' ').map(w => w[0]).join('').slice(0, 2)} size={40} />
+            <UserAvatar name={(row || {}).avatar || (t.client.split(' ').map(w => w[0]).join('').slice(0, 2))} size={40} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 700, fontSize: 14 }}>{(row || {}).name || t.client}</div>
               <div style={{ fontSize: 11, opacity: 0.8 }}>Conversando com CORA · via WhatsApp</div>
@@ -279,6 +355,11 @@ function CoraDrawer({ transcript, row, onClose }) {
               </span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {t.messages.length === 0 && (
+                <div style={{ textAlign: 'center', color: 'var(--g-500)', fontSize: 12, padding: 20 }}>
+                  Nenhuma mensagem registrada ainda.
+                </div>
+              )}
               {t.messages.map((m, i) => (
                 <div key={i} style={{
                   display: 'flex',
