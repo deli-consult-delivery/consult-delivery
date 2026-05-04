@@ -233,7 +233,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   }, []);
 
   useEffect(() => {
-    loadWAGroups(null);
+    loadWAGroups();
     loadInternalChannels();
     loadQuickReplies();
   }, [tenant, tenantDbId]);
@@ -327,7 +327,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     if (selectedInstance) {
       // loadRealtimeConvs faz setConvs(mapped) substituindo tudo — aguarda terminar
       // antes de loadWAGroups appender os grupos, evitando race condition
-      loadRealtimeConvs(selectedInstance).then(() => loadWAGroups(selectedInstance));
+      loadRealtimeConvs(selectedInstance).then(() => loadWAGroups());
     } else {
       setConvs(prev => prev.filter(c => c.id.startsWith('wag-') || c.id.startsWith('chan-')));
       setUsingRealData(false);
@@ -461,18 +461,19 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     return () => window.removeEventListener('resize', handler);
   }, []);
 
-  async function loadWAGroups(instanceName) {
+  async function loadWAGroups() {
     try {
-      let q = supabase.from('whatsapp_groups')
-        .select('id, name, type, wa_group_id, participant_count, instance_name')
+      if (!tenantDbId) return;
+      const { data } = await supabase.from('whatsapp_groups')
+        .select('id, nome, group_jid, loja_id, ativo')
+        .eq('tenant_id', tenantDbId)
         .order('created_at', { ascending: false });
-      if (instanceName) q = q.eq('instance_name', instanceName);
-      const { data } = await q;
       if (!data?.length) return;
       const groupConvs = data.map(g => ({
-        id: 'wag-' + g.id, name: g.name, avatar: g.name.slice(0, 2).toUpperCase(),
-        type: 'group', whatsapp_chat_id: g.wa_group_id, waGroupId: g.id,
-        groupType: g.type, preview: `${g.participant_count || 0} participantes`,
+        id: 'wag-' + g.id, name: g.nome || g.group_jid,
+        avatar: (g.nome || 'G').slice(0, 2).toUpperCase(),
+        type: 'group', whatsapp_chat_id: g.group_jid, waGroupId: g.id,
+        groupType: 'Grupo WhatsApp', preview: 'Grupo WhatsApp',
         time: '', unread: 0, online: false, messages: [],
       }));
       setConvs(prev => [...prev.filter(c => !c.id.startsWith('wag-')), ...groupConvs]);
