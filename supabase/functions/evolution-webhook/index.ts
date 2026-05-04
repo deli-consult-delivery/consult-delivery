@@ -157,6 +157,7 @@ Deno.serve(async (req) => {
     // ── Salvar em conversations + messages (backward compat com UI) ───────────
 
     const convId = await upsertConversation({
+      tenantId,
       instanceId: inst.id,
       chatId,
       isGroup,
@@ -167,6 +168,7 @@ Deno.serve(async (req) => {
       const { data: savedMsg } = await supabase
         .from('messages')
         .insert({
+          tenant_id:       tenantId,
           conversation_id: convId,
           whatsapp_msg_id: msgId,
           direction:       'inbound',
@@ -217,13 +219,15 @@ async function upsertContact({ tenantId, jid, displayName }: {
     .single();
 
   if (error || !data) {
+    console.error('[WEBHOOK] upsertContact upsert falhou | msg:', error?.message, '| code:', error?.code, '| details:', error?.details, '| hint:', error?.hint, '| tenantId:', tenantId, '| jid:', jid);
     // Fallback: buscar registro existente (conflito de unicidade no upsert)
-    const { data: existing } = await supabase
+    const { data: existing, error: fetchErr } = await supabase
       .from('whatsapp_contacts')
       .select('id')
       .eq('tenant_id', tenantId)
       .eq('evolution_jid', jid)
       .single();
+    if (fetchErr) console.error('[WEBHOOK] upsertContact fallback também falhou:', fetchErr?.message, '| code:', fetchErr?.code);
     if (!existing?.id) throw new Error(`upsertContact falhou para JID: ${jid}`);
     return existing.id;
   }
@@ -243,20 +247,22 @@ async function upsertGroup({ tenantId, jid, groupName }: {
     .single();
 
   if (error || !data) {
-    const { data: existing } = await supabase
+    console.error('[WEBHOOK] upsertGroup upsert falhou | msg:', error?.message, '| code:', error?.code, '| details:', error?.details, '| hint:', error?.hint, '| tenantId:', tenantId, '| jid:', jid);
+    const { data: existing, error: fetchErr } = await supabase
       .from('whatsapp_groups')
       .select('id')
       .eq('tenant_id', tenantId)
       .eq('evolution_jid', jid)
       .single();
+    if (fetchErr) console.error('[WEBHOOK] upsertGroup fallback também falhou:', fetchErr?.message, '| code:', fetchErr?.code);
     if (!existing?.id) throw new Error(`upsertGroup falhou para JID: ${jid}`);
     return existing.id;
   }
   return data.id;
 }
 
-async function upsertConversation({ instanceId, chatId, isGroup, pushName }: {
-  instanceId: string; chatId: string; isGroup: boolean; pushName: string;
+async function upsertConversation({ tenantId, instanceId, chatId, isGroup, pushName }: {
+  tenantId: string; instanceId: string; chatId: string; isGroup: boolean; pushName: string;
 }): Promise<string | null> {
   const { data: existing } = await supabase
     .from('conversations')
@@ -266,7 +272,7 @@ async function upsertConversation({ instanceId, chatId, isGroup, pushName }: {
     .maybeSingle();
 
   if (existing) {
-    const upd: Record<string, string | null> = { updated_at: new Date().toISOString() };
+    const upd: Record<string, string | null> = { updated_at: new Date().toISOString(), tenant_id: tenantId };
     if (!isGroup && pushName && pushName !== 'Desconhecido') upd.push_name = pushName;
     await supabase.from('conversations').update(upd).eq('id', existing.id);
     return existing.id;
@@ -276,6 +282,7 @@ async function upsertConversation({ instanceId, chatId, isGroup, pushName }: {
   const { data: newConv, error } = await supabase
     .from('conversations')
     .insert({
+      tenant_id:        tenantId,
       instance_id:      instanceId,
       whatsapp_chat_id: chatId,
       is_group:         isGroup,
