@@ -212,7 +212,7 @@ function AgentCard({ agent, lastAction, onClick, userId }) {
           background: 'var(--g-50)', borderRadius: 6,
           display: 'flex', gap: 6, alignItems: 'flex-start', marginBottom: 12,
         }}>
-          <Icon name="clock" size={11} style={{ marginTop: 1, flexShrink: 0 }} />
+          <Icon name="info" size={11} style={{ marginTop: 1, flexShrink: 0 }} />
           <span style={{ lineHeight: 1.4 }}>
             <strong>{fmtRelTime(lastAction.created_at)}</strong> · {lastAction.action}
           </span>
