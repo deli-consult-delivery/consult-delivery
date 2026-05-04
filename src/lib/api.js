@@ -361,3 +361,89 @@ export async function createSugestao({ tenant_id, texto, tela }) {
   if (error) throw error;
   return data;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Agent Drafts — sistema de proposta-aprovação (Etapa 11)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function listAgentDrafts(tenantId, filters = {}) {
+  let q = supabase
+    .from('agent_drafts')
+    .select(`
+      id, agent_name, channel, target_id, content, reasoning,
+      status, rejection_reason, expires_at, created_at,
+      loja:lojas(id, nome)
+    `)
+    .eq('tenant_id', tenantId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false });
+
+  if (filters.agent) q = q.eq('agent_name', filters.agent);
+  if (filters.channel) q = q.eq('channel', filters.channel);
+
+  const { data, error } = await q;
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function approveDraft(draftId) {
+  const { data: { user } } = await supabase.auth.getUser();
+  const { error } = await supabase
+    .from('agent_drafts')
+    .update({ status: 'approved', reviewer_id: user?.id, reviewed_at: new Date().toISOString() })
+    .eq('id', draftId);
+  if (error) throw error;
+}
+
+export async function rejectDraft(draftId, rejectionReason) {
+  const { data: { user } } = await supabase.auth.getUser();
+  const { error } = await supabase
+    .from('agent_drafts')
+    .update({
+      status: 'rejected',
+      reviewer_id: user?.id,
+      reviewed_at: new Date().toISOString(),
+      rejection_reason: rejectionReason,
+    })
+    .eq('id', draftId);
+  if (error) throw error;
+}
+
+export async function updateDraftContent(draftId, newContent, editsSummary) {
+  const { error } = await supabase
+    .from('agent_drafts')
+    .update({ content: newContent, edits_made: editsSummary })
+    .eq('id', draftId);
+  if (error) throw error;
+}
+
+export function subscribeToDrafts(tenantId, callback) {
+  const channel = supabase
+    .channel(`drafts-${tenantId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'agent_drafts', filter: `tenant_id=eq.${tenantId}` },
+      payload => callback(payload)
+    )
+    .subscribe();
+  return () => supabase.removeChannel(channel);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Audit Log — histórico de ações dos agentes (Etapa 15)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function listAuditLog(tenantId, filters = {}) {
+  let q = supabase
+    .from('audit_log')
+    .select('id, agent_name, user_id, action, resource, metadata, created_at')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false });
+
+  if (filters.agentName) q = q.eq('agent_name', filters.agentName);
+  if (filters.limit) q = q.limit(filters.limit);
+
+  const { data, error } = await q;
+  if (error) throw error;
+  return data ?? [];
+}
