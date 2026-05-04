@@ -44,9 +44,10 @@ Deno.serve(async (req) => {
     const msgId    = msgData.key.id as string;
     const pushName = (msgData.pushName || 'Desconhecido') as string;
 
-    // Em grupos, o remetente real fica em key.participant
-    const senderJid = isGroup
-      ? (msgData.key.participant || msgData.participant || chatId)
+    // Em grupos, o remetente real fica em key.participant.
+    // Se ausente (mensagem de sistema do grupo), ignora para não criar contato com JID do grupo.
+    const senderJid: string | null = isGroup
+      ? (msgData.key.participant || msgData.participant || null)
       : chatId;
 
     // ── Instância ──────────────────────────────────────────────────────────────
@@ -97,49 +98,60 @@ Deno.serve(async (req) => {
     const isMentionToBot  = mentionedAgent !== null;
 
     // ── Contato remetente (whatsapp_contacts) ─────────────────────────────────
+    // senderJid é null para mensagens de sistema de grupo — ignoramos whatsapp_messages
 
-    const senderContactId = await upsertContact({
-      tenantId,
-      jid:         senderJid,
-      displayName: pushName,
-    });
+    let wMsg: { id: string } | null = null;
+    let groupId: string | null      = null;
 
-    // ── Grupo ou PV ───────────────────────────────────────────────────────────
+    if (senderJid) {
+      let senderContactId: string;
+      try {
+        senderContactId = await upsertContact({ tenantId, jid: senderJid, displayName: pushName });
+      } catch (err) {
+        console.error('[WEBHOOK] falha ao criar contato, mensagem ignorada no novo schema:', (err as Error).message);
+        senderContactId = '';
+      }
 
-    let groupId: string | null     = null;
-    let pvContactId: string | null = null;
+      // ── Grupo ou PV ────────────────────────────────────────────────────────
 
-    if (isGroup) {
-      groupId = await upsertGroup({ tenantId, jid: chatId, groupName: pushName || chatId });
+      let pvContactId: string | null = null;
+
+      if (isGroup) {
+        groupId = await upsertGroup({ tenantId, jid: chatId, groupName: pushName || chatId });
+      } else {
+        pvContactId = senderContactId;
+      }
+
+      // ── Salvar em whatsapp_messages (novo schema) ──────────────────────────
+
+      if (senderContactId) {
+        const { data: inserted, error: wMsgErr } = await supabase
+          .from('whatsapp_messages')
+          .insert({
+            tenant_id:            tenantId,
+            evolution_message_id: msgId,
+            group_id:             groupId,
+            contact_id:           pvContactId,
+            sender_contact_id:    senderContactId,
+            direction:            'inbound',
+            message_type:         detectedMediaType || 'text',
+            content:              messageText || null,
+            is_mention_to_bot:    isMentionToBot,
+            mentioned_agent:      mentionedAgent,
+            ts:                   msgTimestamp,
+          })
+          .select('id')
+          .single();
+
+        if (wMsgErr) {
+          console.error('[WEBHOOK] falha whatsapp_messages:', wMsgErr.message);
+        } else {
+          wMsg = inserted;
+          console.log('[WEBHOOK] whatsapp_messages id=', wMsg?.id, 'mencao=', mentionedAgent);
+        }
+      }
     } else {
-      pvContactId = senderContactId;
-    }
-
-    // ── Salvar em whatsapp_messages (novo schema) ─────────────────────────────
-
-    const { data: wMsg, error: wMsgErr } = await supabase
-      .from('whatsapp_messages')
-      .insert({
-        tenant_id:          tenantId,
-        evolution_message_id: msgId,
-        group_id:           groupId,
-        contact_id:         pvContactId,
-        sender_contact_id:  senderContactId,
-        direction:          'inbound',
-        message_type:       detectedMediaType || 'text',
-        content:            messageText || null,
-        is_mention_to_bot:  isMentionToBot,
-        mentioned_agent:    mentionedAgent,
-        ts:                 msgTimestamp,
-      })
-      .select('id')
-      .single();
-
-    if (wMsgErr) {
-      console.error('[WEBHOOK] falha whatsapp_messages:', wMsgErr.message);
-      // Continua mesmo assim — salva no schema antigo abaixo
-    } else {
-      console.log('[WEBHOOK] whatsapp_messages id=', wMsg?.id, 'mencao=', mentionedAgent);
+      console.log('[WEBHOOK] mensagem de sistema de grupo, ignorando whatsapp_messages');
     }
 
     // ── Salvar em conversations + messages (backward compat com UI) ───────────
@@ -205,14 +217,15 @@ async function upsertContact({ tenantId, jid, displayName }: {
     .single();
 
   if (error || !data) {
-    // Tenta só buscar se upsert falhou
+    // Fallback: buscar registro existente (conflito de unicidade no upsert)
     const { data: existing } = await supabase
       .from('whatsapp_contacts')
       .select('id')
       .eq('tenant_id', tenantId)
       .eq('evolution_jid', jid)
       .single();
-    return existing?.id ?? crypto.randomUUID();
+    if (!existing?.id) throw new Error(`upsertContact falhou para JID: ${jid}`);
+    return existing.id;
   }
   return data.id;
 }
@@ -236,7 +249,8 @@ async function upsertGroup({ tenantId, jid, groupName }: {
       .eq('tenant_id', tenantId)
       .eq('evolution_jid', jid)
       .single();
-    return existing?.id ?? crypto.randomUUID();
+    if (!existing?.id) throw new Error(`upsertGroup falhou para JID: ${jid}`);
+    return existing.id;
   }
   return data.id;
 }

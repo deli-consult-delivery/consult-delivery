@@ -32,9 +32,13 @@ app.get('/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOStrin
 
 app.post('/analise', requireAgentAccess('analista-ifood'), async (req, res) => {
 
-  const { job_id, cliente_nome, drive_link, periodo, correcoes } = req.body;
-  if (!job_id || !drive_link) {
-    return res.status(400).json({ error: 'job_id e drive_link são obrigatórios' });
+  const { job_id, cliente_nome, drive_link, periodo, correcoes, trigger_source } = req.body;
+  // drive_link é opcional para invokes via menção WhatsApp (o agente usa dados do Supabase)
+  if (!job_id) {
+    return res.status(400).json({ error: 'job_id é obrigatório' });
+  }
+  if (!drive_link && trigger_source !== 'whatsapp_mention') {
+    return res.status(400).json({ error: 'drive_link é obrigatório para análises manuais' });
   }
 
   res.status(202).json({ ok: true, job_id });
@@ -315,7 +319,8 @@ app.post('/deli/approve', async (req, res) => {
   }
 
   if (decision === 'approved') {
-    const ok = await executeApprovedAction(approval_id);
+    const ok = await executeApprovedAction(approval_id, vermelho_code);
+    if (!ok) return res.status(403).json({ error: 'Aprovação inválida ou código vermelho incorreto.', approval_id });
     return res.json({ ok, approval_id });
   }
 

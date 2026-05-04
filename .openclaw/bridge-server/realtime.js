@@ -103,14 +103,18 @@ async function executeVerde(trigger, payload) {
     console.error('[realtime] executeVerde erro:', err.message);
   }
 
-  await supabase().from('deli_actions_log').insert({
-    tenant_id:          tenantId,
-    trigger_id:         trigger.id,
-    context_jsonb:      payload,
-    action_taken_jsonb: action,
-    autonomy_level:     'verde',
-    result,
-  });
+  try {
+    await supabase().from('deli_actions_log').insert({
+      tenant_id:          tenantId,
+      trigger_id:         trigger.id,
+      context_jsonb:      payload,
+      action_taken_jsonb: action,
+      autonomy_level:     'verde',
+      result,
+    });
+  } catch (logErr) {
+    console.warn('[realtime] deli_actions_log insert falhou:', logErr.message);
+  }
 
   console.log(`[realtime] Verde: trigger="${trigger.name}" result=${result}`);
 }
@@ -183,7 +187,7 @@ async function handleEvent(sourceTable, eventType, payload) {
 
 // ── Executa ação após aprovação do Wandson (/deli/approve) ───────────────────
 
-async function executeApprovedAction(approvalId) {
+async function executeApprovedAction(approvalId, vermelhoCode) {
   const { data: approval, error } = await supabase()
     .from('deli_pending_approvals')
     .select('*')
@@ -194,6 +198,15 @@ async function executeApprovedAction(approvalId) {
   if (error || !approval) {
     console.warn('[realtime] approval não encontrado ou já processado:', approvalId);
     return false;
+  }
+
+  // Semáforo Vermelho: exige código explícito "APROVADO VERMELHO apr-{id}"
+  if (approval.autonomy_level === 'vermelho') {
+    const expected = `APROVADO VERMELHO apr-${approvalId}`;
+    if (vermelhoCode !== expected) {
+      console.warn('[realtime] código vermelho inválido para id:', approvalId);
+      return false;
+    }
   }
 
   const action   = approval.proposed_action_jsonb;
@@ -210,6 +223,7 @@ async function executeApprovedAction(approvalId) {
             'Content-Type':    'application/json',
             'x-bridge-secret': process.env.BRIDGE_SECRET || '',
           },
+          signal: AbortSignal.timeout(60_000),
           body: JSON.stringify({
             job_id:       `deli-${approvalId}`,
             cliente_nome: action.cliente_nome || '',
@@ -237,21 +251,26 @@ async function executeApprovedAction(approvalId) {
     result = `error: ${err.message}`;
   }
 
+  const finalStatus = result === 'success' ? 'approved' : 'failed';
   await supabase()
     .from('deli_pending_approvals')
-    .update({ status: 'approved', approved_at: new Date().toISOString() })
+    .update({ status: finalStatus, approved_at: new Date().toISOString() })
     .eq('id', approvalId);
 
-  await supabase().from('deli_actions_log').insert({
-    tenant_id:          tenantId,
-    trigger_id:         approval.trigger_id,
-    context_jsonb:      approval.context_jsonb,
-    action_taken_jsonb: action,
-    autonomy_level:     approval.autonomy_level,
-    result,
-  });
+  try {
+    await supabase().from('deli_actions_log').insert({
+      tenant_id:          tenantId,
+      trigger_id:         approval.trigger_id,
+      context_jsonb:      approval.context_jsonb,
+      action_taken_jsonb: action,
+      autonomy_level:     approval.autonomy_level,
+      result,
+    });
+  } catch (logErr) {
+    console.warn('[realtime] deli_actions_log insert falhou:', logErr.message);
+  }
 
-  console.log(`[realtime] aprovação executada: id=${approvalId} result=${result}`);
+  console.log(`[realtime] aprovação executada: id=${approvalId} status=${finalStatus} result=${result}`);
   return result === 'success';
 }
 
@@ -259,7 +278,8 @@ async function rejectApproval(approvalId) {
   await supabase()
     .from('deli_pending_approvals')
     .update({ status: 'rejected' })
-    .eq('id', approvalId);
+    .eq('id', approvalId)
+    .eq('status', 'waiting');
   console.log(`[realtime] aprovação rejeitada: id=${approvalId}`);
 }
 
