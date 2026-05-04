@@ -1,10 +1,11 @@
 // bridge-server/index.js
 // Recebe webhook da plataforma, chama openclaw agent, retorna resultado via Edge Function
 
-const express = require('express');
-const { spawn } = require('child_process');
-const fs   = require('fs');
-const path = require('path');
+const express            = require('express');
+const { spawn }          = require('child_process');
+const fs                 = require('fs');
+const path               = require('path');
+const requireAgentAccess = require('./middleware/requireAgentAccess');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -28,11 +29,7 @@ app.use((req, res, next) => {
 
 app.get('/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
-app.post('/analise', async (req, res) => {
-  const incomingSecret = req.headers['x-bridge-secret'];
-  if (BRIDGE_SECRET && incomingSecret !== BRIDGE_SECRET) {
-    return res.status(401).json({ error: 'unauthorized' });
-  }
+app.post('/analise', requireAgentAccess('analista-ifood'), async (req, res) => {
 
   const { job_id, cliente_nome, drive_link, periodo, correcoes } = req.body;
   if (!job_id || !drive_link) {
