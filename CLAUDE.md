@@ -616,6 +616,33 @@ ORDEM RECOMENDADA EM CADA SESSÃO
 
 ================================================================================
 
+====================================================
+12. CONVENÇÃO DE DIAGRAMAS
+====================================================
+
+Diagramas formais e versionados (que o time inteiro consulta):
+→ Mermaid em docs/fluxos/
+→ Texto markdown, renderiza no GitHub e VS Code
+→ Diff do git mostra mudanças linha a linha
+→ Pode ser editado diretamente pelo Claude Code
+
+Rascunhos rápidos (pensar, brainstormar):
+→ Excalidraw via plugin do Obsidian (vault WikiBrain)
+→ Exports PNG/SVG vão pra docs/rascunhos/ se quiser commitar
+→ Não substituem o Mermaid (são pra ideação)
+
+Workflow recomendado:
+1. Bate ideia → desenha rápido no Excalidraw
+2. Aprova mentalmente → pede pro Claude Code converter pra Mermaid
+3. Mermaid fica em docs/fluxos/, versionado, time todo vê
+
+Arquivos existentes:
+- docs/fluxos/arquitetura.md    — stack completa (Frontend, VPS, agentes, integrações)
+- docs/fluxos/analise-ifood.md  — fluxo do módulo Análise iFood
+- docs/rascunhos/               — exports Excalidraw (PNG/SVG)
+
+================================================================================
+
 ## Context Navigation (Wiki-Brain)
 
 You have access to a personal wiki at `C:\Users\Consult Delivery\consult-delivery\WikiBrain`. This is the user's
