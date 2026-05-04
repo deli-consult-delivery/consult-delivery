@@ -465,14 +465,14 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     try {
       if (!tenantDbId) return;
       const { data } = await supabase.from('whatsapp_groups')
-        .select('id, nome, group_jid, loja_id, ativo')
+        .select('id, group_name, evolution_jid, loja_id')
         .eq('tenant_id', tenantDbId)
         .order('created_at', { ascending: false });
       if (!data?.length) return;
       const groupConvs = data.map(g => ({
-        id: 'wag-' + g.id, name: g.nome || g.group_jid,
-        avatar: (g.nome || 'G').slice(0, 2).toUpperCase(),
-        type: 'group', whatsapp_chat_id: g.group_jid, waGroupId: g.id,
+        id: 'wag-' + g.id, name: g.group_name || g.evolution_jid,
+        avatar: (g.group_name || 'G').slice(0, 2).toUpperCase(),
+        type: 'group', whatsapp_chat_id: g.evolution_jid, waGroupId: g.id,
         groupType: 'Grupo WhatsApp', preview: 'Grupo WhatsApp',
         time: '', unread: 0, online: false, messages: [],
       }));
