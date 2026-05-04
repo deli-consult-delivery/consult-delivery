@@ -186,7 +186,7 @@ export default function DashboardScreen({ tenant, tenantDbId, onNavigate }) {
       <div style={{ marginTop: 28 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <h2 className="section-h2">Tarefas urgentes</h2>
-          <button className="btn-ghost" style={{ fontSize: 13 }}>Ver no Kanban <Icon name="arrowright" size={12} /></button>
+          <button className="btn-ghost" style={{ fontSize: 13 }} onClick={() => onNavigate?.('tasks')}>Ver tarefas <Icon name="arrowright" size={12} /></button>
         </div>
         <div className="card-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
           {urgentTasks.map(t => (
