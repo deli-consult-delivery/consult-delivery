@@ -6,6 +6,7 @@ const { spawn }          = require('child_process');
 const fs                 = require('fs');
 const path               = require('path');
 const requireAgentAccess = require('./middleware/requireAgentAccess');
+const { startRealtime, executeApprovedAction, rejectApproval } = require('./realtime');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -300,9 +301,36 @@ async function postCallback(payload) {
   }
 }
 
+// ── Endpoint DELI — aprovação/rejeição de pendências ─────────────────────────
+
+app.post('/deli/approve', async (req, res) => {
+  const bridgeSecret = req.headers['x-bridge-secret'];
+  if (!process.env.BRIDGE_SECRET || bridgeSecret !== process.env.BRIDGE_SECRET) {
+    return res.status(401).json({ error: 'Não autorizado.' });
+  }
+
+  const { approval_id, decision, vermelho_code } = req.body;
+  if (!approval_id || !decision) {
+    return res.status(400).json({ error: 'approval_id e decision são obrigatórios.' });
+  }
+
+  if (decision === 'approved') {
+    const ok = await executeApprovedAction(approval_id);
+    return res.json({ ok, approval_id });
+  }
+
+  if (decision === 'rejected') {
+    await rejectApproval(approval_id);
+    return res.json({ ok: true, approval_id, status: 'rejected' });
+  }
+
+  return res.status(400).json({ error: 'decision deve ser "approved" ou "rejected".' });
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[bridge] ouvindo em 0.0.0.0:${PORT}`);
   console.log(`[bridge] SUPABASE_URL:   ${SUPABASE_URL   ? '✓' : '✗ não configurado'}`);
   console.log(`[bridge] BRIDGE_SECRET:  ${BRIDGE_SECRET  ? '✓' : '✗ não configurado'}`);
   console.log(`[bridge] GOOGLE_API_KEY: ${GOOGLE_API_KEY ? '✓' : 'não configurado (modo público/local)'}`);
+  startRealtime();
 });
