@@ -20,6 +20,7 @@ _(ideas, frameworks, patterns, principles — pages that describe a concept)_
 - [[Campanha Inteligente iFood]] — como funciona, configuração correta e como potencializar com anúncio
 - [[Estratégias para Dias Fracos iFood]] — como identificar dias fracos e criar ofertas direcionadas
 - [[Métricas iFood]] — todos os KPIs monitorados em análises: funil, operação, marketing, financeiro
+- [[Evolution API Webhooks]] — arquitetura dual (global vs instance), self-healing, gotchas de diagnóstico
 
 ## Sources
 

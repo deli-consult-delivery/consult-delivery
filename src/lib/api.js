@@ -447,3 +447,79 @@ export async function listAuditLog(tenantId, filters = {}) {
   if (error) throw error;
   return data ?? [];
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Webhook self-healing — Evolution API
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Verifica se o webhook de uma instância aponta para a Supabase Edge Function
+ * com enabled=true. Se não estiver correto, corrige automaticamente e loga em audit_log.
+ *
+ * @param {string} instanceName
+ * @param {{ evolutionUrl?: string, apiKey?: string, tenantId?: string }} opts
+ * @returns {Promise<{ status: 'ok'|'corrected'|'failed', url?: string, reason?: string }>}
+ */
+export async function ensureWebhookConfig(instanceName, opts = {}) {
+  const SUPA_URL  = import.meta.env.VITE_SUPABASE_URL;
+  const EVO_URL   = opts.evolutionUrl || import.meta.env.VITE_EVOLUTION_URL;
+  const EVO_KEY   = opts.apiKey       || import.meta.env.VITE_EVOLUTION_KEY;
+  const tenantId  = opts.tenantId     || null;
+
+  if (!EVO_URL || !EVO_KEY || !SUPA_URL) {
+    return { status: 'failed', reason: 'missing_env' };
+  }
+
+  const TARGET_URL = `${SUPA_URL}/functions/v1/evolution-webhook`;
+  const evoHeaders = { 'Content-Type': 'application/json', apikey: EVO_KEY };
+
+  try {
+    const findRes = await fetch(`${EVO_URL}/webhook/find/${instanceName}`, { headers: evoHeaders });
+    if (!findRes.ok) return { status: 'failed', reason: `find_http_${findRes.status}` };
+
+    const current = await findRes.json();
+
+    if (current.enabled === true && current.url === TARGET_URL) {
+      return { status: 'ok', url: current.url };
+    }
+
+    // Webhook está incorreto — corrigir
+    const setRes = await fetch(`${EVO_URL}/webhook/set/${instanceName}`, {
+      method:  'POST',
+      headers: evoHeaders,
+      body: JSON.stringify({
+        webhook: {
+          enabled:           true,
+          url:               TARGET_URL,
+          webhook_by_events: false,
+          events:            ['MESSAGES_UPSERT'],
+        },
+      }),
+    });
+
+    const corrected = setRes.ok;
+
+    if (tenantId) {
+      await supabase.from('audit_log').insert({
+        tenant_id:  tenantId,
+        agent_name: 'system',
+        action:     corrected ? 'webhook_autocorrected' : 'webhook_correction_failed',
+        resource:   `evolution_instances/${instanceName}`,
+        metadata: {
+          was_url:     current.url,
+          was_enabled: current.enabled,
+          target_url:  TARGET_URL,
+          corrected,
+        },
+      });
+    }
+
+    return corrected
+      ? { status: 'corrected', url: TARGET_URL }
+      : { status: 'failed', reason: 'set_failed' };
+
+  } catch (err) {
+    return { status: 'failed', reason: err.message };
+  }
+}
+

@@ -49,6 +49,17 @@ export async function sendMediaMessage(instanceName, to, media, mediaType, mimeT
   return res.json();
 }
 
+// Ler configuração atual do webhook (sem modificar)
+export async function getWebhookStatus(instanceName, evolutionUrl, apiKey) {
+  const url = evolutionUrl || EVO_URL;
+  const key = apiKey || EVO_KEY;
+  const res = await fetch(`${url}/webhook/find/${instanceName}`, {
+    headers: { 'Content-Type': 'application/json', apikey: key },
+  });
+  if (!res.ok) throw new Error(`webhook/find ${res.status}`);
+  return res.json();
+}
+
 // Configurar webhook da instância para apontar para a Supabase Edge Function
 export async function setWebhook(instanceName, webhookUrl, evolutionUrl, apiKey) {
   const url = evolutionUrl || EVO_URL;

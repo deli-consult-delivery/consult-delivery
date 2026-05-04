@@ -6,7 +6,8 @@ import RequireRole from '../components/auth/RequireRole.jsx';
 import { usePermissions } from '../hooks/usePermissions.js';
 import { SETTINGS_DATA, AGENTS } from '../data.js';
 import { supabase } from '../lib/supabase.js';
-import { setWebhook, getQRCode, getInstanceStatus } from '../lib/evolution.js';
+import { setWebhook, getQRCode, getInstanceStatus, getWebhookStatus } from '../lib/evolution.js';
+import { ensureWebhookConfig } from '../lib/api.js';
 
 /* ─── Helpers ───────────────────────────────────────────── */
 // Sempre retorna o tenant_id real do usuário logado (fonte de verdade: Supabase)
@@ -136,13 +137,14 @@ function TabWhatsApp() {
   const WEBHOOK   = SUPA_URL ? `${SUPA_URL}/functions/v1/evolution-webhook` : '';
   const HAS_EVO   = !!(EVO_URL && EVO_KEY);
 
-  const [instances,    setInstances]    = useState([]);
-  const [loading,      setLoading]      = useState(true);
-  const [showForm,     setShowForm]     = useState(false);
-  const [savingForm,   setSavingForm]   = useState(false);
-  const [showQR,       setShowQR]       = useState(null); // instance_name
-  const [qrData,       setQrData]       = useState(null);
-  const [qrLoading,    setQrLoading]    = useState(false);
+  const [instances,       setInstances]       = useState([]);
+  const [loading,         setLoading]         = useState(true);
+  const [showForm,        setShowForm]        = useState(false);
+  const [savingForm,      setSavingForm]      = useState(false);
+  const [showQR,          setShowQR]          = useState(null); // instance_name
+  const [qrData,          setQrData]          = useState(null);
+  const [qrLoading,       setQrLoading]       = useState(false);
+  const [webhookStatuses, setWebhookStatuses] = useState({}); // { [instanceName]: 'loading'|'ok'|'mismatch'|'error' }
   const [form, setForm] = useState({ name: '', url: EVO_URL || '', key: '' });
 
   useEffect(() => {
@@ -169,22 +171,49 @@ function TabWhatsApp() {
       if (data && data.length > 0) {
         setInstances(data);
         setLoading(false);
+        checkWebhookStatuses(data);
         return;
       }
     } catch { /* tabela ainda não existe */ }
 
     // Fallback: mostrar instância padrão das env vars
-    if (HAS_EVO) {
-      setInstances([{
-        id:            'default',
-        instance_name: 'suporte-consult-delivery',
-        evolution_url: EVO_URL,
-        status:        'disconnected',
-        phone:         null,
-        profile_name:  null,
-      }]);
+    const fallback = HAS_EVO ? [{
+      id:            'default',
+      instance_name: 'suporte-consult-delivery',
+      evolution_url: EVO_URL,
+      status:        'disconnected',
+      phone:         null,
+      profile_name:  null,
+    }] : [];
+    if (fallback.length) {
+      setInstances(fallback);
+      checkWebhookStatuses(fallback);
     }
     setLoading(false);
+  }
+
+  async function checkWebhookStatuses(instList) {
+    if (!HAS_EVO || !SUPA_URL) return;
+    const TARGET = `${SUPA_URL}/functions/v1/evolution-webhook`;
+
+    const loading = Object.fromEntries((instList || instances).map(i => [i.instance_name, 'loading']));
+    setWebhookStatuses(loading);
+
+    for (const inst of (instList || instances)) {
+      const evoUrl = inst.evolution_url || EVO_URL;
+      const evoKey = inst.api_key || EVO_KEY;
+      if (!evoUrl || !evoKey) {
+        setWebhookStatuses(prev => ({ ...prev, [inst.instance_name]: 'error' }));
+        continue;
+      }
+      try {
+        const wh = await getWebhookStatus(inst.instance_name, evoUrl, evoKey);
+        const status = (wh.enabled === true && wh.url === TARGET) ? 'ok' : 'mismatch';
+        setWebhookStatuses(prev => ({ ...prev, [inst.instance_name]: status }));
+      } catch {
+        setWebhookStatuses(prev => ({ ...prev, [inst.instance_name]: 'error' }));
+      }
+    }
   }
 
   async function pollStatuses() {
@@ -240,11 +269,26 @@ function TabWhatsApp() {
       alert('Instância sem URL ou API Key configurados.');
       return;
     }
+    setWebhookStatuses(prev => ({ ...prev, [inst.instance_name]: 'loading' }));
     try {
-      await setWebhook(inst.instance_name, WEBHOOK, evoUrl, evoKey);
-      alert(`Webhook configurado com sucesso!\n\nURL: ${WEBHOOK}`);
+      const result = await ensureWebhookConfig(inst.instance_name, {
+        evolutionUrl: evoUrl,
+        apiKey:       evoKey,
+      });
+      if (result.status === 'ok') {
+        alert(`Webhook já está correto.\n\nURL: ${WEBHOOK}`);
+      } else if (result.status === 'corrected') {
+        alert(`Webhook corrigido com sucesso!\n\nURL: ${WEBHOOK}`);
+      } else {
+        alert(`Erro ao configurar webhook: ${result.reason || 'desconhecido'}`);
+      }
+      setWebhookStatuses(prev => ({
+        ...prev,
+        [inst.instance_name]: result.status === 'failed' ? 'error' : 'ok',
+      }));
     } catch (err) {
       alert('Erro ao configurar webhook: ' + (err?.message || err));
+      setWebhookStatuses(prev => ({ ...prev, [inst.instance_name]: 'error' }));
     }
   }
 
@@ -353,7 +397,7 @@ function TabWhatsApp() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'var(--g-50)', borderBottom: '1px solid var(--g-200)' }}>
-                  {['Instância', 'Status', 'Telefone / Perfil', 'Ações'].map(h => (
+                  {['Instância', 'Status', 'Webhook', 'Telefone / Perfil', 'Ações'].map(h => (
                     <th key={h} style={{
                       padding: '10px 14px', fontSize: 11, fontWeight: 700,
                       color: 'var(--g-500)', textTransform: 'uppercase',
@@ -364,7 +408,18 @@ function TabWhatsApp() {
               </thead>
               <tbody>
                 {instances.map((inst, i) => {
-                  const sb = statusBadge(inst.status);
+                  const sb  = statusBadge(inst.status);
+                  const whs = webhookStatuses[inst.instance_name];
+                  const whBadge = whs === 'loading'
+                    ? { cls: 'badge-gray',   label: '◌ Verificando' }
+                    : whs === 'ok'
+                    ? { cls: 'badge-green',  label: '● Ativo'       }
+                    : whs === 'mismatch'
+                    ? { cls: 'badge-red',    label: '✕ Incorreto'   }
+                    : whs === 'error'
+                    ? { cls: 'badge-yellow', label: '⚠ Erro'        }
+                    : { cls: 'badge-gray',   label: '— '            };
+
                   return (
                     <tr key={inst.id} style={{
                       borderBottom: i < instances.length - 1 ? '1px solid var(--g-100)' : 'none',
@@ -383,6 +438,9 @@ function TabWhatsApp() {
                       </td>
                       <td style={{ padding: '14px 14px' }}>
                         <span className={`badge ${sb.cls}`}>{sb.label}</span>
+                      </td>
+                      <td style={{ padding: '14px 14px' }}>
+                        <span className={`badge ${whBadge.cls}`}>{whBadge.label}</span>
                       </td>
                       <td style={{ padding: '14px 14px', fontSize: 12, color: 'var(--g-600)' }}>
                         {inst.phone || inst.profile_name || '—'}

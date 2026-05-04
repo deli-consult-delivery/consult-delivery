@@ -7,6 +7,7 @@ const fs                 = require('fs');
 const path               = require('path');
 const requireAgentAccess = require('./middleware/requireAgentAccess');
 const { startRealtime, executeApprovedAction, rejectApproval } = require('./realtime');
+const { startWebhookGuard } = require('./webhookGuard');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -338,4 +339,5 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`[bridge] BRIDGE_SECRET:  ${BRIDGE_SECRET  ? '✓' : '✗ não configurado'}`);
   console.log(`[bridge] GOOGLE_API_KEY: ${GOOGLE_API_KEY ? '✓' : 'não configurado (modo público/local)'}`);
   startRealtime();
+  startWebhookGuard();
 });
