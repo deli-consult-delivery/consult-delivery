@@ -17,7 +17,19 @@
       "mcp__supabase__deploy_edge_function",
       "Bash(supabase --version)",
       "mcp__claude_ai_Google_Drive__search_files",
-      "mcp__claude_ai_Google_Drive__create_file"
+      "mcp__claude_ai_Google_Drive__create_file",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 -u -c ' *)",
+      "WebFetch(domain:doc.evolution-api.com)",
+      "WebFetch(domain:docs.evolution-api.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.postman.com)",
+      "WebFetch(domain:gist.github.com)",
+      "Bash(git merge *)",
+      "PowerShell(Set-Location \"C:\\\\Users\\\\Consult Delivery\\\\consult-delivery\"; Get-ChildItem supabase/migrations/ | Where-Object { $_.Name -match \"20260504\" } | Select-Object Name)",
+      "Bash(git rm *)",
+      "Bash(git checkout *)",
+      "Bash(echo \"status: $?\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\Consult Delivery\\.openclaw"

@@ -8,6 +8,12 @@ Chronological, append-only record of everything that's happened in this wiki.
 <optional detail line>
 ```
 
+## [2026-05-04 22:30] session | webhook self-healing + Evolution v2 architecture
+Touched: wiki/evolution-api-webhooks.md, wiki/index.md
+
+## [2026-05-04 22:00] session | schema-alignment migrations e frontend
+Touched: none
+
 ## [2026-05-04 15:00] session | Etapas 11 e 15 — Drafts UI e AgentsPage real
 Touched: none
 
