@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import Icon from '../components/Icon.jsx';
-import UserAvatar from '../components/UserAvatar.jsx';
 import { supabase } from '../lib/supabase.js';
 import {
   fetchGroups,
@@ -12,16 +11,6 @@ import {
   leaveWAGroup,
   sendGroupTextMessage,
 } from '../lib/evolution.js';
-
-const GROUP_TYPES = [
-  { id: 'geral',       label: 'Geral',        emoji: '💬' },
-  { id: 'cozinha',     label: 'Cozinha',       emoji: '🍳' },
-  { id: 'atendimento', label: 'Atendimento',   emoji: '🎧' },
-  { id: 'entrega',     label: 'Entrega',       emoji: '🛵' },
-  { id: 'gerencia',    label: 'Gerência',      emoji: '📊' },
-];
-
-const TYPE_MAP = Object.fromEntries(GROUP_TYPES.map(t => [t.id, t]));
 
 const CHAN_COLORS = ['#2563EB','#B70C00','#059669','#D97706','#7C3AED','#0D0D0D','#EC4899','#06B6D4'];
 
@@ -68,18 +57,17 @@ export default function GruposScreen({ tenant, tenantDbId }) {
 
 /* ─── Tab WhatsApp Groups ─────────────────────────────── */
 function TabWhatsApp({ tenant, tenantDbId }) {
-  const [instances,    setInstances]    = useState([]);
-  const [selInstance,  setSelInstance]  = useState('');
-  const [groups,       setGroups]       = useState([]);
-  const [loadingGroups,setLoadingGroups]= useState(false);
-  const [syncing,      setSyncing]      = useState(false);
-  const [showCreate,   setShowCreate]   = useState(false);
-  const [editGroup,    setEditGroup]    = useState(null);
-  const [broadcastGrp, setBroadcastGrp]= useState(null);
-  const [membersGrp,   setMembersGrp]  = useState(null);
-  const [search,       setSearch]       = useState('');
-  const [filterType,   setFilterType]   = useState('all');
-  const [toast,        setToast]        = useState(null); // { type: 'ok'|'err', msg: string }
+  const [instances,     setInstances]    = useState([]);
+  const [selInstance,   setSelInstance]  = useState('');
+  const [groups,        setGroups]       = useState([]);
+  const [loadingGroups, setLoadingGroups]= useState(false);
+  const [syncing,       setSyncing]      = useState(false);
+  const [showCreate,    setShowCreate]   = useState(false);
+  const [editGroup,     setEditGroup]    = useState(null);
+  const [broadcastGrp,  setBroadcastGrp]= useState(null);
+  const [membersGrp,    setMembersGrp]  = useState(null);
+  const [search,        setSearch]       = useState('');
+  const [toast,         setToast]        = useState(null);
 
   function showToast(type, msg) {
     setToast({ type, msg });
@@ -87,7 +75,7 @@ function TabWhatsApp({ tenant, tenantDbId }) {
   }
 
   useEffect(() => { loadInstances(); }, []);
-  useEffect(() => { if (selInstance) loadGroups(); }, [selInstance]);
+  useEffect(() => { if (tenantDbId) loadGroups(); }, [tenantDbId]);
 
   async function loadInstances() {
     try {
@@ -104,13 +92,13 @@ function TabWhatsApp({ tenant, tenantDbId }) {
   }
 
   async function loadGroups() {
-    if (!selInstance) return;
+    if (!tenantDbId) return;
     setLoadingGroups(true);
     try {
       const { data } = await supabase
         .from('whatsapp_groups')
         .select('*')
-        .eq('instance_name', selInstance)
+        .eq('tenant_id', tenantDbId)
         .order('created_at', { ascending: false });
       setGroups(data || []);
     } catch { setGroups([]); }
@@ -118,7 +106,7 @@ function TabWhatsApp({ tenant, tenantDbId }) {
   }
 
   async function syncFromWA() {
-    if (!selInstance) return;
+    if (!selInstance || !tenantDbId) return;
     setSyncing(true);
     try {
       const raw = await fetchGroups(selInstance, true);
@@ -126,18 +114,15 @@ function TabWhatsApp({ tenant, tenantDbId }) {
 
       let count = 0;
       for (const g of waGroups) {
-        const jid   = g.id || g.remoteJid;
-        const name  = g.subject || g.name || 'Grupo sem nome';
-        const pCount = g.participants?.length || g.size || 0;
+        const jid  = g.id || g.remoteJid;
+        const nome = g.subject || g.name || 'Grupo sem nome';
+        if (!jid) continue;
 
         await supabase.from('whatsapp_groups').upsert({
-          tenant_id:         tenantDbId,
-          instance_name:     selInstance,
-          wa_group_id:       jid,
-          name,
-          participant_count: pCount,
-          synced_at:         new Date().toISOString(),
-        }, { onConflict: 'wa_group_id,instance_name', ignoreDuplicates: false });
+          tenant_id: tenantDbId,
+          group_jid: jid,
+          nome,
+        }, { onConflict: 'tenant_id,group_jid', ignoreDuplicates: false });
         count++;
       }
       await loadGroups();
@@ -149,9 +134,10 @@ function TabWhatsApp({ tenant, tenantDbId }) {
   }
 
   async function handleDelete(g) {
-    if (!confirm(`Excluir "${g.name}"? Se o grupo existir no WhatsApp, você será removido.`)) return;
-    if (g.wa_group_id) {
-      try { await leaveWAGroup(selInstance, g.wa_group_id); } catch { /* ignora */ }
+    const label = g.nome || g.group_jid || 'este grupo';
+    if (!confirm(`Excluir "${label}"? Se o grupo existir no WhatsApp, você será removido.`)) return;
+    if (g.group_jid) {
+      try { await leaveWAGroup(selInstance, g.group_jid); } catch { /* ignora */ }
     }
     await supabase.from('whatsapp_groups').delete().eq('id', g.id);
     loadGroups();
@@ -159,16 +145,14 @@ function TabWhatsApp({ tenant, tenantDbId }) {
 
   async function handleSaveGroup(form) {
     if (form.id) {
-      // Editar
-      const updates = { name: form.name, type: form.type, description: form.description, updated_at: new Date().toISOString() };
-      if (form.wa_group_id) {
-        try { await updateWAGroupSubject(selInstance, form.wa_group_id, form.name); } catch { /* ignora */ }
+      const updates = { nome: form.nome };
+      if (form.group_jid) {
+        try { await updateWAGroupSubject(selInstance, form.group_jid, form.nome); } catch { /* ignora */ }
       }
       await supabase.from('whatsapp_groups').update(updates).eq('id', form.id);
       showToast('ok', 'Grupo atualizado!');
     } else {
-      // Criar novo — formatar participantes como @s.whatsapp.net
-      let waGroupId = null;
+      let groupJid = null;
       const participants = (form.participants || []).map(p => {
         const digits = String(p).replace(/\D/g, '');
         return digits.includes('@') ? digits : `${digits}@s.whatsapp.net`;
@@ -176,9 +160,9 @@ function TabWhatsApp({ tenant, tenantDbId }) {
 
       if (participants.length > 0) {
         try {
-          const res = await createWAGroup(selInstance, form.name, participants, form.description);
-          waGroupId = res?.groupJid || res?.id || res?.data?.groupJid || null;
-          if (waGroupId) {
+          const res = await createWAGroup(selInstance, form.nome, participants);
+          groupJid = res?.groupJid || res?.id || res?.data?.groupJid || null;
+          if (groupJid) {
             showToast('ok', 'Grupo criado no WhatsApp! 🎉');
           } else {
             showToast('err', 'API não retornou groupJid — grupo salvo localmente apenas.');
@@ -189,13 +173,9 @@ function TabWhatsApp({ tenant, tenantDbId }) {
       }
 
       await supabase.from('whatsapp_groups').insert({
-        tenant_id:         tenantDbId,
-        instance_name:     selInstance,
-        wa_group_id:       waGroupId,
-        name:              form.name,
-        type:              form.type,
-        description:       form.description,
-        participant_count: participants.length,
+        tenant_id: tenantDbId,
+        group_jid: groupJid,
+        nome:      form.nome,
       });
     }
     setShowCreate(false);
@@ -204,9 +184,9 @@ function TabWhatsApp({ tenant, tenantDbId }) {
   }
 
   const filtered = groups.filter(g => {
-    const matchSearch = !search || g.name.toLowerCase().includes(search.toLowerCase());
-    const matchType   = filterType === 'all' || g.type === filterType;
-    return matchSearch && matchType;
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (g.nome || '').toLowerCase().includes(q) || (g.group_jid || '').toLowerCase().includes(q);
   });
 
   return (
@@ -256,36 +236,17 @@ function TabWhatsApp({ tenant, tenantDbId }) {
         </button>
       </div>
 
-      {/* Filters */}
-      <div className="filters-stack" style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, maxWidth: 280 }}>
-          <div style={{ position: 'relative' }}>
-            <Icon name="search" size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--g-400)' }} />
-            <input
-              className="input"
-              placeholder="Buscar grupos..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={{ paddingLeft: 32 }}
-            />
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {[{ id: 'all', label: 'Todos' }, ...GROUP_TYPES].map(t => (
-            <button
-              key={t.id}
-              onClick={() => setFilterType(t.id)}
-              style={{
-                padding: '7px 14px', borderRadius: 'var(--r-sm)', fontSize: 12, fontWeight: 600,
-                background: filterType === t.id ? 'var(--red)' : 'white',
-                color: filterType === t.id ? 'white' : 'var(--g-700)',
-                border: `1px solid ${filterType === t.id ? 'var(--red)' : 'var(--g-200)'}`,
-                cursor: 'pointer',
-              }}
-            >
-              {t.emoji ? `${t.emoji} ` : ''}{t.label}
-            </button>
-          ))}
+      {/* Search */}
+      <div style={{ marginBottom: 16, maxWidth: 320 }}>
+        <div style={{ position: 'relative' }}>
+          <Icon name="search" size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--g-400)' }} />
+          <input
+            className="input"
+            placeholder="Buscar grupos..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{ paddingLeft: 32 }}
+          />
         </div>
       </div>
 
@@ -343,13 +304,13 @@ function TabWhatsApp({ tenant, tenantDbId }) {
 }
 
 /* ─── GroupCard ───────────────────────────────────────── */
-function GroupCard({ group, onEdit, onDelete, onBroadcast, onMembers, instanceName }) {
-  const typeInfo = TYPE_MAP[group.type] || TYPE_MAP.geral;
-  const hasWA = !!group.wa_group_id;
+function GroupCard({ group, onEdit, onDelete, onBroadcast, onMembers }) {
+  const hasWA   = !!group.group_jid;
+  const label   = group.nome || group.group_jid || 'Grupo sem nome';
+  const initials = label.slice(0, 2).toUpperCase();
 
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-      {/* Header stripe */}
       <div style={{ height: 4, background: hasWA ? '#25D366' : 'var(--g-300)' }} />
       <div style={{ padding: 18 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
@@ -357,37 +318,22 @@ function GroupCard({ group, onEdit, onDelete, onBroadcast, onMembers, instanceNa
             width: 44, height: 44, borderRadius: 12,
             background: hasWA ? '#25D36622' : 'var(--g-100)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 20, flexShrink: 0,
+            fontSize: 16, fontWeight: 700, color: hasWA ? '#25D366' : 'var(--g-500)', flexShrink: 0,
           }}>
-            {typeInfo.emoji}
+            {initials}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-              <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--g-900)' }} className="truncate">{group.name}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--g-900)' }} className="truncate">{label}</div>
               {hasWA && <Icon name="whatsapp" size={12} style={{ color: '#25D366', flexShrink: 0 }} />}
             </div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <span style={{ fontSize: 11, color: 'var(--g-500)', background: 'var(--g-100)', padding: '2px 8px', borderRadius: 9999 }}>
-                {typeInfo.emoji} {typeInfo.label}
-              </span>
-              <span style={{ fontSize: 11, color: 'var(--g-500)' }}>
-                {group.participant_count || 0} participantes
-              </span>
-            </div>
+            {group.group_jid && (
+              <div style={{ fontSize: 11, color: 'var(--g-400)', fontFamily: 'ui-monospace, monospace' }} className="truncate">
+                {group.group_jid}
+              </div>
+            )}
           </div>
         </div>
-
-        {group.description && (
-          <p style={{ fontSize: 12, color: 'var(--g-600)', marginBottom: 14, lineHeight: 1.5 }} className="truncate">
-            {group.description}
-          </p>
-        )}
-
-        {group.synced_at && (
-          <div style={{ fontSize: 11, color: 'var(--g-400)', marginBottom: 12 }}>
-            Sincronizado {new Date(group.synced_at).toLocaleDateString('pt-BR')}
-          </div>
-        )}
 
         {!hasWA && (
           <div style={{ fontSize: 11, color: 'var(--warn)', padding: '6px 10px', background: '#fffbeb', borderRadius: 6, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -422,11 +368,9 @@ function GroupCard({ group, onEdit, onDelete, onBroadcast, onMembers, instanceNa
 function GroupFormModal({ group, instanceName, tenantDbId, onClose, onSave }) {
   const isEdit = !!group;
   const [form, setForm] = useState({
-    id:          group?.id          || null,
-    wa_group_id: group?.wa_group_id || null,
-    name:        group?.name        || '',
-    type:        group?.type        || 'geral',
-    description: group?.description || '',
+    id:        group?.id        || null,
+    group_jid: group?.group_jid || null,
+    nome:      group?.nome      || '',
   });
   const [selectedContacts, setSelectedContacts] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -435,7 +379,7 @@ function GroupFormModal({ group, instanceName, tenantDbId, onClose, onSave }) {
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
   async function handleSave() {
-    if (!form.name.trim()) { setError('Nome é obrigatório.'); return; }
+    if (!form.nome.trim()) { setError('Nome é obrigatório.'); return; }
     setSaving(true);
     const phones = selectedContacts.map(c => c.phone);
     await onSave({ ...form, participants: phones });
@@ -449,22 +393,13 @@ function GroupFormModal({ group, instanceName, tenantDbId, onClose, onSave }) {
         <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
 
           <GField label="Nome do grupo *">
-            <input className="input" value={form.name} onChange={e => set('name', e.target.value)} placeholder="Ex: Cozinha — Pizzaria do João" autoFocus />
+            <input className="input" value={form.nome} onChange={e => set('nome', e.target.value)} placeholder="Ex: Cozinha — Pizzaria do João" autoFocus />
           </GField>
 
-          <GField label="Tipo">
-            <select className="input" value={form.type} onChange={e => set('type', e.target.value)}>
-              {GROUP_TYPES.map(t => (
-                <option key={t.id} value={t.id}>{t.emoji} {t.label}</option>
-              ))}
-            </select>
-            <div style={{ fontSize: 11, color: 'var(--g-400)', marginTop: 5 }}>
-              Instância: <span style={{ fontFamily: 'ui-monospace, monospace' }}>{instanceName}</span>
+          <GField label="Instância">
+            <div style={{ fontSize: 12, color: 'var(--g-500)', padding: '8px 12px', background: 'var(--g-50)', borderRadius: 6, fontFamily: 'ui-monospace, monospace' }}>
+              {instanceName || '—'}
             </div>
-          </GField>
-
-          <GField label="Descrição">
-            <input className="input" value={form.description} onChange={e => set('description', e.target.value)} placeholder="Finalidade do grupo..." />
           </GField>
 
           {!isEdit && (
@@ -481,7 +416,7 @@ function GroupFormModal({ group, instanceName, tenantDbId, onClose, onSave }) {
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', paddingTop: 4 }}>
             <button className="btn-secondary" onClick={onClose}>Cancelar</button>
-            <button className="btn-primary" onClick={handleSave} disabled={saving || !form.name.trim()}>
+            <button className="btn-primary" onClick={handleSave} disabled={saving || !form.nome.trim()}>
               {saving ? 'Salvando...' : isEdit ? 'Salvar alterações' : 'Criar grupo'}
             </button>
           </div>
@@ -498,11 +433,11 @@ function BroadcastModal({ group, instanceName, onClose }) {
   const [result,  setResult]  = useState(null);
 
   async function handleSend() {
-    if (!text.trim() || !group.wa_group_id) return;
+    if (!text.trim() || !group.group_jid) return;
     setSending(true);
     setResult(null);
     try {
-      await sendGroupTextMessage(instanceName, group.wa_group_id, text.trim());
+      await sendGroupTextMessage(instanceName, group.group_jid, text.trim());
       setResult({ ok: true });
       setText('');
     } catch (e) {
@@ -511,14 +446,16 @@ function BroadcastModal({ group, instanceName, onClose }) {
     setSending(false);
   }
 
+  const label = group.nome || group.group_jid;
+
   return (
     <ModalOverlay onClose={onClose}>
       <div className="modal-mobile" style={{ width: 440 }}>
-        <ModalHeader title={`Mensagem para "${group.name}"`} onClose={onClose} />
+        <ModalHeader title={`Mensagem para "${label}"`} onClose={onClose} />
         <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ padding: '10px 14px', background: '#f0fdf4', borderRadius: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
             <Icon name="whatsapp" size={14} style={{ color: '#25D366' }} />
-            <span style={{ fontSize: 12, color: '#166534' }}>{group.wa_group_id}</span>
+            <span style={{ fontSize: 12, color: '#166534', fontFamily: 'ui-monospace, monospace' }}>{group.group_jid}</span>
           </div>
           <GField label="Mensagem">
             <textarea
@@ -562,13 +499,13 @@ function MembersModal({ group, instanceName, onClose }) {
   const [error,        setError]        = useState('');
 
   useEffect(() => {
-    if (group.wa_group_id) loadParticipants();
+    if (group.group_jid) loadParticipants();
   }, []);
 
   async function loadParticipants() {
     setLoading(true);
     try {
-      const data = await fetchWAGroupParticipants(instanceName, group.wa_group_id);
+      const data = await fetchWAGroupParticipants(instanceName, group.group_jid);
       const list = Array.isArray(data) ? data : (data?.participants || []);
       setParticipants(list);
     } catch { setParticipants([]); }
@@ -581,7 +518,7 @@ function MembersModal({ group, instanceName, onClose }) {
     setAdding(true);
     setError('');
     try {
-      await addWAGroupParticipants(instanceName, group.wa_group_id, [phone]);
+      await addWAGroupParticipants(instanceName, group.group_jid, [phone]);
       setAddPhone('');
       await loadParticipants();
     } catch (e) {
@@ -593,19 +530,20 @@ function MembersModal({ group, instanceName, onClose }) {
   async function handleRemove(jid) {
     if (!confirm(`Remover ${jid.split('@')[0]}?`)) return;
     try {
-      await removeWAGroupParticipant(instanceName, group.wa_group_id, [jid]);
+      await removeWAGroupParticipant(instanceName, group.group_jid, [jid]);
       setParticipants(prev => prev.filter(p => (p.id || p) !== jid));
     } catch (e) {
       alert('Erro: ' + e.message);
     }
   }
 
-  const hasWA = !!group.wa_group_id;
+  const hasWA = !!group.group_jid;
+  const label = group.nome || group.group_jid;
 
   return (
     <ModalOverlay onClose={onClose}>
       <div className="modal-mobile" style={{ width: 420 }}>
-        <ModalHeader title={`Participantes — ${group.name}`} onClose={onClose} />
+        <ModalHeader title={`Participantes — ${label}`} onClose={onClose} />
         <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
           {!hasWA ? (
             <div style={{ textAlign: 'center', padding: 32, color: 'var(--g-400)', fontSize: 13 }}>
@@ -642,9 +580,9 @@ function MembersModal({ group, instanceName, onClose }) {
               ) : (
                 <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid var(--g-200)', borderRadius: 8 }}>
                   {participants.map((p, i) => {
-                    const jid    = typeof p === 'string' ? p : (p.id || p.jid || '');
-                    const num    = jid.split('@')[0];
-                    const admin  = p.admin === 'admin' || p.admin === 'superadmin';
+                    const jid   = typeof p === 'string' ? p : (p.id || p.jid || '');
+                    const num   = jid.split('@')[0];
+                    const admin = p.admin === 'admin' || p.admin === 'superadmin';
                     return (
                       <div key={jid || i} style={{
                         display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
@@ -981,7 +919,6 @@ function ContactPicker({ tenantDbId, selected, onChange }) {
   async function doSearch() {
     setSearching(true);
     try {
-      // Busca em conversas WA reais (push_name + número) e customers
       const [convRes, custRes] = await Promise.all([
         supabase
           .from('conversations')
@@ -1009,7 +946,6 @@ function ContactPicker({ tenantDbId, selected, onChange }) {
         phone: (c.phone || '').replace(/\D/g, ''),
       }));
 
-      // Merge deduplicated by phone
       const seen = new Set();
       const merged = [...fromConvs, ...fromCustomers].filter(c => {
         if (!c.phone || seen.has(c.phone)) return false;
@@ -1040,7 +976,6 @@ function ContactPicker({ tenantDbId, selected, onChange }) {
 
   return (
     <div>
-      {/* Chips dos selecionados */}
       {selected.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
           {selected.map(s => (
@@ -1052,7 +987,6 @@ function ContactPicker({ tenantDbId, selected, onChange }) {
         </div>
       )}
 
-      {/* Campo de busca */}
       <div ref={dropRef} style={{ position: 'relative' }}>
         <div style={{ position: 'relative' }}>
           <Icon name="search" size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--g-400)' }} />
@@ -1100,7 +1034,6 @@ function ContactPicker({ tenantDbId, selected, onChange }) {
         )}
       </div>
 
-      {/* Número manual */}
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
         <input
           className="input"
