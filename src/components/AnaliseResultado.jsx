@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import SugestaoModal from './SugestaoModal.jsx';
+import AgenteFeedbackModal from './AgenteFeedbackModal.jsx';
+import { createTasksFromAnalise } from '../lib/api.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -65,8 +67,9 @@ export function extractAnalise(resultado_json) {
 
 // ── Subcomponents ─────────────────────────────────────────────────────────────
 
-function BlocoCard({ blocoKey, bloco, selecionados, onToggle }) {
-  const [open, setOpen] = useState(false);
+function BlocoCard({ blocoKey, bloco, selecionados, onToggle, tenantDbId }) {
+  const [open, setOpen]           = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
   const label  = BLOCO_LABEL[blocoKey] || blocoKey;
   const s      = STATUS_COLOR[bloco.status] || STATUS_COLOR.atencao;
   const pontos = bloco.pontos || [];
@@ -75,32 +78,48 @@ function BlocoCard({ blocoKey, bloco, selecionados, onToggle }) {
 
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center',
-          justifyContent: 'space-between', padding: '14px 18px',
-          background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', gap: 12,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
-          <span style={{ width: 10, height: 10, borderRadius: '50%', background: s.color, flexShrink: 0 }} />
-          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--g-900)' }}>{label}</span>
-          <StatusBadge status={bloco.status} small />
-          {selecionadosNoBloco > 0 && (
-            <span style={{
-              fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 9999,
-              background: '#DBEAFE', color: '#2563EB',
-            }}>
-              {selecionadosNoBloco} marcado{selecionadosNoBloco > 1 ? 's' : ''}
-            </span>
-          )}
-        </div>
-        <span style={{ fontSize: 12, color: 'var(--g-400)', flexShrink: 0 }}>
-          {pontos.length} ponto{pontos.length !== 1 ? 's' : ''} {open ? '▲' : '▼'}
-        </span>
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          style={{
+            flex: 1, display: 'flex', alignItems: 'center',
+            justifyContent: 'space-between', padding: '14px 18px',
+            background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', gap: 12,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
+            <span style={{ width: 10, height: 10, borderRadius: '50%', background: s.color, flexShrink: 0 }} />
+            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--g-900)' }}>{label}</span>
+            <StatusBadge status={bloco.status} small />
+            {selecionadosNoBloco > 0 && (
+              <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 7px', borderRadius: 9999, background: '#DBEAFE', color: '#2563EB' }}>
+                {selecionadosNoBloco} marcado{selecionadosNoBloco > 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+          <span style={{ fontSize: 12, color: 'var(--g-400)', flexShrink: 0 }}>
+            {pontos.length} ponto{pontos.length !== 1 ? 's' : ''} {open ? '▲' : '▼'}
+          </span>
+        </button>
+        <button
+          type="button"
+          title="Treinar agente — reportar erro neste bloco"
+          onClick={e => { e.stopPropagation(); setShowFeedback(true); }}
+          style={{
+            padding: '14px 14px', background: 'none', border: 'none',
+            cursor: 'pointer', fontSize: 14, opacity: 0.4,
+            borderLeft: '1px solid var(--g-100)',
+          }}
+          onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+          onMouseLeave={e => e.currentTarget.style.opacity = '0.4'}
+        >
+          🚩
+        </button>
+      </div>
+      {showFeedback && (
+        <AgenteFeedbackModal tenantDbId={tenantDbId} blocoKey={blocoKey} onClose={() => setShowFeedback(false)} />
+      )}
 
       {open && pontos.length > 0 && (
         <div style={{ borderTop: '1px solid var(--g-100)', padding: '4px 18px 14px' }}>
@@ -243,12 +262,14 @@ function EnvioModal({ pontosSelecionados, onClose }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function AnaliseResultado({ resultado_json, mensagem_whatsapp, onNovaAnalise, tenantDbId }) {
+export default function AnaliseResultado({ resultado_json, mensagem_whatsapp, onNovaAnalise, tenantDbId, analiseId, clienteId }) {
   const analise = extractAnalise(resultado_json);
 
-  const [selecionados, setSelecionados] = useState(new Set());
-  const [showEnvio, setShowEnvio]       = useState(false);
-  const [showSugestao, setShowSugestao] = useState(false);
+  const [selecionados, setSelecionados]   = useState(new Set());
+  const [showEnvio, setShowEnvio]         = useState(false);
+  const [showSugestao, setShowSugestao]   = useState(false);
+  const [exportando, setExportando]       = useState(false);
+  const [exportToast, setExportToast]     = useState(null);
 
   function togglePonto(key) {
     setSelecionados(prev => {
@@ -256,6 +277,28 @@ export default function AnaliseResultado({ resultado_json, mensagem_whatsapp, on
       next.has(key) ? next.delete(key) : next.add(key);
       return next;
     });
+  }
+
+  async function exportarParaKanban() {
+    if (!analiseId || !clienteId) return;
+    const blocos = analise?.blocos || {};
+    const pontos = [];
+    Object.values(blocos).forEach(bloco => {
+      (bloco.pontos || []).forEach(p => {
+        if (p.status === 'critico' || p.status === 'atencao') pontos.push(p);
+      });
+    });
+    if (pontos.length === 0) { setExportToast('Nenhum ponto crítico ou de atenção encontrado.'); setTimeout(() => setExportToast(null), 3000); return; }
+    setExportando(true);
+    try {
+      const criadas = await createTasksFromAnalise({ tenantId: tenantDbId, analiseId, clienteId, pontos });
+      setExportToast(`✅ ${criadas.length} tarefas criadas no Kanban!`);
+    } catch {
+      setExportToast('Erro ao criar tarefas. Tente novamente.');
+    } finally {
+      setExportando(false);
+      setTimeout(() => setExportToast(null), 4000);
+    }
   }
 
   if (!analise) {
@@ -352,19 +395,37 @@ export default function AnaliseResultado({ resultado_json, mensagem_whatsapp, on
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {Object.entries(blocos).map(([key, bloco]) => (
-              <BlocoCard key={key} blocoKey={key} bloco={bloco} selecionados={selecionados} onToggle={togglePonto} />
+              <BlocoCard key={key} blocoKey={key} bloco={bloco} selecionados={selecionados} onToggle={togglePonto} tenantDbId={tenantDbId} />
             ))}
           </div>
         </div>
       )}
 
       {/* Rodapé */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', paddingTop: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8, flexWrap: 'wrap', gap: 8 }}>
+        {analiseId && clienteId && (
+          <button type="button" className="btn-secondary" onClick={exportarParaKanban}
+            disabled={exportando}
+            style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+            {exportando ? 'Exportando...' : '📋 Exportar críticos para Kanban'}
+          </button>
+        )}
         <button type="button" className="btn-secondary" onClick={() => setShowSugestao(true)}
-          style={{ fontSize: 13, color: 'var(--g-500)' }}>
+          style={{ fontSize: 13, color: 'var(--g-500)', marginLeft: 'auto' }}>
           💡 Sugerir melhoria
         </button>
       </div>
+
+      {exportToast && (
+        <div style={{
+          position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)',
+          background: '#1a1a1a', color: 'white', borderRadius: 9999,
+          padding: '10px 20px', fontSize: 13, fontWeight: 600,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.3)', zIndex: 101, whiteSpace: 'nowrap',
+        }}>
+          {exportToast}
+        </div>
+      )}
 
       {/* Barra flutuante de pontos selecionados */}
       {selecionados.size > 0 && (

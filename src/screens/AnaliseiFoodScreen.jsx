@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import Icon from '../components/Icon.jsx';
-import { createAnalise, listClientes, listAnalises, subscribeToAnalise } from '../lib/api.js';
+import { createAnalise, listClientes, listAnalises, listCorrecoes, subscribeToAnalise } from '../lib/api.js';
 import { supabase } from '../lib/supabase.js';
 import AnaliseResultado from '../components/AnaliseResultado.jsx';
 
@@ -74,6 +74,9 @@ function AnaliseForm({ tenantDbId, clientes, loadingClientes, onAnaliseIniciada 
     const WEBHOOK_URL   = import.meta.env.VITE_ANALISTA_WEBHOOK_URL;
     const BRIDGE_SECRET = import.meta.env.VITE_BRIDGE_SECRET;
     const clienteSelecionado = clientes.find(c => c.id === clienteId);
+    // Busca correções ativas para injetar no prompt do agente
+    let correcoes = [];
+    try { correcoes = await listCorrecoes(tenantDbId); } catch { /* continua sem correções */ }
     try {
       const res = await fetch(WEBHOOK_URL, {
         method: 'POST',
@@ -81,6 +84,7 @@ function AnaliseForm({ tenantDbId, clientes, loadingClientes, onAnaliseIniciada 
         body: JSON.stringify({
           job_id: analise.job_id, tenant_id: tenantDbId, cliente_id: clienteId,
           cliente_nome: clienteSelecionado?.name || '', drive_link: driveLink, periodo,
+          correcoes: correcoes.map(c => c.instrucao),
         }),
       });
       if (res.status !== 200 && res.status !== 202) throw new Error(`Webhook ${res.status}`);
@@ -388,6 +392,8 @@ export default function AnaliseiFoodScreen({ tenant, tenantDbId }) {
               resultado_json={analiseAtiva.resultado_json}
               mensagem_whatsapp={analiseAtiva.mensagem_whatsapp}
               tenantDbId={tenantDbId}
+              analiseId={analiseAtiva.id}
+              clienteId={analiseAtiva.cliente?.id}
             />
           )}
 

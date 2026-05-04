@@ -34,14 +34,14 @@ app.post('/analise', async (req, res) => {
     return res.status(401).json({ error: 'unauthorized' });
   }
 
-  const { job_id, cliente_nome, drive_link, periodo } = req.body;
+  const { job_id, cliente_nome, drive_link, periodo, correcoes } = req.body;
   if (!job_id || !drive_link) {
     return res.status(400).json({ error: 'job_id e drive_link são obrigatórios' });
   }
 
   res.status(202).json({ ok: true, job_id });
 
-  processAnalise({ job_id, cliente_nome, drive_link, periodo }).catch(err => {
+  processAnalise({ job_id, cliente_nome, drive_link, periodo, correcoes: correcoes || [] }).catch(err => {
     console.error(`[bridge] erro não tratado job ${job_id}:`, err.message);
   });
 });
@@ -186,17 +186,25 @@ async function fetchDrivePublico(driveLink) {
 
 // ── Processamento principal ───────────────────────────────────────────────────
 
-async function processAnalise({ job_id, cliente_nome, drive_link, periodo }) {
+async function processAnalise({ job_id, cliente_nome, drive_link, periodo, correcoes }) {
   const periodoLabel = { diaria: 'Diária', semanal: 'Semanal', mensal: 'Mensal' }[periodo] || periodo;
   const clienteLabel = cliente_nome || 'cliente';
 
   const dadosLoja = await buscarDadosLoja(drive_link, clienteLabel);
 
-  const instrucoesPrefixo = [
+  const linhasInstrucoes = [
     'CORREÇÃO ORTOGRÁFICA: Antes de iniciar, corrija silenciosamente todos os erros ortográficos e gramaticais nos dados fornecidos, adaptando o texto sem alterar o sentido.',
     'TOM: Escreva na perspectiva da Consult Delivery (consultoria). Os ajustes serão executados pela consultoria após autorização do cliente. Use frases como "Nossa equipe vai configurar...", "Vamos implementar...", "A consultoria irá ajustar...".',
     'TEMPO: NÃO inclua estimativas de tempo de execução para nenhum ajuste.',
-  ].join('\n');
+  ];
+
+  if (Array.isArray(correcoes) && correcoes.length > 0) {
+    linhasInstrucoes.push('');
+    linhasInstrucoes.push('CORREÇÕES APRENDIDAS (aplique nestas e em todas as análises futuras):');
+    correcoes.forEach(c => linhasInstrucoes.push(`- ${c}`));
+  }
+
+  const instrucoesPrefixo = linhasInstrucoes.join('\n');
 
   let message;
   if (dadosLoja) {
