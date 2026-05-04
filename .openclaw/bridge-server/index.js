@@ -6,6 +6,7 @@ const { spawn }          = require('child_process');
 const fs                 = require('fs');
 const path               = require('path');
 const requireAgentAccess = require('./middleware/requireAgentAccess');
+const { startRealtime, executeApprovedAction, rejectApproval } = require('./realtime');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -31,9 +32,13 @@ app.get('/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOStrin
 
 app.post('/analise', requireAgentAccess('analista-ifood'), async (req, res) => {
 
-  const { job_id, cliente_nome, drive_link, periodo, correcoes } = req.body;
-  if (!job_id || !drive_link) {
-    return res.status(400).json({ error: 'job_id e drive_link são obrigatórios' });
+  const { job_id, cliente_nome, drive_link, periodo, correcoes, trigger_source } = req.body;
+  // drive_link é opcional para invokes via menção WhatsApp (o agente usa dados do Supabase)
+  if (!job_id) {
+    return res.status(400).json({ error: 'job_id é obrigatório' });
+  }
+  if (!drive_link && trigger_source !== 'whatsapp_mention') {
+    return res.status(400).json({ error: 'drive_link é obrigatório para análises manuais' });
   }
 
   res.status(202).json({ ok: true, job_id });
@@ -300,9 +305,37 @@ async function postCallback(payload) {
   }
 }
 
+// ── Endpoint DELI — aprovação/rejeição de pendências ─────────────────────────
+
+app.post('/deli/approve', async (req, res) => {
+  const bridgeSecret = req.headers['x-bridge-secret'];
+  if (!process.env.BRIDGE_SECRET || bridgeSecret !== process.env.BRIDGE_SECRET) {
+    return res.status(401).json({ error: 'Não autorizado.' });
+  }
+
+  const { approval_id, decision, vermelho_code } = req.body;
+  if (!approval_id || !decision) {
+    return res.status(400).json({ error: 'approval_id e decision são obrigatórios.' });
+  }
+
+  if (decision === 'approved') {
+    const ok = await executeApprovedAction(approval_id, vermelho_code);
+    if (!ok) return res.status(403).json({ error: 'Aprovação inválida ou código vermelho incorreto.', approval_id });
+    return res.json({ ok, approval_id });
+  }
+
+  if (decision === 'rejected') {
+    await rejectApproval(approval_id);
+    return res.json({ ok: true, approval_id, status: 'rejected' });
+  }
+
+  return res.status(400).json({ error: 'decision deve ser "approved" ou "rejected".' });
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[bridge] ouvindo em 0.0.0.0:${PORT}`);
   console.log(`[bridge] SUPABASE_URL:   ${SUPABASE_URL   ? '✓' : '✗ não configurado'}`);
   console.log(`[bridge] BRIDGE_SECRET:  ${BRIDGE_SECRET  ? '✓' : '✗ não configurado'}`);
   console.log(`[bridge] GOOGLE_API_KEY: ${GOOGLE_API_KEY ? '✓' : 'não configurado (modo público/local)'}`);
+  startRealtime();
 });
