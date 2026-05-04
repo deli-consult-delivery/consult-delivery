@@ -8,6 +8,9 @@ Chronological, append-only record of everything that's happened in this wiki.
 <optional detail line>
 ```
 
+## [2026-05-04 15:00] session | Etapas 11 e 15 — Drafts UI e AgentsPage real
+Touched: none
+
 ## [2026-05-04 20:00] session | Etapa 10 ClickUp Light — Sidebar hierárquica + TasksScreen MultiView
 Touched: none (código entregue via git — 2 commits: feat(ui) sidebar + feat(ui) TasksScreen)
 
