@@ -523,3 +523,60 @@ export async function ensureWebhookConfig(instanceName, opts = {}) {
   }
 }
 
+// ── Notificações internas ─────────────────────────────────────────────────────
+
+export async function listNotifications(tenantId, userId, { onlyUnread = false, limit = 50 } = {}) {
+  // Retorna notificações do usuário: diretas + broadcasts do tenant
+  // RLS garante o filtro — query simples com order
+  let q = supabase
+    .from('internal_notifications')
+    .select('id, kind, agent, title, body, link, read_at, created_at, recipient_user_id')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (onlyUnread) q = q.is('read_at', null);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function countUnreadNotifications(tenantId, userId) {
+  const { count, error } = await supabase
+    .from('internal_notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', tenantId)
+    .is('read_at', null);
+  if (error) throw error;
+  return count ?? 0;
+}
+
+export async function markNotificationRead(notificationId) {
+  const { error } = await supabase
+    .from('internal_notifications')
+    .update({ read_at: new Date().toISOString() })
+    .eq('id', notificationId);
+  if (error) throw error;
+}
+
+export async function markAllNotificationsRead(tenantId, userId) {
+  const { error } = await supabase
+    .from('internal_notifications')
+    .update({ read_at: new Date().toISOString() })
+    .eq('tenant_id', tenantId)
+    .eq('recipient_user_id', userId)
+    .is('read_at', null);
+  if (error) throw error;
+}
+
+export function subscribeToNotifications(tenantId, userId, onInsert) {
+  return supabase
+    .channel(`notifications-${tenantId}-${userId}`)
+    .on('postgres_changes', {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'internal_notifications',
+      filter: `tenant_id=eq.${tenantId}`,
+    }, onInsert)
+    .subscribe();
+}
+
