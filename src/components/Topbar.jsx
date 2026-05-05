@@ -8,7 +8,7 @@ import { listNotifications, markNotificationRead, markAllNotificationsRead, subs
 
 const ROUTE_LABELS = {
   dashboard: 'Dashboard',
-  chat: 'Chat Unificado',
+  chat: 'Chat Ao Vivo',
   tasks: 'Tarefas',
   cora: 'CORA — Cobrança',
   crm: 'Clientes / CRM',
