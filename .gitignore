@@ -27,6 +27,9 @@ graphify-out/
 *.pem
 secrets/
 
+# === Backups de banco (contêm API keys — não subir no GitHub) ===
+backup_*.sql
+
 # === OpenClaw config local ===
 # Configs com tokens
 .openclaw/openclaw.json

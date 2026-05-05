@@ -29,10 +29,13 @@
       "PowerShell(Set-Location \"C:\\\\Users\\\\Consult Delivery\\\\consult-delivery\"; Get-ChildItem supabase/migrations/ | Where-Object { $_.Name -match \"20260504\" } | Select-Object Name)",
       "Bash(git rm *)",
       "Bash(git checkout *)",
-      "Bash(echo \"status: $?\")"
+      "Bash(echo \"status: $?\")",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Users/Consult Delivery/backups-consult/**)"
     ],
     "additionalDirectories": [
-      "C:\\Users\\Consult Delivery\\.openclaw"
+      "C:\\Users\\Consult Delivery\\.openclaw",
+      "C:\\Users\\Consult Delivery"
     ]
   }
 }
