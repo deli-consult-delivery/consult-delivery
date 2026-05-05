@@ -7,6 +7,8 @@ import { supabase } from '../lib/supabase.js';
 import { sendTextMessage, fetchProfile, sendAudioMessage, sendMediaMessage, fetchWAGroupParticipants, addWAGroupParticipants, removeWAGroupParticipant, leaveWAGroup } from '../lib/evolution.js';
 import DepartmentBadge from '../components/chat/DepartmentBadge.jsx';
 import ConversationFiltersBar from '../components/chat/ConversationFiltersBar.jsx';
+import DepartmentSelector from '../components/chat/DepartmentSelector.jsx';
+import ConversationStatusBadge from '../components/chat/ConversationStatusBadge.jsx';
 
 const HAS_EVO = !!(
   import.meta.env.VITE_EVOLUTION_URL && import.meta.env.VITE_EVOLUTION_KEY
@@ -1299,7 +1301,22 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                 {/* Nome + status dropdown */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--g-900)' }}>{active.name}</span>
-                  {/* Dropdown de status integrado */}
+                  {/* Badge status_v2 */}
+                  {(active.type === 'whatsapp' || active.type === 'group') && active.status_v2 && (
+                    <ConversationStatusBadge status={active.status_v2} />
+                  )}
+                  {/* DepartmentSelector */}
+                  {(active.type === 'whatsapp' || active.type === 'group') && (
+                    <DepartmentSelector
+                      conversationId={active.id}
+                      tenantId={tenantDbId}
+                      currentDepartmentId={active.department_id ?? null}
+                      onChanged={dept => setConvs(prev => prev.map(c =>
+                        c.id === active.id ? { ...c, department_id: dept.id } : c
+                      ))}
+                    />
+                  )}
+                  {/* Dropdown de status integrado (old system) */}
                   {(active.type === 'whatsapp' || active.type === 'group') && (
                     <div style={{ position: 'relative' }}>
                       <button
