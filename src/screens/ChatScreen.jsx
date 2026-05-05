@@ -5,6 +5,7 @@ import ConversationStatusBar from '../components/ConversationStatusBar.jsx';
 import { useConversationStatus, STATUS_LABELS, STATUS_COLORS } from '../lib/conversationStatus.js';
 import { supabase } from '../lib/supabase.js';
 import { sendTextMessage, fetchProfile, sendAudioMessage, sendMediaMessage, fetchWAGroupParticipants, addWAGroupParticipants, removeWAGroupParticipant, leaveWAGroup } from '../lib/evolution.js';
+import DepartmentBadge from '../components/chat/DepartmentBadge.jsx';
 
 const HAS_EVO = !!(
   import.meta.env.VITE_EVOLUTION_URL && import.meta.env.VITE_EVOLUTION_KEY
@@ -65,6 +66,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [currentUser, setCurrentUser]            = useState(null);
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const [statusFilter, setStatusFilter]             = useState(null); // 'aguardando' | 'em_atendimento' | ...
+  const [departments, setDepartments]               = useState([]);
 
   // ── Status de atendimento ────────────────────────────────
   const {
@@ -236,6 +238,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     loadWAGroups();
     loadInternalChannels();
     loadQuickReplies();
+    if (tenantDbId) {
+      supabase.from('departments').select('id, name, color')
+        .eq('tenant_id', tenantDbId).eq('is_active', true).order('name')
+        .then(({ data }) => setDepartments(data ?? []));
+    }
   }, [tenant, tenantDbId]);
 
   // ── Load channel messages when switching to a channel ──
@@ -667,7 +674,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             time: c.updated_at
               ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
             unread: 0, online: false, messages: [],
-            status: c.status,
+            status:        c.status,
+            department_id: c.department_id || null,
+            customer_id:   c.customer_id   || null,
+            status_v2:     c.status_v2     || 'open',
+            tenant_id:     c.tenant_id     || null,
           };
         });
         setConvs(mapped); setActiveId(mapped[0]?.id); setUsingRealData(true);
@@ -1071,7 +1082,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               {intDireto.map(c => {
                 const lastMsg = messages[c.id]?.slice(-1)[0];
                 return (
-                  <ConvItem key={c.id} conv={c} active={c.id === activeId} lastMsg={lastMsg} members={members} onClick={() => {
+                  <ConvItem key={c.id} conv={c} active={c.id === activeId} lastMsg={lastMsg} members={members} departments={departments} onClick={() => {
                     setActiveId(c.id);
                     setMobileView('chat');
                     if (usingRealData && !messages[c.id]?.length) loadMsgs(c.id);
@@ -1102,7 +1113,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                 </div>
               )}
               {intCanais.map(c => (
-                <ConvItem key={c.id} conv={c} active={c.id === activeId} members={members} onClick={() => {
+                <ConvItem key={c.id} conv={c} active={c.id === activeId} members={members} departments={departments} onClick={() => {
                   setActiveId(c.id);
                   setMobileView('chat');
                   setShowPinned(false);
@@ -1114,7 +1125,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               {filtered.map(c => {
                 const lastMsg = messages[c.id]?.slice(-1)[0];
                 return (
-                  <ConvItem key={c.id} conv={c} active={c.id === activeId} lastMsg={lastMsg} members={members} onClick={() => {
+                  <ConvItem key={c.id} conv={c} active={c.id === activeId} lastMsg={lastMsg} members={members} departments={departments} onClick={() => {
                     setActiveId(c.id);
                     setMobileView('chat');
                     if (usingRealData && !messages[c.id]?.length) loadMsgs(c.id);
@@ -2150,7 +2161,7 @@ function ConvAvatar({ conv, size = 36 }) {
 }
 
 /* ── ConvItem ───────────────────────────────────────────── */
-function ConvItem({ conv, active, onClick, lastMsg, members = [] }) {
+function ConvItem({ conv, active, onClick, lastMsg, members = [], departments = [] }) {
   const isChannel = conv.type === 'internal' && conv.id?.startsWith('chan-');
 
   // Preview: usa a última mensagem real se disponível
@@ -2170,6 +2181,7 @@ function ConvItem({ conv, active, onClick, lastMsg, members = [] }) {
 
   // Assignee badge
   const assigneeName = members.find(m => m.id === conv.assigned_to)?.full_name || null;
+  const dept = departments.find(d => d.id === conv.department_id);
 
   return (
     <div
@@ -2237,7 +2249,7 @@ function ConvItem({ conv, active, onClick, lastMsg, members = [] }) {
                 </span>
               )}
             </div>
-            {/* Linha 3: tags de status + atendente */}
+            {/* Linha 3: tags de status + departamento + atendente */}
             <div style={{ display: 'flex', gap: 6, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' }}>
               <span style={{
                 fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
@@ -2246,6 +2258,7 @@ function ConvItem({ conv, active, onClick, lastMsg, members = [] }) {
               }}>
                 {sLabel}
               </span>
+              {dept && <DepartmentBadge name={dept.name} color={dept.color} />}
               {assigneeName && (
                 <span style={{
                   fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 4,
