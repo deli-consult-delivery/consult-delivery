@@ -1398,7 +1398,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               {(active.type === 'whatsapp' || active.type === 'group') && (
                 convStatus === 'finalizado' ? (
                   <button
-                    onClick={reopen}
+                    onClick={async () => {
+                      await reopen();
+                      await supabase.from('conversations').update({ status_v2: 'in_progress' }).eq('id', activeId);
+                      setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status_v2: 'in_progress' } : c));
+                    }}
                     disabled={statusLoading}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 6,
@@ -1411,7 +1415,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                   </button>
                 ) : (
                   <button
-                    onClick={finish}
+                    onClick={async () => {
+                      await finish();
+                      await supabase.from('conversations').update({ status_v2: 'closed' }).eq('id', activeId);
+                      setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status_v2: 'closed' } : c));
+                    }}
                     disabled={statusLoading}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 6,
