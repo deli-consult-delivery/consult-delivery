@@ -143,6 +143,8 @@ export default function App() {
         theme={theme}
         setTheme={setTheme}
         onMenuToggle={() => setSidebarOpen(v => !v)}
+        tenantId={tenantDbId}
+        userId={session?.user?.id}
       />
       <main className="main scroll" key={route + tenant}>
         {route === 'dashboard' && <DashboardScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={setRoute} />}
