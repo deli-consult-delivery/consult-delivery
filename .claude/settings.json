@@ -31,11 +31,23 @@
       "Bash(git checkout *)",
       "Bash(echo \"status: $?\")",
       "Read(//c/Program Files/**)",
-      "Read(//c/Users/Consult Delivery/backups-consult/**)"
+      "Read(//c/Users/Consult Delivery/backups-consult/**)",
+      "PowerShell(Test-Path \"$env:USERPROFILE\\\\.claude\\\\settings.json\")",
+      "Bash(claude --version)",
+      "PowerShell(echo $env:CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS)",
+      "Bash(cd \"C:\\Users\\Consult Delivery\\consult-rename\" *)",
+      "Bash(cd \"C:\\Users\\Consult Delivery\\consult-migrations\" *)",
+      "Bash(cd \"C:\\Users\\Consult Delivery\\consult-frontend\" *)",
+      "Read(C:/Users/Consult Delivery/consult-rename/**)",
+      "Read(C:/Users/Consult Delivery/consult-migrations/**)",
+      "Read(C:/Users/Consult Delivery/consult-frontend/**)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Consult Delivery\\.openclaw",
-      "C:\\Users\\Consult Delivery"
+      "C:\\Users\\Consult Delivery",
+      "C:\\Users\\Consult Delivery\\consult-rename",
+      "C:\\Users\\Consult Delivery\\consult-migrations",
+      "C:\\Users\\Consult Delivery\\consult-frontend"
     ]
   }
 }
