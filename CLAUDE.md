@@ -197,7 +197,7 @@ NOMES DE BRANCH — PADRÃO
 
 wandson/dashboard-kpis
 wandson/login-real
-yasmin/chat-unificado
+yasmin/chat-ao-vivo
 yasmin/kanban-drag-drop
 fix/bug-topbar
 hotfix/login-erro
