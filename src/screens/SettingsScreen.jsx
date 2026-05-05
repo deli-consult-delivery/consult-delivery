@@ -8,6 +8,7 @@ import { SETTINGS_DATA, AGENTS } from '../data.js';
 import { supabase } from '../lib/supabase.js';
 import { setWebhook, getQRCode, getInstanceStatus, getWebhookStatus } from '../lib/evolution.js';
 import { ensureWebhookConfig } from '../lib/api.js';
+import DepartmentManagementPage from './DepartmentManagementPage.jsx';
 
 /* ─── Helpers ───────────────────────────────────────────── */
 // Sempre retorna o tenant_id real do usuário logado (fonte de verdade: Supabase)
@@ -24,13 +25,14 @@ async function resolveTenantId(fallbackTenantDbId) {
 }
 /* ─── Tabs ────────────────────────────────────────────── */
 const TABS = [
-  { id: 'workspace',    label: 'Workspace',    icon: 'building'  },
-  { id: 'users',        label: 'Usuários',     icon: 'users'     },
-  { id: 'integrations', label: 'Integrações',  icon: 'refresh'   },
-  { id: 'whatsapp',     label: 'WhatsApp',     icon: 'whatsapp'  },
-  { id: 'agents',       label: 'Agentes IA',   icon: 'bot'       },
-  { id: 'billing',      label: 'Billing',      icon: 'dollar'    },
-  { id: 'security',     label: 'Segurança',    icon: 'gear'      },
+  { id: 'workspace',     label: 'Workspace',      icon: 'building'  },
+  { id: 'users',         label: 'Usuários',        icon: 'users'     },
+  { id: 'departamentos', label: 'Departamentos',   icon: 'folder'    },
+  { id: 'integrations',  label: 'Integrações',     icon: 'refresh'   },
+  { id: 'whatsapp',      label: 'WhatsApp',        icon: 'whatsapp'  },
+  { id: 'agents',        label: 'Agentes IA',      icon: 'bot'       },
+  { id: 'billing',       label: 'Billing',         icon: 'dollar'    },
+  { id: 'security',      label: 'Segurança',       icon: 'gear'      },
 ];
 
 const ROLE_MAP = {
@@ -118,6 +120,7 @@ export default function SettingsScreen({ tenant, tenantDbId, onTenantChange, use
         <div>
           {tab === 'workspace'    && <RequireRole resource="tenant_admin" action="view" userId={userId}><TabWorkspace tenantDbId={tenantDbId} onTenantChange={onTenantChange} /></RequireRole>}
           {tab === 'users'        && <RequireRole resource="tenant_admin" action="view" userId={userId}><TabUsers tenantDbId={tenantDbId} tenant={tenant} /></RequireRole>}
+          {tab === 'departamentos' && <RequireRole resource="departments" action="view" userId={userId}><DepartmentManagementPage tenantId={tenantDbId} /></RequireRole>}
           {tab === 'integrations' && <TabIntegrations />}
           {tab === 'whatsapp'     && <TabWhatsApp />}
           {tab === 'agents'       && <TabAgents />}
