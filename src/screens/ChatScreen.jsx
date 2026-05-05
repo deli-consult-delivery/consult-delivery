@@ -9,6 +9,7 @@ import DepartmentBadge from '../components/chat/DepartmentBadge.jsx';
 import ConversationFiltersBar from '../components/chat/ConversationFiltersBar.jsx';
 import DepartmentSelector from '../components/chat/DepartmentSelector.jsx';
 import ConversationStatusBadge from '../components/chat/ConversationStatusBadge.jsx';
+import LeadPanel from '../components/chat/LeadPanel.jsx';
 
 const HAS_EVO = !!(
   import.meta.env.VITE_EVOLUTION_URL && import.meta.env.VITE_EVOLUTION_KEY
@@ -72,6 +73,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [departments, setDepartments]               = useState([]);
   const [filters, setFilters]                       = useState({ department: null, tag: null, status: null });
   const [taggedCustomerIds, setTaggedCustomerIds]   = useState(null);
+  const [activeCustomer, setActiveCustomer]         = useState(null);
 
   // ── Status de atendimento ────────────────────────────────
   const {
@@ -127,6 +129,17 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   useEffect(() => {
     refreshStatus();
   }, [activeId, refreshStatus]);
+
+  // Carrega customer quando muda de conversa
+  useEffect(() => {
+    const conv = convsRef.current.find(c => c.id === activeId);
+    if (!conv?.customer_id) { setActiveCustomer(null); return; }
+    supabase.from('customers')
+      .select('id, name, phone, email, document, created_at')
+      .eq('id', conv.customer_id)
+      .maybeSingle()
+      .then(({ data }) => setActiveCustomer(data ?? null));
+  }, [activeId]);
 
   // Busca foto + nome do WhatsApp quando uma conversa é aberta
   useEffect(() => {
@@ -1688,38 +1701,23 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
       {/* ── Col 3: Painel de info / mensagens fixadas ─────── */}
       {showInfo && !isChannel && !isMobile && (
-        <div className="slide-right scroll" style={{
-          background: 'var(--white)', borderLeft: '1px solid var(--g-200)', overflowY: 'auto',
-          display: 'flex', flexDirection: 'column',
+        <div className="slide-right" style={{
+          background: 'var(--white)', borderLeft: '1px solid var(--g-200)',
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
         }}>
-          <div style={{
-            padding: '12px 16px', borderBottom: '1px solid var(--g-200)',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0,
-          }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--g-900)' }}>
-              {active.type === 'group' ? 'Informações do grupo' : 'Informações do contato'}
-            </span>
-            <button className="btn-icon" onClick={() => setShowInfo(false)}><Icon name="x" size={16} /></button>
-          </div>
-          <ContactPanel
-            conv={active}
-            onNavigate={onNavigate}
-            members={members}
-            tenantDbId={tenantDbId}
-            instanceName={selectedInstance}
-            onNameSaved={newName => {
-              setConvs(prev => prev.map(c =>
-                c.id === active.id
-                  ? { ...c, name: newName, avatar: newName.slice(0, 2).toUpperCase() }
-                  : c
-              ));
+          <LeadPanel
+            conversation={{
+              id:          active.id,
+              status_v2:   active.status_v2 || 'open',
+              tenant_id:   active.tenant_id || tenantDbId,
+              channel:     active.type === 'group' ? 'group' : 'whatsapp',
             }}
-            onStatusChange={newStatus => {
-              changeStatus(newStatus);
-              setConvs(prev => prev.map(c =>
-                c.id === active.id ? { ...c, status: newStatus } : c
-              ));
-            }}
+            customer={activeCustomer}
+            tenantId={tenantDbId}
+            onClose={() => setShowInfo(false)}
+            onReopened={() => setConvs(prev => prev.map(c =>
+              c.id === active.id ? { ...c, status_v2: 'in_progress' } : c
+            ))}
           />
         </div>
       )}

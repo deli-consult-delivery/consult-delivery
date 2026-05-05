@@ -3,6 +3,9 @@ import LeadProfileSection from './LeadProfileSection.jsx';
 import LeadNotesSection from './LeadNotesSection.jsx';
 import LeadAddressSection from './LeadAddressSection.jsx';
 import ReopenButton from './ReopenButton.jsx';
+import TagPicker from './TagPicker.jsx';
+import ListPicker from './ListPicker.jsx';
+import LeadHistorySection from './LeadHistorySection.jsx';
 
 export default function LeadPanel({ conversation, customer, tenantId, onClose, onReopened }) {
   return (
@@ -23,6 +26,32 @@ export default function LeadPanel({ conversation, customer, tenantId, onClose, o
         overflowX: 'hidden',
       }}>
         <LeadProfileSection customer={customer} />
+
+        <Divider />
+
+        {/* Tags do lead */}
+        <div style={{ padding: '10px 16px' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--g-500)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Tags
+          </div>
+          <TagPicker
+            customerId={customer?.id}
+            tenantId={tenantId}
+          />
+        </div>
+
+        <Divider />
+
+        {/* Listas do lead */}
+        <div style={{ padding: '10px 16px' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--g-500)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Listas
+          </div>
+          <ListPicker
+            customerId={customer?.id}
+            tenantId={tenantId}
+          />
+        </div>
 
         <Divider />
 
@@ -49,6 +78,13 @@ export default function LeadPanel({ conversation, customer, tenantId, onClose, o
             </div>
           </>
         )}
+
+        <Divider />
+
+        <LeadHistorySection
+          customerId={customer?.id}
+          tenantId={tenantId}
+        />
       </div>
     </div>
   );
