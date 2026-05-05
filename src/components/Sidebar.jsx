@@ -13,7 +13,7 @@ const NAV_GROUPS = [
   {
     label: 'Comunicação',
     items: [
-      { id: 'chat',   icon: 'chat',     label: 'Chat Unificado'  },
+      { id: 'chat',   icon: 'chat',     label: 'Chat Ao Vivo'    },
       { id: 'grupos', icon: 'whatsapp', label: 'Grupos WhatsApp' },
     ],
   },
