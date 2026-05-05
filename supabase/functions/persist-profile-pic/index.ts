@@ -39,6 +39,10 @@ Deno.serve(async (req) => {
   catch { return json({ error: 'Invalid JSON' }, 400); }
 
   const { instanceName, phone, conversationId } = body;
+  const cleanPhone = phone
+    .replace('@s.whatsapp.net', '')
+    .replace('@g.us', '')
+    .replace(/\D/g, '');
   if (!instanceName || !phone || !conversationId) {
     return json({ error: 'instanceName, phone and conversationId are required' }, 400);
   }
@@ -51,7 +55,7 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json',
         'apikey': EVO_KEY,
       },
-      body: JSON.stringify({ number: phone }),
+      body: JSON.stringify({ number: cleanPhone }),
     });
 
     // Evolution retorna 404 quando o contato não tem foto ou a instância não está conectada

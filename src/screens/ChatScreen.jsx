@@ -192,7 +192,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   // Persiste foto de perfil em Storage para conversas que não têm foto
   useEffect(() => {
     if (!HAS_EVO || !selectedInstance) return;
-    const target = convsRef.current.find(c =>
+    const target = convs.find(c =>
       (c.type === 'whatsapp' || c.type === 'group')
       && c.whatsapp_chat_id
       && !c.photoUrl
@@ -243,7 +243,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         persistingRef.current.delete(target.id);
       }
     })();
-  }, [selectedInstance]);
+  }, [selectedInstance, convs]);
 
   useEffect(() => {
     loadInstances();
