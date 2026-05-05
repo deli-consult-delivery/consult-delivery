@@ -229,6 +229,7 @@ input, textarea { font-family: inherit; }
 }
 
 /* ─── SCROLL ──────────────────────────────────────────────── */
+.scroll { scrollbar-gutter: stable; }
 .scroll::-webkit-scrollbar { width: 8px; height: 8px; }
 .scroll::-webkit-scrollbar-track { background: transparent; }
 .scroll::-webkit-scrollbar-thumb { background: var(--g-300); border-radius: 4px; }

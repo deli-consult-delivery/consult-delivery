@@ -512,6 +512,8 @@ async function upsertConversation({ tenantId, instanceId, chatId, isGroup, pushN
     .select('id')
     .eq('whatsapp_chat_id', chatId)
     .eq('instance_id', instanceId)
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (existing) {

@@ -30,12 +30,14 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [tenants, setTenants] = useState(TENANTS);
-  const [route, setRoute] = useState('dashboard');
+  const [route, setRoute] = useState(() => localStorage.getItem('cd-route') || 'dashboard');
   const [tenant, setTenant] = useState(TENANTS[0].id);
   const [tenantDbId, setTenantDbId] = useState(null);
   const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [theme, setTheme] = useState(() => localStorage.getItem('cd-theme') || 'claro');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => { localStorage.setItem('cd-route', route); }, [route]);
 
   // Carrega tenants do banco (usado no mount e quando um workspace novo é criado)
   async function reloadTenants(preferSlug) {

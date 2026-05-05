@@ -430,7 +430,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                   const phone = conv.whatsapp_chat_id?.split('@')[0] || '';
                   const name  = conv.push_name || conv.contact_name || conv.group_name || phone || 'Desconhecido';
                   setConvs(p => {
-                    if (p.find(c => c.id === conv.id)) return p;
+                    if (p.find(c => c.whatsapp_chat_id === conv.whatsapp_chat_id)) return p;
                     return [{
                       id: conv.id, name, avatar: name.slice(0, 2).toUpperCase(),
                       photoUrl: conv.push_photo_url || null,
@@ -663,9 +663,16 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         .order('updated_at', { ascending: false }).limit(50);
 
       if (rows?.length) {
+        const seen = new Set();
+        const uniqueRows = rows.filter(r => {
+          if (seen.has(r.whatsapp_chat_id)) return false;
+          seen.add(r.whatsapp_chat_id);
+          return true;
+        });
+
         // Busca última mensagem de cada conversa individualmente — garante preview para todas
         const lastMsgResults = await Promise.all(
-          rows.map(r =>
+          uniqueRows.map(r =>
             supabase.from('messages')
               .select('conversation_id, content, body, direction, created_at, media_type')
               .eq('conversation_id', r.id)
@@ -679,7 +686,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           if (data) lastMsgMap[data.conversation_id] = data;
         });
 
-        const mapped = rows.map(c => {
+        const mapped = uniqueRows.map(c => {
           const phone   = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
           const name    = c.push_name || c.contact_name || c.group_name || phone || 'Desconhecido';
           const lm      = lastMsgMap[c.id];
@@ -1455,6 +1462,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             <div ref={scrollRef} className="scroll" style={{
               flex: 1, overflowY: 'auto', padding: '24px 32px',
               display: 'flex', flexDirection: 'column', gap: 10,
+              minHeight: 0,
             }}>
               {activeMsgs.map((msg, i) => (
                 <div key={msg.id || i} style={{ display: 'flex', flexDirection: 'column', alignItems: msg.from === 'out' ? 'flex-end' : 'flex-start' }} className="slide-up">
