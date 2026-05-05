@@ -399,7 +399,7 @@ Per 01-UI-SPEC.md, insert after `cora`:
 ```js
 const NAV_ITEMS = [
   { id: 'dashboard',     icon: 'home',    label: 'Dashboard' },
-  { id: 'chat',          icon: 'chat',    label: 'Chat Unificado' },
+  { id: 'chat',          icon: 'chat',    label: 'Chat Ao Vivo' },
   { id: 'grupos',        icon: 'whatsapp',label: 'Grupos' },
   { id: 'tasks',         icon: 'check',   label: 'Tarefas' },
   { id: 'cora',          icon: 'dollar',  label: 'CORA — Cobrança', pulse: true },
