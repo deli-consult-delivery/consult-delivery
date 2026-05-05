@@ -6,6 +6,7 @@ import { useConversationStatus, STATUS_LABELS, STATUS_COLORS } from '../lib/conv
 import { supabase } from '../lib/supabase.js';
 import { sendTextMessage, fetchProfile, sendAudioMessage, sendMediaMessage, fetchWAGroupParticipants, addWAGroupParticipants, removeWAGroupParticipant, leaveWAGroup } from '../lib/evolution.js';
 import DepartmentBadge from '../components/chat/DepartmentBadge.jsx';
+import ConversationFiltersBar from '../components/chat/ConversationFiltersBar.jsx';
 
 const HAS_EVO = !!(
   import.meta.env.VITE_EVOLUTION_URL && import.meta.env.VITE_EVOLUTION_KEY
@@ -67,6 +68,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const [statusFilter, setStatusFilter]             = useState(null); // 'aguardando' | 'em_atendimento' | ...
   const [departments, setDepartments]               = useState([]);
+  const [filters, setFilters]                       = useState({ department: null, tag: null, status: null });
+  const [taggedCustomerIds, setTaggedCustomerIds]   = useState(null);
 
   // ── Status de atendimento ────────────────────────────────
   const {
@@ -244,6 +247,13 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         .then(({ data }) => setDepartments(data ?? []));
     }
   }, [tenant, tenantDbId]);
+
+  // Carrega customer_ids com a tag selecionada para filtro client-side
+  useEffect(() => {
+    if (!filters?.tag) { setTaggedCustomerIds(null); return; }
+    supabase.from('customer_tags').select('customer_id').eq('tag_id', filters.tag)
+      .then(({ data }) => setTaggedCustomerIds(data ? new Set(data.map(r => r.customer_id)) : new Set()));
+  }, [filters?.tag]);
 
   // ── Load channel messages when switching to a channel ──
   useEffect(() => {
@@ -923,6 +933,10 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       const convStatus = c.status || 'aguardando';
       if (convStatus !== statusFilter) return false;
     }
+    // Filtros da ConversationFiltersBar
+    if (filters?.department && c.department_id !== filters.department) return false;
+    if (filters?.status     && c.status_v2     !== filters.status)     return false;
+    if (filters?.tag && taggedCustomerIds !== null && !taggedCustomerIds.has(c.customer_id)) return false;
     return true;
   });
 
@@ -1054,6 +1068,13 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             ))}
           </div>
         </div>
+
+        {/* Barra de filtros — departamento / tag / status_v2 */}
+        <ConversationFiltersBar
+          tenantId={tenantDbId}
+          filters={filters}
+          onChange={setFilters}
+        />
 
         {/* Botão nova conversa interna (DM) — apenas na sub-seção Direto */}
         {tab === 'int' && (
