@@ -1,0 +1,13 @@
+project_id = "czyanilrverorwenikqw"
+
+[functions.evolution-webhook]
+verify_jwt = false
+
+[functions.persist-profile-pic]
+verify_jwt = false
+
+[functions.analista-callback]
+verify_jwt = false
+
+[functions.manage-users]
+verify_jwt = true
