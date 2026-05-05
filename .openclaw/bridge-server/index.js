@@ -8,6 +8,7 @@ const path               = require('path');
 const requireAgentAccess = require('./middleware/requireAgentAccess');
 const { startRealtime, executeApprovedAction, rejectApproval } = require('./realtime');
 const { startWebhookGuard } = require('./webhookGuard');
+const agentRouter = require('./agent');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -332,6 +333,8 @@ app.post('/deli/approve', async (req, res) => {
 
   return res.status(400).json({ error: 'decision deve ser "approved" ou "rejected".' });
 });
+
+app.use('/agent', agentRouter);
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[bridge] ouvindo em 0.0.0.0:${PORT}`);
