@@ -1722,6 +1722,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             }}
             customer={activeCustomer}
             tenantId={tenantDbId}
+            members={members}
             onClose={() => setShowInfo(false)}
             onReopened={() => setConvs(prev => prev.map(c =>
               c.id === active.id ? { ...c, status_v2: 'in_progress' } : c
