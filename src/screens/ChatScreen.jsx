@@ -1638,7 +1638,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                              : msg.replyTo.mediaType === 'video' ? '🎬 Vídeo'
                              : msg.replyTo.mediaType?.includes('audio') ? '🎵 Áudio'
                              : msg.replyTo.mediaType === 'document' ? '📄 Arquivo'
-                             : msg.replyTo.text || ''}
+                             : msg.replyTo.text || '↩ Mensagem'}
                           </div>
                         )}
                       </div>
