@@ -220,6 +220,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [qrExpandedId, setQrExpandedId]   = useState(null);
   const [qrCreating, setQrCreating]       = useState(false);
   const [lightboxUrl, setLightboxUrl]     = useState(null);
+  const [pastedImage, setPastedImage]     = useState(null); // { file, previewUrl, caption }
   const [replyTo, setReplyTo]             = useState(null);
   const [hoveredMsgId, setHoveredMsgId]   = useState(null);
 
@@ -966,7 +967,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     setSending(false);
   }
 
-  async function sendFile(file) {
+  async function sendFile(file, caption = '') {
     if (!file || !active || sending) return;
     if (file.size > 10 * 1024 * 1024) { alert('Arquivo muito grande. Máximo: 10 MB'); return; }
 
@@ -996,12 +997,12 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     setSending(true);
     try {
       if (HAS_EVO && selectedInstance && active.whatsapp_chat_id) {
-        await sendMediaMessage(selectedInstance, active.whatsapp_chat_id, base64, mediaType, mimeType, '', file.name);
+        await sendMediaMessage(selectedInstance, active.whatsapp_chat_id, base64, mediaType, mimeType, caption, file.name);
       }
       await supabase.from('messages').insert({
         conversation_id: active.id,
         direction:   'outbound',
-        content:     file.name,
+        content:     caption || file.name,
         media_type:  mediaType,
         media_url:   dataUrl,
         created_at:  new Date().toISOString(),
@@ -1900,7 +1901,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                         if (e.key === 'Escape' && showQRPopup) { setShowQRPopup(false); setQrFilter(''); return; }
                         onKeyDown(e);
                       }}
-                      onPaste={async e => {
+                      onPaste={e => {
                         const items = Array.from(e.clipboardData?.items || []);
                         const imageItem = items.find(item => item.type.startsWith('image/'));
                         if (imageItem) {
@@ -1909,7 +1910,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                           if (blob) {
                             const ext = blob.type.split('/')[1] || 'png';
                             const file = new File([blob], `imagem-colada.${ext}`, { type: blob.type });
-                            await sendFile(file);
+                            const previewUrl = URL.createObjectURL(blob);
+                            setPastedImage({ file, previewUrl, caption: '' });
                           }
                         }
                       }}
@@ -2277,6 +2279,62 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         </div>
       )}
     </div>
+    {pastedImage && (
+      <div style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 9999,
+      }} onClick={() => { URL.revokeObjectURL(pastedImage.previewUrl); setPastedImage(null); }}>
+        <div style={{
+          background: 'var(--bg-secondary, #1e1e2e)', borderRadius: 12, padding: 20,
+          display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 480, width: '90%',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+        }} onClick={e => e.stopPropagation()}>
+          <p style={{ margin: 0, fontWeight: 600, color: 'var(--text-primary, #fff)' }}>Pré-visualização da imagem</p>
+          <img src={pastedImage.previewUrl} alt="preview"
+            style={{ maxHeight: 280, objectFit: 'contain', borderRadius: 8, background: '#111' }} />
+          <input
+            autoFocus
+            type="text"
+            placeholder="Legenda (opcional)…"
+            value={pastedImage.caption}
+            onChange={e => setPastedImage(p => ({ ...p, caption: e.target.value }))}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                const { file, caption } = pastedImage;
+                URL.revokeObjectURL(pastedImage.previewUrl);
+                setPastedImage(null);
+                sendFile(file, caption);
+              }
+              if (e.key === 'Escape') { URL.revokeObjectURL(pastedImage.previewUrl); setPastedImage(null); }
+            }}
+            style={{
+              background: 'var(--bg-tertiary, #2a2a3e)', border: '1px solid var(--border, #444)',
+              borderRadius: 8, padding: '8px 12px', color: 'var(--text-primary, #fff)',
+              fontSize: 14, outline: 'none',
+            }}
+          />
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <button onClick={() => { URL.revokeObjectURL(pastedImage.previewUrl); setPastedImage(null); }}
+              style={{
+                padding: '8px 18px', borderRadius: 8, border: '1px solid var(--border, #444)',
+                background: 'transparent', color: 'var(--text-secondary, #aaa)', cursor: 'pointer', fontSize: 14,
+              }}>Cancelar</button>
+            <button onClick={() => {
+                const { file, caption } = pastedImage;
+                URL.revokeObjectURL(pastedImage.previewUrl);
+                setPastedImage(null);
+                sendFile(file, caption);
+              }}
+              style={{
+                padding: '8px 18px', borderRadius: 8, border: 'none',
+                background: 'var(--accent, #e04b2f)', color: '#fff', cursor: 'pointer',
+                fontSize: 14, fontWeight: 600,
+              }}>Enviar</button>
+          </div>
+        </div>
+      </div>
+    )}
     {lightboxUrl && <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
     </>
   );
