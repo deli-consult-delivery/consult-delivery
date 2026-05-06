@@ -995,7 +995,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     }}>
 
       {/* ── Col 1: Sidebar ────────────────────────────────── */}
-      <div style={{ background: 'var(--white)', borderRight: '1px solid var(--g-200)', display: isMobile && mobileView === 'chat' ? 'none' : 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div style={{ background: 'var(--white)', borderRight: '1px solid var(--g-200)', display: isMobile && mobileView === 'chat' ? 'none' : 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
         <div style={{ padding: '20px 20px 12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <h2 className="section-h2" style={{ fontSize: 18 }}>Conversas</h2>
@@ -1112,7 +1112,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         )}
 
         {/* Lista de conversas */}
-        <div className="scroll" style={{ flex: 1, overflowY: 'auto', paddingBottom: 16 }}>
+        <div className="scroll" style={{ flex: 1, overflowY: 'auto', paddingBottom: 16, minHeight: 0 }}>
           {tab === 'int' ? (
             <>
               {/* Seção: DIRETO */}
