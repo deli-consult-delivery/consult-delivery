@@ -1096,12 +1096,14 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     if (tab === 'groups' && c.type !== 'group')    return false;
     if (tab === 'int'    && !(c.type === 'internal' || c.type === 'agent')) return false;
     if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
-    // Aba Aberto/Finalizado
-    const convStatus = c.status || 'aguardando';
-    if (statusTab === 'aberto'     && convStatus === 'finalizado') return false;
-    if (statusTab === 'finalizado' && convStatus !== 'finalizado') return false;
-    if (statusFilter && statusTab === 'aberto') {
-      if (convStatus !== statusFilter) return false;
+    // Aba Aberto/Finalizado — só conversas reais (não wag- nem chan-)
+    if (!c.id.startsWith('wag-') && !c.id.startsWith('chan-')) {
+      const convStatus = c.status || 'aguardando';
+      if (statusTab === 'aberto'     && convStatus === 'finalizado') return false;
+      if (statusTab === 'finalizado' && convStatus !== 'finalizado') return false;
+      if (statusFilter && statusTab === 'aberto') {
+        if (convStatus !== statusFilter) return false;
+      }
     }
     // Filtros da ConversationFiltersBar
     if (filters?.department && c.department_id !== filters.department) return false;
