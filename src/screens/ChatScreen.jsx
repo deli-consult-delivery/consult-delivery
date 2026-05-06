@@ -1009,7 +1009,6 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               className="input"
               style={{ fontSize: 12, padding: '6px 10px', marginBottom: 10 }}
             >
-              <option value="">— Modo demonstração —</option>
               {instances.map(inst => (
                 <option key={inst.id} value={inst.instance_name}>
                   {inst.status === 'connected' ? '🟢' : '🔴'} {inst.instance_name}
