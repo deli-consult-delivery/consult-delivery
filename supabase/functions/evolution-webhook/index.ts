@@ -146,6 +146,43 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
       msgData.message?.extendedTextMessage?.text ||
       '';
 
+  // ── Mensagem citada (reply) ───────────────────────────────────────────────
+  const contextInfo = msgData.message?.extendedTextMessage?.contextInfo
+    || msgData.message?.imageMessage?.contextInfo
+    || msgData.message?.videoMessage?.contextInfo
+    || msgData.message?.audioMessage?.contextInfo
+    || msgData.message?.pttMessage?.contextInfo
+    || msgData.message?.documentMessage?.contextInfo
+    || null;
+
+  async function buildQuotedContent(): Promise<object | null> {
+    if (!contextInfo?.stanzaId) return null;
+    const stanzaId = contextInfo.stanzaId as string;
+    // Tenta encontrar no banco pelo whatsapp_msg_id
+    const { data: qMsg } = await supabase.from('messages')
+      .select('id, direction, content, media_type')
+      .eq('whatsapp_msg_id', stanzaId)
+      .maybeSingle();
+    if (qMsg) {
+      return { id: qMsg.id, waMsgId: stanzaId, from: qMsg.direction === 'outbound' ? 'out' : 'in', text: qMsg.content || '', mediaType: qMsg.media_type || null };
+    }
+    // Não está no banco — monta pelo contextInfo.quotedMessage
+    const qm = contextInfo.quotedMessage as Record<string, unknown> | undefined;
+    if (!qm) return null;
+    const qIsImage    = !!qm.imageMessage;
+    const qIsVideo    = !!qm.videoMessage;
+    const qIsAudio    = !!qm.audioMessage || !!qm.pttMessage;
+    const qIsDocument = !!qm.documentMessage;
+    const qText = (qm.conversation as string)
+      || ((qm.extendedTextMessage as Record<string, string>)?.text)
+      || ((qm.imageMessage    as Record<string, string>)?.caption)
+      || ((qm.videoMessage    as Record<string, string>)?.caption)
+      || ((qm.documentMessage as Record<string, string>)?.title)
+      || '';
+    const qMediaType = qIsImage ? 'image' : qIsVideo ? 'video' : qIsAudio ? 'audio' : qIsDocument ? 'document' : null;
+    return { waMsgId: stanzaId, from: null, text: qText, mediaType: qMediaType };
+  }
+
   const msgTimestamp = msgData.messageTimestamp
     ? new Date(Number(msgData.messageTimestamp) * 1000).toISOString()
     : new Date().toISOString();
@@ -190,6 +227,7 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
     }
 
     // Celular físico — salva como outbound
+    const fmQuoted = await buildQuotedContent();
     await supabase.from('messages').insert({
       tenant_id:       tenantId,
       conversation_id: fmConvId,
@@ -198,6 +236,7 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
       sender_name:     null,
       content:         messageText,
       created_at:      msgTimestamp,
+      ...(fmQuoted ? { quoted_content: fmQuoted } : {}),
     });
     console.log('[WEBHOOK][MESSAGES_UPSERT] fromMe: mensagem do celular físico salva', msgId);
     return;
@@ -271,6 +310,7 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
   });
 
   if (convId) {
+    const inQuoted = await buildQuotedContent();
     const { data: savedMsg } = await supabase
       .from('messages')
       .insert({
@@ -283,6 +323,7 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
         media_type:      detectedMediaType,
         media_url:       null,
         created_at:      msgTimestamp,
+        ...(inQuoted ? { quoted_content: inQuoted } : {}),
       })
       .select('id')
       .single();
