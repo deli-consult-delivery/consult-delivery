@@ -815,10 +815,10 @@ input, textarea { font-family: inherit; }
 /* ─── CHAT BUBBLES ────────────────────────────────────────── */
 .bubble {
   max-width: 70%;
-  padding: 10px 14px;
-  border-radius: 14px;
-  font-size: 14px;
-  line-height: 1.45;
+  padding: 7px 11px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.38;
   word-wrap: break-word;
 }
 .bubble-in {
@@ -836,7 +836,7 @@ input, textarea { font-family: inherit; }
 .bubble-meta {
   font-size: 10px;
   opacity: 0.6;
-  margin-top: 4px;
+  margin-top: 2px;
   font-weight: 500;
 }
 
@@ -877,26 +877,26 @@ input, textarea { font-family: inherit; }
 .copilot-wrap:focus-within { border-color: var(--red); box-shadow: 0 0 0 3px rgba(183,12,0,0.12); }
 .copilot-textarea {
   width: 100%;
-  padding: 12px 14px;
+  padding: 7px 11px;
   border: none;
   outline: none;
   resize: none;
   background: transparent;
   color: var(--g-900);
-  font-size: 14px;
-  line-height: 1.5;
-  min-height: 44px;
-  max-height: 140px;
+  font-size: 13px;
+  line-height: 1.45;
+  min-height: 30px;
+  max-height: 120px;
   font-family: inherit;
   position: relative;
   z-index: 2;
 }
 .copilot-ghost {
   position: absolute;
-  top: 12px; left: 14px; right: 14px;
+  top: 7px; left: 11px; right: 11px;
   color: var(--g-400);
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 1.45;
   pointer-events: none;
   white-space: pre-wrap;
   z-index: 1;

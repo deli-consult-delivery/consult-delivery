@@ -1571,8 +1571,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
             {/* Mensagens */}
             <div ref={scrollRef} className="scroll" style={{
-              flex: 1, overflowY: 'auto', padding: '24px 32px',
-              display: 'flex', flexDirection: 'column', gap: 10,
+              flex: 1, overflowY: 'auto', padding: '14px 20px',
+              display: 'flex', flexDirection: 'column', gap: 6,
               minHeight: 0,
             }}>
               {activeMsgs.map((msg, i) => (
@@ -1674,7 +1674,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             </div>
 
             {/* Área de input */}
-            <div style={{ padding: '12px 20px 20px', background: 'var(--white)', borderTop: '1px solid var(--g-200)', flexShrink: 0 }}>
+            <div style={{ padding: '8px 14px 12px', background: 'var(--white)', borderTop: '1px solid var(--g-200)', flexShrink: 0 }}>
 
               {/* ── Estado: gravando ───────────────────────── */}
               {recState === 'recording' && (
@@ -2411,8 +2411,8 @@ function ConvItem({ conv, active, onClick, lastMsg, members = [], departments = 
     <div
       onClick={onClick}
       style={{
-        padding: isChannel ? '8px 16px' : '12px 16px',
-        cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'center',
+        padding: isChannel ? '6px 12px' : '8px 12px',
+        cursor: 'pointer', display: 'flex', gap: 8, alignItems: 'center',
         background: active ? 'var(--red-soft)' : 'transparent',
         borderLeft: active ? '3px solid var(--red)' : '3px solid transparent',
         transition: 'all 150ms',
@@ -2423,7 +2423,7 @@ function ConvItem({ conv, active, onClick, lastMsg, members = [], departments = 
       {isChannel ? (
         /* Canal: avatar # colorido menor + nome inline */
         <>
-          <ConvAvatar conv={conv} size={28} />
+          <ConvAvatar conv={conv} size={24} />
           <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontSize: 13, fontWeight: active ? 700 : 500, color: 'var(--g-900)' }} className="truncate">
               {conv.name}
@@ -2443,7 +2443,7 @@ function ConvItem({ conv, active, onClick, lastMsg, members = [], departments = 
       ) : (
         /* DM / WA / Grupo: card reformulado com status + atendente */
         <>
-          <ConvAvatar conv={conv} size={40} />
+          <ConvAvatar conv={conv} size={34} />
           <div style={{ flex: 1, minWidth: 0 }}>
             {/* Linha 1: nome + tempo */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -2453,7 +2453,7 @@ function ConvItem({ conv, active, onClick, lastMsg, members = [], departments = 
               <div style={{ fontSize: 10, color: 'var(--g-500)', flexShrink: 0 }}>{conv.time}</div>
             </div>
             {/* Linha 2: preview + unread */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flex: 1 }}>
                 {conv.type === 'group' && conv.groupType && (
                   <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 9999, background: '#25D36622', color: '#166534', flexShrink: 0, textTransform: 'uppercase' }}>
@@ -2474,7 +2474,7 @@ function ConvItem({ conv, active, onClick, lastMsg, members = [], departments = 
               )}
             </div>
             {/* Linha 3: tags de status + departamento + atendente */}
-            <div style={{ display: 'flex', gap: 6, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 4, marginTop: 3, flexWrap: 'wrap', alignItems: 'center' }}>
               <span style={{
                 fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
                 background: sColor.bg, color: sColor.text, border: `1px solid ${sColor.dot}`,

@@ -33,31 +33,30 @@ export default function ConversationFiltersBar({ tenantId, filters, onChange }) 
     <div style={{
       display: 'flex',
       alignItems: 'center',
-      gap: 6,
-      padding: '6px 12px',
+      gap: 4,
+      padding: '4px 8px',
       borderBottom: '1px solid var(--g-100)',
       background: hasActive ? 'var(--g-50)' : 'transparent',
-      flexWrap: 'wrap',
     }}>
-      <div style={{ width: 130 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
         <CustomSelect
           compact
           value={filters?.department ?? ''}
           onChange={v => set('department', v)}
-          options={[{ value: '', label: 'Todos deptos' }, ...departments.map(d => ({ value: d.id, label: d.name }))]}
+          options={[{ value: '', label: 'Depto' }, ...departments.map(d => ({ value: d.id, label: d.name }))]}
         />
       </div>
 
-      <div style={{ width: 120 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
         <CustomSelect
           compact
           value={filters?.tag ?? ''}
           onChange={v => set('tag', v)}
-          options={[{ value: '', label: 'Todas tags' }, ...tags.map(t => ({ value: t.id, label: t.name }))]}
+          options={[{ value: '', label: 'Tag' }, ...tags.map(t => ({ value: t.id, label: t.name }))]}
         />
       </div>
 
-      <div style={{ width: 120 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
         <CustomSelect
           compact
           value={filters?.status ?? ''}
@@ -76,11 +75,10 @@ export default function ConversationFiltersBar({ tenantId, filters, onChange }) 
             border: 'none',
             cursor: 'pointer',
             padding: '2px 4px',
-            textDecoration: 'underline',
+            flexShrink: 0,
           }}
-        >
-          Limpar
-        </button>
+          title="Limpar filtros"
+        >×</button>
       )}
     </div>
   );
