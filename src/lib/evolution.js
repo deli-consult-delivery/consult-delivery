@@ -26,12 +26,14 @@ export async function getInstanceStatus(instanceName, evolutionUrl, apiKey) {
   return res.json();
 }
 
-// Enviar mensagem de texto
-export async function sendTextMessage(instanceName, to, text) {
+// Enviar mensagem de texto (quoted opcional para respostas)
+export async function sendTextMessage(instanceName, to, text, quoted = null) {
+  const body = { number: to, text };
+  if (quoted) body.quoted = quoted;
   const res = await fetch(`${EVO_URL}/message/sendText/${instanceName}`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ number: to, text }),
+    body: JSON.stringify(body),
   });
   return res.json();
 }

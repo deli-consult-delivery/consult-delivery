@@ -1029,8 +1029,18 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     if (HAS_EVO && selectedInstance && active.whatsapp_chat_id) {
       setSending(true);
       const textToSend = agentName ? `*${agentName}:*\n${text}` : text;
+      const waQuoted = currentReplyTo?.waMsgId ? {
+        key: {
+          id: currentReplyTo.waMsgId,
+          remoteJid: active.whatsapp_chat_id,
+          fromMe: currentReplyTo.from === 'out',
+        },
+        message: currentReplyTo.mediaType
+          ? {}
+          : { conversation: currentReplyTo.text || '' },
+      } : null;
       try {
-        await sendTextMessage(selectedInstance, active.whatsapp_chat_id, textToSend);
+        await sendTextMessage(selectedInstance, active.whatsapp_chat_id, textToSend, waQuoted);
         await supabase.from('messages').insert({
           conversation_id: active.id, direction: 'outbound', content: text, sender_name: agentName || null, created_at: now.toISOString(),
           ...(currentReplyTo ? { quoted_content: currentReplyTo } : {}),
@@ -1595,7 +1605,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     {msg.from === 'out' && hoveredMsgId === (msg.id || i) && (
                       <button
-                        onClick={() => setReplyTo({ id: msg.id, from: msg.from, text: msg.text, mediaType: msg.mediaType })}
+                        onClick={() => setReplyTo({ id: msg.id, waMsgId: msg.waMsgId, from: msg.from, text: msg.text, mediaType: msg.mediaType })}
                         title="Responder"
                         style={{
                           background: 'var(--g-100)', border: 'none', borderRadius: '50%',
@@ -1708,7 +1718,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                   </div>
                     {msg.from === 'in' && hoveredMsgId === (msg.id || i) && (
                       <button
-                        onClick={() => setReplyTo({ id: msg.id, from: msg.from, text: msg.text, mediaType: msg.mediaType })}
+                        onClick={() => setReplyTo({ id: msg.id, waMsgId: msg.waMsgId, from: msg.from, text: msg.text, mediaType: msg.mediaType })}
                         title="Responder"
                         style={{
                           background: 'var(--g-100)', border: 'none', borderRadius: '50%',
