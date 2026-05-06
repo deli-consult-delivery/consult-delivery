@@ -74,3 +74,31 @@ Touched: wiki/salgados-da-monica-analise.md, wiki/metodologia-analise-ifood.md, 
 
 ## [2026-05-03 13:33] session | graphify pipeline — full project knowledge graph
 Touched: none
+
+## [2026-05-05] session | fix: verify_jwt + VITE_EVOLUTION_URL — fluxo WhatsApp completo
+Touched: none
+
+- Bug 1: Edge Functions rejeitavam Evolution API com 401 — verify_jwt=true bloqueava webhooks (0 invocations). Fix: supabase/config.toml com verify_jwt=false nas 3 funções públicas.
+- Bug 2: Envio falhava com 404 — VITE_EVOLUTION_URL apontava para evo-go (host errado). Fix: banco atualizado com api_key correta, instância teste removida, secrets GitHub + .env.local alinhados com Evo1.
+- Resultado: fluxo bidirecional WhatsApp funcionando em produção (recebe e envia).
+
+## [2026-05-05 00:00] session | Sprint 1 Chat Ao Vivo — migrations + 9 componentes frontend
+
+Touched: none
+
+- Backup DB pré-sprint criado em C:\Users\Consult Delivery\backups-consult\ (não comitado)
+- Sprint spec: docs/SPRINT_CHAT_AO_VIVO.md
+- Branch chat-ao-vivo/rename (consult-delivery): Sidebar + Topbar + CLAUDE.md renomeados
+- Branch chat-ao-vivo/migrations (consult-migrations): 4 migrations (001-004) — status_v2 ENUM, conversation_events, customer_notes, customer_addresses
+- Branch chat-ao-vivo/frontend (consult-frontend): 9 componentes em src/components/chat/ — ChatLayout, ConversationStatusBadge, TimelineEvent, LeadPanel, LeadPanelHeader, LeadProfileSection, LeadNotesSection (debounce 1s), LeadAddressSection (ViaCEP), ReopenButton
+- Build: ✓ sem erros
+- Todos os branches pushados para origin
+
+## [2026-05-05 ] session | Bug fixes chat ao vivo — grupos e fotos de perfil
+Touched: none
+
+## [2026-05-05 14:30] session | Bug fixes chat ao vivo — grupos e fotos de perfil
+Touched: none
+
+## [2026-05-05 15:00] session | Bugs chat ao vivo — fotos grupo, dedup msgs, celular físico
+Touched: none
