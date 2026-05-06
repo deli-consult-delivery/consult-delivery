@@ -175,6 +175,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [currentUser, setCurrentUser]            = useState(null);
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const [statusFilter, setStatusFilter]             = useState(null); // 'aguardando' | 'em_atendimento' | ...
+  const [statusTab, setStatusTab]                   = useState('aberto'); // 'aberto' | 'finalizado'
   const [departments, setDepartments]               = useState([]);
   const [filters, setFilters]                       = useState({ department: null, tag: null, status: null });
   const [taggedCustomerIds, setTaggedCustomerIds]   = useState(null);
@@ -1095,8 +1096,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     if (tab === 'groups' && c.type !== 'group')    return false;
     if (tab === 'int'    && !(c.type === 'internal' || c.type === 'agent')) return false;
     if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
-    if (statusFilter) {
-      const convStatus = c.status || 'aguardando';
+    // Aba Aberto/Finalizado
+    const convStatus = c.status || 'aguardando';
+    if (statusTab === 'aberto'     && convStatus === 'finalizado') return false;
+    if (statusTab === 'finalizado' && convStatus !== 'finalizado') return false;
+    if (statusFilter && statusTab === 'aberto') {
       if (convStatus !== statusFilter) return false;
     }
     // Filtros da ConversationFiltersBar
@@ -1114,6 +1118,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     finalizado:         convs.filter(c => c.status === 'finalizado').length,
     automacao:          convs.filter(c => c.status === 'automacao').length,
   };
+  const abertosCount    = convs.filter(c => (c.status || 'aguardando') !== 'finalizado').length;
+  const finalizadoCount = statusCounts.finalizado;
 
   // Dentro da tab "int", separar DMs de canais
   const intDireto  = filtered.filter(c => c.type === 'internal' && !c.id.startsWith('chan-'));
@@ -1173,8 +1179,32 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             />
           </div>
 
-          {/* Badges de filtros por status */}
-          <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+          {/* Toggle Aberto / Finalizado */}
+          <div style={{ display: 'flex', gap: 3, padding: 3, background: 'var(--g-100)', borderRadius: 8, marginBottom: 10 }}>
+            {[
+              { id: 'aberto',     label: 'Aberto',     count: abertosCount    },
+              { id: 'finalizado', label: 'Finalizado', count: finalizadoCount },
+            ].map(t => (
+              <button key={t.id} onClick={() => { setStatusTab(t.id); setStatusFilter(null); }} style={{
+                flex: 1, padding: '6px 4px', fontSize: 11.5, fontWeight: 700, borderRadius: 6,
+                background: statusTab === t.id ? 'var(--white)' : 'transparent',
+                color:      statusTab === t.id ? 'var(--g-900)' : 'var(--g-500)',
+                boxShadow:  statusTab === t.id ? 'var(--sh-card)' : 'none',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                transition: 'all 150ms',
+              }}>
+                {t.label}
+                <span style={{
+                  background: statusTab === t.id ? (t.id === 'finalizado' ? 'var(--g-200)' : 'var(--accent, #e04b2f)') : 'var(--g-200)',
+                  color:      statusTab === t.id ? (t.id === 'finalizado' ? 'var(--g-600)' : '#fff') : 'var(--g-500)',
+                  borderRadius: 999, padding: '1px 7px', fontSize: 10, fontWeight: 700,
+                }}>{t.count}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Badges de filtros por status (só na aba Aberto) */}
+          {statusTab === 'aberto' && <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
             {[
               { key: 'aguardando',         icon: '⏳', label: 'Aguardando',         bg: '#FEF3C7', text: '#92400E', border: '#F59E0B' },
               { key: 'em_atendimento',     icon: '💬', label: 'Em atendimento',     bg: '#DBEAFE', text: '#1E40AF', border: '#3B82F6' },
@@ -1204,7 +1234,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                 </button>
               );
             })}
-          </div>
+          </div>}
 
           <div style={{ display: 'flex', gap: 3, padding: 3, background: 'var(--g-100)', borderRadius: 6 }}>
             {[
@@ -1535,9 +1565,10 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                 convStatus === 'finalizado' ? (
                   <button
                     onClick={async () => {
-                      await reopen();
+                      await changeStatus('atendimento_aberto');
                       await supabase.from('conversations').update({ status_v2: 'in_progress' }).eq('id', activeId);
-                      setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'aguardando', status_v2: 'in_progress' } : c));
+                      setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'atendimento_aberto', status_v2: 'in_progress' } : c));
+                      setStatusTab('aberto');
                     }}
                     disabled={statusLoading}
                     style={{
@@ -1555,6 +1586,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                       await finish();
                       await supabase.from('conversations').update({ status_v2: 'closed' }).eq('id', activeId);
                       setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'finalizado', status_v2: 'closed' } : c));
+                      setActiveId(null);
                     }}
                     disabled={statusLoading}
                     style={{
