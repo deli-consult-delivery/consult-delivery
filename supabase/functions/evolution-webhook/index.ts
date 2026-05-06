@@ -401,13 +401,7 @@ async function handleSendMessage({ inst, tenantId, data }: {
   const msgData = Array.isArray(data) ? data[0] : data;
   if (!msgData?.key) return;
 
-  const msgId = msgData.key.id as string;
-
-  // Idempotência: ChatScreen pode ter salvo diretamente ao enviar via UI
-  const { data: existing } = await supabase.from('messages').select('id')
-    .eq('whatsapp_msg_id', msgId).maybeSingle();
-  if (existing) return;
-
+  const msgId       = msgData.key.id as string;
   const chatId      = msgData.key.remoteJid as string;
   const messageText = (msgData.message?.conversation
     || msgData.message?.extendedTextMessage?.text || '') as string;
@@ -415,10 +409,36 @@ async function handleSendMessage({ inst, tenantId, data }: {
     ? new Date(Number(msgData.messageTimestamp) * 1000).toISOString()
     : new Date().toISOString();
 
+  // Idempotência 1: dedup por whatsapp_msg_id
+  const { data: existingById } = await supabase.from('messages').select('id')
+    .eq('whatsapp_msg_id', msgId).maybeSingle();
+  if (existingById) return;
+
   const { data: conv } = await supabase.from('conversations').select('id')
     .eq('whatsapp_chat_id', chatId).eq('instance_id', inst.id).maybeSingle();
   if (!conv) return;
 
+  // Idempotência 2: mensagem enviada pela plataforma já salva sem whatsapp_msg_id.
+  // A plataforma envia "*Nome:*\nTexto" ao WhatsApp mas salva só "Texto" no banco,
+  // então strip o prefixo de assinatura antes de comparar.
+  if (messageText) {
+    const rawText = messageText.replace(/^\*[^*]+:\*\n/, '');
+    const thirtySecsAgo = new Date(Date.now() - 30000).toISOString();
+    const { data: existingByContent } = await supabase.from('messages').select('id')
+      .eq('conversation_id', conv.id)
+      .eq('direction', 'outbound')
+      .eq('content', rawText)
+      .is('whatsapp_msg_id', null)
+      .gte('created_at', thirtySecsAgo)
+      .maybeSingle();
+    if (existingByContent) {
+      await supabase.from('messages').update({ whatsapp_msg_id: msgId }).eq('id', existingByContent.id);
+      console.log('[WEBHOOK][SEND_MESSAGE] dedup: whatsapp_msg_id atualizado em msg existente', msgId);
+      return;
+    }
+  }
+
+  // Mensagem enviada pelo celular físico (não pela plataforma) — salva normalmente
   await supabase.from('messages').insert({
     tenant_id:       tenantId,
     conversation_id: conv.id,
