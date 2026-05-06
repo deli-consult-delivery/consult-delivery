@@ -173,7 +173,7 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
     let pvContactId: string | null = null;
 
     if (isGroup) {
-      groupId = await upsertGroup({ tenantId, jid: chatId, groupName: pushName || chatId });
+      groupId = await upsertGroup({ tenantId, jid: chatId, groupName: chatId, overwriteName: false });
     } else {
       pvContactId = senderContactId;
     }
@@ -477,14 +477,14 @@ async function upsertContact({ tenantId, jid, displayName }: {
   return data.id;
 }
 
-async function upsertGroup({ tenantId, jid, groupName }: {
-  tenantId: string; jid: string; groupName: string;
+async function upsertGroup({ tenantId, jid, groupName, overwriteName = true }: {
+  tenantId: string; jid: string; groupName: string; overwriteName?: boolean;
 }): Promise<string> {
   const { data, error } = await supabase
     .from('whatsapp_groups')
     .upsert(
       { tenant_id: tenantId, evolution_jid: jid, group_name: groupName },
-      { onConflict: 'tenant_id,evolution_jid', ignoreDuplicates: false }
+      { onConflict: 'tenant_id,evolution_jid', ignoreDuplicates: !overwriteName }
     )
     .select('id')
     .single();
@@ -501,6 +501,15 @@ async function upsertGroup({ tenantId, jid, groupName }: {
     if (!existing?.id) throw new Error(`upsertGroup falhou para JID: ${jid}`);
     return existing.id;
   }
+
+  // Quando temos o nome real, sincroniza com conversations.group_name
+  if (overwriteName) {
+    await supabase.from('conversations')
+      .update({ group_name: groupName, is_group: true })
+      .eq('tenant_id', tenantId)
+      .eq('whatsapp_chat_id', jid);
+  }
+
   return data.id;
 }
 
@@ -509,7 +518,7 @@ async function upsertConversation({ tenantId, instanceId, chatId, isGroup, pushN
 }): Promise<string | null> {
   const { data: existing } = await supabase
     .from('conversations')
-    .select('id, status_v2')
+    .select('id, status_v2, is_group')
     .eq('whatsapp_chat_id', chatId)
     .eq('instance_id', instanceId)
     .order('created_at', { ascending: false })
@@ -517,9 +526,10 @@ async function upsertConversation({ tenantId, instanceId, chatId, isGroup, pushN
     .maybeSingle();
 
   if (existing) {
-    const upd: Record<string, string | null> = { updated_at: new Date().toISOString(), tenant_id: tenantId };
+    const upd: Record<string, string | boolean | null> = { updated_at: new Date().toISOString(), tenant_id: tenantId };
     if (!isGroup && pushName && pushName !== 'Desconhecido') upd.push_name = pushName;
     if (existing.status_v2 === 'closed') upd.status_v2 = 'in_progress';
+    if (isGroup && !existing.is_group) upd.is_group = true;
     await supabase.from('conversations').update(upd).eq('id', existing.id);
     return existing.id;
   }
@@ -532,7 +542,7 @@ async function upsertConversation({ tenantId, instanceId, chatId, isGroup, pushN
       instance_id:      instanceId,
       whatsapp_chat_id: chatId,
       is_group:         isGroup,
-      group_name:       isGroup ? (validPushName || chatId) : null,
+      group_name:       isGroup ? chatId.split('@')[0] : null,
       push_name:        isGroup ? null : validPushName,
       status:           'aguardando',
     })
