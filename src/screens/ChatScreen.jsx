@@ -1602,7 +1602,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                   className="slide-up"
                 >
                   {/* Row: [botão ↩ à esquerda do bubble out] [bubble] [botão ↩ à direita do bubble in] */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, width: '100%', justifyContent: msg.from === 'out' ? 'flex-end' : 'flex-start' }}>
                     {msg.from === 'out' && hoveredMsgId === (msg.id || i) && (
                       <button
                         onClick={() => setReplyTo({ id: msg.id, waMsgId: msg.waMsgId, from: msg.from, text: msg.text, mediaType: msg.mediaType })}
