@@ -36,7 +36,8 @@ const NAV_GROUPS = [
   {
     label: 'Marketing',
     items: [
-      { id: 'campanhas', icon: 'megaphone', label: 'Campanhas' },
+      { id: 'campanhas', icon: 'megaphone', label: 'Campanhas'        },
+      { id: 'lara',      icon: 'bot',       label: 'Régua de Disparo', pulse: true },
     ],
   },
 ];
