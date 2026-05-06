@@ -878,6 +878,23 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     }
   }
 
+  async function downloadMedia(url, filename) {
+    try {
+      const resp = await fetch(url);
+      const blob = await resp.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename || 'download';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+    } catch {
+      window.open(url, '_blank');
+    }
+  }
+
   function cancelRecording() {
     clearInterval(recTimerRef.current);
     if (mediaRecorderRef.current?.state === 'recording') {
@@ -1549,33 +1566,78 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                   <div className={`bubble ${msg.from === 'out' ? 'bubble-out' : 'bubble-in'}`}>
                     {msg.mediaType === 'image' && msg.mediaUrl ? (
                       <div>
-                        <img
-                          src={msg.mediaUrl}
-                          alt={msg.text || 'imagem'}
-                          style={{ maxWidth: 260, maxHeight: 260, borderRadius: 6, display: 'block', cursor: 'pointer' }}
-                          onClick={() => setLightboxUrl(msg.mediaUrl)}
-                        />
+                        <div style={{ position: 'relative', display: 'inline-block' }}>
+                          <img
+                            src={msg.mediaUrl}
+                            alt={msg.text || 'imagem'}
+                            style={{ maxWidth: 260, maxHeight: 260, borderRadius: 6, display: 'block', cursor: 'pointer' }}
+                            onClick={() => setLightboxUrl(msg.mediaUrl)}
+                          />
+                          <button
+                            onClick={() => downloadMedia(msg.mediaUrl, msg.text || 'imagem.jpg')}
+                            title="Baixar imagem"
+                            style={{
+                              position: 'absolute', bottom: 6, right: 6,
+                              background: 'rgba(0,0,0,0.55)', border: 'none', borderRadius: 6,
+                              color: '#fff', width: 28, height: 28, cursor: 'pointer',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}
+                          ><Icon name="download" size={14} /></button>
+                        </div>
                         {msg.text && msg.text !== '🖼 Imagem' && (
                           <div style={{ marginTop: 4, fontSize: 13 }}>{msg.text}</div>
                         )}
                       </div>
+                    ) : msg.mediaType === 'video' && msg.mediaUrl ? (
+                      <div>
+                        <video
+                          src={msg.mediaUrl}
+                          controls
+                          style={{ maxWidth: 280, maxHeight: 200, borderRadius: 6, display: 'block' }}
+                        />
+                        <button
+                          onClick={() => downloadMedia(msg.mediaUrl, msg.text || 'video.mp4')}
+                          title="Baixar vídeo"
+                          style={{
+                            marginTop: 4, display: 'flex', alignItems: 'center', gap: 5,
+                            background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                            fontSize: 12, color: msg.from === 'out' ? 'rgba(255,255,255,0.8)' : 'var(--g-600)',
+                          }}
+                        ><Icon name="download" size={13} /> Baixar vídeo</button>
+                      </div>
                     ) : msg.mediaType === 'document' && msg.mediaUrl ? (
-                      <a
-                        href={msg.mediaUrl}
-                        download={msg.text || 'arquivo'}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 8,
-                          color: msg.from === 'out' ? 'white' : 'var(--g-900)',
-                          textDecoration: 'none',
-                        }}
-                      >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ fontSize: 22, flexShrink: 0 }}>📄</span>
-                        <span style={{ fontSize: 12, wordBreak: 'break-all' }}>{msg.text || 'Arquivo'}</span>
-                      </a>
+                        <span style={{ fontSize: 12, wordBreak: 'break-all', flex: 1, color: msg.from === 'out' ? 'white' : 'var(--g-900)' }}>
+                          {msg.text || 'Arquivo'}
+                        </span>
+                        <button
+                          onClick={() => downloadMedia(msg.mediaUrl, msg.text || 'arquivo')}
+                          title="Baixar arquivo"
+                          style={{
+                            background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0,
+                            color: msg.from === 'out' ? 'rgba(255,255,255,0.8)' : 'var(--g-600)',
+                            display: 'flex', alignItems: 'center',
+                          }}
+                        ><Icon name="download" size={15} /></button>
+                      </div>
                     ) : msg.mediaType?.includes('audio') ? (
-                      msg.mediaUrl
-                        ? <AudioMessage url={msg.mediaUrl} isOut={msg.from === 'out'} />
-                        : <div style={{ fontSize: 12, color: msg.from === 'out' ? 'rgba(255,255,255,0.7)' : 'var(--g-500)', fontStyle: 'italic' }}>🎵 Carregando áudio…</div>
+                      msg.mediaUrl ? (
+                        <div>
+                          <AudioMessage url={msg.mediaUrl} isOut={msg.from === 'out'} />
+                          <button
+                            onClick={() => downloadMedia(msg.mediaUrl, msg.text || 'audio.ogg')}
+                            title="Baixar áudio"
+                            style={{
+                              marginTop: 4, display: 'flex', alignItems: 'center', gap: 5,
+                              background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                              fontSize: 12, color: msg.from === 'out' ? 'rgba(255,255,255,0.8)' : 'var(--g-600)',
+                            }}
+                          ><Icon name="download" size={13} /> Baixar áudio</button>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 12, color: msg.from === 'out' ? 'rgba(255,255,255,0.7)' : 'var(--g-500)', fontStyle: 'italic' }}>🎵 Carregando áudio…</div>
+                      )
                     ) : msg.from === 'out' && msg.agentName ? (
                       <>
                         <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.75)', marginBottom: 4 }}>{msg.agentName}:</div>
