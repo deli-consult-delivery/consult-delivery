@@ -1,0 +1,48 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-05-06T16:15:53Z",
+  "phase": null,
+  "phase_name": "Ad-hoc chat fixes",
+  "phase_dir": null,
+  "plan": null,
+  "task": null,
+  "total_tasks": null,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": 1, "name": "onPaste para colar texto e imagens/prints no campo de mensagem", "status": "done", "commit": "7a8df4e"},
+    {"id": 2, "name": "ImageLightbox — visualização de imagem com zoom e arrastar", "status": "done", "commit": "26c834f"},
+    {"id": 3, "name": "Download de mídias (imagem, vídeo, documento, áudio)", "status": "done", "commit": "ff00d84"},
+    {"id": 4, "name": "Fix áudio do celular não aparecia (INSERT filter muito restritivo)", "status": "done", "commit": "694ccaa"},
+    {"id": 5, "name": "Formatação WhatsApp (*bold*, _itálico_, ~tachado~, ```mono```)", "status": "done", "commit": "694ccaa"},
+    {"id": 6, "name": "Layout compacto — mais mensagens visíveis a 100% zoom", "status": "done", "commit": "95e4485"},
+    {"id": 7, "name": "Fix webhook fromMe — nome da conversa era 'Consult Delivery' em vez do cliente", "status": "done", "commit": "e39aefa"}
+  ],
+  "remaining_tasks": [
+    {"id": 8, "name": "Marca d'água nas fotos de perfil — WATERMARK_ON_MESSAGES=false não funcionou", "status": "not_started"}
+  ],
+  "blockers": [
+    {
+      "description": "Marca d'água nas fotos de perfil ainda aparece mesmo com WATERMARK_ON_MESSAGES=false no EasyPanel",
+      "type": "external",
+      "workaround": "Investigar logs do container Evolution API no EasyPanel, tentar restart do container ou variável alternativa"
+    }
+  ],
+  "human_actions_pending": [],
+  "decisions": [
+    {"decision": "onPaste cria File com nome 'imagem-colada.ext' para clipboard images sem nome", "rationale": "Supabase content column precisa de string não-vazia", "phase": null},
+    {"decision": "ImageLightbox como componente standalone antes de ChatScreen", "rationale": "Evita closure de estado dentro do return", "phase": null},
+    {"decision": "Download via fetch→blob", "rationale": "download attribute não funciona cross-origin (Evolution API / Supabase Storage)", "phase": null},
+    {"decision": "Filtro INSERT corrigido para !text && !media_url && !media_type", "rationale": "Áudio chega com media_url=null no INSERT, preenchido no UPDATE posterior", "phase": null},
+    {"decision": "formatWAText escapa HTML antes do parse markdown", "rationale": "Prevenir XSS em conteúdo de WhatsApp", "phase": null},
+    {"decision": "Webhook fromMe usa whatsapp_contacts.display_name como nome da conversa", "rationale": "pushName em fromMe é o nome da nossa conta, não do cliente", "phase": null},
+    {"decision": "Edge function evolution-webhook v22 deployada via MCP Supabase", "rationale": "Fix de nome da conversa ativo imediatamente sem aguardar CI", "phase": null}
+  ],
+  "uncommitted_files": [
+    ".claude/settings.json",
+    ".planning/STATE.md",
+    "WikiBrain/.obsidian/community-plugins.json",
+    "WikiBrain/.obsidian/workspace.json"
+  ],
+  "next_action": "Investigar marca d'água nas fotos de perfil: acessar EasyPanel → container Evolution API → logs → variável WATERMARK_ON_MESSAGES. Tentar restart do container se variável já está correta.",
+  "context_notes": "Toda a sessão foi bug fixing ad-hoc no ChatScreen e webhook evolution. Sem fase GSD ativa. Todos os 7 fixes foram commitados e pushados direto no main. edge function evolution-webhook está na versão 22."
+}
