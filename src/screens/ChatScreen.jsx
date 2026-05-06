@@ -220,6 +220,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [qrExpandedId, setQrExpandedId]   = useState(null);
   const [qrCreating, setQrCreating]       = useState(false);
   const [lightboxUrl, setLightboxUrl]     = useState(null);
+  const [replyTo, setReplyTo]             = useState(null);
+  const [hoveredMsgId, setHoveredMsgId]   = useState(null);
 
   const scrollRef     = useRef(null);
   const textareaRef   = useRef(null);
@@ -231,9 +233,10 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
   useEffect(() => { convsRef.current = convs; }, [convs]);
 
-  // Atualiza status de atendimento quando muda de conversa
+  // Atualiza status de atendimento quando muda de conversa; limpa reply pendente
   useEffect(() => {
     refreshStatus();
+    setReplyTo(null);
   }, [activeId, refreshStatus]);
 
   // Carrega customer quando muda de conversa
@@ -831,7 +834,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   async function loadMsgs(convId) {
     try {
       const { data } = await supabase.from('messages')
-        .select('id, direction, content, body, created_at, sender_name, media_url, media_type')
+        .select('id, direction, content, body, created_at, sender_name, media_url, media_type, whatsapp_msg_id, quoted_content')
         .eq('conversation_id', convId).order('created_at').limit(100);
       if (data) {
         setMessages(m => ({
@@ -847,6 +850,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               mediaType: msg.media_type || null,
               mediaUrl:  msg.media_url  || null,
               agentName: msg.sender_name || null,
+              waMsgId:   msg.whatsapp_msg_id || null,
+              replyTo:   msg.quoted_content || null,
             })),
         }));
       }
@@ -1014,11 +1019,13 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
     const now  = new Date();
     const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const currentReplyTo = replyTo;
     setMessages(m => ({
       ...m,
-      [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text, time, agentName }],
+      [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text, time, agentName, replyTo: currentReplyTo }],
     }));
     setDraft('');
+    setReplyTo(null);
     if (HAS_EVO && selectedInstance && active.whatsapp_chat_id) {
       setSending(true);
       const textToSend = agentName ? `*${agentName}:*\n${text}` : text;
@@ -1026,6 +1033,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         await sendTextMessage(selectedInstance, active.whatsapp_chat_id, textToSend);
         await supabase.from('messages').insert({
           conversation_id: active.id, direction: 'outbound', content: text, sender_name: agentName || null, created_at: now.toISOString(),
+          ...(currentReplyTo ? { quoted_content: currentReplyTo } : {}),
         });
         // Mudar status automaticamente se estava aguardando
         if (convStatus === 'aguardando') {
@@ -1576,8 +1584,49 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               minHeight: 0,
             }}>
               {activeMsgs.map((msg, i) => (
-                <div key={msg.id || i} style={{ display: 'flex', flexDirection: 'column', alignItems: msg.from === 'out' ? 'flex-end' : 'flex-start' }} className="slide-up">
+                <div
+                  key={msg.id || i}
+                  onMouseEnter={() => setHoveredMsgId(msg.id || i)}
+                  onMouseLeave={() => setHoveredMsgId(null)}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: msg.from === 'out' ? 'flex-end' : 'flex-start', position: 'relative' }}
+                  className="slide-up"
+                >
+                  {/* Botão responder — visível ao passar o mouse */}
+                  {hoveredMsgId === (msg.id || i) && (
+                    <button
+                      onClick={() => setReplyTo({ id: msg.id, from: msg.from, text: msg.text, mediaType: msg.mediaType })}
+                      title="Responder"
+                      style={{
+                        position: 'absolute',
+                        ...(msg.from === 'out' ? { left: -32 } : { right: -32 }),
+                        top: '50%', transform: 'translateY(-50%)',
+                        background: 'var(--white)', border: '1px solid var(--g-200)',
+                        borderRadius: '50%', width: 26, height: 26,
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: 'var(--g-500)', boxShadow: 'var(--sh-card)', fontSize: 14, zIndex: 10,
+                      }}
+                    >↩</button>
+                  )}
                   <div className={`bubble ${msg.from === 'out' ? 'bubble-out' : 'bubble-in'}`}>
+                    {/* Bloco citado — aparece quando é uma resposta */}
+                    {msg.replyTo && (
+                      <div style={{
+                        borderLeft: `3px solid ${msg.from === 'out' ? 'rgba(255,255,255,0.5)' : 'var(--red)'}`,
+                        background: msg.from === 'out' ? 'rgba(0,0,0,0.15)' : 'var(--g-100)',
+                        borderRadius: 4, padding: '4px 8px', marginBottom: 6, cursor: 'default',
+                      }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 2, color: msg.from === 'out' ? 'rgba(255,255,255,0.7)' : 'var(--red)' }}>
+                          {msg.replyTo.from === 'out' ? 'Você' : (active?.name || 'Cliente')}
+                        </div>
+                        <div style={{ fontSize: 11, opacity: 0.85, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>
+                          {msg.replyTo.mediaType === 'image' ? '🖼 Imagem'
+                           : msg.replyTo.mediaType === 'video' ? '🎬 Vídeo'
+                           : msg.replyTo.mediaType?.includes('audio') ? '🎵 Áudio'
+                           : msg.replyTo.mediaType === 'document' ? '📄 Arquivo'
+                           : msg.replyTo.text || ''}
+                        </div>
+                      </div>
+                    )}
                     {msg.mediaType === 'image' && msg.mediaUrl ? (
                       <div>
                         <div style={{ position: 'relative', display: 'inline-block' }}>
@@ -1741,6 +1790,33 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                       <span className="copilot-hint" style={{ marginLeft: 'auto' }}>
                         Pressione <kbd>Tab</kbd> pra aceitar
                       </span>
+                    </div>
+                  )}
+                  {/* ── Preview de resposta ── */}
+                  {replyTo && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '6px 10px', marginBottom: 6,
+                      background: 'var(--g-50)', borderRadius: 6,
+                      border: '1px solid var(--g-200)', borderLeft: '3px solid var(--red)',
+                    }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--red)', marginBottom: 1 }}>
+                          Respondendo a {replyTo.from === 'out' ? 'você mesmo' : (active?.name || 'cliente')}
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--g-600)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {replyTo.mediaType === 'image' ? '🖼 Imagem'
+                           : replyTo.mediaType === 'video' ? '🎬 Vídeo'
+                           : replyTo.mediaType?.includes('audio') ? '🎵 Áudio'
+                           : replyTo.mediaType === 'document' ? '📄 Arquivo'
+                           : replyTo.text || ''}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setReplyTo(null)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--g-400)', fontSize: 18, lineHeight: 1, padding: '0 2px' }}
+                        title="Cancelar resposta"
+                      >×</button>
                     </div>
                   )}
                   <div className="copilot-wrap" style={{ position: 'relative' }}>
