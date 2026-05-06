@@ -50,6 +50,96 @@ function playNotificationSound() {
   } catch { /* ignore em browsers que bloqueiam AudioContext */ }
 }
 
+function ImageLightbox({ url, onClose }) {
+  const [scale, setScale]   = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const dragging  = useRef(false);
+  const dragStart = useRef({ x: 0, y: 0, ox: 0, oy: 0 });
+
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  function onWheel(e) {
+    e.preventDefault();
+    setScale(s => Math.min(8, Math.max(1, s - e.deltaY * 0.001)));
+  }
+
+  function onMouseDown(e) {
+    if (scale <= 1) return;
+    dragging.current = true;
+    dragStart.current = { x: e.clientX, y: e.clientY, ox: offset.x, oy: offset.y };
+  }
+
+  function onMouseMove(e) {
+    if (!dragging.current) return;
+    setOffset({
+      x: dragStart.current.ox + (e.clientX - dragStart.current.x),
+      y: dragStart.current.oy + (e.clientY - dragStart.current.y),
+    });
+  }
+
+  function onMouseUp() { dragging.current = false; }
+
+  function reset() { setScale(1); setOffset({ x: 0, y: 0 }); }
+
+  return (
+    <div
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      onWheel={onWheel}
+      onMouseDown={onMouseDown}
+      onMouseMove={onMouseMove}
+      onMouseUp={onMouseUp}
+      onMouseLeave={onMouseUp}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: 'rgba(0,0,0,0.88)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        cursor: scale > 1 ? 'grab' : 'zoom-in',
+        userSelect: 'none',
+      }}
+    >
+      <img
+        src={url}
+        alt="preview"
+        draggable={false}
+        style={{
+          maxWidth: '90vw', maxHeight: '90vh',
+          transform: `scale(${scale}) translate(${offset.x / scale}px, ${offset.y / scale}px)`,
+          transformOrigin: 'center',
+          transition: dragging.current ? 'none' : 'transform 120ms ease',
+          borderRadius: 4,
+          boxShadow: '0 8px 40px rgba(0,0,0,0.6)',
+          pointerEvents: 'none',
+        }}
+      />
+      {/* controles */}
+      <div style={{
+        position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+        display: 'flex', gap: 8, alignItems: 'center',
+        background: 'rgba(0,0,0,0.6)', borderRadius: 20, padding: '6px 14px',
+      }}>
+        <button onClick={() => setScale(s => Math.max(1, +(s - 0.5).toFixed(1)))}
+          style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer', lineHeight: 1 }}>−</button>
+        <span onClick={reset} style={{ color: '#fff', fontSize: 12, minWidth: 40, textAlign: 'center', cursor: 'pointer' }}>
+          {Math.round(scale * 100)}%
+        </span>
+        <button onClick={() => setScale(s => Math.min(8, +(s + 0.5).toFixed(1)))}
+          style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer', lineHeight: 1 }}>+</button>
+      </div>
+      {/* fechar */}
+      <button onClick={onClose} style={{
+        position: 'fixed', top: 16, right: 16,
+        background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.2)',
+        color: '#fff', borderRadius: '50%', width: 36, height: 36,
+        fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>×</button>
+    </div>
+  );
+}
+
 export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [instances, setInstances]               = useState([]);
   const [selectedInstance, setSelectedInstance]  = useState(null);
@@ -115,6 +205,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [qrTab, setQrTab]                 = useState('quick');
   const [qrExpandedId, setQrExpandedId]   = useState(null);
   const [qrCreating, setQrCreating]       = useState(false);
+  const [lightboxUrl, setLightboxUrl]     = useState(null);
 
   const scrollRef     = useRef(null);
   const textareaRef   = useRef(null);
@@ -983,6 +1074,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   }
 
   return (
+    <>
     <div className="route-enter" style={{
       display: 'grid',
       gridTemplateColumns: isMobile
@@ -1461,7 +1553,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                           src={msg.mediaUrl}
                           alt={msg.text || 'imagem'}
                           style={{ maxWidth: 260, maxHeight: 260, borderRadius: 6, display: 'block', cursor: 'pointer' }}
-                          onClick={() => window.open(msg.mediaUrl)}
+                          onClick={() => setLightboxUrl(msg.mediaUrl)}
                         />
                         {msg.text && msg.text !== '🖼 Imagem' && (
                           <div style={{ marginTop: 4, fontSize: 13 }}>{msg.text}</div>
@@ -2004,6 +2096,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         </div>
       )}
     </div>
+    {lightboxUrl && <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
+    </>
   );
 }
 
