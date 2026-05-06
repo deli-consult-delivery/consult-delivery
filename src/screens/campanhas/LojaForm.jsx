@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import Icon from '../../components/Icon.jsx';
+import CustomSelect from '../../components/CustomSelect.jsx';
 import LogoUpload from './components/LogoUpload.jsx';
 
 const TIPOS = ['restaurante','pizzaria','doceria','hamburgueria','açaiteria','outro'];
@@ -153,9 +154,7 @@ export default function LojaForm({ go, mode, slug }) {
             <input value={form.slug} onChange={e=>set('slug',e.target.value.toLowerCase().replace(/[^a-z0-9-]/g,''))} style={inputStyle} placeholder="varandas-burguer" />
           </Field>
           <Field label="Tipo" required>
-            <select value={form.tipo} onChange={e=>set('tipo',e.target.value)} style={inputStyle}>
-              {TIPOS.map(t=><option key={t} value={t}>{t}</option>)}
-            </select>
+            <CustomSelect value={form.tipo} onChange={v=>set('tipo',v)} options={TIPOS} />
           </Field>
           <Field label="Nome fantasia" hint="Como aparece nas campanhas.">
             <input value={form.nome_fantasia} onChange={e=>set('nome_fantasia',e.target.value)} style={inputStyle} placeholder="Varanda's" />
@@ -202,9 +201,7 @@ export default function LojaForm({ go, mode, slug }) {
 
         <Section id="tom" title="Tom de voz">
           <Field label="Tom base" required>
-            <select value={form.tom_base} onChange={e=>set('tom_base',e.target.value)} style={inputStyle}>
-              {TONS.map(t=><option key={t} value={t}>{t}</option>)}
-            </select>
+            <CustomSelect value={form.tom_base} onChange={v=>set('tom_base',v)} options={TONS} />
           </Field>
           <Field label="Bordões da casa" hint="Frases que a loja usa, uma por linha.">
             <textarea value={form.bordoes} onChange={e=>set('bordoes',e.target.value)} style={{...inputStyle, minHeight:80}} placeholder="A melhor pizza da cidade\nDesde 1995..." />

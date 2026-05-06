@@ -91,7 +91,7 @@ export default function Sidebar({ route, setRoute, counts, isOpen }) {
       </div>
 
       {/* Grupos de navegação */}
-      <nav className="sidebar-nav">
+      <nav className="sidebar-nav scrollbar-hidden">
         {NAV_GROUPS.map((group, gi) => (
           <div key={gi} style={{ width: '100%' }}>
             {gi > 0 && <div className="side-divider" />}

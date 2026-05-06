@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import Icon from '../components/Icon.jsx';
+import CustomSelect from '../components/CustomSelect.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
 import UserAvatar from '../components/UserAvatar.jsx';
 import MultiViewSwitch from '../components/tasks/MultiViewSwitch.jsx';
@@ -504,25 +505,36 @@ function TaskModal({ task, defaultCol, onSave, onClose }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--g-600)', display: 'block', marginBottom: 6 }}>Prioridade</label>
-              <select className="input" value={form.priority} onChange={e => set('priority', e.target.value)}>
-                <option value="high">🔴 Urgente</option>
-                <option value="med">🟡 Média</option>
-                <option value="low">🟢 Baixa</option>
-              </select>
+              <CustomSelect
+                compact
+                value={form.priority}
+                onChange={v => set('priority', v)}
+                options={[
+                  { value:'high', label:'🔴 Urgente' },
+                  { value:'med',  label:'🟡 Média' },
+                  { value:'low',  label:'🟢 Baixa' },
+                ]}
+              />
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--g-600)', display: 'block', marginBottom: 6 }}>Coluna</label>
-              <select className="input" value={form.col} onChange={e => set('col', e.target.value)}>
-                {COLS.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-              </select>
+              <CustomSelect
+                compact
+                value={form.col}
+                onChange={v => set('col', v)}
+                options={COLS.map(c => ({ value:c.id, label:c.label }))}
+              />
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--g-600)', display: 'block', marginBottom: 6 }}>Responsável</label>
-              <select className="input" value={form.assignee} onChange={e => set('assignee', e.target.value)}>
-                {MEMBERS.map(u => <option key={u.avatar} value={u.avatar}>{u.name.split(' ')[0]}</option>)}
-              </select>
+              <CustomSelect
+                compact
+                value={form.assignee}
+                onChange={v => set('assignee', v)}
+                options={MEMBERS.map(u => ({ value:u.avatar, label:u.name.split(' ')[0] }))}
+              />
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--g-600)', display: 'block', marginBottom: 6 }}>Prazo</label>
@@ -531,10 +543,12 @@ function TaskModal({ task, defaultCol, onSave, onClose }) {
           </div>
           <div>
             <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--g-600)', display: 'block', marginBottom: 6 }}>Agente IA (opcional)</label>
-            <select className="input" value={form.agent} onChange={e => set('agent', e.target.value)}>
-              <option value="">— Nenhum —</option>
-              {AGENTS.map(a => <option key={a.id} value={a.id}>{a.name} · {a.role}</option>)}
-            </select>
+            <CustomSelect
+              compact
+              value={form.agent}
+              onChange={v => set('agent', v)}
+              options={[{ value:'', label:'— Nenhum —' }, ...AGENTS.map(a => ({ value:a.id, label:`${a.name} · ${a.role}` }))]}
+            />
           </div>
           <div>
             <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--g-600)', display: 'block', marginBottom: 6 }}>

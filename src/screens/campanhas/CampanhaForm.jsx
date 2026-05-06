@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import Icon from '../../components/Icon.jsx';
+import CustomSelect from '../../components/CustomSelect.jsx';
 import EmptyState from './components/EmptyState.jsx';
 
 const WEBHOOK_BASE = import.meta.env.VITE_N8N_WEBHOOK_BASE;
@@ -123,20 +124,22 @@ export default function CampanhaForm({ go, params }) {
       <form onSubmit={handleSubmit}>
         <div style={{ background:'#1a1a1a', border:'1px solid #2a2a2a', borderRadius:12, padding:20, marginBottom:16 }}>
           <Field label="Loja" required>
-            <select value={form.loja_id} onChange={e=>set('loja_id',e.target.value)} style={inputStyle} disabled={!hasSkillLojas}>
-              <option value="">Selecione...</option>
-              {lojas.map(l=><option key={l.id} value={l.id}>{l.nome}</option>)}
-            </select>
+            <CustomSelect
+              value={form.loja_id}
+              onChange={v=>set('loja_id',v)}
+              options={lojas.map(l=>({ value:l.id, label:l.nome }))}
+              placeholder="Selecione uma loja..."
+              disabled={!hasSkillLojas}
+            />
           </Field>
 
           <Field label="Tipo de campanha" required>
-            <select value={form.tipo} onChange={e=>set('tipo',e.target.value)} style={inputStyle}>
-              {TIPOS.map(g=>(
-                <optgroup key={g.group} label={g.group}>
-                  {g.items.map(i=><option key={i.value} value={i.value}>{i.label}</option>)}
-                </optgroup>
-              ))}
-            </select>
+            <CustomSelect
+              value={form.tipo}
+              onChange={v=>set('tipo',v)}
+              options={TIPOS.map(g=>({ label:g.group, items:g.items }))}
+              groups
+            />
           </Field>
 
           <Field label="Canal" required>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import Icon from '../components/Icon.jsx';
+import CustomSelect from '../components/CustomSelect.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
 import ConversationStatusBar from '../components/ConversationStatusBar.jsx';
 import { useConversationStatus, STATUS_LABELS, STATUS_COLORS } from '../lib/conversationStatus.js';
@@ -1003,19 +1004,17 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           </div>
 
           {instances.length > 0 && (
-            <select
-              value={selectedInstance || ''}
-              onChange={e => setSelectedInstance(e.target.value || null)}
-              className="input"
-              style={{ fontSize: 12, padding: '6px 10px', marginBottom: 10 }}
-            >
-              {instances.map(inst => (
-                <option key={inst.id} value={inst.instance_name}>
-                  {inst.status === 'connected' ? '🟢' : '🔴'} {inst.instance_name}
-                  {inst.phone ? ` · ${inst.phone}` : ''}
-                </option>
-              ))}
-            </select>
+            <div style={{ marginBottom: 10 }}>
+              <CustomSelect
+                compact
+                value={selectedInstance || ''}
+                onChange={v => setSelectedInstance(v || null)}
+                options={instances.map(inst => ({
+                  value: inst.instance_name,
+                  label: `${inst.status === 'connected' ? '🟢' : '🔴'} ${inst.instance_name}${inst.phone ? ` · ${inst.phone}` : ''}`,
+                }))}
+              />
+            </div>
           )}
 
 
@@ -2528,11 +2527,14 @@ function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved,
             <div style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600, padding: '4px 0' }}>✅ Adicionado ao pipeline "{pipeline}"</div>
           ) : showPipeline ? (
             <div style={{ display: 'flex', gap: 6 }}>
-              <select className="input" style={{ flex: 1, fontSize: 12, padding: '6px 8px' }}
-                value={pipeline} onChange={e => setPipeline(e.target.value)}>
-                <option value="">Selecionar pipeline…</option>
-                {PIPELINES.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
+              <div style={{ flex: 1 }}>
+                <CustomSelect
+                  compact
+                  value={pipeline}
+                  onChange={v => setPipeline(v)}
+                  options={[{ value:'', label:'Selecionar pipeline…' }, ...PIPELINES.map(p => ({ value:p, label:p }))]}
+                />
+              </div>
               <button className="btn-primary" style={{ padding: '6px 10px', fontSize: 12 }} onClick={confirmPipeline}>OK</button>
               <button className="btn-icon" onClick={() => setShowPipeline(false)}><Icon name="x" size={13} /></button>
             </div>
@@ -2648,11 +2650,14 @@ function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved,
             <div style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600, padding: '4px 0' }}>✅ Conversa transferida com sucesso</div>
           ) : showTransfer ? (
             <div style={{ display: 'flex', gap: 6 }}>
-              <select className="input" style={{ flex: 1, fontSize: 12, padding: '6px 8px' }}
-                value={transferTo} onChange={e => setTransferTo(e.target.value)}>
-                <option value="">Selecionar agente…</option>
-                {members.map(m => <option key={m.id} value={m.id}>{m.full_name || m.email}</option>)}
-              </select>
+              <div style={{ flex: 1 }}>
+                <CustomSelect
+                  compact
+                  value={transferTo}
+                  onChange={v => setTransferTo(v)}
+                  options={[{ value:'', label:'Selecionar agente…' }, ...members.map(m => ({ value:m.id, label:m.full_name || m.email }))]}
+                />
+              </div>
               <button className="btn-primary" style={{ padding: '6px 10px', fontSize: 12 }} onClick={confirmTransfer}>OK</button>
               <button className="btn-icon" onClick={() => setShowTransfer(false)}><Icon name="x" size={13} /></button>
             </div>
@@ -2670,10 +2675,12 @@ function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved,
             <div style={{ background: 'var(--g-50)', border: '1px solid var(--g-200)', borderRadius: 8, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
               <input className="input" style={{ fontSize: 12, padding: '6px 8px' }} placeholder="Título da tarefa *" value={taskTitle} onChange={e => setTaskTitle(e.target.value)} autoFocus />
               <input className="input" style={{ fontSize: 12, padding: '6px 8px' }} type="date" value={taskDue} onChange={e => setTaskDue(e.target.value)} />
-              <select className="input" style={{ fontSize: 12, padding: '6px 8px' }} value={taskAssignee} onChange={e => setTaskAssignee(e.target.value)}>
-                <option value="">Responsável (opcional)</option>
-                {members.map(m => <option key={m.id} value={m.id}>{m.full_name || m.email}</option>)}
-              </select>
+              <CustomSelect
+                compact
+                value={taskAssignee}
+                onChange={v => setTaskAssignee(v)}
+                options={[{ value:'', label:'Responsável (opcional)' }, ...members.map(m => ({ value:m.id, label:m.full_name || m.email }))]}
+              />
               <div style={{ display: 'flex', gap: 6 }}>
                 <button className="btn-primary" style={{ flex: 1, fontSize: 12, padding: '6px 0', justifyContent: 'center' }}
                   onClick={saveTask} disabled={taskSaving || !taskTitle.trim()}>

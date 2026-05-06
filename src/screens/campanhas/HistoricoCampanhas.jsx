@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import Icon from '../../components/Icon.jsx';
+import CustomSelect from '../../components/CustomSelect.jsx';
 import StatusBadge from './components/StatusBadge.jsx';
 import EmptyState from './components/EmptyState.jsx';
 
@@ -49,13 +50,20 @@ export default function HistoricoCampanhas({ go }) {
       </div>
 
       <div style={{ display:'flex', gap:10, flexWrap:'wrap', marginBottom:20, background:'#1a1a1a', border:'1px solid #2a2a2a', borderRadius:12, padding:14 }}>
-        <select value={filters.loja} onChange={e=>setFilters(f=>({...f,loja:e.target.value}))} style={filterStyle}>
-          <option value="">Todas as lojas</option>
-          {lojas.map(l=><option key={l.id} value={l.id}>{l.nome}</option>)}
-        </select>
-        <select value={filters.status} onChange={e=>setFilters(f=>({...f,status:e.target.value}))} style={filterStyle}>
-          {STATUS_OPTIONS.map(s=><option key={s} value={s}>{s}</option>)}
-        </select>
+        <div style={{ minWidth: 180 }}>
+          <CustomSelect
+            value={filters.loja}
+            onChange={v=>setFilters(f=>({...f,loja:v}))}
+            options={[{ value:'', label:'Todas as lojas' }, ...lojas.map(l=>({ value:l.id, label:l.nome }))]}
+          />
+        </div>
+        <div style={{ minWidth: 180 }}>
+          <CustomSelect
+            value={filters.status}
+            onChange={v=>setFilters(f=>({...f,status:v}))}
+            options={STATUS_OPTIONS.map(s=>({ value:s, label:s }))}
+          />
+        </div>
         <input type="date" value={filters.start ? filters.start.slice(0,10) : ''} onChange={e=>setFilters(f=>({...f,start:e.target.value?e.target.value+'T00:00:00':''}))} style={filterStyle} />
         <input type="date" value={filters.end ? filters.end.slice(0,10) : ''} onChange={e=>setFilters(f=>({...f,end:e.target.value?e.target.value+'T23:59:59':''}))} style={filterStyle} />
         <button onClick={fetchCampanhas} style={{ background:'#252525', border:'1px solid #2a2a2a', color:'#fff', padding:'8px 14px', borderRadius:8, cursor:'pointer', fontSize:13 }}>
