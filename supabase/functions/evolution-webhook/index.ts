@@ -160,11 +160,11 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
     const stanzaId = contextInfo.stanzaId as string;
     // Tenta encontrar no banco pelo whatsapp_msg_id
     const { data: qMsg } = await supabase.from('messages')
-      .select('id, direction, content, media_type')
+      .select('id, direction, content, media_type, media_url')
       .eq('whatsapp_msg_id', stanzaId)
       .maybeSingle();
     if (qMsg) {
-      return { id: qMsg.id, waMsgId: stanzaId, from: qMsg.direction === 'outbound' ? 'out' : 'in', text: qMsg.content || '', mediaType: qMsg.media_type || null };
+      return { id: qMsg.id, waMsgId: stanzaId, from: qMsg.direction === 'outbound' ? 'out' : 'in', text: qMsg.content || '', mediaType: qMsg.media_type || null, mediaUrl: qMsg.media_url || null };
     }
     // Não está no banco — monta pelo contextInfo.quotedMessage
     const qm = contextInfo.quotedMessage as Record<string, unknown> | undefined;

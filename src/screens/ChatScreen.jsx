@@ -523,6 +523,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                 mediaType,
                 mediaUrl:  msg.media_url || null,
                 agentName: msg.sender_name || null,
+                waMsgId:   msg.whatsapp_msg_id || null,
+                replyTo:   msg.quoted_content || null,
               }],
             };
           });
@@ -1623,13 +1625,22 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                         <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 2, color: msg.from === 'out' ? 'rgba(255,255,255,0.7)' : 'var(--red)' }}>
                           {msg.replyTo.from === 'out' ? 'Você' : (active?.name || 'Cliente')}
                         </div>
-                        <div style={{ fontSize: 11, opacity: 0.85, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>
-                          {msg.replyTo.mediaType === 'image' ? '🖼 Imagem'
-                           : msg.replyTo.mediaType === 'video' ? '🎬 Vídeo'
-                           : msg.replyTo.mediaType?.includes('audio') ? '🎵 Áudio'
-                           : msg.replyTo.mediaType === 'document' ? '📄 Arquivo'
-                           : msg.replyTo.text || ''}
-                        </div>
+                        {msg.replyTo.mediaType === 'image' && msg.replyTo.mediaUrl ? (
+                          <img
+                            src={msg.replyTo.mediaUrl}
+                            alt="imagem citada"
+                            onClick={e => { e.stopPropagation(); setLightboxUrl(msg.replyTo.mediaUrl); }}
+                            style={{ maxWidth: 120, maxHeight: 60, borderRadius: 4, display: 'block', cursor: 'zoom-in', marginTop: 2 }}
+                          />
+                        ) : (
+                          <div style={{ fontSize: 11, opacity: 0.85, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>
+                            {msg.replyTo.mediaType === 'image' ? '🖼 Imagem'
+                             : msg.replyTo.mediaType === 'video' ? '🎬 Vídeo'
+                             : msg.replyTo.mediaType?.includes('audio') ? '🎵 Áudio'
+                             : msg.replyTo.mediaType === 'document' ? '📄 Arquivo'
+                             : msg.replyTo.text || ''}
+                          </div>
+                        )}
                       </div>
                     )}
                     {msg.mediaType === 'image' && msg.mediaUrl ? (
