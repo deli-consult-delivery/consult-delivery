@@ -158,7 +158,17 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
       .eq('whatsapp_msg_id', msgId).maybeSingle();
     if (alreadySaved) return;
 
-    const fmConvId = await upsertConversation({ tenantId, instanceId: inst.id, chatId, isGroup, pushName });
+    // Para mensagens enviadas do celular, pushName = nome da nossa conta (ex: "Consult Delivery"),
+    // não o nome do cliente. Busca o nome real do destinatário pelo JID.
+    const { data: recipientContact } = await supabase
+      .from('whatsapp_contacts')
+      .select('display_name')
+      .eq('tenant_id', tenantId)
+      .eq('evolution_jid', chatId)
+      .maybeSingle();
+    const recipientName = recipientContact?.display_name || 'Desconhecido';
+
+    const fmConvId = await upsertConversation({ tenantId, instanceId: inst.id, chatId, isGroup, pushName: recipientName });
     if (!fmConvId) return;
 
     // Dedup 2: plataforma salvou sem whatsapp_msg_id — apenas vincula o ID
