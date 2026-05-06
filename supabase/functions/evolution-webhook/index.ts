@@ -185,7 +185,7 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
       conversation_id: fmConvId,
       whatsapp_msg_id: msgId,
       direction:       'outbound',
-      sender_name:     'Equipe',
+      sender_name:     null,
       content:         messageText,
       created_at:      msgTimestamp,
     });
@@ -486,7 +486,7 @@ async function handleSendMessage({ inst, tenantId, data }: {
     conversation_id: conv.id,
     whatsapp_msg_id: msgId,
     direction:       'outbound',
-    sender_name:     'Equipe',
+    sender_name:     null,
     content:         messageText,
     created_at:      ts,
   });
