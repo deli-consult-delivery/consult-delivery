@@ -158,7 +158,8 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
   async function buildQuotedContent(): Promise<object | null> {
     if (!contextInfo?.stanzaId) return null;
     const stanzaId = contextInfo.stanzaId as string;
-    // Tenta encontrar no banco pelo whatsapp_msg_id
+
+    // 1. Tenta encontrar no banco pelo whatsapp_msg_id
     const { data: qMsg } = await supabase.from('messages')
       .select('id, direction, content, media_type, media_url')
       .eq('whatsapp_msg_id', stanzaId)
@@ -166,21 +167,40 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
     if (qMsg) {
       return { id: qMsg.id, waMsgId: stanzaId, from: qMsg.direction === 'outbound' ? 'out' : 'in', text: qMsg.content || '', mediaType: qMsg.media_type || null, mediaUrl: qMsg.media_url || null };
     }
-    // Não está no banco — monta pelo contextInfo.quotedMessage
+
+    // 2. Não está no banco — infere direção pelo contextInfo.participant
+    // Em PV: participant === chatId → cliente enviou (in); participant ausente/outro → nós enviamos (out)
+    const participant = contextInfo.participant as string | undefined;
+    const qFrom: string | null = !isGroup && participant
+      ? (participant.split('@')[0] === chatId.split('@')[0] ? 'in' : 'out')
+      : null;
+
+    // 3. Tenta montar pelo quotedMessage (Evolution/Baileys às vezes omite este campo)
     const qm = contextInfo.quotedMessage as Record<string, unknown> | undefined;
-    if (!qm) return null;
+    if (!qm) {
+      // quotedMessage ausente mas stanzaId presente → sabemos que é uma resposta, exibe marcação mínima
+      return { waMsgId: stanzaId, from: qFrom, text: '', mediaType: null };
+    }
+
     const qIsImage    = !!qm.imageMessage;
     const qIsVideo    = !!qm.videoMessage;
     const qIsAudio    = !!qm.audioMessage || !!qm.pttMessage;
     const qIsDocument = !!qm.documentMessage;
+
     const qText = (qm.conversation as string)
       || ((qm.extendedTextMessage as Record<string, string>)?.text)
       || ((qm.imageMessage    as Record<string, string>)?.caption)
       || ((qm.videoMessage    as Record<string, string>)?.caption)
       || ((qm.documentMessage as Record<string, string>)?.title)
       || '';
+
     const qMediaType = qIsImage ? 'image' : qIsVideo ? 'video' : qIsAudio ? 'audio' : qIsDocument ? 'document' : null;
-    return { waMsgId: stanzaId, from: null, text: qText, mediaType: qMediaType };
+
+    // Extrai jpegThumbnail para imagens citadas (thumbnail inline em base64)
+    const qJpegThumb = qIsImage ? ((qm.imageMessage as Record<string, string>)?.jpegThumbnail) : null;
+    const qMediaUrl  = qJpegThumb ? `data:image/jpeg;base64,${qJpegThumb}` : null;
+
+    return { waMsgId: stanzaId, from: qFrom, text: qText, mediaType: qMediaType, ...(qMediaUrl ? { mediaUrl: qMediaUrl } : {}) };
   }
 
   const msgTimestamp = msgData.messageTimestamp
