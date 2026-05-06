@@ -110,7 +110,6 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
 }) {
   const msgData = Array.isArray(data) ? data[0] : data;
   if (!msgData?.key) return;
-  if (msgData.key.fromMe) return; // outbound já tratado pelo SEND_MESSAGE
 
   // ── Dados básicos ─────────────────────────────────────────────────────────
 
@@ -150,6 +149,49 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
   const msgTimestamp = msgData.messageTimestamp
     ? new Date(Number(msgData.messageTimestamp) * 1000).toISOString()
     : new Date().toISOString();
+
+  // ── Mensagens enviadas pelo próprio número (plataforma ou celular físico) ──
+
+  if (msgData.key.fromMe) {
+    // Dedup 1: já salva pelo handleSendMessage ou iteração anterior
+    const { data: alreadySaved } = await supabase.from('messages').select('id')
+      .eq('whatsapp_msg_id', msgId).maybeSingle();
+    if (alreadySaved) return;
+
+    const fmConvId = await upsertConversation({ tenantId, instanceId: inst.id, chatId, isGroup, pushName });
+    if (!fmConvId) return;
+
+    // Dedup 2: plataforma salvou sem whatsapp_msg_id — apenas vincula o ID
+    if (messageText) {
+      const rawText = messageText.replace(/^\*[^*]+:\*\n/, '');
+      const thirtySecsAgo = new Date(Date.now() - 30000).toISOString();
+      const { data: existingByContent } = await supabase.from('messages').select('id')
+        .eq('conversation_id', fmConvId)
+        .eq('direction', 'outbound')
+        .eq('content', rawText)
+        .is('whatsapp_msg_id', null)
+        .gte('created_at', thirtySecsAgo)
+        .maybeSingle();
+      if (existingByContent) {
+        await supabase.from('messages').update({ whatsapp_msg_id: msgId }).eq('id', existingByContent.id);
+        console.log('[WEBHOOK][MESSAGES_UPSERT] fromMe dedup: vinculado whatsapp_msg_id', msgId);
+        return;
+      }
+    }
+
+    // Celular físico — salva como outbound
+    await supabase.from('messages').insert({
+      tenant_id:       tenantId,
+      conversation_id: fmConvId,
+      whatsapp_msg_id: msgId,
+      direction:       'outbound',
+      sender_name:     'Equipe',
+      content:         messageText,
+      created_at:      msgTimestamp,
+    });
+    console.log('[WEBHOOK][MESSAGES_UPSERT] fromMe: mensagem do celular físico salva', msgId);
+    return;
+  }
 
   // ── Detecção de menção a agente ───────────────────────────────────────────
 
