@@ -1408,7 +1408,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                     onClick={async () => {
                       await reopen();
                       await supabase.from('conversations').update({ status_v2: 'in_progress' }).eq('id', activeId);
-                      setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status_v2: 'in_progress' } : c));
+                      setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'aguardando', status_v2: 'in_progress' } : c));
                     }}
                     disabled={statusLoading}
                     style={{
@@ -1425,7 +1425,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                     onClick={async () => {
                       await finish();
                       await supabase.from('conversations').update({ status_v2: 'closed' }).eq('id', activeId);
-                      setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status_v2: 'closed' } : c));
+                      setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'finalizado', status_v2: 'closed' } : c));
                     }}
                     disabled={statusLoading}
                     style={{
