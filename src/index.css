@@ -238,6 +238,14 @@ input, textarea { font-family: inherit; }
 .dark-scroll::-webkit-scrollbar-track { background: transparent; }
 .dark-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
 
+.scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
 /* ─── ANIMATIONS ──────────────────────────────────────────── */
 @keyframes pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
@@ -268,6 +276,11 @@ input, textarea { font-family: inherit; }
   40%           { opacity: 1;   transform: translateY(-3px); }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes indeterminate {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(0%); }
+  100% { transform: translateX(100%); }
+}
 @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
 @keyframes blink-rec { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
 .rec-dot { animation: blink-rec 1s infinite ease-in-out; }

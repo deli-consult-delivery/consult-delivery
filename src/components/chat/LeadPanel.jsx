@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
+import CustomSelect from '../CustomSelect.jsx';
 import LeadPanelHeader from './LeadPanelHeader.jsx';
 import LeadProfileSection from './LeadProfileSection.jsx';
 import LeadNotesSection from './LeadNotesSection.jsx';
@@ -105,15 +106,14 @@ export default function LeadPanel({ conversation, customer, tenantId, members = 
             </div>
           ) : showPipeline ? (
             <div style={{ display: 'flex', gap: 6 }}>
-              <select
-                className="input"
-                style={{ flex: 1, fontSize: 12, padding: '6px 8px' }}
-                value={pipeline}
-                onChange={e => setPipeline(e.target.value)}
-              >
-                <option value="">Selecionar pipeline…</option>
-                {PIPELINES.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
+              <div style={{ flex: 1 }}>
+                <CustomSelect
+                  compact
+                  value={pipeline}
+                  onChange={v => setPipeline(v)}
+                  options={[{ value:'', label:'Selecionar pipeline…' }, ...PIPELINES.map(p => ({ value:p, label:p }))]}
+                />
+              </div>
               <button className="btn-primary" style={{ padding: '6px 10px', fontSize: 12 }} onClick={confirmPipeline}>OK</button>
               <button className="btn-icon" onClick={() => setShowPipeline(false)}>✕</button>
             </div>
@@ -154,15 +154,12 @@ export default function LeadPanel({ conversation, customer, tenantId, members = 
                 value={taskDue}
                 onChange={e => setTaskDue(e.target.value)}
               />
-              <select
-                className="input"
-                style={{ fontSize: 12, padding: '6px 8px' }}
+              <CustomSelect
+                compact
                 value={taskAssignee}
-                onChange={e => setTaskAssignee(e.target.value)}
-              >
-                <option value="">Responsável (opcional)</option>
-                {members.map(m => <option key={m.id} value={m.id}>{m.full_name || m.email}</option>)}
-              </select>
+                onChange={v => setTaskAssignee(v)}
+                options={[{ value:'', label:'Responsável (opcional)' }, ...members.map(m => ({ value:m.id, label:m.full_name || m.email }))]}
+              />
               <div style={{ display: 'flex', gap: 6 }}>
                 <button
                   className="btn-primary"
