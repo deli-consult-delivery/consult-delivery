@@ -619,7 +619,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         avatar: (g.group_name || 'G').slice(0, 2).toUpperCase(),
         type: 'group', whatsapp_chat_id: g.evolution_jid, waGroupId: g.id,
         groupType: 'Grupo WhatsApp', preview: 'Grupo WhatsApp',
-        time: '', unread: 0, online: false, messages: [],
+        time: '', unread: 0, online: false, messages: [], status: 'finalizado',
       }));
       setConvs(prev => [...prev.filter(c => !c.id.startsWith('wag-')), ...groupConvs]);
     } catch { /* ignore */ }
@@ -1096,8 +1096,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     if (tab === 'groups' && c.type !== 'group')    return false;
     if (tab === 'int'    && !(c.type === 'internal' || c.type === 'agent')) return false;
     if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
-    // Aba Aberto/Finalizado — só conversas reais (não wag- nem chan-)
-    if (!c.id.startsWith('wag-') && !c.id.startsWith('chan-')) {
+    // Aba Aberto/Finalizado (chan- sempre visível — canais internos não têm ciclo de status)
+    if (!c.id.startsWith('chan-')) {
       const convStatus = c.status || 'aguardando';
       if (statusTab === 'aberto'     && convStatus === 'finalizado') return false;
       if (statusTab === 'finalizado' && convStatus !== 'finalizado') return false;
