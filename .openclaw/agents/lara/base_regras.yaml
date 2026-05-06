@@ -1,0 +1,224 @@
+# ============================================================
+# BASE DE REGRAS - LARA (Agente Régua de Disparo)
+# Herda regras do analista-ifood/base_regras.yaml + adições específicas de CRM/régua
+# Versão: 1.0 | 06/05/2026
+# ============================================================
+
+linguagem:
+  proibido_usar:
+    - "Promoção"
+    - "Termos técnicos sem explicação (ROAS, cohort, uplift)"
+    - "Linguagem corporativa"
+    - "Texto longo na legenda final"
+  preferir:
+    - "Oferta"
+    - "Linguagem do dia a dia"
+    - "Frases curtas e diretas"
+    - "Exemplos com números concretos"
+  tom: "Amigável, direto, prático, com pé no chão. Wélida fala com dono de delivery, não com publicitário."
+
+estrutura_regua:
+  cobertura_minima_dias: 30
+  cobertura_padrao_dias: 90
+  cobertura_maxima_dias: 180
+
+  estagios_obrigatorios:
+    lead_frio:
+      caracteristica: "Cliente cadastrado, nunca comprou"
+      campanhas_minimo: 2
+      campanhas_maximo: 3
+      objetivo_principal: vendas
+      cupom_recomendado: "BEMVINDO15 (15% primeira compra)"
+      horario_ideal: "11:30-12:30 (próximo ao almoço)"
+
+    primeiro_pedido:
+      caracteristica: "Comprou 1 vez"
+      campanhas_minimo: 1
+      campanhas_maximo: 2
+      objetivo_principal: relacionamento
+      cupom_recomendado: "OBRIGADO5 (5% segundo pedido)"
+      horario_ideal: "1-3 dias após pedido"
+
+    recorrente_novo:
+      caracteristica: "2-3 pedidos"
+      campanhas_minimo: 2
+      campanhas_maximo: 3
+      objetivo_principal: fidelizacao
+      cupom_recomendado: "leve sem cupom — só relacionamento"
+
+    recorrente_fiel:
+      caracteristica: "4+ pedidos em 60 dias"
+      campanhas_minimo: 2
+      campanhas_maximo: 3
+      objetivo_principal: fidelizacao
+      cupom_recomendado: "VIP10 — programa fidelidade"
+
+    inativo_recente:
+      caracteristica: "15-30 dias sem comprar"
+      campanhas_minimo: 2
+      campanhas_maximo: 3
+      objetivo_principal: vendas
+      cupom_recomendado: "leve, frete grátis"
+      horario_ideal: "horário do último pedido"
+
+    inativo_medio:
+      caracteristica: "30-60 dias sem comprar"
+      campanhas_minimo: 2
+      campanhas_maximo: 3
+      objetivo_principal: vendas
+      cupom_recomendado: "agressivo: 10-15% off"
+
+    cliente_perdido:
+      caracteristica: "60+ dias sem comprar"
+      campanhas_minimo: 2
+      campanhas_maximo: 3
+      objetivo_principal: vendas
+      cupom_recomendado: "muito agressivo: 20% ou frete grátis + brinde"
+      contexto: "Última tentativa de win-back. Vale investir."
+
+    aniversariante:
+      caracteristica: "No mês do aniversário"
+      campanhas_minimo: 1
+      campanhas_maximo: 2
+      objetivo_principal: relacionamento
+      cupom_recomendado: "ANIVER15 com brinde"
+      horario_ideal: "manhã do dia, ou véspera"
+
+    pesquisa_satisfacao:
+      caracteristica: "1-2 dias após entrega"
+      campanhas_minimo: 1
+      campanhas_maximo: 2
+      objetivo_principal: pesquisa
+      cupom_recomendado: "sem cupom — NPS puro"
+      categoria_meta: utility
+
+  total_minimo_campanhas: 18
+  total_maximo_campanhas: 40
+  total_recomendado: 28
+
+categoria_meta:
+  utility:
+    quando_usar:
+      - "Lembrete (você esqueceu seu cupom)"
+      - "Atualização de status do pedido"
+      - "Pesquisa de satisfação"
+      - "Aniversário (felicitação)"
+      - "Notificação de entrega"
+    custo: "Mais barato na Meta"
+    aprovacao_meta: "Mais fácil"
+
+  marketing:
+    quando_usar:
+      - "Apresentação de produto novo"
+      - "Oferta agressiva"
+      - "Win-back direto"
+    custo: "Mais caro na Meta"
+    aprovacao_meta: "Mais rigoroso, pode ser rejeitado"
+
+  regra_decisao:
+    - "Sempre tentar utility primeiro"
+    - "Se a copy ficar artificial pra caber em utility, marcar como marketing"
+
+regras_copy:
+  estrutura_legenda:
+    - "Gancho (1 linha curta)"
+    - "Benefício claro (2 linhas)"
+    - "CTA específico (1 linha)"
+    - "Cupom destacado (com validade)"
+
+  formatacao_whatsapp:
+    negrito: "*texto*"
+    italico: "_texto_"
+    risco: "~texto~"
+    monospace: "```texto```"
+    limite_caracteres: 600
+    emojis: "Com moderação. Máximo 3 por mensagem."
+
+  personalizacao_obrigatoria:
+    - "{nome_cliente} — primeiro nome"
+    - "{produto_preferido} — quando aplicável"
+    - "{ultimo_pedido} — referência ao histórico"
+    - "{nome_loja} — sempre que assina"
+
+  cupom_destacado:
+    posicao: "Final da legenda"
+    formato: "Use o código *NOMECUPOM* até DD/MM/AAAA"
+    informar: "validade, valor mínimo (se houver)"
+
+regras_midia:
+  imagem:
+    iluminacao: "Boa, natural se possível"
+    fundo: "Limpo, neutro"
+    composicao: "Produto centralizado, ocupando 60-70% do frame"
+    cupom_visual: "Destacado em badge/selo na imagem"
+    identidade: "Logo + cores da marca presentes"
+    proporcao_recomendada: "1:1 (quadrada) ou 4:5 (vertical)"
+    tamanho_minimo: "1080x1080px"
+
+  video:
+    duracao_maxima: "30 segundos"
+    primeiros_3_segundos: "Tem que prender atenção"
+    legendado: "Sempre (maioria assiste sem som)"
+
+  audio:
+    duracao_maxima: "30 segundos"
+    voz_humana: "Preferencial sobre TTS"
+
+custos_referencia:
+  whatsapp_oficial_meta:
+    utility_brl: 0.05
+    marketing_brl: 0.15
+    contexto: "Custo aproximado por disparo. Calcular antes de aprovar régua agressiva."
+
+  nexus_geracao:
+    pesquisa_brl: 5.00  # estimativa, ajustar conforme pricing real
+    regua_brl: 8.00
+    midia_por_campanha_brl: 12.00  # 3 variações
+    contexto: "Custo aproximado para gerar régua completa"
+
+  estimativa_total_regua:
+    formula: "pesquisa + regua + (n_campanhas * midia)"
+    exemplo_28_campanhas: "5 + 8 + (28 * 12) = R$ 349 por loja"
+    contexto: "Sempre informar custo estimado à Wélida ANTES de chamar Nexus-Mídia"
+
+prioridades_geracao:
+  ordem_recomendada:
+    - "Win-back (cliente perdido) — maior ROI"
+    - "Inativos médios — mais volume"
+    - "Lead frio — aquisição"
+    - "Pesquisa satisfação — utility barata"
+    - "Recorrentes — manutenção"
+  regra_geral: "Quando custo de mídia for alto, priorizar campanhas de maior conversão histórica"
+
+aprovacao_meta:
+  template_utility_seguro:
+    - "Lembrete de cupom: 'Seu cupom NOMECUPOM expira em X dias'"
+    - "Confirmação de entrega: 'Seu pedido foi entregue! Como foi?'"
+    - "Aniversário: 'Hoje é seu dia, {nome}! Veja o que separamos pra você'"
+
+  evitar_em_utility:
+    - "Mensagens 100% promocionais sem contexto"
+    - "Ofertas sem ligação com histórico do cliente"
+    - "CTAs muito agressivos"
+
+historico_aprendizado:
+  registrar_em_client_facts:
+    - "category: lara, key: cupom_que_funcionou — quando uma campanha converte > 10%"
+    - "category: lara, key: cupom_que_falhou — quando converte < 2%"
+    - "category: lara, key: melhor_horario — horário com maior taxa de leitura"
+    - "category: lara, key: ticket_medio_disparo — vs ticket_medio orgânico"
+
+  usar_aprendizado:
+    - "Antes de propor cupom, consultar histórico da loja"
+    - "Antes de propor horário, consultar melhor_horario_disparo"
+    - "Antes de copy ousada, ver se funciona com tom_de_voz da marca"
+
+linguagem_cliente:
+  proibido_usar:
+    - "Promoção (sempre 'oferta')"
+    - "Termos técnicos sem explicação"
+  preferir:
+    - "Oferta"
+    - "Explicação simples com exemplo prático"
+    - "Numeral concreto sempre que possível"
+  tom: "Amigável, consultivo, direto, pé no chão"

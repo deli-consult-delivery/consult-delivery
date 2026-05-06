@@ -1,7 +1,7 @@
 DOCUMENTO MESTRE - PLATAFORMA CONSULT DELIVERY v2.0
 ====================================================
 Data de aprovação: 23/04/2026
-Última revisão: 04/05/2026
+Última revisão: 06/05/2026
 Status: APROVADO - em execução
 
 ====================================================
@@ -68,7 +68,7 @@ Agentes OpenClaw ativos:
 
 Agentes planejados (a ativar no OpenClaw):
 - deli (COO digital — Milestone v1 Fase 1E)
-- lara (marketing — Milestone v2)
+- lara (CRM food service + régua de disparo — ATIVA EM DESENVOLVIMENTO — branch wandson/lara-agente-regua)
 - cora (cobrança — Milestone v2)
 - sofia (SDR — Milestone v2)
 - breno (atendimento — futuro)
@@ -80,7 +80,7 @@ Agentes planejados (a ativar no OpenClaw):
 ====================================================
 
 DELI  - COO digital, orquestradora (ativa no Milestone v1 Fase 1E)
-LARA  - marketing e conteúdo (Milestone v2)
+LARA  - CRM food service + régua de disparo — ATIVA EM DESENVOLVIMENTO
 CORA  - cobrança inteligente (Milestone v2)
 SOFIA - SDR/prospecção (Milestone v2)
 BRENO - atendimento e suporte (futuro)
@@ -90,6 +90,16 @@ VERA  - BI e relatórios (futuro)
 Princípio: DELI é COO, não chatbot. Monitora tudo, aciona especialistas,
 propõe ações com semáforo Verde/Amarelo/Vermelho. NUNCA responde clientes.
 Ver seção 16 para detalhes de triggers e autonomia.
+
+--- LARA — Referências ---
+Diagrama de fluxo:  docs/fluxos/lara-regua.md
+Agente OpenClaw:    .openclaw/agents/lara/ (system_prompt.md, base_regras.yaml, nexus_subagents_spec.md)
+Bridge Server:      bridge-server/docs/lara-endpoints.md
+Migration:          supabase/migrations/20260506_001_lara_regua.sql
+Usuária principal:  Wélida (role: marketing) — invoca, aprova drafts
+Audiência LARA:     equipe interna APENAS. Nunca responde cliente final.
+Sub-agentes Nexus:  NEXUS-PESQUISA / NEXUS-RÉGUA / NEXUS-MÍDIA (async, callback HMAC-SHA256)
+Secrets a criar:    NEXUS_API_KEY, NEXUS_BASE_URL, NEXUS_CALLBACK_SECRET, INTERNAL_BRIDGE_TOKEN (Infisical)
 
 ====================================================
 6. ROADMAP
