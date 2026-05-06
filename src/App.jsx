@@ -13,6 +13,7 @@ import CRMScreen from './screens/CRMScreen.jsx';
 import ReportsScreen from './screens/ReportsScreen.jsx';
 import SettingsScreen from './screens/SettingsScreen.jsx';
 import AgentsPage from './screens/AgentsPage.jsx';
+import CampanhasScreen from './screens/campanhas/CampanhasScreen.jsx';
 import DraftsPendentesScreen from './screens/DraftsPendentesScreen.jsx';
 import GruposScreen from './screens/GruposScreen.jsx';
 import { CONVERSATIONS, INADIMPLENTES, TENANTS } from './data.js';
@@ -158,6 +159,7 @@ export default function App() {
         {route === 'crm'             && <CRMScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'reports'         && <ReportsScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'agents'           && <AgentsPage tenantId={tenantDbId} userId={session?.user?.id} />}
+        {route === 'campanhas' && <CampanhasScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'drafts-pendentes' && <DraftsPendentesScreen tenantId={tenantDbId} userId={session?.user?.id} />}
         {route === 'grupos'    && <GruposScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'settings'  && <SettingsScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} onTenantChange={async (newSlug) => {

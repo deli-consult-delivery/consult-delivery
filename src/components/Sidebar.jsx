@@ -33,6 +33,12 @@ const NAV_GROUPS = [
       { id: 'agents',  icon: 'bot',    label: 'Agentes IA'              },
     ],
   },
+  {
+    label: 'Marketing',
+    items: [
+      { id: 'campanhas', icon: 'megaphone', label: 'Campanhas' },
+    ],
+  },
 ];
 
 const NAV_BOTTOM = [
