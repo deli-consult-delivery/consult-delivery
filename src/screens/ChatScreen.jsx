@@ -1588,25 +1588,23 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                   key={msg.id || i}
                   onMouseEnter={() => setHoveredMsgId(msg.id || i)}
                   onMouseLeave={() => setHoveredMsgId(null)}
-                  style={{ display: 'flex', flexDirection: 'column', alignItems: msg.from === 'out' ? 'flex-end' : 'flex-start', position: 'relative' }}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: msg.from === 'out' ? 'flex-end' : 'flex-start' }}
                   className="slide-up"
                 >
-                  {/* Botão responder — visível ao passar o mouse */}
-                  {hoveredMsgId === (msg.id || i) && (
-                    <button
-                      onClick={() => setReplyTo({ id: msg.id, from: msg.from, text: msg.text, mediaType: msg.mediaType })}
-                      title="Responder"
-                      style={{
-                        position: 'absolute',
-                        ...(msg.from === 'out' ? { left: -32 } : { right: -32 }),
-                        top: '50%', transform: 'translateY(-50%)',
-                        background: 'var(--white)', border: '1px solid var(--g-200)',
-                        borderRadius: '50%', width: 26, height: 26,
-                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: 'var(--g-500)', boxShadow: 'var(--sh-card)', fontSize: 14, zIndex: 10,
-                      }}
-                    >↩</button>
-                  )}
+                  {/* Row: [botão ↩ à esquerda do bubble out] [bubble] [botão ↩ à direita do bubble in] */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {msg.from === 'out' && hoveredMsgId === (msg.id || i) && (
+                      <button
+                        onClick={() => setReplyTo({ id: msg.id, from: msg.from, text: msg.text, mediaType: msg.mediaType })}
+                        title="Responder"
+                        style={{
+                          background: 'var(--g-100)', border: 'none', borderRadius: '50%',
+                          width: 26, height: 26, cursor: 'pointer', flexShrink: 0,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          color: 'var(--g-500)', fontSize: 14,
+                        }}
+                      >↩</button>
+                    )}
                   <div className={`bubble ${msg.from === 'out' ? 'bubble-out' : 'bubble-in'}`}>
                     {/* Bloco citado — aparece quando é uma resposta */}
                     {msg.replyTo && (
@@ -1707,6 +1705,19 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                         <span dangerouslySetInnerHTML={{ __html: formatWAText(msg.text) }} />
                       </>
                     ) : <span dangerouslySetInnerHTML={{ __html: formatWAText(msg.text) }} />}
+                  </div>
+                    {msg.from === 'in' && hoveredMsgId === (msg.id || i) && (
+                      <button
+                        onClick={() => setReplyTo({ id: msg.id, from: msg.from, text: msg.text, mediaType: msg.mediaType })}
+                        title="Responder"
+                        style={{
+                          background: 'var(--g-100)', border: 'none', borderRadius: '50%',
+                          width: 26, height: 26, cursor: 'pointer', flexShrink: 0,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          color: 'var(--g-500)', fontSize: 14,
+                        }}
+                      >↩</button>
+                    )}
                   </div>
                   <div className="bubble-meta" style={{ color: 'var(--g-500)' }}>{msg.time}</div>
                 </div>
