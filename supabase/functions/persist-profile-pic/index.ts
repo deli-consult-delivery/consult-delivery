@@ -39,10 +39,12 @@ Deno.serve(async (req) => {
   catch { return json({ error: 'Invalid JSON' }, 400); }
 
   const { instanceName, phone, conversationId } = body;
-  const cleanPhone = phone
-    .replace('@s.whatsapp.net', '')
-    .replace('@g.us', '')
-    .replace(/\D/g, '');
+  // Group JIDs have the format "XXXXXXXXX-XXXXXXXXXX" (with dash); PV JIDs are digits only.
+  // ChatScreen already strips the @suffix, so we just detect by presence of a dash.
+  const isGroup = phone?.includes('-');
+  const cleanPhone = isGroup
+    ? phone  // keep group JID as-is (e.g. "553198765432-1234567890")
+    : (phone ?? '').replace('@s.whatsapp.net', '').replace('@g.us', '').replace(/\D/g, '');
   if (!instanceName || !phone || !conversationId) {
     return json({ error: 'instanceName, phone and conversationId are required' }, 400);
   }
@@ -83,7 +85,7 @@ Deno.serve(async (req) => {
     const bytes = new Uint8Array(arrayBuffer);
 
     // 3. Gera nome do arquivo
-    const safePhone = phone.replace(/\D/g, '');
+    const safePhone = isGroup ? phone : phone.replace(/\D/g, '');
     const ext = contentType.includes('png') ? 'png' : 'jpg';
     const filename = `${safePhone}.${ext}`;
     const bucketPath = `profile-pics/${filename}`;

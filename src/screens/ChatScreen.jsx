@@ -193,7 +193,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   useEffect(() => {
     if (!HAS_EVO || !selectedInstance) return;
     const target = convs.find(c =>
-      c.type === 'whatsapp'
+      (c.type === 'whatsapp' || c.type === 'group')
       && c.whatsapp_chat_id
       && !c.photoUrl
       && photoCacheRef.current[c.whatsapp_chat_id.split('@')[0]] !== false
