@@ -28,6 +28,18 @@ _(summaries of specific sources you've ingested)_
 
 - [[Salgados da Monica — Análise]] — transcrição de vídeo de análise de loja (Salgados_da_monica.txt)
 
+## How-To / Procedures
+
+_(step-by-step procedures validated in practice)_
+
+- [[Deploy de Agentes OpenClaw]] — procedimento completo para subir novos agentes no OpenClaw via SSH + CLI
+
+## Agents
+
+_(agentes IA da plataforma — identidade, status e artefatos)_
+
+- [[LARA — Agente Régua]] — CRM food service + régua de disparo, ativa no OpenClaw desde 06/05/2026
+
 ## Analyses
 
 _(synthesized answers to questions you've asked, filed back as pages)_

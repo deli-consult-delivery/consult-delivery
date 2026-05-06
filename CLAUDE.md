@@ -65,10 +65,10 @@ Integrações validadas: Anthropic, Evolution, n8n, Google Drive, Asaas
 Agentes OpenClaw ativos:
 - main (default, genérico)
 - analista-ifood (Co-piloto Delivery — análise de lojas iFood)
+- lara (CRM food service + régua de disparo — ✅ ATIVA NO OPENCLAW desde 06/05/2026)
 
 Agentes planejados (a ativar no OpenClaw):
 - deli (COO digital — Milestone v1 Fase 1E)
-- lara (CRM food service + régua de disparo — ATIVA EM DESENVOLVIMENTO — branch wandson/lara-agente-regua)
 - cora (cobrança — Milestone v2)
 - sofia (SDR — Milestone v2)
 - breno (atendimento — futuro)
@@ -80,7 +80,7 @@ Agentes planejados (a ativar no OpenClaw):
 ====================================================
 
 DELI  - COO digital, orquestradora (ativa no Milestone v1 Fase 1E)
-LARA  - CRM food service + régua de disparo — ATIVA EM DESENVOLVIMENTO
+LARA  - CRM food service + régua de disparo — ✅ ATIVA NO OPENCLAW (06/05/2026)
 CORA  - cobrança inteligente (Milestone v2)
 SOFIA - SDR/prospecção (Milestone v2)
 BRENO - atendimento e suporte (futuro)
