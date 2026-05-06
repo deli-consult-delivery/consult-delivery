@@ -1565,9 +1565,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                 convStatus === 'finalizado' ? (
                   <button
                     onClick={async () => {
-                      await reopen();
+                      await changeStatus('atendimento_aberto');
                       await supabase.from('conversations').update({ status_v2: 'in_progress' }).eq('id', activeId);
-                      setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'aguardando', status_v2: 'in_progress' } : c));
+                      setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'atendimento_aberto', status_v2: 'in_progress' } : c));
                       setStatusTab('aberto');
                     }}
                     disabled={statusLoading}
