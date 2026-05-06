@@ -1,3 +1,18 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+current_phase: None (not started)
+status: planning
+last_updated: "2026-05-06T01:39:13.938Z"
+progress:
+  total_phases: 3
+  completed_phases: 0
+  total_plans: 3
+  completed_plans: 0
+  percent: 0
+---
+
 # Project State — Módulo Análise iFood
 
 **Status:** Planning complete — ready to execute
@@ -51,6 +66,7 @@ Phase 3 ░░░░░░░░░░░░
 ## Accumulated Context
 
 ### Key Decisions
+
 - n8n orquestra (não Edge Functions) — Drive, Evolution e Anthropic já integrados no n8n
 - Tarefas vão para Kanban da plataforma — ClickUp sendo substituído
 - Regras YAML fixas no system prompt — Wandson gerencia diretamente no n8n
@@ -58,6 +74,7 @@ Phase 3 ░░░░░░░░░░░░
 - Polling assíncrono (Realtime + fallback 5s) — n8n pode levar 30–60s
 
 ### Open Questions (from research)
+
 1. Compartilhamento do Drive — manual por análise ou onboarding self-service?
 2. Destino WhatsApp — direto ao dono da loja ou ao consultor primeiro?
 3. Limite 15 arquivos por pasta — confirmado como aceitável?
@@ -65,6 +82,7 @@ Phase 3 ░░░░░░░░░░░░
 5. Modelo Claude — `claude-sonnet-4-6` aprovado como substituto do `claude-sonnet-4-20250514` (aposenta 15/jun/2026)?
 
 ### Critical Risks (from research)
+
 - Claude retorna JSON inválido → usar tool-use mode + Code node strip
 - Triggers duplicados → botão desabilita no primeiro clique + IF guard no n8n
 - Spinner infinito se n8n falhar → Error Trigger + pg_cron cleanup
@@ -72,10 +90,12 @@ Phase 3 ░░░░░░░░░░░░
 - Row presa em `processing` → pg_cron define `error` após 5min
 
 ### Todos
+
 - [ ] Confirmar questões abertas com Wandson antes de Phase 2
 - [ ] Validar schema `tasks` (Kanban) antes de PIPE-09
 
 ### Blockers
+
 - Nenhum no momento
 
 ---

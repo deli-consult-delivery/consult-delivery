@@ -1628,6 +1628,19 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                         if (e.key === 'Escape' && showQRPopup) { setShowQRPopup(false); setQrFilter(''); return; }
                         onKeyDown(e);
                       }}
+                      onPaste={async e => {
+                        const items = Array.from(e.clipboardData?.items || []);
+                        const imageItem = items.find(item => item.type.startsWith('image/'));
+                        if (imageItem) {
+                          e.preventDefault();
+                          const blob = imageItem.getAsFile();
+                          if (blob) {
+                            const ext = blob.type.split('/')[1] || 'png';
+                            const file = new File([blob], `imagem-colada.${ext}`, { type: blob.type });
+                            await sendFile(file);
+                          }
+                        }
+                      }}
                       className="copilot-textarea"
                       placeholder="Escreva uma mensagem… (Shift+Enter = nova linha)"
                       rows={2}
