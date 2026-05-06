@@ -50,6 +50,20 @@ function playNotificationSound() {
   } catch { /* ignore em browsers que bloqueiam AudioContext */ }
 }
 
+function formatWAText(text) {
+  if (!text) return '';
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return escaped
+    .replace(/```([\s\S]*?)```/g, '<code style="font-family:monospace;background:rgba(0,0,0,0.12);padding:1px 5px;border-radius:3px;font-size:0.9em">$1</code>')
+    .replace(/\*([^*\n]+)\*/g, '<strong>$1</strong>')
+    .replace(/_([^_\n]+)_/g, '<em>$1</em>')
+    .replace(/~([^~\n]+)~/g, '<del>$1</del>')
+    .replace(/\n/g, '<br>');
+}
+
 function ImageLightbox({ url, onClose }) {
   const [scale, setScale]   = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -469,7 +483,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         payload => {
           const msg = payload.new;
           const text = msg.content || msg.body || '';
-          if (!text && !msg.media_url) return;
+          if (!text && !msg.media_url && !msg.media_type) return;
 
           const convId    = msg.conversation_id;
           const isInbound = msg.direction !== 'outbound';
@@ -1641,9 +1655,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                     ) : msg.from === 'out' && msg.agentName ? (
                       <>
                         <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.75)', marginBottom: 4 }}>{msg.agentName}:</div>
-                        <div>{msg.text}</div>
+                        <span dangerouslySetInnerHTML={{ __html: formatWAText(msg.text) }} />
                       </>
-                    ) : msg.text}
+                    ) : <span dangerouslySetInnerHTML={{ __html: formatWAText(msg.text) }} />}
                   </div>
                   <div className="bubble-meta" style={{ color: 'var(--g-500)' }}>{msg.time}</div>
                 </div>
