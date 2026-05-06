@@ -58,9 +58,9 @@ Deno.serve(async (req) => {
       body: JSON.stringify({ number: cleanPhone }),
     });
 
-    // Evolution retorna 404 quando o contato não tem foto ou a instância não está conectada
+    // Evolution retorna 404/400 quando o contato não tem foto, é grupo, ou instância não conectada
     if (!profileRes.ok) {
-      if (profileRes.status === 404) {
+      if (profileRes.status === 404 || profileRes.status === 400) {
         return json({ success: true, hasPhoto: false, message: 'Contato não tem foto de perfil' });
       }
       throw new Error(`Evolution fetchProfile failed: ${profileRes.status}`);
