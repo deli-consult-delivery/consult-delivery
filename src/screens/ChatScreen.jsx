@@ -3,7 +3,7 @@ import Icon from '../components/Icon.jsx';
 import CustomSelect from '../components/CustomSelect.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
 import ConversationStatusBar from '../components/ConversationStatusBar.jsx';
-import { useConversationStatus, STATUS_LABELS, STATUS_COLORS } from '../lib/conversationStatus.js';
+import { useConversationStatus, STATUS_LABELS, STATUS_COLORS, STATUS_EMOJI } from '../lib/conversationStatus.js';
 import { supabase } from '../lib/supabase.js';
 import { sendTextMessage, fetchProfile, sendAudioMessage, sendMediaMessage, fetchWAGroupParticipants, addWAGroupParticipants, removeWAGroupParticipant, leaveWAGroup } from '../lib/evolution.js';
 import DepartmentBadge from '../components/chat/DepartmentBadge.jsx';
@@ -1173,11 +1173,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           {/* Badges de filtros por status */}
           <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
             {[
-              { key: 'aguardando',         icon: '📩', label: 'Aguardando',         bg: '#FEF3C7', text: '#92400E', border: '#F59E0B' },
-              { key: 'em_atendimento',     icon: '⏱',  label: 'Em atendimento',     bg: '#FEF3C7', text: '#92400E', border: '#F59E0B' },
-              { key: 'atendimento_aberto', icon: '📂', label: 'Aberto',             bg: '#DBEAFE', text: '#1E40AF', border: '#3B82F6' },
-              { key: 'finalizado',         icon: '✅', label: 'Finalizado',         bg: '#D1FAE5', text: '#065F46', border: '#10B981' },
-              { key: 'automacao',          icon: '⚠',  label: 'Automação',          bg: '#F3F4F6', text: '#4B5563', border: '#9CA3AF' },
+              { key: 'aguardando',         icon: '⏳', label: 'Aguardando',         bg: '#FEF3C7', text: '#92400E', border: '#F59E0B' },
+              { key: 'em_atendimento',     icon: '💬', label: 'Em atendimento',     bg: '#DBEAFE', text: '#1E40AF', border: '#3B82F6' },
+              { key: 'atendimento_aberto', icon: '📂', label: 'Aberto',             bg: '#D1FAE5', text: '#065F46', border: '#10B981' },
+              { key: 'finalizado',         icon: '✅', label: 'Finalizado',         bg: '#F3F4F6', text: '#4B5563', border: '#9CA3AF' },
+              { key: 'automacao',          icon: '🤖', label: 'Automação',          bg: '#F3E8FF', text: '#6B21A8', border: '#A855F7' },
             ].map(b => {
               const count = statusCounts[b.key] || 0;
               const isActive = statusFilter === b.key;
@@ -1479,7 +1479,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                           fontSize: 11, fontWeight: 600, cursor: 'pointer',
                         }}
                       >
-                        {STATUS_LABELS[convStatus] || convStatus}
+                        {STATUS_EMOJI[convStatus] || '❓'}
                         <Icon name="chevdown" size={10} />
                       </button>
                       {statusDropdownOpen && (
@@ -1500,10 +1500,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                                 cursor: 'pointer', fontSize: 12, color: 'var(--g-800)', textAlign: 'left',
                               }}
                             >
-                              <span style={{
-                                width: 8, height: 8, borderRadius: '50%',
-                                background: STATUS_COLORS[key]?.dot || '#9CA3AF', flexShrink: 0,
-                              }} />
+                              <span style={{ fontSize: 14 }}>{STATUS_EMOJI[key] || '❓'}</span>
                               {label}
                             </button>
                           ))}
@@ -2499,6 +2496,7 @@ function ConvItem({ conv, active, onClick, lastMsg, members = [], departments = 
   const status = conv.status || 'aguardando';
   const sColor = STATUS_COLORS[status] || STATUS_COLORS.aguardando;
   const sLabel = STATUS_LABELS[status] || STATUS_LABELS.aguardando;
+  const sEmoji = STATUS_EMOJI[status] || '❓';
 
   // Assignee badge
   const assigneeName = members.find(m => m.id === conv.assigned_to)?.full_name || null;
@@ -2572,12 +2570,15 @@ function ConvItem({ conv, active, onClick, lastMsg, members = [], departments = 
             </div>
             {/* Linha 3: tags de status + departamento + atendente */}
             <div style={{ display: 'flex', gap: 4, marginTop: 3, flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{
-                fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
-                background: sColor.bg, color: sColor.text, border: `1px solid ${sColor.dot}`,
-                flexShrink: 0, textTransform: 'uppercase', letterSpacing: 0.3,
-              }}>
-                {sLabel}
+              <span
+                title={sLabel}
+                style={{
+                  fontSize: 11, padding: '1px 4px', borderRadius: 4,
+                  background: sColor.bg, border: `1px solid ${sColor.dot}`,
+                  flexShrink: 0, lineHeight: 1.4,
+                }}
+              >
+                {sEmoji}
               </span>
               {dept && <DepartmentBadge name={dept.name} color={dept.color} />}
               {assigneeName && (

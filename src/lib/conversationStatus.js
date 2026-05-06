@@ -9,6 +9,14 @@ export const STATUS_LABELS = {
   finalizado:         'Finalizado',
 };
 
+export const STATUS_EMOJI = {
+  aguardando:         '⏳',
+  em_atendimento:     '💬',
+  atendimento_aberto: '📂',
+  automacao:          '🤖',
+  finalizado:         '✅',
+};
+
 export const STATUS_COLORS = {
   aguardando:         { bg: '#FEF3C7', text: '#92400E', dot: '#F59E0B' },   // amber
   em_atendimento:     { bg: '#DBEAFE', text: '#1E40AF', dot: '#3B82F6' },   // blue

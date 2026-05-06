@@ -4,18 +4,18 @@
  */
 
 const STATUS_CONFIG = {
-  open:        { label: 'Aberta',        cls: 'badge badge-gray'   },
-  in_progress: { label: 'Em Atendimento',cls: 'badge badge-blue'   },
-  waiting:     { label: 'Aguardando',    cls: 'badge badge-yellow' },
-  closed:      { label: 'Finalizada',    cls: 'badge badge-green'  },
-  archived:    { label: 'Arquivada',     cls: 'badge',             style: { background: 'var(--info-soft)', color: '#6D28D9' } },
+  open:        { emoji: '📂', label: 'Aberta',         cls: 'badge badge-gray'   },
+  in_progress: { emoji: '💬', label: 'Em Atendimento', cls: 'badge badge-blue'   },
+  waiting:     { emoji: '⏳', label: 'Aguardando',     cls: 'badge badge-yellow' },
+  closed:      { emoji: '✅', label: 'Finalizada',     cls: 'badge badge-green'  },
+  archived:    { emoji: '📦', label: 'Arquivada',      cls: 'badge',             style: { background: 'var(--info-soft)', color: '#6D28D9' } },
 };
 
 export default function ConversationStatusBadge({ status }) {
-  const config = STATUS_CONFIG[status] ?? { label: status, cls: 'badge badge-gray' };
+  const config = STATUS_CONFIG[status] ?? { emoji: '❓', label: status, cls: 'badge badge-gray' };
   return (
-    <span className={config.cls} style={config.style ?? {}}>
-      {config.label}
+    <span className={config.cls} style={config.style ?? {}} title={config.label}>
+      {config.emoji}
     </span>
   );
 }
