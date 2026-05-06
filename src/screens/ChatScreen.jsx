@@ -1018,16 +1018,6 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             </select>
           )}
 
-          {usingRealData && (
-            <div style={{
-              marginBottom: 10, padding: '6px 10px', borderRadius: 'var(--r-sm)',
-              background: 'rgba(37,211,102,0.10)', border: '1px solid rgba(37,211,102,0.28)',
-              fontSize: 11, color: '#1a9e50', display: 'flex', alignItems: 'center', gap: 6,
-            }}>
-              <span style={{ width: 7, height: 7, background: '#25D366', borderRadius: '50%' }} />
-              WhatsApp conectado — dados em tempo real
-            </div>
-          )}
 
           <div style={{ position: 'relative', marginBottom: 10 }}>
             <Icon name="search" size={14} style={{ position: 'absolute', top: 11, left: 12, color: 'var(--g-400)' }} />
