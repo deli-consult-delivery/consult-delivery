@@ -509,7 +509,7 @@ async function upsertConversation({ tenantId, instanceId, chatId, isGroup, pushN
 }): Promise<string | null> {
   const { data: existing } = await supabase
     .from('conversations')
-    .select('id')
+    .select('id, status_v2')
     .eq('whatsapp_chat_id', chatId)
     .eq('instance_id', instanceId)
     .order('created_at', { ascending: false })
@@ -519,6 +519,7 @@ async function upsertConversation({ tenantId, instanceId, chatId, isGroup, pushN
   if (existing) {
     const upd: Record<string, string | null> = { updated_at: new Date().toISOString(), tenant_id: tenantId };
     if (!isGroup && pushName && pushName !== 'Desconhecido') upd.push_name = pushName;
+    if (existing.status_v2 === 'closed') upd.status_v2 = 'in_progress';
     await supabase.from('conversations').update(upd).eq('id', existing.id);
     return existing.id;
   }

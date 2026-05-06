@@ -989,7 +989,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         : showThirdCol
           ? 'minmax(220px, 270px) minmax(0, 1fr) 300px'
           : 'minmax(220px, 270px) minmax(0, 1fr)',
-      height: 'calc(100vh - 64px)',
+      height: '100%',
       background: 'var(--g-50)',
       overflow: 'hidden',
     }}>
