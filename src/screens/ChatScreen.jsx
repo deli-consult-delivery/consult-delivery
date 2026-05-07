@@ -1,12 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import Icon from '../components/Icon.jsx';
-import CustomSelect from '../components/CustomSelect.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
-import ConversationStatusBar from '../components/ConversationStatusBar.jsx';
-import { useConversationStatus, STATUS_LABELS, STATUS_COLORS, STATUS_EMOJI } from '../lib/conversationStatus.js';
+import CustomSelect from '../components/CustomSelect.jsx';
+import { useConversationStatus, STATUS_EMOJI } from '../lib/conversationStatus.js';
 import { supabase } from '../lib/supabase.js';
-import { sendTextMessage, fetchProfile, sendAudioMessage, sendMediaMessage, fetchWAGroupParticipants, addWAGroupParticipants, removeWAGroupParticipant, leaveWAGroup } from '../lib/evolution.js';
-import DepartmentBadge from '../components/chat/DepartmentBadge.jsx';
+import { sendTextMessage, fetchProfile } from '../lib/evolution.js';
 import ConversationFiltersBar from '../components/chat/ConversationFiltersBar.jsx';
 import DepartmentSelector from '../components/chat/DepartmentSelector.jsx';
 import ConversationStatusBadge from '../components/chat/ConversationStatusBadge.jsx';
@@ -16,58 +14,298 @@ const HAS_EVO = !!(
   import.meta.env.VITE_EVOLUTION_URL && import.meta.env.VITE_EVOLUTION_KEY
 );
 
-// ── Som de notificação via Web Audio API — beep duplo nítido ──
+// ─── CHAT META (fallback visual quando não há dados reais) ──────
+const CHAT_META_DEFAULT = {
+  protocol: '#00000', dept: 'Atendimento', deptColor: '#B70C00',
+  tag: '', tagColor: '#6B7280', waitColor: 'green', wait: 'agora', stale: '0min',
+  phone: '—', email: '—', empresa: '—', site: '—', doc: '—', nasc: '—',
+  address: '—', dadosLead: {}, sentiment: 'neutro', sentimentScore: 0.5,
+  channel: 'WhatsApp', aiHandled: 0.5, autoTags: [], lang: 'pt-BR',
+};
+
+const QUICK_REPLIES_DEFAULT = [
+  { id: 'qr1', shortcut: '/ola',      label: 'Saudação inicial',       text: 'Olá! Aqui é da Consult Delivery. Como posso te ajudar hoje? 🚀' },
+  { id: 'qr2', shortcut: '/horario',  label: 'Horário de atendimento', text: 'Nosso horário de atendimento é de seg a sex, 9h–18h.' },
+  { id: 'qr3', shortcut: '/desculpa', label: 'Pedir desculpas',        text: 'Peço desculpas pelo transtorno. Vou resolver isso pra você agora mesmo!' },
+];
+
+const AI_SUPERAGENTS = [
+  { id: 'deli', name: 'DELI', desc: 'Orquestrador IA',           color: '#B70C00' },
+  { id: 'cora', name: 'CORA', desc: 'Cobrança & inadimplência',  color: '#10B981' },
+  { id: 'max',  name: 'MAX',  desc: 'iFood & marketplaces',      color: '#EA580C' },
+  { id: 'vera', name: 'VERA', desc: 'Relatórios & analytics',    color: '#3B82F6' },
+  { id: 'lara', name: 'LARA', desc: 'CRM & régua de disparo',    color: '#8B5CF6' },
+];
+
+const AI_COMMANDS = [
+  { cmd: '/resumir',     icon: 'sparkles',   label: 'Resumir conversa',   desc: 'DELI cria um resumo executivo' },
+  { cmd: '/traduzir',    icon: 'globe',       label: 'Traduzir mensagem',  desc: 'Tradução automática com contexto' },
+  { cmd: '/tom',         icon: 'smile',       label: 'Ajustar tom',        desc: 'Mais formal, amigável, etc.' },
+  { cmd: '/proxima',     icon: 'arrowright',  label: 'Próxima ação',       desc: 'DELI sugere o próximo passo' },
+  { cmd: '/tarefa',      icon: 'check',       label: 'Criar tarefa',       desc: 'Vira um item no Kanban' },
+  { cmd: '/cobranca',    icon: 'dollar',      label: 'Acionar CORA',       desc: 'CORA inicia régua de cobrança' },
+  { cmd: '/handoff',     icon: 'users',       label: 'Passar pra humano',  desc: 'Entrega ao próximo atendente livre' },
+];
+
+// ─── SOM DE NOTIFICAÇÃO ─────────────────────────────────────────
 function playNotificationSound() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const now = ctx.currentTime;
-
-    // Oscilador 1: tom principal (alto)
     const osc1 = ctx.createOscillator();
     const gain1 = ctx.createGain();
     osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(1046, now);        // C6 — mais agudo e perceptível
+    osc1.frequency.setValueAtTime(1046, now);
     osc1.frequency.exponentialRampToValueAtTime(523, now + 0.18);
-    gain1.gain.setValueAtTime(0.9, now);             // volume alto (0.9)
+    gain1.gain.setValueAtTime(0.9, now);
     gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-    osc1.connect(gain1);
-    gain1.connect(ctx.destination);
-    osc1.start(now);
-    osc1.stop(now + 0.35);
-
-    // Oscilador 2: harmônico sutil para "corpo"
-    const osc2 = ctx.createOscillator();
-    const gain2 = ctx.createGain();
-    osc2.type = 'triangle';
-    osc2.frequency.setValueAtTime(784, now + 0.08);  // G5 — segundo beep levemente atrasado
-    gain2.gain.setValueAtTime(0, now);
-    gain2.gain.linearRampToValueAtTime(0.5, now + 0.10);
-    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.40);
-    osc2.connect(gain2);
-    gain2.connect(ctx.destination);
-    osc2.start(now + 0.08);
-    osc2.stop(now + 0.40);
-  } catch { /* ignore em browsers que bloqueiam AudioContext */ }
+    osc1.connect(gain1); gain1.connect(ctx.destination);
+    osc1.start(now); osc1.stop(now + 0.35);
+  } catch { /* ignore */ }
 }
 
-function formatWAText(text) {
-  if (!text) return '';
-  const escaped = text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-  return escaped
-    .replace(/```([\s\S]*?)```/g, '<code style="font-family:monospace;background:rgba(0,0,0,0.12);padding:1px 5px;border-radius:3px;font-size:0.9em">$1</code>')
-    .replace(/\*([^*\n]+)\*/g, '<strong>$1</strong>')
-    .replace(/_([^_\n]+)_/g, '<em>$1</em>')
-    .replace(/~([^~\n]+)~/g, '<del>$1</del>')
-    .replace(/\n/g, '<br>');
+// ─── CONV AVATAR ───────────────────────────────────────────────
+function ConvAvatar({ conv, size = 36 }) {
+  if (!conv) return null;
+  if (conv.type === 'agent') {
+    return <AgentAvatar id={conv.name?.toLowerCase()} size={size} />;
+  }
+  if (conv.photoUrl) {
+    return (
+      <div style={{ position: 'relative', flexShrink: 0 }}>
+        <img src={conv.photoUrl} alt={conv.name} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover' }} />
+        {conv.type === 'whatsapp' && (
+          <span style={{ position:'absolute', bottom: -1, right: -1, width: size*0.34, height: size*0.34, borderRadius:'50%', background:'#25D366', border:'2px solid #0E0E0E', display:'inline-flex', alignItems:'center', justifyContent:'center' }}>
+            <svg width={size*0.18} height={size*0.18} viewBox="0 0 24 24" fill="white"><path d="M12 2a10 10 0 0 0-8.5 15.2L2 22l4.9-1.5A10 10 0 1 0 12 2Z"/></svg>
+          </span>
+        )}
+      </div>
+    );
+  }
+  const palette = ['#B70C00','#F59E0B','#10B981','#3B82F6','#8B5CF6','#EC4899','#06B6D4'];
+  const seed = (conv.id || conv.name || '').split('').reduce((s, c) => s + c.charCodeAt(0), 0);
+  const bg = conv.type === 'internal' ? '#374151' : palette[seed % palette.length];
+  return (
+    <div style={{ width: size, height: size, borderRadius: '50%', background: `linear-gradient(135deg, ${bg}, ${bg}cc)`, color: 'white', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: size * 0.36, flexShrink: 0, position: 'relative', boxShadow: '0 2px 6px rgba(0,0,0,0.3)' }}>
+      {conv.avatar}
+      {conv.type === 'whatsapp' && (
+        <span style={{ position:'absolute', bottom: -1, right: -1, width: size*0.34, height: size*0.34, borderRadius:'50%', background:'#25D366', border:'2px solid #0E0E0E', display:'inline-flex', alignItems:'center', justifyContent:'center' }}>
+          <svg width={size*0.18} height={size*0.18} viewBox="0 0 24 24" fill="white"><path d="M12 2a10 10 0 0 0-8.5 15.2L2 22l4.9-1.5A10 10 0 1 0 12 2Z"/></svg>
+        </span>
+      )}
+      {conv.type === 'group' && (
+        <span style={{ position:'absolute', bottom: -1, right: -1, width: size*0.34, height: size*0.34, borderRadius:'50%', background:'#25D366', border:'2px solid #0E0E0E', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize: size*0.16 }}>👥</span>
+      )}
+    </div>
+  );
 }
 
+// ─── SENTIMENT BADGE ───────────────────────────────────────────
+function SentimentBadge({ sentiment, score }) {
+  const map = {
+    positivo:  { label: 'Positivo',  color: '#34D399', bg: 'rgba(16,185,129,0.16)',  icon: '😊' },
+    neutro:    { label: 'Neutro',    color: '#9CA3AF', bg: 'rgba(156,163,175,0.16)', icon: '😐' },
+    frustrado: { label: 'Frustrado', color: '#FBBF24', bg: 'rgba(245,158,11,0.18)',  icon: '😟' },
+    raiva:     { label: 'Raiva',     color: '#FF8A80', bg: 'rgba(183,12,0,0.18)',    icon: '😡' },
+  };
+  const s = map[sentiment] || map.neutro;
+  return (
+    <span style={{ display:'inline-flex', alignItems:'center', gap: 4, background: s.bg, color: s.color, padding:'2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600 }}>
+      <span style={{ fontSize: 10 }}>{s.icon}</span>
+      {s.label}
+      {score !== undefined && <span style={{ opacity: 0.7 }}>{Math.round(score * 100)}%</span>}
+    </span>
+  );
+}
+
+// ─── STATUS ICON ───────────────────────────────────────────────
+function StatusIcon({ name, size = 14 }) {
+  const paths = {
+    msg:   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>,
+    clock: <><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></>,
+    paper: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></>,
+    inbox: <><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></>,
+    check: <><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></>,
+    alert: <><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></>,
+    arch:  <><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></>,
+  };
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {paths[name] || null}
+    </svg>
+  );
+}
+
+// ─── COLLAPSE SECTION ──────────────────────────────────────────
+function CollapseSection({ title, open, onToggle, right, accent, children }) {
+  return (
+    <div className={`lc-collapse${accent ? ' accent' : ''}`}>
+      <div
+        className="lc-collapse-head"
+        role="button" tabIndex={0}
+        onClick={onToggle}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
+      >
+        <span className="lc-collapse-title" style={accent ? { color: 'var(--red-light)' } : null}>
+          {accent && <Icon name="sparkles" size={12} style={{ marginRight: 6, verticalAlign: 'middle' }} />}
+          {title}
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={e => e.stopPropagation()}>
+          {right}
+          <Icon name="chevdown" size={14} style={{ color: 'rgba(255,255,255,0.5)', transform: open ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 200ms' }} />
+        </span>
+      </div>
+      {open && <div className="lc-collapse-body">{children}</div>}
+    </div>
+  );
+}
+
+// ─── FIELD ROW ────────────────────────────────────────────────
+function FieldRow({ label, value, hint }) {
+  return (
+    <div className="lc-field">
+      <div className="lc-field-label">{label}</div>
+      <div className="lc-field-value">
+        {value || <span style={{ color: 'rgba(255,255,255,0.3)' }}>{hint || '—'}</span>}
+      </div>
+    </div>
+  );
+}
+
+// ─── CONV ROW (sidebar item) ───────────────────────────────────
+function ConvRow({ conv, active, onClick, statusCounts }) {
+  const waitColors = {
+    aguardando:         { bg: 'rgba(245,158,11,0.18)', color: '#FBBF24' },
+    em_atendimento:     { bg: 'rgba(59,130,246,0.18)',  color: '#93C5FD' },
+    atendimento_aberto: { bg: 'rgba(16,185,129,0.18)',  color: '#34D399' },
+    finalizado:         { bg: 'rgba(156,163,175,0.14)', color: '#9CA3AF' },
+    automacao:          { bg: 'rgba(168,85,247,0.18)',  color: '#D8B4FE' },
+  };
+  const statusKey = conv.status || 'aguardando';
+  const wColor = waitColors[statusKey] || waitColors.aguardando;
+  const statusLabels = {
+    aguardando: 'Aguardando', em_atendimento: 'Em atend.', atendimento_aberto: 'Aberto',
+    finalizado: 'Finalizado', automacao: 'Automação',
+  };
+  return (
+    <div onClick={onClick} className={`lc-row${active ? ' on' : ''}`}>
+      <div style={{ position: 'relative', flexShrink: 0 }}>
+        <ConvAvatar conv={conv} size={42} />
+        {conv.unread > 0 && (
+          <span style={{ position: 'absolute', top: -2, right: -2, width: 16, height: 16, background: 'var(--red)', borderRadius: '50%', border: '2px solid #181818', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: 'white' }}>
+            {conv.unread > 9 ? '9+' : conv.unread}
+          </span>
+        )}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6 }}>
+          <div className="lc-row-name truncate">{conv.name}</div>
+          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+            {conv.time && <span className="lc-row-pill" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.55)' }}>{conv.time}</span>}
+          </div>
+        </div>
+        <div style={{ marginTop: 3 }}>
+          <div className="lc-row-preview truncate">
+            {conv.preview && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                {conv.previewFrom === 'in' && <span style={{ width: 6, height: 6, background: '#34D399', borderRadius: '50%', display: 'inline-block', flexShrink: 0 }} />}
+                {conv.preview}
+              </span>
+            )}
+          </div>
+        </div>
+        <div style={{ marginTop: 5, display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span className="lc-row-pill" style={{ background: wColor.bg, color: wColor.color }}>
+            {statusLabels[statusKey] || statusKey}
+          </span>
+          {conv.type === 'internal' && <span className="lc-row-tag" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)' }}>Interno</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── MESSAGE BUBBLE ────────────────────────────────────────────
+function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage }) {
+  const isOut = m.from === 'out';
+  const isSystem = m.from === 'system';
+
+  if (isSystem) {
+    return (
+      <div className="lc-system">{m.text}</div>
+    );
+  }
+
+  function renderMedia() {
+    if (!m.mediaType) return null;
+    const url = m.mediaUrl;
+    if (m.mediaType === 'image') {
+      return (
+        <div style={{ marginBottom: m.text ? 6 : 0 }}>
+          <img src={url} alt="imagem" style={{ maxWidth: 260, maxHeight: 200, borderRadius: 8, cursor: 'pointer', display: 'block' }} onClick={() => onViewImage?.(url)} />
+        </div>
+      );
+    }
+    if (m.mediaType === 'video') {
+      return <video src={url} controls style={{ maxWidth: 260, borderRadius: 8 }} />;
+    }
+    if (m.mediaType?.includes('audio')) {
+      return <audio src={url} controls style={{ maxWidth: 260 }} />;
+    }
+    if (m.mediaType === 'document') {
+      return (
+        <a href={url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'white', textDecoration: 'none', padding: '8px 10px', background: 'rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 12 }}>
+          <span>📄</span> {m.text || 'Documento'}
+        </a>
+      );
+    }
+    return null;
+  }
+
+  return (
+    <div className={`lc-msg-row ${isOut ? 'out' : 'in'} slide-up`}>
+      {!isOut && <ConvAvatar conv={conv} size={28} />}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: isOut ? 'flex-end' : 'flex-start', maxWidth: '72%' }}>
+        {!isOut && m.agentName && (
+          <div style={{ fontSize: 11, color: '#B70C00', fontWeight: 700, marginBottom: 4, marginLeft: 4 }}>
+            {m.agentName} <span style={{ color: 'rgba(255,255,255,0.4)', fontWeight: 500, marginLeft: 6 }}>· {m.time}</span>
+          </div>
+        )}
+        {m.replyTo && (
+          <div style={{ marginBottom: 4, padding: '5px 10px', borderLeft: '3px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.05)', borderRadius: '0 6px 6px 0', fontSize: 11, color: 'rgba(255,255,255,0.6)', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {m.replyTo.text || '🖼 Mídia'}
+          </div>
+        )}
+        <div className={`lc-bubble ${isOut ? 'out' : 'in'}`}>
+          {renderMedia()}
+          {m.text && !m.mediaType?.includes('document') && (
+            <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.text}</div>
+          )}
+        </div>
+        {!isOut && (
+          <div className="lc-bubble-actions">
+            <button title="Responder" onClick={() => onReply?.(m)}><Icon name="msg" size={11} /></button>
+            <button title="Traduzir"><Icon name="globe" size={11} /></button>
+            <button title="Virar tarefa" onClick={() => onCreateTask?.(m)}><Icon name="check" size={11} /></button>
+            <button title="Resumir"><Icon name="sparkles" size={11} /></button>
+          </div>
+        )}
+        {isOut && (
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 3, marginRight: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+            {m.time}
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34D399" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── IMAGE LIGHTBOX ────────────────────────────────────────────
 function ImageLightbox({ url, onClose }) {
-  const [scale, setScale]   = useState(1);
+  const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const dragging  = useRef(false);
+  const dragging = useRef(false);
   const dragStart = useRef({ x: 0, y: 0, ox: 0, oy: 0 });
 
   useEffect(() => {
@@ -76,286 +314,115 @@ function ImageLightbox({ url, onClose }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  function onWheel(e) {
-    e.preventDefault();
-    setScale(s => Math.min(8, Math.max(1, s - e.deltaY * 0.001)));
-  }
-
-  function onMouseDown(e) {
-    if (scale <= 1) return;
-    dragging.current = true;
-    dragStart.current = { x: e.clientX, y: e.clientY, ox: offset.x, oy: offset.y };
-  }
-
-  function onMouseMove(e) {
-    if (!dragging.current) return;
-    setOffset({
-      x: dragStart.current.ox + (e.clientX - dragStart.current.x),
-      y: dragStart.current.oy + (e.clientY - dragStart.current.y),
-    });
-  }
-
+  function onWheel(e) { e.preventDefault(); setScale(s => Math.min(8, Math.max(1, s - e.deltaY * 0.001))); }
+  function onMouseDown(e) { if (scale <= 1) return; dragging.current = true; dragStart.current = { x: e.clientX, y: e.clientY, ox: offset.x, oy: offset.y }; }
+  function onMouseMove(e) { if (!dragging.current) return; setOffset({ x: dragStart.current.ox + (e.clientX - dragStart.current.x), y: dragStart.current.oy + (e.clientY - dragStart.current.y) }); }
   function onMouseUp() { dragging.current = false; }
 
-  function reset() { setScale(1); setOffset({ x: 0, y: 0 }); }
-
   return (
-    <div
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-      onWheel={onWheel}
-      onMouseDown={onMouseDown}
-      onMouseMove={onMouseMove}
-      onMouseUp={onMouseUp}
-      onMouseLeave={onMouseUp}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 9999,
-        background: 'rgba(0,0,0,0.88)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        cursor: scale > 1 ? 'grab' : 'zoom-in',
-        userSelect: 'none',
-      }}
-    >
-      <img
-        src={url}
-        alt="preview"
-        draggable={false}
-        style={{
-          maxWidth: '90vw', maxHeight: '90vh',
-          transform: `scale(${scale}) translate(${offset.x / scale}px, ${offset.y / scale}px)`,
-          transformOrigin: 'center',
-          transition: dragging.current ? 'none' : 'transform 120ms ease',
-          borderRadius: 4,
-          boxShadow: '0 8px 40px rgba(0,0,0,0.6)',
-          pointerEvents: 'none',
-        }}
-      />
-      {/* controles */}
-      <div style={{
-        position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-        display: 'flex', gap: 8, alignItems: 'center',
-        background: 'rgba(0,0,0,0.6)', borderRadius: 20, padding: '6px 14px',
-      }}>
-        <button onClick={() => setScale(s => Math.max(1, +(s - 0.5).toFixed(1)))}
-          style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer', lineHeight: 1 }}>−</button>
-        <span onClick={reset} style={{ color: '#fff', fontSize: 12, minWidth: 40, textAlign: 'center', cursor: 'pointer' }}>
-          {Math.round(scale * 100)}%
-        </span>
-        <button onClick={() => setScale(s => Math.min(8, +(s + 0.5).toFixed(1)))}
-          style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer', lineHeight: 1 }}>+</button>
-      </div>
-      {/* fechar */}
-      <button onClick={onClose} style={{
-        position: 'fixed', top: 16, right: 16,
-        background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.2)',
-        color: '#fff', borderRadius: '50%', width: 36, height: 36,
-        fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>×</button>
+    <div onClick={e => { if (e.target === e.currentTarget) onClose(); }} onWheel={onWheel} onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp} style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: scale > 1 ? 'grab' : 'zoom-in', userSelect: 'none' }}>
+      <img src={url} alt="preview" draggable={false} style={{ maxWidth: '90vw', maxHeight: '90vh', transform: `scale(${scale}) translate(${offset.x / scale}px, ${offset.y / scale}px)`, transformOrigin: 'center', transition: dragging.current ? 'none' : 'transform 120ms ease', borderRadius: 4, boxShadow: '0 8px 40px rgba(0,0,0,0.6)', pointerEvents: 'none' }} />
+      <button onClick={onClose} style={{ position: 'fixed', top: 16, right: 16, background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: '50%', width: 36, height: 36, fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
     </div>
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+// CHAT SCREEN — componente principal
+// ═══════════════════════════════════════════════════════════════
 export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
-  const [instances, setInstances]               = useState([]);
-  const [selectedInstance, setSelectedInstance]  = useState(null);
-  const [convs, setConvs]                        = useState([]);
-  const [usingRealData, setUsingRealData]        = useState(false);
-  const [tab, setTab]                            = useState('all');
-  const [activeId, setActiveId]                  = useState(null);
-  const [mobileView, setMobileView]              = useState('list'); // 'list' | 'chat'
-  const [isMobile, setIsMobile]                  = useState(() => window.innerWidth <= 768);
-  const [search, setSearch]                      = useState('');
-  const [draft, setDraft]                        = useState('');
-  const [messages, setMessages]                  = useState({});
-  const [typing, setTyping]                      = useState(false);
-  const [showInfo, setShowInfo]                  = useState(false);
-  const [sending, setSending]                    = useState(false);
-  const [showEmoji, setShowEmoji]                = useState(false);
-  const [members, setMembers]                    = useState([]);
-  const [showNewInternal, setShowNewInternal]    = useState(false);
-  const [currentUser, setCurrentUser]            = useState(null);
-  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
-  const [statusFilter, setStatusFilter]             = useState(null); // 'aguardando' | 'em_atendimento' | ...
-  const [statusTab, setStatusTab]                   = useState('aberto'); // 'aberto' | 'finalizado'
-  const [departments, setDepartments]               = useState([]);
-  const [filters, setFilters]                       = useState({ department: null, tag: null, status: null });
-  const [taggedCustomerIds, setTaggedCustomerIds]   = useState(null);
-  const [activeCustomer, setActiveCustomer]         = useState(null);
+  // ── Dados e instâncias ────────────────────────────────────
+  const [instances, setInstances]            = useState([]);
+  const [selectedInstance, setSelectedInstance] = useState(null);
+  const [convs, setConvs]                    = useState([]);
+  const [usingRealData, setUsingRealData]    = useState(false);
+  const [members, setMembers]                = useState([]);
+  const [currentUser, setCurrentUser]        = useState(null);
+  const [departments, setDepartments]        = useState([]);
+  const [activeCustomer, setActiveCustomer]  = useState(null);
 
-  // ── Status de atendimento ────────────────────────────────
-  const {
-    status: convStatus,
-    loading: statusLoading,
-    internalNotes,
-    refresh: refreshStatus,
-    changeStatus,
-    finish,
-    reopen,
-    start,
-  } = useConversationStatus(activeId, tenantDbId, currentUser?.id);
+  // ── UI state ──────────────────────────────────────────────
+  const [activeId, setActiveId]              = useState(null);
+  const [headerTab, setHeaderTab]            = useState('inbox');
+  const [search, setSearch]                  = useState('');
+  const [statusFilter, setStatusFilter]      = useState(null);
+  const [statusTab, setStatusTab]            = useState('aberto');
+  const [tab, setTab]                        = useState('all');
+  const [filters, setFilters]                = useState({ department: null, tag: null, status: null });
+  const [taggedCustomerIds, setTaggedCustomerIds] = useState(null);
 
-  // ── Gravação de áudio ──────────────────────────────────
-  const [recState, setRecState]     = useState('idle'); // idle | recording | preview
-  const [recSeconds, setRecSeconds] = useState(0);
-  const [audioPreview, setAudioPreview] = useState(null); // { blob, url }
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef   = useRef([]);
-  const recTimerRef      = useRef(null);
+  // ── Mensagens ─────────────────────────────────────────────
+  const [messages, setMessages]              = useState({});
+  const [typing, setTyping]                  = useState(false);
+  const [draft, setDraft]                    = useState('');
+  const [sending, setSending]                = useState(false);
+  const [replyTo, setReplyTo]                = useState(null);
+  const [lightboxUrl, setLightboxUrl]        = useState(null);
 
-  // ── Canais Internos state ───────────────────────────────
-  const [chanMsgs, setChanMsgs]                  = useState({});
-  const [chanDraft, setChanDraft]                = useState('');
-  const [showPinned, setShowPinned]              = useState(false);
-  const [taskFromMsg, setTaskFromMsg]            = useState(null);
-  const [taskFromMsgTitle, setTaskFromMsgTitle]  = useState('');
-  const [savingTask, setSavingTask]              = useState(false);
+  // ── AI / Composer ─────────────────────────────────────────
+  const [aiMode, setAiMode]                  = useState('humano');
+  const [showCopilot, setShowCopilot]        = useState(true);
+  const [showSlash, setShowSlash]            = useState(false);
+  const [showMention, setShowMention]        = useState(false);
+  const [showQR, setShowQR]                  = useState(false);
+  const [aiAction, setAiAction]              = useState(null);
+  const [resolved, setResolved]              = useState({});
 
-  // ── Mensagens Rápidas ─────────────────────────────────
-  const [quickReplies, setQuickReplies]   = useState([]);
-  const [showQRPopup, setShowQRPopup]     = useState(false);
-  const [qrFilter, setQrFilter]           = useState('');
-  const [showQRManager, setShowQRManager] = useState(false);
-  const [qrEditId, setQrEditId]           = useState(null);
-  const [qrEditTitle, setQrEditTitle]     = useState('');
-  const [qrEditContent, setQrEditContent] = useState('');
-  const [qrTab, setQrTab]                 = useState('quick');
-  const [qrExpandedId, setQrExpandedId]   = useState(null);
-  const [qrCreating, setQrCreating]       = useState(false);
-  const [lightboxUrl, setLightboxUrl]     = useState(null);
-  const [pastedImage, setPastedImage]     = useState(null); // { file, previewUrl, caption }
-  const [replyTo, setReplyTo]             = useState(null);
-  const [hoveredMsgId, setHoveredMsgId]   = useState(null);
+  // ── Canais internos ───────────────────────────────────────
+  const [chanMsgs, setChanMsgs]              = useState({});
+  const [chanDraft, setChanDraft]            = useState('');
 
-  const scrollRef     = useRef(null);
-  const textareaRef   = useRef(null);
-  const chanScrollRef = useRef(null);
-  const activeIdRef   = useRef(activeId);
-  const photoCacheRef = useRef({});
-  const convsRef      = useRef(convs);
-  const persistingRef = useRef(new Set());
+  // ── Respostas rápidas ─────────────────────────────────────
+  const [quickReplies, setQuickReplies]      = useState([]);
+
+  // ── Gravação de áudio ─────────────────────────────────────
+  const [recState, setRecState]              = useState('idle');
+  const [recSeconds, setRecSeconds]          = useState(0);
+  const [audioPreview, setAudioPreview]      = useState(null);
+  const mediaRecorderRef                      = useRef(null);
+  const audioChunksRef                        = useRef([]);
+  const recTimerRef                           = useRef(null);
+
+  // ── Painel direito collapse ────────────────────────────────
+  const [openPerfil, setOpenPerfil]          = useState(true);
+  const [openIA, setOpenIA]                  = useState(true);
+  const [openNotas, setOpenNotas]            = useState(false);
+  const [openEndereco, setOpenEndereco]      = useState(false);
+  const [openDados, setOpenDados]            = useState(false);
+  const [openIfood, setOpenIfood]            = useState(false);
+
+  // ── Refs ──────────────────────────────────────────────────
+  const scrollRef      = useRef(null);
+  const textareaRef    = useRef(null);
+  const chanScrollRef  = useRef(null);
+  const activeIdRef    = useRef(activeId);
+  const photoCacheRef  = useRef({});
+  const convsRef       = useRef(convs);
+  const persistingRef  = useRef(new Set());
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
   useEffect(() => { convsRef.current = convs; }, [convs]);
 
-  // Atualiza status de atendimento quando muda de conversa; limpa reply pendente
-  useEffect(() => {
-    refreshStatus();
-    setReplyTo(null);
-  }, [activeId, refreshStatus]);
+  // ── Status de atendimento ─────────────────────────────────
+  const { status: convStatus, loading: statusLoading, refresh: refreshStatus, changeStatus, finish } = useConversationStatus(activeId, tenantDbId, currentUser?.id);
 
-  // Carrega customer quando muda de conversa
-  useEffect(() => {
-    const conv = convsRef.current.find(c => c.id === activeId);
-    if (!conv?.customer_id) { setActiveCustomer(null); return; }
-    supabase.from('customers')
-      .select('id, name, phone, email, document, created_at')
-      .eq('id', conv.customer_id)
-      .maybeSingle()
-      .then(({ data }) => setActiveCustomer(data ?? null));
-  }, [activeId]);
+  // ── CONTAGENS para badges de status ────────────────────────
+  const statusCounts = useMemo(() => ({
+    aguardando:         convs.filter(c => c.status === 'aguardando' || !c.status).length,
+    em_atendimento:     convs.filter(c => c.status === 'em_atendimento').length,
+    atendimento_aberto: convs.filter(c => c.status === 'atendimento_aberto').length,
+    finalizado:         convs.filter(c => c.status === 'finalizado').length,
+    automacao:          convs.filter(c => c.status === 'automacao').length,
+  }), [convs]);
 
-  // Busca foto + nome do WhatsApp quando uma conversa é aberta
-  useEffect(() => {
-    if (!HAS_EVO || !selectedInstance || !activeId) return;
-    const conv = convsRef.current.find(c => c.id === activeId);
-    if (!conv || !conv.whatsapp_chat_id) return;
-    if (conv.type !== 'whatsapp' && conv.type !== 'group') return;
-    const phone = conv.whatsapp_chat_id.split('@')[0];
-    if (!phone) return;
+  const COUNTS = useMemo(() => [
+    { id: 'aguardando',         icon: 'clock', value: statusCounts.aguardando,         kind: 'amber', label: 'Aguardando' },
+    { id: 'em_atendimento',     icon: 'msg',   value: statusCounts.em_atendimento,     kind: 'gray',  label: 'Em atendimento' },
+    { id: 'atendimento_aberto', icon: 'inbox', value: statusCounts.atendimento_aberto, kind: 'green', label: 'Aberto' },
+    { id: 'finalizado',         icon: 'check', value: statusCounts.finalizado,         kind: 'gray',  label: 'Finalizados' },
+    { id: 'automacao',          icon: 'alert', value: statusCounts.automacao,          kind: 'amber', label: 'Automação' },
+  ], [statusCounts]);
 
-    const cached = photoCacheRef.current[phone];
-    if (cached === false) return;
-
-    function applyName(waName) {
-      if (!waName) return;
-      setConvs(prev => prev.map(c => {
-        if (c.id !== activeId) return c;
-        if (c.waNameFetched) return c;
-        return { ...c, name: waName, avatar: waName.slice(0, 2).toUpperCase(), waNameFetched: true };
-      }));
-    }
-
-    if (cached !== undefined) {
-      applyName(cached.waName);
-      return;
-    }
-
-    fetchProfile(selectedInstance, phone)
-      .then(data => {
-        console.log('[fetchProfile] response:', JSON.stringify(data));
-        const photoUrl = data?.picture || data?.profilePictureUrl || data?.imgUrl
-          || data?.profilePic || data?.profilePicUrl || data?.image || null;
-        const waName   = data?.name || data?.pushName || data?.verifiedName
-          || data?.notify || data?.short_name || null;
-        photoCacheRef.current[phone] = { photoUrl, waName };
-        applyName(waName);
-
-        // Persiste nome no banco
-        if (waName) {
-          supabase.from('conversations')
-            .update({ push_name: waName })
-            .eq('id', activeId)
-            .then(() => {})
-            .catch(() => {});
-        }
-      })
-      .catch(() => { photoCacheRef.current[phone] = false; });
-  }, [activeId, selectedInstance]);
-
-  // Persiste foto de perfil em Storage para conversas que não têm foto
-  useEffect(() => {
-    if (!HAS_EVO || !selectedInstance) return;
-    const target = convs.find(c =>
-      (c.type === 'whatsapp' || c.type === 'group')
-      && c.whatsapp_chat_id
-      && !c.photoUrl
-      && photoCacheRef.current[c.whatsapp_chat_id.split('@')[0]] !== false
-      && !persistingRef.current.has(c.id)
-    );
-    if (!target) return;
-
-    const phone = target.whatsapp_chat_id.split('@')[0];
-    persistingRef.current.add(target.id);
-    console.log('[ChatScreen] auto-persist-profile-pic para', phone, 'conv:', target.id);
-
-    (async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/persist-profile-pic`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token}`,
-          },
-          body: JSON.stringify({
-            instanceName: selectedInstance,
-            phone,
-            conversationId: target.id,
-          }),
-        });
-        console.log('[ChatScreen] persist-profile-pic status:', res.status);
-        if (res.ok) {
-          const { publicUrl, hasPhoto } = await res.json();
-          if (publicUrl) {
-            console.log('[ChatScreen] persist-profile-pic OK:', publicUrl);
-            setConvs(prev => prev.map(c => c.id === target.id ? { ...c, photoUrl: publicUrl } : c));
-          } else if (hasPhoto === false) {
-            console.log('[ChatScreen] persist-profile-pic: contato sem foto');
-            photoCacheRef.current[phone] = false;
-          }
-        } else {
-          const errText = await res.text();
-          console.error('[ChatScreen] persist-profile-pic error:', res.status, errText);
-          // Marca cache como false para não tentar de novo na sessão
-          photoCacheRef.current[phone] = false;
-        }
-      } catch (e) {
-        console.error('[ChatScreen] persist-profile-pic exception:', e);
-        photoCacheRef.current[phone] = false;
-      } finally {
-        persistingRef.current.delete(target.id);
-      }
-    })();
-  }, [selectedInstance, convs]);
-
+  // ── EFFECTS DE INICIALIZAÇÃO ───────────────────────────────
   useEffect(() => {
     loadInstances();
     loadMembers();
@@ -368,43 +435,158 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     loadInternalChannels();
     loadQuickReplies();
     if (tenantDbId) {
-      supabase.from('departments').select('id, name, color')
-        .eq('tenant_id', tenantDbId).eq('is_active', true).order('name')
+      supabase.from('departments').select('id, name, color').eq('tenant_id', tenantDbId).eq('is_active', true).order('name')
         .then(({ data }) => setDepartments(data ?? []));
     }
   }, [tenant, tenantDbId]);
 
-  // Carrega customer_ids com a tag selecionada para filtro client-side
   useEffect(() => {
     if (!filters?.tag) { setTaggedCustomerIds(null); return; }
     supabase.from('customer_tags').select('customer_id').eq('tag_id', filters.tag)
       .then(({ data }) => setTaggedCustomerIds(data ? new Set(data.map(r => r.customer_id)) : new Set()));
   }, [filters?.tag]);
 
-  // ── Load channel messages when switching to a channel ──
+  useEffect(() => {
+    refreshStatus();
+    setReplyTo(null);
+  }, [activeId, refreshStatus]);
+
+  useEffect(() => {
+    const conv = convsRef.current.find(c => c.id === activeId);
+    if (!conv?.customer_id) { setActiveCustomer(null); return; }
+    supabase.from('customers').select('id, name, phone, email, document, created_at').eq('id', conv.customer_id).maybeSingle()
+      .then(({ data }) => setActiveCustomer(data ?? null));
+  }, [activeId]);
+
+  // Fetch foto/nome WhatsApp
+  useEffect(() => {
+    if (!HAS_EVO || !selectedInstance || !activeId) return;
+    const conv = convsRef.current.find(c => c.id === activeId);
+    if (!conv?.whatsapp_chat_id) return;
+    if (conv.type !== 'whatsapp' && conv.type !== 'group') return;
+    const phone = conv.whatsapp_chat_id.split('@')[0];
+    if (!phone) return;
+    const cached = photoCacheRef.current[phone];
+    if (cached === false) return;
+    function applyName(waName) {
+      if (!waName) return;
+      setConvs(prev => prev.map(c => {
+        if (c.id !== activeId || c.waNameFetched) return c;
+        return { ...c, name: waName, avatar: waName.slice(0, 2).toUpperCase(), waNameFetched: true };
+      }));
+    }
+    if (cached !== undefined) { applyName(cached.waName); return; }
+    fetchProfile(selectedInstance, phone).then(data => {
+      const photoUrl = data?.picture || data?.profilePictureUrl || null;
+      const waName   = data?.name || data?.pushName || null;
+      photoCacheRef.current[phone] = { photoUrl, waName };
+      applyName(waName);
+      if (waName) supabase.from('conversations').update({ push_name: waName }).eq('id', activeId).then(() => {}).catch(() => {});
+    }).catch(() => { photoCacheRef.current[phone] = false; });
+  }, [activeId, selectedInstance]);
+
+  // Reset ao trocar tenant
+  useEffect(() => {
+    setConvs([]); setActiveId(null); setMessages({}); setDraft('');
+    setUsingRealData(false); setSelectedInstance(null);
+  }, [tenant]);
+
+  useEffect(() => {
+    if (selectedInstance) {
+      loadRealtimeConvs(selectedInstance).then(() => loadWAGroups());
+    } else {
+      setConvs(prev => prev.filter(c => c.id.startsWith('wag-') || c.id.startsWith('chan-')));
+      setUsingRealData(false);
+    }
+  }, [selectedInstance]);
+
+  // Realtime global de mensagens
+  useEffect(() => {
+    if (!usingRealData) return;
+    const channel = supabase
+      .channel('global-messages-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
+        const msg = payload.new;
+        const text = msg.content || msg.body || '';
+        if (!text && !msg.media_url && !msg.media_type) return;
+        const convId    = msg.conversation_id;
+        const isInbound = msg.direction !== 'outbound';
+        const time      = new Date(msg.created_at || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        const isActive  = convId === activeIdRef.current;
+        const mediaType = msg.media_type || null;
+        const preview   = text || (mediaType === 'image' ? '🖼 Imagem' : mediaType === 'video' ? '🎬 Vídeo' : mediaType === 'document' ? '📄 Documento' : mediaType?.includes('audio') ? '🎵 Áudio' : '');
+        setMessages(m => {
+          const convMsgs = m[convId] || [];
+          if (!isInbound) {
+            const tmpIdx = convMsgs.findIndex(ex => ex.id?.startsWith('tmp-') && ex.text === text && ex.from === 'out');
+            if (tmpIdx !== -1) return { ...m, [convId]: convMsgs.map((ex, i) => i === tmpIdx ? { ...ex, id: msg.id } : ex) };
+          }
+          return { ...m, [convId]: [...convMsgs, { id: msg.id, from: isInbound ? 'in' : 'out', text, time, mediaType, mediaUrl: msg.media_url || null, agentName: msg.sender_name || null, waMsgId: msg.whatsapp_msg_id || null, replyTo: msg.quoted_content || null }] };
+        });
+        setConvs(prev => {
+          const idx = prev.findIndex(c => c.id === convId);
+          if (idx === -1) {
+            supabase.from('conversations').select('*').eq('id', convId).single().then(({ data: conv }) => {
+              if (!conv) return;
+              const phone = conv.whatsapp_chat_id?.split('@')[0] || '';
+              const name  = conv.push_name || conv.contact_name || conv.group_name || phone || 'Desconhecido';
+              setConvs(p => {
+                if (p.find(c => c.whatsapp_chat_id === conv.whatsapp_chat_id)) return p;
+                return [{ id: conv.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: conv.push_photo_url || null, type: conv.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: conv.whatsapp_chat_id, preview, previewFrom: 'in', time, unread: 1, online: false, messages: [], status: conv.status }, ...p];
+              });
+            });
+            return prev;
+          }
+          const conv    = prev[idx];
+          const updated = { ...conv, preview, time, unread: isActive ? 0 : (conv.unread || 0) + (isInbound ? 1 : 0), ...(isInbound && conv.status === 'finalizado' ? { status: 'aguardando' } : {}) };
+          return [updated, ...prev.filter(c => c.id !== convId)];
+        });
+        if (isInbound && !isActive) playNotificationSound();
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, payload => {
+        const msg = payload.new;
+        if (!msg.media_url) return;
+        setMessages(m => {
+          const convMsgs = m[msg.conversation_id];
+          if (!convMsgs) return m;
+          return { ...m, [msg.conversation_id]: convMsgs.map(ex => ex.id === msg.id ? { ...ex, mediaUrl: msg.media_url } : ex) };
+        });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [usingRealData]);
+
+  // Canal interno — carrega mensagens ao selecionar
   useEffect(() => {
     if (activeId?.startsWith('chan-')) {
-      setShowInfo(false);
       const chanId = convs.find(c => c.id === activeId)?.chanId;
-      if (chanId && !chanMsgs[chanId]?.length) {
-        loadChanMsgs(chanId);
-      }
+      if (chanId && !chanMsgs[chanId]?.length) loadChanMsgs(chanId);
     }
   }, [activeId]);
 
-  // ── Auto-scroll channel messages ───────────────────────
+  // Auto-scroll
   useEffect(() => {
-    if (chanScrollRef.current) {
-      chanScrollRef.current.scrollTop = chanScrollRef.current.scrollHeight;
-    }
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages, activeId, typing]);
+  useEffect(() => {
+    if (chanScrollRef.current) chanScrollRef.current.scrollTop = chanScrollRef.current.scrollHeight;
   }, [chanMsgs, activeId]);
+
+  // ── FUNÇÕES DE CARREGAMENTO ────────────────────────────────
+  async function loadInstances() {
+    try {
+      const { data } = await supabase.from('evolution_instances').select('id, instance_name, status, phone, profile_name').order('created_at');
+      if (data?.length) {
+        setInstances(data);
+        const connected = data.find(i => i.status === 'connected') || data[0];
+        setSelectedInstance(connected.instance_name);
+      }
+    } catch { /* demo mode */ }
+  }
 
   async function loadMembers() {
     try {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, avatar_url')
-        .order('full_name');
+      const { data } = await supabase.from('profiles').select('id, full_name, email, avatar_url').order('full_name');
       if (data?.length) setMembers(data);
     } catch { /* ignore */ }
   }
@@ -417,648 +599,103 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         supabase.from('profiles').select('full_name, avatar_url').eq('id', user.id).single(),
         supabase.from('tenant_members').select('display_name').eq('user_id', user.id).maybeSingle(),
       ]);
-      setCurrentUser({
-        id:   user.id,
-        email: user.email,
-        name: member?.display_name || profile?.full_name || user.email?.split('@')[0] || 'Equipe',
-      });
+      setCurrentUser({ id: user.id, email: user.email, name: member?.display_name || profile?.full_name || user.email?.split('@')[0] || 'Equipe' });
     } catch { /* ignore */ }
   }
 
-  function insertEmoji(emoji) {
-    const ta = textareaRef.current;
-    if (!ta) { setDraft(d => d + emoji); return; }
-    const start = ta.selectionStart;
-    const end   = ta.selectionEnd;
-    setDraft(draft.slice(0, start) + emoji + draft.slice(end));
-    setTimeout(() => {
-      ta.selectionStart = start + emoji.length;
-      ta.selectionEnd   = start + emoji.length;
-      ta.focus();
-    }, 0);
+  async function loadQuickReplies() {
+    try {
+      const { data } = await supabase.from('quick_replies').select('id, title, content').order('title');
+      if (data) setQuickReplies(data);
+    } catch { /* ignore */ }
   }
-
-  async function createInternalConv(member) {
-    const tempId  = 'int-' + member.id;
-    const initials = (member.full_name || 'TM').split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
-    const conv = {
-      id: tempId, name: member.full_name || member.email || 'Membro',
-      avatar: initials, type: 'internal', preview: '', time: '', unread: 0,
-      online: false, messages: [], memberId: member.id,
-    };
-    setConvs(prev => {
-      if (prev.find(c => c.id === tempId)) return prev;
-      return [conv, ...prev];
-    });
-    setMessages(m => ({ ...m, [tempId]: [] }));
-    setActiveId(tempId);
-    setTab('all');
-    setShowNewInternal(false);
-  }
-
-  useEffect(() => {
-    setConvs([]);
-    setActiveId(null);
-    setMessages({});
-    setDraft('');
-    setShowInfo(false);
-    setUsingRealData(false);
-    setSelectedInstance(null);
-  }, [tenant]);
-
-  useEffect(() => {
-    if (selectedInstance) {
-      // loadRealtimeConvs faz setConvs(mapped) substituindo tudo — aguarda terminar
-      // antes de loadWAGroups appender os grupos, evitando race condition
-      loadRealtimeConvs(selectedInstance).then(() => loadWAGroups());
-    } else {
-      setConvs(prev => prev.filter(c => c.id.startsWith('wag-') || c.id.startsWith('chan-')));
-      setUsingRealData(false);
-    }
-  }, [selectedInstance]);
-
-  // ── Realtime global: todas as mensagens de todas as conversas ──
-  useEffect(() => {
-    if (!usingRealData) return;
-
-    const channel = supabase
-      .channel('global-messages-realtime')
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages' },
-        payload => {
-          const msg = payload.new;
-          const text = msg.content || msg.body || '';
-          if (!text && !msg.media_url && !msg.media_type) return;
-
-          const convId    = msg.conversation_id;
-          const isInbound = msg.direction !== 'outbound';
-          const time      = new Date(msg.created_at || Date.now())
-            .toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-          const isActive  = convId === activeIdRef.current;
-          const mediaType = msg.media_type || null;
-          const preview   = text
-            || (mediaType === 'image'    ? '🖼 Imagem'
-              : mediaType === 'video'    ? '🎬 Vídeo'
-              : mediaType === 'document' ? '📄 Documento'
-              : mediaType?.includes('audio') ? '🎵 Áudio' : '');
-
-          // 1. Atualiza a thread da conversa
-          setMessages(m => {
-            const convMsgs = m[convId] || [];
-            // Deduplica outbound: substitui mensagem temporária local pela real do banco
-            if (!isInbound) {
-              const tmpIdx = convMsgs.findIndex(ex => ex.id?.startsWith('tmp-') && ex.text === text && ex.from === 'out');
-              if (tmpIdx !== -1) {
-                return {
-                  ...m,
-                  [convId]: convMsgs.map((ex, i) => i === tmpIdx ? { ...ex, id: msg.id, agentName: msg.sender_name || ex.agentName || null } : ex),
-                };
-              }
-            }
-            return {
-              ...m,
-              [convId]: [...convMsgs, {
-                id:        msg.id,
-                from:      isInbound ? 'in' : 'out',
-                text,
-                time,
-                mediaType,
-                mediaUrl:  msg.media_url || null,
-                agentName: msg.sender_name || null,
-                waMsgId:   msg.whatsapp_msg_id || null,
-                replyTo:   msg.quoted_content || null,
-              }],
-            };
-          });
-
-          // 2. Atualiza sidebar: preview + unread + sobe para o topo
-          setConvs(prev => {
-            const idx = prev.findIndex(c => c.id === convId);
-
-            // Conversa nova (primeiro contato) — busca do DB e adiciona na sidebar
-            if (idx === -1) {
-              supabase.from('conversations').select('*').eq('id', convId).single()
-                .then(({ data: conv }) => {
-                  if (!conv) return;
-                  const phone = conv.whatsapp_chat_id?.split('@')[0] || '';
-                  const name  = conv.push_name || conv.contact_name || conv.group_name || phone || 'Desconhecido';
-                  setConvs(p => {
-                    if (p.find(c => c.whatsapp_chat_id === conv.whatsapp_chat_id)) return p;
-                    return [{
-                      id: conv.id, name, avatar: name.slice(0, 2).toUpperCase(),
-                      photoUrl: conv.push_photo_url || null,
-                      type: conv.is_group ? 'group' : 'whatsapp',
-                      whatsapp_chat_id: conv.whatsapp_chat_id,
-                      preview, previewFrom: 'in', time, unread: 1, online: false, messages: [],
-                      status: conv.status,
-                    }, ...p];
-                  });
-                });
-              return prev;
-            }
-
-            const conv    = prev[idx];
-            const updated = {
-              ...conv,
-              preview,
-              time,
-              unread: isActive ? 0 : (conv.unread || 0) + (isInbound ? 1 : 0),
-              // Mensagem inbound reabre conversa finalizada → volta para Aberto
-              ...(isInbound && conv.status === 'finalizado'
-                ? { status: 'aguardando', status_v2: 'open' } : {}),
-            };
-            return [updated, ...prev.filter(c => c.id !== convId)];
-          });
-
-          // 3. Som + Badge apenas para mensagens recebidas em conversa não ativa
-          if (isInbound && !isActive) {
-            playNotificationSound();
-          }
-        })
-      .on('postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'messages' },
-        payload => {
-          const msg = payload.new;
-          if (!msg.media_url) return;
-          // Atualiza media_url quando webhook salva base64 após o INSERT
-          setMessages(m => {
-            const convMsgs = m[msg.conversation_id];
-            if (!convMsgs) return m;
-            return {
-              ...m,
-              [msg.conversation_id]: convMsgs.map(ex =>
-                ex.id === msg.id ? { ...ex, mediaUrl: msg.media_url } : ex
-              ),
-            };
-          });
-        })
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [usingRealData]);
-
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages, activeId, typing]);
-
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener('resize', handler);
-    return () => window.removeEventListener('resize', handler);
-  }, []);
 
   async function loadWAGroups() {
     try {
       if (!tenantDbId) return;
-      const { data } = await supabase.from('whatsapp_groups')
-        .select('id, group_name, evolution_jid, loja_id')
-        .eq('tenant_id', tenantDbId)
-        .order('created_at', { ascending: false });
+      const { data } = await supabase.from('whatsapp_groups').select('id, group_name, evolution_jid, loja_id').eq('tenant_id', tenantDbId).order('created_at', { ascending: false });
       if (!data?.length) return;
-      const groupConvs = data.map(g => ({
-        id: 'wag-' + g.id, name: g.group_name || g.evolution_jid,
-        avatar: (g.group_name || 'G').slice(0, 2).toUpperCase(),
-        type: 'group', whatsapp_chat_id: g.evolution_jid, waGroupId: g.id,
-        groupType: 'Grupo WhatsApp', preview: 'Grupo WhatsApp',
-        time: '', unread: 0, online: false, messages: [], status: 'finalizado',
-      }));
+      const groupConvs = data.map(g => ({ id: 'wag-' + g.id, name: g.group_name || g.evolution_jid, avatar: (g.group_name || 'G').slice(0, 2).toUpperCase(), type: 'group', whatsapp_chat_id: g.evolution_jid, waGroupId: g.id, preview: 'Grupo WhatsApp', time: '', unread: 0, online: false, messages: [], status: 'finalizado' }));
       setConvs(prev => [...prev.filter(c => !c.id.startsWith('wag-')), ...groupConvs]);
     } catch { /* ignore */ }
   }
 
   async function loadInternalChannels() {
     try {
-      let q = supabase.from('internal_channels')
-        .select('id, name, color, description, is_global')
-        .order('created_at', { ascending: false });
+      let q = supabase.from('internal_channels').select('id, name, color, description, is_global').order('created_at', { ascending: false });
       if (tenantDbId) q = q.or(`tenant_id.eq.${tenantDbId},is_global.eq.true`);
       const { data } = await q;
       if (!data?.length) return;
-      const chanConvs = data.map(c => ({
-        id: 'chan-' + c.id, name: '#' + c.name, avatar: c.name.slice(0, 2).toUpperCase(),
-        type: 'internal', chanId: c.id, color: c.color || '#2563EB',
-        isGlobal: c.is_global, description: c.description || '',
-        preview: c.description || 'Canal interno', time: '', unread: 0, online: false, messages: [],
-      }));
+      const chanConvs = data.map(c => ({ id: 'chan-' + c.id, name: '#' + c.name, avatar: c.name.slice(0, 2).toUpperCase(), type: 'internal', chanId: c.id, color: c.color || '#2563EB', isGlobal: c.is_global, description: c.description || '', preview: c.description || 'Canal interno', time: '', unread: 0, online: false, messages: [] }));
       setConvs(prev => [...prev.filter(c => !c.id.startsWith('chan-')), ...chanConvs]);
     } catch { /* ignore */ }
   }
 
   async function loadChanMsgs(chanId) {
     try {
-      const { data } = await supabase
-        .from('channel_messages')
-        .select('id, sender_id, sender_name, text, is_pinned, created_at')
-        .eq('channel_id', chanId)
-        .order('created_at');
+      const { data } = await supabase.from('channel_messages').select('id, sender_id, sender_name, text, is_pinned, created_at').eq('channel_id', chanId).order('created_at');
       if (data) setChanMsgs(m => ({ ...m, [chanId]: data }));
-    } catch { /* ignore */ }
-  }
-
-  async function sendChanMsg() {
-    const text = chanDraft.trim();
-    if (!text || !active) return;
-    const chanId = active.chanId;
-    const now = new Date();
-    const tmpMsg = {
-      id: 'tmp-' + Date.now(), sender_name: 'Você', text,
-      is_pinned: false, created_at: now.toISOString(),
-    };
-    setChanMsgs(m => ({ ...m, [chanId]: [...(m[chanId] || []), tmpMsg] }));
-    setChanDraft('');
-    try {
-      const { data } = await supabase.from('channel_messages').insert({
-        channel_id: chanId, sender_name: 'Você', text,
-      }).select().single();
-      if (data) {
-        setChanMsgs(m => ({
-          ...m,
-          [chanId]: (m[chanId] || []).map(msg => msg.id === tmpMsg.id ? data : msg),
-        }));
-      }
-    } catch { /* ignore */ }
-  }
-
-  async function togglePin(chanId, msgId, current) {
-    setChanMsgs(m => ({
-      ...m,
-      [chanId]: (m[chanId] || []).map(msg =>
-        msg.id === msgId ? { ...msg, is_pinned: !current } : msg
-      ),
-    }));
-    try {
-      await supabase.from('channel_messages')
-        .update({ is_pinned: !current, pinned_at: !current ? new Date().toISOString() : null })
-        .eq('id', msgId);
-    } catch { /* ignore */ }
-  }
-
-  async function createTaskFromMsg() {
-    if (!taskFromMsg || !taskFromMsgTitle.trim()) return;
-    setSavingTask(true);
-    try {
-      await supabase.from('tasks').insert({
-        title: taskFromMsgTitle.trim(),
-        description: taskFromMsg.text,
-        tenant_id: tenantDbId,
-        col: 'todo',
-      });
-    } catch { /* ignore */ }
-    setSavingTask(false);
-    setTaskFromMsg(null);
-    setTaskFromMsgTitle('');
-  }
-
-  async function loadInstances() {
-    try {
-      const { data } = await supabase
-        .from('evolution_instances')
-        .select('id, instance_name, status, phone, profile_name')
-        .order('created_at');
-      if (data?.length) {
-        setInstances(data);
-        const connected = data.find(i => i.status === 'connected') || data[0];
-        setSelectedInstance(connected.instance_name);
-      }
-    } catch { /* demo mode */ }
-  }
-
-  async function loadQuickReplies() {
-    try {
-      // RLS handles filtering — SELECT policy allows own agent_id OR tenant_id
-      const { data, error } = await supabase
-        .from('quick_replies')
-        .select('id, title, content')
-        .order('title');
-      if (error) console.error('[QR] load error:', error.message);
-      if (data) setQuickReplies(data);
-    } catch (e) { console.error('[QR] load exception:', e); }
-  }
-
-  async function saveQuickReply() {
-    if (!qrEditTitle.trim() || !qrEditContent.trim()) return;
-    try {
-      if (qrEditId) {
-        const { error } = await supabase.from('quick_replies')
-          .update({ title: qrEditTitle.trim(), content: qrEditContent.trim() })
-          .eq('id', qrEditId);
-        if (error) { console.error('[QR] update error:', error.message); return; }
-      } else {
-        const row = {
-          title:    qrEditTitle.trim(),
-          content:  qrEditContent.trim(),
-          agent_id: currentUser?.id,
-        };
-        if (tenantDbId) row.tenant_id = tenantDbId;
-        const { error } = await supabase.from('quick_replies').insert(row);
-        if (error) { console.error('[QR] insert error:', error.message); return; }
-      }
-      await loadQuickReplies();
-      setQrEditId(null); setQrEditTitle(''); setQrEditContent('');
-      setQrCreating(false); setQrExpandedId(null);
-    } catch (e) { console.error('[QR] save exception:', e); }
-  }
-
-  async function deleteQuickReply(id) {
-    try {
-      await supabase.from('quick_replies').delete().eq('id', id);
-      setQuickReplies(prev => prev.filter(q => q.id !== id));
     } catch { /* ignore */ }
   }
 
   async function loadRealtimeConvs(instanceName) {
     try {
-      const { data: inst } = await supabase.from('evolution_instances')
-        .select('id').eq('instance_name', instanceName).single();
+      const { data: inst } = await supabase.from('evolution_instances').select('id').eq('instance_name', instanceName).single();
       if (!inst) { setConvs([]); setUsingRealData(false); return; }
-
-      const { data: rows } = await supabase.from('conversations')
-        .select('*').eq('instance_id', inst.id)
-        .order('updated_at', { ascending: false }).limit(50);
-
+      const { data: rows } = await supabase.from('conversations').select('*').eq('instance_id', inst.id).order('updated_at', { ascending: false }).limit(50);
       if (rows?.length) {
         const seen = new Set();
-        const uniqueRows = rows.filter(r => {
-          if (seen.has(r.whatsapp_chat_id)) return false;
-          seen.add(r.whatsapp_chat_id);
-          return true;
-        });
-
-        // Busca última mensagem de cada conversa individualmente — garante preview para todas
-        const lastMsgResults = await Promise.all(
-          uniqueRows.map(r =>
-            supabase.from('messages')
-              .select('conversation_id, content, body, direction, created_at, media_type')
-              .eq('conversation_id', r.id)
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle()
-          )
-        );
+        const uniqueRows = rows.filter(r => { if (seen.has(r.whatsapp_chat_id)) return false; seen.add(r.whatsapp_chat_id); return true; });
+        const lastMsgResults = await Promise.all(uniqueRows.map(r => supabase.from('messages').select('conversation_id, content, body, direction, created_at, media_type').eq('conversation_id', r.id).order('created_at', { ascending: false }).limit(1).maybeSingle()));
         const lastMsgMap = {};
-        lastMsgResults.forEach(({ data }) => {
-          if (data) lastMsgMap[data.conversation_id] = data;
-        });
-
+        lastMsgResults.forEach(({ data }) => { if (data) lastMsgMap[data.conversation_id] = data; });
         const mapped = uniqueRows.map(c => {
-          const phone   = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
-          const name    = c.push_name || c.contact_name || c.group_name || phone || 'Desconhecido';
-          const lm      = lastMsgMap[c.id];
-          const preview = lm
-            ? (lm.media_type === 'image'    ? '🖼 Imagem'
-              : lm.media_type === 'video'    ? '🎬 Vídeo'
-              : lm.media_type === 'document' ? '📄 Documento'
-              : lm.media_type?.includes('audio') ? '🎵 Áudio'
-              : lm.content || lm.body || '')
-            : '';
+          const phone = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
+          const name  = c.push_name || c.contact_name || c.group_name || phone || 'Desconhecido';
+          const lm    = lastMsgMap[c.id];
+          const preview = lm ? (lm.media_type === 'image' ? '🖼 Imagem' : lm.media_type === 'video' ? '🎬 Vídeo' : lm.media_type === 'document' ? '📄 Documento' : lm.media_type?.includes('audio') ? '🎵 Áudio' : lm.content || lm.body || '') : '';
           const previewFrom = lm?.direction === 'inbound' ? 'in' : 'out';
-          return {
-            id: c.id, name, avatar: name.slice(0, 2).toUpperCase(),
-            photoUrl: c.push_photo_url || null,
-            type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id,
-            preview, previewFrom,
-            time: c.updated_at
-              ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
-            unread: 0, online: false, messages: [],
-            status:        c.status,
-            department_id: c.department_id || null,
-            customer_id:   c.customer_id   || null,
-            status_v2:     c.status_v2     || 'open',
-            tenant_id:     c.tenant_id     || null,
-          };
+          return { id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null, type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id, preview, previewFrom, time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '', unread: 0, online: false, messages: [], status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null, status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null };
         });
         setConvs(mapped); setActiveId(mapped[0]?.id); setUsingRealData(true);
         if (mapped[0]) loadMsgs(mapped[0].id);
         return;
       }
     } catch { /* ignore */ }
-    setConvs([]);
-    setUsingRealData(false);
+    setConvs([]); setUsingRealData(false);
   }
 
   async function loadMsgs(convId) {
     try {
-      const { data } = await supabase.from('messages')
-        .select('id, direction, content, body, created_at, sender_name, media_url, media_type, whatsapp_msg_id, quoted_content')
-        .eq('conversation_id', convId).order('created_at').limit(100);
+      const { data } = await supabase.from('messages').select('id, direction, content, body, created_at, sender_name, media_url, media_type, whatsapp_msg_id, quoted_content').eq('conversation_id', convId).order('created_at').limit(100);
       if (data) {
-        setMessages(m => ({
-          ...m,
-          [convId]: data
-            .filter(msg => msg.content || msg.body || msg.media_url)
-            .map(msg => ({
-              id:        msg.id,
-              from:      msg.direction === 'outbound' ? 'out' : 'in',
-              text:      msg.content || msg.body || '',
-              time:      new Date(msg.created_at || Date.now())
-                .toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-              mediaType: msg.media_type || null,
-              mediaUrl:  msg.media_url  || null,
-              agentName: msg.sender_name || null,
-              waMsgId:   msg.whatsapp_msg_id || null,
-              replyTo:   msg.quoted_content || null,
-            })),
-        }));
+        setMessages(m => ({ ...m, [convId]: data.filter(msg => msg.content || msg.body || msg.media_url).map(msg => ({ id: msg.id, from: msg.direction === 'outbound' ? 'out' : 'in', text: msg.content || msg.body || '', time: new Date(msg.created_at || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), mediaType: msg.media_type || null, mediaUrl: msg.media_url || null, agentName: msg.sender_name || null, waMsgId: msg.whatsapp_msg_id || null, replyTo: msg.quoted_content || null })) }));
       }
     } catch { /* ignore */ }
   }
 
-  // ── Gravação de áudio ──────────────────────────────────
-  function fmtRecTime(s) {
-    const m = Math.floor(s / 60);
-    return `${m}:${String(s % 60).padStart(2, '0')}`;
-  }
-
-  async function startRecording() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      audioChunksRef.current = [];
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
-      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : {});
-      mr.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-      mr.onstop = () => {
-        stream.getTracks().forEach(t => t.stop());
-        const blob = new Blob(audioChunksRef.current, { type: mr.mimeType || 'audio/webm' });
-        const url  = URL.createObjectURL(blob);
-        setAudioPreview({ blob, url, mimeType: mr.mimeType || 'audio/webm' });
-        setRecState('preview');
-      };
-      mr.start();
-      mediaRecorderRef.current = mr;
-      setRecState('recording');
-      setRecSeconds(0);
-      recTimerRef.current = setInterval(() => setRecSeconds(s => s + 1), 1000);
-    } catch {
-      alert('Permissão de microfone negada ou não disponível.');
-    }
-  }
-
-  function stopRecording() {
-    clearInterval(recTimerRef.current);
-    if (mediaRecorderRef.current?.state === 'recording') {
-      mediaRecorderRef.current.stop();
-    }
-  }
-
-  async function downloadMedia(url, filename) {
-    try {
-      const resp = await fetch(url);
-      const blob = await resp.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = filename || 'download';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
-    } catch {
-      window.open(url, '_blank');
-    }
-  }
-
-  function cancelRecording() {
-    clearInterval(recTimerRef.current);
-    if (mediaRecorderRef.current?.state === 'recording') {
-      mediaRecorderRef.current.stop();
-    }
-    if (audioPreview?.url) URL.revokeObjectURL(audioPreview.url);
-    setAudioPreview(null);
-    setRecState('idle');
-    setRecSeconds(0);
-  }
-
-  async function sendAudio() {
-    if (!audioPreview?.blob || !active || sending) return;
-    setSending(true);
-    const time = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    const localUrl = audioPreview.url;
-    setMessages(m => ({
-      ...m,
-      [active.id]: [...(m[active.id] || []), {
-        id: 'tmp-' + Date.now(), from: 'out', text: '', time,
-        mediaType: 'audio', mediaUrl: localUrl,
-      }],
-    }));
-    if (HAS_EVO && selectedInstance && active.whatsapp_chat_id) {
-      try {
-        const ab     = await audioPreview.blob.arrayBuffer();
-        const bytes  = new Uint8Array(ab);
-        let b64 = '';
-        const chunk = 8192;
-        for (let i = 0; i < bytes.length; i += chunk) {
-          b64 += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunk, bytes.length)));
-        }
-        const base64 = btoa(b64);
-        console.log('[Chat] Enviando áudio:', {
-          instance: selectedInstance,
-          to: active.whatsapp_chat_id,
-          bytes: bytes.length,
-          mimeType: audioPreview.mimeType,
-        });
-        await sendAudioMessage(selectedInstance, active.whatsapp_chat_id, base64);
-      } catch (err) {
-        console.error('[Chat] Falha ao enviar áudio:', err?.message || err);
-      }
-    }
-    setRecState('idle');
-    setRecSeconds(0);
-    setAudioPreview(null);
-    setSending(false);
-  }
-
-  async function sendFile(file, caption = '') {
-    if (!file || !active || sending) return;
-    if (file.size > 10 * 1024 * 1024) { alert('Arquivo muito grande. Máximo: 10 MB'); return; }
-
-    const mimeType  = file.type || 'application/octet-stream';
-    const isImage   = mimeType.startsWith('image/');
-    const isVideo   = mimeType.startsWith('video/');
-    const mediaType = isImage ? 'image' : isVideo ? 'video' : 'document';
-
-    // Converter para base64
-    const base64 = await new Promise((res, rej) => {
-      const reader = new FileReader();
-      reader.onload  = e => res(e.target.result.split(',')[1]);
-      reader.onerror = rej;
-      reader.readAsDataURL(file);
-    });
-    const dataUrl = `data:${mimeType};base64,${base64}`;
-    const time    = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
-    // UI otimista
-    setMessages(m => ({
-      ...m,
-      [active.id]: [...(m[active.id] || []), {
-        id: 'tmp-' + Date.now(), from: 'out', text: file.name, time,
-        mediaType, mediaUrl: dataUrl,
-      }],
-    }));
-    setSending(true);
-    try {
-      if (HAS_EVO && selectedInstance && active.whatsapp_chat_id) {
-        await sendMediaMessage(selectedInstance, active.whatsapp_chat_id, base64, mediaType, mimeType, caption, file.name);
-      }
-      await supabase.from('messages').insert({
-        conversation_id: active.id,
-        direction:   'outbound',
-        content:     caption || file.name,
-        media_type:  mediaType,
-        media_url:   dataUrl,
-        created_at:  new Date().toISOString(),
-      });
-    } catch (err) {
-      console.error('[Chat] Falha ao enviar arquivo:', err);
-    }
-    setSending(false);
-  }
-
+  // ── SEND MESSAGE ──────────────────────────────────────────
   const send = async () => {
     const text = (draft || '').trim();
     if (!text || !active || sending) return;
-
     const isWA = active.type === 'whatsapp' || active.type === 'group';
     const agentName = (currentUser?.name && isWA) ? currentUser.name : null;
-
     const now  = new Date();
     const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     const currentReplyTo = replyTo;
-    setMessages(m => ({
-      ...m,
-      [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text, time, agentName, replyTo: currentReplyTo }],
-    }));
-    setDraft('');
-    setReplyTo(null);
+    setMessages(m => ({ ...m, [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text, time, agentName, replyTo: currentReplyTo }] }));
+    setDraft(''); setReplyTo(null);
     if (HAS_EVO && selectedInstance && active.whatsapp_chat_id) {
       setSending(true);
       const textToSend = agentName ? `*${agentName}:*\n${text}` : text;
-      const waQuoted = currentReplyTo?.waMsgId ? {
-        key: {
-          id: currentReplyTo.waMsgId,
-          remoteJid: active.whatsapp_chat_id,
-          fromMe: currentReplyTo.from === 'out',
-        },
-        message: currentReplyTo.mediaType
-          ? {}
-          : { conversation: currentReplyTo.text || '' },
-      } : null;
+      const waQuoted = currentReplyTo?.waMsgId ? { key: { id: currentReplyTo.waMsgId, remoteJid: active.whatsapp_chat_id, fromMe: currentReplyTo.from === 'out' }, message: currentReplyTo.mediaType ? {} : { conversation: currentReplyTo.text || '' } } : null;
       try {
         await sendTextMessage(selectedInstance, active.whatsapp_chat_id, textToSend, waQuoted);
-        await supabase.from('messages').insert({
-          conversation_id: active.id, direction: 'outbound', content: text, sender_name: agentName || null, created_at: now.toISOString(),
-          ...(currentReplyTo ? { quoted_content: currentReplyTo } : {}),
-        });
-        // Mudar status automaticamente se estava aguardando
-        if (convStatus === 'aguardando') {
-          await changeStatus('em_atendimento');
-        }
+        await supabase.from('messages').insert({ conversation_id: active.id, direction: 'outbound', content: text, sender_name: agentName || null, created_at: now.toISOString(), ...(currentReplyTo ? { quoted_content: currentReplyTo } : {}) });
+        if (convStatus === 'aguardando') await changeStatus('em_atendimento');
       } catch (err) { console.error('Falha ao enviar via Evolution:', err); }
       finally { setSending(false); }
-    } else if (active.type === 'whatsapp' || active.type === 'group') {
+    } else if (isWA) {
       setTyping(true);
       setTimeout(() => {
         setTyping(false);
@@ -1066,98 +703,194 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         const r  = replies[Math.floor(Math.random() * replies.length)];
         const t2 = new Date();
         const tm2 = t2.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-        setMessages(m => ({
-          ...m,
-          [active.id]: [...(m[active.id] || []), { id: 'mock-' + t2.getTime(), from: 'in', text: r, time: tm2 }],
-        }));
+        setMessages(m => ({ ...m, [active.id]: [...(m[active.id] || []), { id: 'mock-' + t2.getTime(), from: 'in', text: r, time: tm2 }] }));
       }, 2400);
     }
   };
 
-  const onKeyDown = e => {
-    if (e.key === 'Tab' && showGhost) {
-      e.preventDefault();
-      setDraft(suggestion);
-    } else if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      send();
+  async function sendChanMsg() {
+    const text = chanDraft.trim();
+    if (!text || !active) return;
+    const chanId = active.chanId;
+    const now = new Date();
+    const tmpMsg = { id: 'tmp-' + Date.now(), sender_name: currentUser?.name || 'Você', text, is_pinned: false, created_at: now.toISOString() };
+    setChanMsgs(m => ({ ...m, [chanId]: [...(m[chanId] || []), tmpMsg] }));
+    setChanDraft('');
+    try {
+      const { data } = await supabase.from('channel_messages').insert({ channel_id: chanId, sender_name: currentUser?.name || 'Você', text }).select().single();
+      if (data) setChanMsgs(m => ({ ...m, [chanId]: (m[chanId] || []).map(msg => msg.id === tmpMsg.id ? data : msg) }));
+    } catch { /* ignore */ }
+  }
+
+  // ── AI COMMANDS ───────────────────────────────────────────
+  const runCommand = (cmd) => {
+    setShowSlash(false);
+    setDraft('');
+    if (cmd === '/resumir') {
+      setAiAction({ type: 'summary', title: 'Resumo da conversa', body: ['Conversa em andamento.', 'DELI analisando contexto e histórico…', 'Próximo passo: confirmar ação necessária.'] });
+    } else if (cmd === '/proxima') {
+      setAiAction({ type: 'next', title: 'Próxima ação sugerida', body: ['Verificar status da última interação.', 'Acionar departamento responsável se necessário.', 'Registrar andamento no CRM.'] });
+    } else if (cmd === '/tom') {
+      setAiAction({ type: 'tone', title: 'Ajuste de tom', body: [] });
+    } else {
+      setAiAction({ type: 'cmd', title: cmd, body: ['Comando executado pela DELI…'] });
     }
   };
 
-  // ── Derivados ────────────────────────────────────────────
-  const active       = convs.find(c => c.id === activeId) || convs[0];
-  const activeMsgs   = messages[activeId] || [];
-  const suggestion   = active?.deliSuggestion;
-  const showGhost    = !draft && suggestion;
-  const isChannel    = activeId?.startsWith('chan-');
+  const onDraftChange = (v) => {
+    setDraft(v);
+    if (v === '/' || (v.endsWith('/') && (v.length === 1 || v[v.length-2] === ' '))) setShowSlash(true);
+    else if (!v.includes('/')) setShowSlash(false);
+    if (v.endsWith('@') && (v.length === 1 || v[v.length-2] === ' ')) setShowMention(true);
+    else if (!v.match(/@\w*$/)) setShowMention(false);
+  };
+
+  const onKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !showSlash && !showMention) { e.preventDefault(); send(); }
+    else if (e.key === 'Escape') { setShowSlash(false); setShowMention(false); setShowQR(false); }
+  };
+
+  const insertMention = (agentId) => {
+    setShowMention(false);
+    setDraft(d => d.replace(/@\w*$/, '') + `@${agentId.toUpperCase()} `);
+  };
+
+  const insertQR = (qr) => {
+    setShowQR(false);
+    setDraft(qr.content || qr.text || '');
+  };
+
+  // ── DERIVADOS ─────────────────────────────────────────────
+  const active         = convs.find(c => c.id === activeId) || convs[0];
+  const activeMsgs     = messages[activeId] || [];
+  const isChannel      = !!activeId?.startsWith('chan-');
   const activeChanMsgs = isChannel ? (chanMsgs[active?.chanId] || []) : [];
-  const pinnedMsgs   = activeChanMsgs.filter(m => m.is_pinned);
-  const showThirdCol = showInfo || (showPinned && isChannel);
+  const suggestion     = active?.deliSuggestion;
+  const showGhost      = !draft && suggestion && aiMode !== 'humano';
+
+  const abertosCount    = convs.filter(c => (c.status || 'aguardando') !== 'finalizado').length;
+  const finalizadoCount = statusCounts.finalizado;
+  const unreadCount     = convs.reduce((s, c) => s + (c.unread || 0), 0);
 
   const filtered = convs.filter(c => {
     if (tab === 'wa'     && c.type !== 'whatsapp') return false;
     if (tab === 'groups' && c.type !== 'group')    return false;
     if (tab === 'int'    && !(c.type === 'internal' || c.type === 'agent')) return false;
     if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
-    // Aba Aberto/Finalizado (chan- sempre visível — canais internos não têm ciclo de status)
     if (!c.id.startsWith('chan-')) {
-      const convStatus = c.status || 'aguardando';
-      if (statusTab === 'aberto'     && convStatus === 'finalizado') return false;
-      if (statusTab === 'finalizado' && convStatus !== 'finalizado') return false;
-      if (statusFilter && statusTab === 'aberto') {
-        if (convStatus !== statusFilter) return false;
-      }
+      const cStatus = c.status || 'aguardando';
+      if (statusTab === 'aberto'     && cStatus === 'finalizado') return false;
+      if (statusTab === 'finalizado' && cStatus !== 'finalizado') return false;
+      if (statusFilter && statusTab === 'aberto' && cStatus !== statusFilter) return false;
     }
-    // Filtros da ConversationFiltersBar
     if (filters?.department && c.department_id !== filters.department) return false;
     if (filters?.status     && c.status_v2     !== filters.status)     return false;
     if (filters?.tag && taggedCustomerIds !== null && !taggedCustomerIds.has(c.customer_id)) return false;
     return true;
   });
 
-  // Contagens por status para os badges
-  const statusCounts = {
-    aguardando:         convs.filter(c => c.status === 'aguardando' || !c.status).length,
-    em_atendimento:     convs.filter(c => c.status === 'em_atendimento').length,
-    atendimento_aberto: convs.filter(c => c.status === 'atendimento_aberto').length,
-    finalizado:         convs.filter(c => c.status === 'finalizado').length,
-    automacao:          convs.filter(c => c.status === 'automacao').length,
-  };
-  const abertosCount    = convs.filter(c => (c.status || 'aguardando') !== 'finalizado').length;
-  const finalizadoCount = statusCounts.finalizado;
-
-  // Dentro da tab "int", separar DMs de canais
-  const intDireto  = filtered.filter(c => c.type === 'internal' && !c.id.startsWith('chan-'));
-  const intCanais  = filtered.filter(c => c.type === 'internal' && c.id.startsWith('chan-'));
-
-  const unreadCount = convs.reduce((s, c) => s + (c.unread || 0), 0);
-
-  if (!active) {
-    return <div style={{ padding: 40, color: 'var(--g-500)', fontSize: 14 }}>Nenhuma conversa</div>;
+  // ── SUB-ABA (tabs que não são inbox) ──────────────────────
+  if (headerTab !== 'inbox') {
+    return (
+      <div className="route-enter livechat lc-tabbed" style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <header className="lc-fullhead" style={{ flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+            <div className="lc-breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>
+              <span>Plataforma</span>
+              <Icon name="chevright" size={12} />
+              <span style={{ color: 'white', fontWeight: 600 }}>Chat ao Vivo</span>
+            </div>
+            <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.1)' }} />
+            <div className="lc-tabs">
+              {[
+                { id: 'inbox', icon: 'chat',  label: 'Caixa de entrada' },
+                { id: 'dept',  icon: 'users', label: 'Departamentos' },
+                { id: 'bots',  icon: 'bot',   label: 'Bots' },
+                { id: 'proto', icon: 'paper', label: 'Protocolos',   overflow: true },
+                { id: 'viz',   icon: 'chart', label: 'Visualização', overflow: true },
+              ].map(t => (
+                <button key={t.id} className={`lc-tab${t.overflow ? ' lc-tabs-overflow' : ''}${headerTab === t.id ? ' on' : ''}`} onClick={() => setHeaderTab(t.id)}>
+                  <Icon name={t.icon} size={13} /> <span className="lc-tab-label">{t.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </header>
+        <div style={{ flex: 1, overflow: 'auto', padding: 32, color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>
+          {headerTab === 'dept'  && <div>Departamentos — em breve</div>}
+          {headerTab === 'bots'  && <div>Bots — em breve</div>}
+          {headerTab === 'proto' && <div>Protocolos — em breve</div>}
+          {headerTab === 'viz'   && <div>Visualização — em breve</div>}
+        </div>
+      </div>
+    );
   }
 
   return (
     <>
-    <div className="route-enter" style={{
-      display: 'grid',
-      gridTemplateColumns: isMobile
-        ? '1fr'
-        : showThirdCol
-          ? 'minmax(220px, 270px) minmax(0, 1fr) 300px'
-          : 'minmax(220px, 270px) minmax(0, 1fr)',
-      height: '100%',
-      background: 'var(--g-50)',
-      overflow: 'hidden',
-    }}>
+    <div
+      className="route-enter livechat"
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(320px, 360px) minmax(0, 1fr) 320px',
+        gridTemplateRows: '52px 1fr',
+        gridTemplateAreas: '"header header header" "list chat inspector"',
+        height: '100vh',
+        background: '#0E0E0E',
+        overflow: 'hidden',
+      }}
+    >
 
-      {/* ── Col 1: Sidebar ────────────────────────────────── */}
-      <div style={{ background: 'var(--white)', borderRight: '1px solid var(--g-200)', display: isMobile && mobileView === 'chat' ? 'none' : 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '20px 20px 12px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-            <h2 className="section-h2" style={{ fontSize: 18 }}>Conversas</h2>
-            {unreadCount > 0 && <span className="badge badge-red">{unreadCount} novas</span>}
+      {/* ─── HEADER full-width ────────────────────────────────── */}
+      <header className="lc-fullhead" style={{ gridArea: 'header' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+          <div className="lc-breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>
+            <span>Plataforma</span>
+            <Icon name="chevright" size={12} />
+            <span style={{ color: 'white', fontWeight: 600 }}>Chat ao Vivo</span>
           </div>
+          <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.1)' }} />
+          <div className="lc-tabs">
+            {[
+              { id: 'inbox', icon: 'chat',  label: 'Caixa de entrada' },
+              { id: 'dept',  icon: 'users', label: 'Departamentos' },
+              { id: 'bots',  icon: 'bot',   label: 'Bots' },
+              { id: 'proto', icon: 'paper', label: 'Protocolos',   overflow: true },
+              { id: 'viz',   icon: 'chart', label: 'Visualização', overflow: true },
+            ].map(t => (
+              <button key={t.id} className={`lc-tab${t.overflow ? ' lc-tabs-overflow' : ''}${headerTab === t.id ? ' on' : ''}`} onClick={() => setHeaderTab(t.id)}>
+                <Icon name={t.icon} size={13} /> <span className="lc-tab-label">{t.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button className="lc-ask-deli" onClick={() => runCommand('/resumir')}>
+            <AgentAvatar id="deli" size={18} />
+            <span className="lc-ask-deli-label">Faça uma pergunta</span>
+            <kbd className="lc-kbd">⌘K</kbd>
+          </button>
+          <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.1)' }} />
+          <div className="lc-mode-switch">
+            {['humano', 'hibrido', 'ia'].map(m => (
+              <button key={m} className={`lc-mode-btn${aiMode === m ? ' on' : ''}`} onClick={() => setAiMode(m)} title={m === 'humano' ? 'Humano' : m === 'hibrido' ? 'Híbrido' : 'IA total'}>
+                {m === 'humano'  && <Icon name="users"    size={11} />}
+                {m === 'hibrido' && <Icon name="sparkles" size={11} />}
+                {m === 'ia'      && <Icon name="bot"      size={11} />}
+                <span className="lc-mode-btn-label">{m === 'humano' ? 'Humano' : m === 'hibrido' ? 'Híbrido' : 'IA total'}</span>
+              </button>
+            ))}
+          </div>
+          <button className={`lc-head-btn${showCopilot ? ' on' : ''}`} onClick={() => setShowCopilot(v => !v)}>
+            <AgentAvatar id="deli" size={14} /> <span className="lc-head-btn-label">Copiloto</span>
+          </button>
+        </div>
+      </header>
 
+      {/* ─── COL 1: Lista de conversas ────────────────────────── */}
+      <aside className="lc-list" style={{ gridArea: 'list' }}>
+        <div className="lc-list-head">
+          {/* Seletor de instância Evolution */}
           {instances.length > 0 && (
             <div style={{ marginBottom: 10 }}>
               <CustomSelect
@@ -1172,2107 +905,456 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             </div>
           )}
 
-
-          <div style={{ position: 'relative', marginBottom: 10 }}>
-            <Icon name="search" size={14} style={{ position: 'absolute', top: 11, left: 12, color: 'var(--g-400)' }} />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="input"
-              placeholder="Buscar conversa…"
-              style={{ paddingLeft: 34, background: 'var(--g-50)', borderColor: 'transparent', fontSize: 13 }}
-            />
+          {/* Busca */}
+          <div style={{ position: 'relative', marginBottom: 8 }}>
+            <Icon name="search" size={14} style={{ position: 'absolute', top: 11, left: 12, color: 'rgba(255,255,255,0.4)' }} />
+            <input value={search} onChange={e => setSearch(e.target.value)} className="lc-search" placeholder="Pesquise seus contatos" style={{ paddingLeft: 36 }} />
           </div>
 
           {/* Toggle Aberto / Finalizado */}
-          <div style={{ display: 'flex', gap: 3, padding: 3, background: 'var(--g-100)', borderRadius: 8, marginBottom: 10 }}>
-            {[
-              { id: 'aberto',     label: 'Aberto',     count: abertosCount    },
-              { id: 'finalizado', label: 'Finalizado', count: finalizadoCount },
-            ].map(t => (
-              <button key={t.id} onClick={() => { setStatusTab(t.id); setStatusFilter(null); }} style={{
-                flex: 1, padding: '6px 4px', fontSize: 11.5, fontWeight: 700, borderRadius: 6,
-                background: statusTab === t.id ? 'var(--white)' : 'transparent',
-                color:      statusTab === t.id ? 'var(--g-900)' : 'var(--g-500)',
-                boxShadow:  statusTab === t.id ? 'var(--sh-card)' : 'none',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-                transition: 'all 150ms',
-              }}>
+          <div style={{ display: 'flex', gap: 3, padding: 3, background: 'rgba(255,255,255,0.04)', borderRadius: 8, marginBottom: 8 }}>
+            {[{ id: 'aberto', label: 'Aberto', count: abertosCount }, { id: 'finalizado', label: 'Finalizado', count: finalizadoCount }].map(t => (
+              <button key={t.id} onClick={() => { setStatusTab(t.id); setStatusFilter(null); }} style={{ flex: 1, padding: '6px 4px', fontSize: 11.5, fontWeight: 700, borderRadius: 6, background: statusTab === t.id ? 'rgba(255,255,255,0.08)' : 'transparent', color: statusTab === t.id ? 'white' : 'rgba(255,255,255,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'all 150ms' }}>
                 {t.label}
-                <span style={{
-                  background: statusTab === t.id ? (t.id === 'finalizado' ? 'var(--g-200)' : 'var(--accent, #e04b2f)') : 'var(--g-200)',
-                  color:      statusTab === t.id ? (t.id === 'finalizado' ? 'var(--g-600)' : '#fff') : 'var(--g-500)',
-                  borderRadius: 999, padding: '1px 7px', fontSize: 10, fontWeight: 700,
-                }}>{t.count}</span>
+                <span style={{ background: statusTab === t.id ? 'var(--red)' : 'rgba(255,255,255,0.08)', color: 'white', borderRadius: 999, padding: '1px 7px', fontSize: 10, fontWeight: 700 }}>{t.count}</span>
               </button>
             ))}
           </div>
 
-          {/* Badges de filtros por status (só na aba Aberto) */}
-          {statusTab === 'aberto' && <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-            {[
-              { key: 'aguardando',         icon: '⏳', label: 'Aguardando',         bg: '#FEF3C7', text: '#92400E', border: '#F59E0B' },
-              { key: 'em_atendimento',     icon: '💬', label: 'Em atendimento',     bg: '#DBEAFE', text: '#1E40AF', border: '#3B82F6' },
-              { key: 'atendimento_aberto', icon: '📂', label: 'Aberto',             bg: '#D1FAE5', text: '#065F46', border: '#10B981' },
-              { key: 'finalizado',         icon: '✅', label: 'Finalizado',         bg: '#F3F4F6', text: '#4B5563', border: '#9CA3AF' },
-              { key: 'automacao',          icon: '🤖', label: 'Automação',          bg: '#F3E8FF', text: '#6B21A8', border: '#A855F7' },
-            ].map(b => {
-              const count = statusCounts[b.key] || 0;
-              const isActive = statusFilter === b.key;
-              return (
-                <button
-                  key={b.key}
-                  onClick={() => setStatusFilter(isActive ? null : b.key)}
-                  title={b.label}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 3,
-                    padding: '3px 8px', borderRadius: 999,
-                    border: `1px solid ${isActive ? b.border : 'transparent'}`,
-                    background: isActive ? b.bg : 'var(--g-100)',
-                    color: isActive ? b.text : 'var(--g-500)',
-                    fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                    transition: 'all 150ms',
-                  }}
-                >
-                  <span>{b.icon}</span>
-                  <span>{count}</span>
-                </button>
-              );
-            })}
-          </div>}
-
-          <div style={{ display: 'flex', gap: 3, padding: 3, background: 'var(--g-100)', borderRadius: 6 }}>
-            {[
-              { id: 'wa',     label: 'WhatsApp' },
-              { id: 'groups', label: 'Grupos'   },
-              { id: 'int',    label: 'Interno'  },
-              { id: 'all',    label: 'Todas'    },
-            ].map(t => (
-              <button key={t.id} onClick={() => setTab(t.id)} style={{
-                flex: 1, padding: '5px 2px', fontSize: 10.5, fontWeight: 600, borderRadius: 4,
-                background: tab === t.id ? 'var(--white)' : 'transparent',
-                color:      tab === t.id ? 'var(--g-900)' : 'var(--g-600)',
-                boxShadow:  tab === t.id ? 'var(--sh-card)' : 'none',
-              }}>{t.label}</button>
+          {/* Tabs WhatsApp / Grupos / Interno / Todas */}
+          <div style={{ display: 'flex', gap: 3, padding: 3, background: 'rgba(255,255,255,0.04)', borderRadius: 6, marginBottom: 8 }}>
+            {[{ id: 'wa', label: 'WA' }, { id: 'groups', label: 'Grupos' }, { id: 'int', label: 'Interno' }, { id: 'all', label: 'Todas' }].map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, padding: '5px 2px', fontSize: 10.5, fontWeight: 600, borderRadius: 4, background: tab === t.id ? 'rgba(255,255,255,0.08)' : 'transparent', color: tab === t.id ? 'white' : 'rgba(255,255,255,0.55)' }}>{t.label}</button>
             ))}
           </div>
         </div>
 
-        {/* Barra de filtros — departamento / tag / status_v2 */}
-        <ConversationFiltersBar
-          tenantId={tenantDbId}
-          filters={filters}
-          onChange={setFilters}
-        />
+        {/* Status pills */}
+        <div className="lc-status-head">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h3 className="lc-status-title">{COUNTS.find(c => c.id === statusFilter)?.label || 'Conversas'}</h3>
+            <span className="lc-status-count">{filtered.length}</span>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className="lc-filters-chip" title="Filtros"><span>Filtros</span><Icon name="filter" size={12} /></button>
+          </div>
+        </div>
 
-        {/* Botão nova conversa interna (DM) — apenas na sub-seção Direto */}
-        {tab === 'int' && (
-          <div style={{ padding: '4px 16px 0' }}>
-            <button
-              className="btn-secondary"
-              style={{ width: '100%', justifyContent: 'center', fontSize: 11 }}
-              onClick={() => setShowNewInternal(true)}
-            >
-              <Icon name="plus" size={12} /> Nova mensagem direta
-            </button>
+        {statusTab === 'aberto' && (
+          <div className="lc-status-row">
+            {COUNTS.map(c => (
+              <button key={c.id} className={`lc-status-pill${statusFilter === c.id ? ' on' : ''} k-${c.kind}`} onClick={() => setStatusFilter(statusFilter === c.id ? null : c.id)} title={c.label}>
+                <StatusIcon name={c.icon} size={13} />
+                <span className="lc-status-pill-v">{c.value}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Filtros avançados */}
+        <ConversationFiltersBar tenantId={tenantDbId} filters={filters} onChange={setFilters} />
+
+        {/* AI triage banner */}
+        {unreadCount > 0 && (
+          <div className="lc-ai-triage">
+            <AgentAvatar id="deli" size={20} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 11, color: 'white', fontWeight: 600 }}>DELI — {unreadCount} conversa{unreadCount > 1 ? 's' : ''} não lida{unreadCount > 1 ? 's' : ''}</div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)' }}>Verificar prioridade de atendimento</div>
+            </div>
+            <button className="lc-ai-triage-btn" onClick={() => setStatusFilter('aguardando')}>Ver</button>
           </div>
         )}
 
         {/* Lista de conversas */}
-        <div className="scroll" style={{ flex: 1, overflowY: 'auto', paddingBottom: 16, minHeight: 0 }}>
-          {tab === 'int' ? (
-            <>
-              {/* Seção: DIRETO */}
-              <SidebarSection label="DIRETO" />
-              {intDireto.length === 0 && (
-                <div style={{ padding: '8px 16px', fontSize: 12, color: 'var(--g-400)' }}>
-                  Nenhuma mensagem direta
-                </div>
-              )}
-              {intDireto.map(c => {
-                const lastMsg = messages[c.id]?.slice(-1)[0];
-                return (
-                  <ConvItem key={c.id} conv={c} active={c.id === activeId} lastMsg={lastMsg} members={members} departments={departments} onClick={() => {
-                    setActiveId(c.id);
-                    setMobileView('chat');
-                    if (usingRealData && !messages[c.id]?.length) loadMsgs(c.id);
-                  }} />
-                );
-              })}
-
-              {/* Seção: CANAIS */}
-              <SidebarSection
-                label="CANAIS"
-                action={
-                  <button
-                    className="btn-icon"
-                    style={{ width: 22, height: 22 }}
-                    title="Gerenciar canais"
-                    onClick={() => onNavigate?.('grupos')}
-                  >
-                    <Icon name="plus" size={12} />
-                  </button>
-                }
-              />
-              {intCanais.length === 0 && (
-                <div
-                  onClick={() => onNavigate?.('grupos')}
-                  style={{ padding: '8px 16px', fontSize: 12, color: 'var(--g-400)', cursor: 'pointer' }}
-                >
-                  + Criar canal interno
-                </div>
-              )}
-              {intCanais.map(c => (
-                <ConvItem key={c.id} conv={c} active={c.id === activeId} members={members} departments={departments} onClick={() => {
-                  setActiveId(c.id);
-                  setMobileView('chat');
-                  setShowPinned(false);
-                }} />
-              ))}
-            </>
-          ) : (
-            <>
-              {filtered.map(c => {
-                const lastMsg = messages[c.id]?.slice(-1)[0];
-                return (
-                  <ConvItem key={c.id} conv={c} active={c.id === activeId} lastMsg={lastMsg} members={members} departments={departments} onClick={() => {
-                    setActiveId(c.id);
-                    setMobileView('chat');
-                    if (usingRealData && !messages[c.id]?.length) loadMsgs(c.id);
-                    if (c.id.startsWith('chan-')) setShowPinned(false);
-                  }} />
-                );
-              })}
-              {filtered.length === 0 && (
-                <div style={{ textAlign: 'center', padding: 32, color: 'var(--g-400)', fontSize: 13 }}>
-                  Nenhuma conversa encontrada
-                </div>
-              )}
-            </>
+        <div className="lc-list-body dark-scroll">
+          {filtered.map(c => (
+            <ConvRow
+              key={c.id}
+              conv={c}
+              active={c.id === activeId}
+              onClick={() => {
+                setActiveId(c.id);
+                if (usingRealData && !messages[c.id]?.length && !c.id.startsWith('chan-')) loadMsgs(c.id);
+              }}
+            />
+          ))}
+          {filtered.length === 0 && (
+            <div style={{ textAlign: 'center', padding: 36, color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
+              Sem conversas neste filtro
+            </div>
           )}
         </div>
-      </div>
+      </aside>
 
-      {/* ── Col 2: Área de chat / canal ───────────────────── */}
-      <div style={{ display: isMobile && mobileView === 'list' ? 'none' : 'flex', flexDirection: 'column', minWidth: 0, background: 'var(--g-50)', overflow: 'hidden' }}>
+      {/* ─── COL 2: Área de chat ──────────────────────────────── */}
+      {active ? (
+        <section className="lc-chat" style={{ gridArea: 'chat' }}>
 
-        {isChannel ? (
-          /* ── Canal interno ──────────────────────────────── */
-          <>
-            {/* Header do canal */}
-            <div style={{
-              padding: '14px 20px', background: 'var(--white)', borderBottom: '1px solid var(--g-200)',
-              display: 'flex', alignItems: 'center', gap: 12,
-            }}>
-              {isMobile && (
-                <button className="btn-icon" onClick={() => setMobileView('list')} title="Voltar">
-                  <Icon name="chevleft" size={20} />
-                </button>
-              )}
-              <ConvAvatar conv={active} size={40} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--g-900)' }}>{active.name}</div>
-                <div style={{ fontSize: 12, color: 'var(--g-500)' }}>
-                  {active.description || 'Canal interno'}
-                  {active.isGlobal && (
-                    <span style={{
-                      marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '1px 5px',
-                      borderRadius: 9999, background: 'rgba(37,99,235,0.1)', color: '#2563EB',
-                    }}>
-                      Global
-                    </span>
-                  )}
+          {isChannel ? (
+            /* ── Canal interno ──────────────────────────────── */
+            <>
+              <header className="lc-chat-head">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                  <ConvAvatar conv={active} size={40} />
+                  <div style={{ minWidth: 0 }}>
+                    <div className="lc-chat-name">{active.name}</div>
+                    <div className="lc-chat-sub">
+                      <span>{active.description || 'Canal interno'}</span>
+                      {active.isGlobal && <span style={{ marginLeft: 4, fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 9999, background: 'rgba(37,99,235,0.15)', color: '#93C5FD' }}>Global</span>}
+                    </div>
+                  </div>
                 </div>
+                <button className="lc-action-btn" onClick={() => onNavigate?.('grupos')}><Icon name="users" size={13} /> Membros</button>
+              </header>
+
+              <div ref={chanScrollRef} className="lc-msgs dark-scroll">
+                {activeChanMsgs.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>
+                    Nenhuma mensagem ainda. Seja o primeiro a escrever! 👋
+                  </div>
+                )}
+                {activeChanMsgs.map(msg => (
+                  <div key={msg.id} className="lc-msg-row in slide-up">
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#374151', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, color: 'white', flexShrink: 0 }}>
+                      {(msg.sender_name || '?').slice(0, 2).toUpperCase()}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', maxWidth: '72%' }}>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', fontWeight: 600, marginBottom: 3 }}>
+                        {msg.sender_name || 'Equipe'} <span style={{ marginLeft: 6, opacity: 0.6 }}>{new Date(msg.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                      <div className="lc-bubble in">{msg.text}</div>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <button
-                className="btn-secondary"
-                style={{ fontSize: 12, padding: '5px 10px' }}
-                onClick={() => onNavigate?.('grupos')}
-              >
-                <Icon name="users" size={13} /> Membros
-              </button>
-              <button
-                className="btn-icon"
-                onClick={() => { setShowPinned(v => !v); setShowInfo(false); }}
-                style={{ background: showPinned ? 'var(--g-100)' : 'transparent' }}
-                title="Mensagens fixadas"
-              >
-                <span style={{ fontSize: 14 }}>📌</span>
-              </button>
-            </div>
 
-            {/* Banner de mensagens fixadas */}
-            {pinnedMsgs.length > 0 && (
-              <div
-                onClick={() => setShowPinned(v => !v)}
-                style={{
-                  padding: '7px 20px', background: 'rgba(37,99,235,0.06)',
-                  borderBottom: '1px solid rgba(37,99,235,0.14)',
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  cursor: 'pointer', fontSize: 12, color: '#2563EB', fontWeight: 600,
-                }}
-              >
-                <span>📌</span>
-                {pinnedMsgs.length} mensagem{pinnedMsgs.length > 1 ? 'ns' : ''} fixada{pinnedMsgs.length > 1 ? 's' : ''}
-                <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 400, color: 'var(--g-500)' }}>
-                  {showPinned ? 'Fechar painel' : 'Ver painel'}
-                </span>
-              </div>
-            )}
-
-            {/* Mensagens do canal */}
-            <div
-              ref={chanScrollRef}
-              className="scroll"
-              style={{ flex: 1, overflowY: 'auto', padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 12 }}
-            >
-              {activeChanMsgs.length === 0 && (
-                <div style={{ textAlign: 'center', padding: 40, color: 'var(--g-400)', fontSize: 13 }}>
-                  Nenhuma mensagem ainda. Seja o primeiro a escrever! 👋
-                </div>
-              )}
-              {activeChanMsgs.map(msg => (
-                <ChannelMessage
-                  key={msg.id}
-                  msg={msg}
-                  onPin={() => togglePin(active.chanId, msg.id, msg.is_pinned)}
-                  onCreateTask={() => {
-                    setTaskFromMsg({ text: msg.text });
-                    setTaskFromMsgTitle(msg.text.length > 60 ? msg.text.slice(0, 60) + '…' : msg.text);
-                  }}
-                />
-              ))}
-            </div>
-
-            {/* Input do canal */}
-            <div style={{ padding: '12px 20px 20px', background: 'var(--white)', borderTop: '1px solid var(--g-200)', flexShrink: 0 }}>
-              <div className="copilot-wrap">
-                <textarea
-                  value={chanDraft}
-                  onChange={e => setChanDraft(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChanMsg(); }
-                  }}
-                  className="copilot-textarea"
-                  placeholder={`Mensagem para ${active.name}…`}
-                  rows={2}
-                />
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '6px 10px 10px' }}>
-                  <button
-                    onClick={sendChanMsg}
-                    className="btn-primary"
-                    style={{ padding: '8px 14px', fontSize: 13, opacity: chanDraft.trim() ? 1 : 0.5 }}
-                    disabled={!chanDraft.trim()}
-                  >
-                    Enviar <Icon name="send" size={13} />
+              <footer className="lc-composer-bar">
+                <div className="lc-composer">
+                  <div className="lc-comp-input-wrap">
+                    <textarea value={chanDraft} onChange={e => setChanDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChanMsg(); } }} className="lc-comp-input" placeholder={`Mensagem para ${active.name}…`} rows={1} />
+                  </div>
+                  <button onClick={sendChanMsg} className={`lc-comp-send${chanDraft.trim() ? ' ready' : ''}`} disabled={!chanDraft.trim()}>
+                    <Icon name="send" size={15} />
                   </button>
                 </div>
+              </footer>
+            </>
+          ) : (
+            /* ── WhatsApp / DM ─────────────────────────────── */
+            <>
+              {/* Header do chat */}
+              <header className="lc-chat-head">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                  <ConvAvatar conv={active} size={40} />
+                  <div style={{ minWidth: 0 }}>
+                    <div className="lc-chat-name">{active.name}</div>
+                    <div className="lc-chat-sub">
+                      {active.type === 'whatsapp' && <><span className="lc-wa-mini"><Icon name="whatsapp" size={10} /></span><span>WhatsApp</span></>}
+                      {active.type === 'group'    && <><Icon name="users" size={12} /><span>Grupo</span></>}
+                      {active.whatsapp_chat_id && <><span style={{ color: 'rgba(255,255,255,0.3)' }}>·</span><code style={{ fontSize: 10, background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: 3 }}>{active.whatsapp_chat_id.split('@')[0]}</code></>}
+                      {(active.type === 'whatsapp' || active.type === 'group') && (
+                        <>
+                          <DepartmentSelector conversationId={active.id} tenantId={tenantDbId} currentDepartmentId={active.department_id ?? null} onChanged={dept => setConvs(prev => prev.map(c => c.id === active.id ? { ...c, department_id: dept.id } : c))} />
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                  <button className="lc-action-btn ghost" onClick={() => runCommand('/resumir')} title="Resumir">
+                    <Icon name="sparkles" size={13} /> Resumir
+                  </button>
+                  <button className="lc-action-btn ghost" onClick={() => runCommand('/proxima')} title="Próxima ação">
+                    <Icon name="arrowright" size={13} />
+                  </button>
+                  <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.1)', margin: '0 4px' }} />
+                  <span className="lc-protocol">#{active.id?.slice(-5) || '00000'}</span>
+                  {convStatus === 'finalizado' ? (
+                    <button className="lc-action-btn" onClick={async () => { await changeStatus('atendimento_aberto'); await supabase.from('conversations').update({ status_v2: 'in_progress' }).eq('id', activeId); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'atendimento_aberto', status_v2: 'in_progress' } : c)); setStatusTab('aberto'); }} disabled={statusLoading}>
+                      <Icon name="refresh" size={13} /> Reabrir
+                    </button>
+                  ) : (
+                    <button className="lc-action-btn primary" onClick={async () => { await finish(); await supabase.from('conversations').update({ status_v2: 'closed' }).eq('id', activeId); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'finalizado', status_v2: 'closed' } : c)); setResolved(r => ({ ...r, [activeId]: true })); }} disabled={statusLoading}>
+                      <Icon name="check" size={13} /> {resolved[activeId] ? 'Finalizado' : 'Finalizar'}
+                    </button>
+                  )}
+                  <button className="lc-icon-btn-dark" title="Mais"><Icon name="chevdown" size={16} style={{ transform: 'rotate(90deg)' }} /></button>
+                </div>
+              </header>
+
+              {/* AI strip */}
+              <div className="lc-ai-strip">
+                <div className="lc-ai-strip-left">
+                  <span className="lc-ai-strip-label"><Icon name="sparkles" size={11} /> Auto-tags IA:</span>
+                  {active.type === 'whatsapp' && <span className="lc-autotag">#whatsapp</span>}
+                  {active.type === 'group'    && <span className="lc-autotag">#grupo</span>}
+                  {convStatus === 'aguardando'     && <span className="lc-autotag" style={{ background: 'rgba(245,158,11,0.18)', color: '#FBBF24' }}>#aguardando</span>}
+                  {convStatus === 'em_atendimento' && <span className="lc-autotag" style={{ background: 'rgba(59,130,246,0.18)', color: '#93C5FD' }}>#em-atendimento</span>}
+                  <button className="lc-autotag-add">+ tag</button>
+                </div>
+                <div className="lc-ai-strip-right">
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)' }}>IA mode:</span>
+                  <span style={{ fontSize: 11, color: 'white', fontWeight: 700 }}>{aiMode}</span>
+                </div>
               </div>
-            </div>
-          </>
-        ) : (
-          /* ── WhatsApp / DM ─────────────────────────────── */
-          <>
-            {/* Header do chat — modelo reformulado */}
-            <div style={{
-              padding: '12px 20px', background: 'var(--white)', borderBottom: '1px solid var(--g-200)',
-              display: 'flex', alignItems: 'center', gap: 12,
-            }}>
-              {isMobile && (
-                <button className="btn-icon" onClick={() => setMobileView('list')} title="Voltar">
-                  <Icon name="chevleft" size={20} />
-                </button>
-              )}
-              <ConvAvatar conv={active} size={40} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                {/* Nome + status dropdown */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--g-900)' }}>{active.name}</span>
-                  {/* Badge status_v2 */}
-                  {(active.type === 'whatsapp' || active.type === 'group') && active.status_v2 && (
-                    <ConversationStatusBadge status={active.status_v2} />
-                  )}
-                  {/* DepartmentSelector */}
-                  {(active.type === 'whatsapp' || active.type === 'group') && (
-                    <DepartmentSelector
-                      conversationId={active.id}
-                      tenantId={tenantDbId}
-                      currentDepartmentId={active.department_id ?? null}
-                      onChanged={dept => setConvs(prev => prev.map(c =>
-                        c.id === active.id ? { ...c, department_id: dept.id } : c
-                      ))}
-                    />
-                  )}
-                  {/* Dropdown de status integrado (old system) */}
-                  {(active.type === 'whatsapp' || active.type === 'group') && (
-                    <div style={{ position: 'relative' }}>
-                      <button
-                        onClick={() => setStatusDropdownOpen(v => !v)}
-                        disabled={statusLoading}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 4,
-                          padding: '2px 8px', borderRadius: 999,
-                          border: '1px solid var(--g-200)',
-                          background: 'var(--g-50)', color: 'var(--g-600)',
-                          fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                        }}
-                      >
-                        {STATUS_EMOJI[convStatus] || '❓'}
-                        <Icon name="chevdown" size={10} />
-                      </button>
-                      {statusDropdownOpen && (
-                        <div style={{
-                          position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 50,
-                          background: 'var(--white)', border: '1px solid var(--g-200)',
-                          borderRadius: 'var(--r-sm)', boxShadow: 'var(--sh-dropdown)',
-                          minWidth: 200, padding: '4px 0',
-                        }}>
-                          {Object.entries(STATUS_LABELS).map(([key, label]) => (
-                            <button
-                              key={key}
-                              onClick={() => { changeStatus(key); setStatusDropdownOpen(false); }}
-                              style={{
-                                display: 'flex', alignItems: 'center', gap: 8,
-                                width: '100%', padding: '6px 12px', border: 'none',
-                                background: convStatus === key ? 'var(--g-50)' : 'transparent',
-                                cursor: 'pointer', fontSize: 12, color: 'var(--g-800)', textAlign: 'left',
-                              }}
-                            >
-                              <span style={{ fontSize: 14 }}>{STATUS_EMOJI[key] || '❓'}</span>
-                              {label}
-                            </button>
+
+              {/* AI action banner */}
+              {aiAction && (
+                <div className="lc-ai-result fade-in">
+                  <button className="lc-ai-result-close" onClick={() => setAiAction(null)}><Icon name="x" size={12} /></button>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                    <AgentAvatar id="deli" size={28} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, color: 'var(--red-light)', fontWeight: 700, marginBottom: 4 }}>DELI · {aiAction.title}</div>
+                      {aiAction.type === 'tone' ? (
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {['Mais formal', 'Mais amigável', 'Mais curto', 'Mais empático', 'Mais técnico'].map(t => (
+                            <button key={t} className="lc-tone-btn">{t}</button>
                           ))}
+                        </div>
+                      ) : (
+                        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6 }}>
+                          {aiAction.body.map((b, i) => <li key={i}>{b}</li>)}
+                        </ul>
+                      )}
+                      {aiAction.type === 'next' && (
+                        <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                          <button className="lc-ai-cta">Aplicar sugestão</button>
+                          <button className="lc-ai-cta ghost">Editar</button>
                         </div>
                       )}
                     </div>
-                  )}
+                  </div>
                 </div>
-                {/* Subtítulo: canal + número */}
-                <div style={{ fontSize: 12, color: 'var(--g-500)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
-                  {active.online && (
-                    <><span style={{ width: 7, height: 7, background: 'var(--success)', borderRadius: '50%' }} />online agora</>
-                  )}
-                  {active.type === 'whatsapp' && <><Icon name="whatsapp" size={12} style={{ color: '#25D366' }} />WhatsApp</>}
-                  {active.type === 'group' && <><Icon name="users" size={12} />Grupo WhatsApp</>}
-                  {active.whatsapp_chat_id && (
-                    <><span>·</span><code style={{ fontSize: 10, background: 'var(--g-100)', padding: '1px 5px', borderRadius: 3 }}>{active.whatsapp_chat_id.split('@')[0]}</code></>
-                  )}
+              )}
+
+              {/* Reply banner */}
+              {replyTo && (
+                <div style={{ padding: '6px 16px', background: 'rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>
+                  <Icon name="msg" size={12} />
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Respondendo: {replyTo.text || '🖼 Mídia'}</span>
+                  <button onClick={() => setReplyTo(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', padding: 4 }}>×</button>
                 </div>
+              )}
+
+              {/* Mensagens */}
+              <div ref={scrollRef} className="lc-msgs dark-scroll">
+                {activeMsgs.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.35)', fontSize: 13 }}>
+                    Nenhuma mensagem ainda
+                  </div>
+                )}
+                {activeMsgs.map((m, i) => (
+                  <MsgBubble
+                    key={m.id || i}
+                    m={m}
+                    conv={active}
+                    onReply={msg => setReplyTo(msg)}
+                    onViewImage={url => setLightboxUrl(url)}
+                    onCreateTask={msg => console.log('criar tarefa:', msg.text)}
+                  />
+                ))}
+                {typing && (
+                  <div className="lc-msg-row in fade-in">
+                    <ConvAvatar conv={active} size={28} />
+                    <div className="lc-bubble in" style={{ display: 'inline-flex', gap: 4, padding: '12px 14px' }}>
+                      <span className="lc-typ-dot" style={{ animationDelay: '0s' }} />
+                      <span className="lc-typ-dot" style={{ animationDelay: '0.15s' }} />
+                      <span className="lc-typ-dot" style={{ animationDelay: '0.3s' }} />
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* ID da conversa */}
-              <span style={{ fontSize: 11, color: 'var(--g-400)', fontFamily: 'monospace', flexShrink: 0 }}>
-                #{active.id?.slice(-5) || '00000'}
-              </span>
-
-              {/* Botão Finalizar / Reabrir */}
-              {(active.type === 'whatsapp' || active.type === 'group') && (
-                convStatus === 'finalizado' ? (
-                  <button
-                    onClick={async () => {
-                      await changeStatus('atendimento_aberto');
-                      await supabase.from('conversations').update({ status_v2: 'in_progress' }).eq('id', activeId);
-                      setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'atendimento_aberto', status_v2: 'in_progress' } : c));
-                      setStatusTab('aberto');
-                    }}
-                    disabled={statusLoading}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 6,
-                      padding: '6px 12px', borderRadius: 'var(--r-sm)',
-                      border: '1px solid var(--info)', background: 'var(--info-soft)',
-                      color: 'var(--info)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                    }}
-                  >
-                    <Icon name="refresh" size={13} /> Reabrir
-                  </button>
-                ) : (
-                  <button
-                    onClick={async () => {
-                      await finish();
-                      await supabase.from('conversations').update({ status_v2: 'closed' }).eq('id', activeId);
-                      setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'finalizado', status_v2: 'closed' } : c));
-                      setActiveId(null);
-                    }}
-                    disabled={statusLoading}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 6,
-                      padding: '6px 12px', borderRadius: 'var(--r-sm)',
-                      border: '1px solid var(--success)', background: 'var(--success-soft)',
-                      color: 'var(--success)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                    }}
-                  >
-                    <Icon name="checkcircle" size={13} /> Finalizar
-                  </button>
-                )
-              )}
-
-              {/* Menu 3 pontos */}
-              <button className="btn-icon" title="Mais ações" style={{ color: 'var(--g-500)' }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                  <circle cx="12" cy="6" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="18" r="2"/>
-                </svg>
-              </button>
-
-              {/* Info toggle */}
-              <button
-                className="btn-icon"
-                onClick={() => setShowInfo(v => !v)}
-                style={{ background: showInfo ? 'var(--red-soft)' : 'transparent', color: showInfo ? 'var(--red)' : 'var(--g-600)' }}
-                title="Informações do contato"
-              >
-                <Icon name="info" size={16} />
-              </button>
-            </div>
-
-            {/* Mensagens */}
-            <div ref={scrollRef} className="scroll" style={{
-              flex: 1, overflowY: 'auto', padding: '14px 20px',
-              display: 'flex', flexDirection: 'column', gap: 6,
-              minHeight: 0,
-            }}>
-              {activeMsgs.map((msg, i) => (
-                <div
-                  key={msg.id || i}
-                  onMouseEnter={() => setHoveredMsgId(msg.id || i)}
-                  onMouseLeave={() => setHoveredMsgId(null)}
-                  style={{ display: 'flex', flexDirection: 'column', alignItems: msg.from === 'out' ? 'flex-end' : 'flex-start' }}
-                  className="slide-up"
-                >
-                  {/* Row: [botão ↩ à esquerda do bubble out] [bubble] [botão ↩ à direita do bubble in] */}
-                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, width: '100%', justifyContent: msg.from === 'out' ? 'flex-end' : 'flex-start' }}>
-                    {msg.from === 'out' && hoveredMsgId === (msg.id || i) && (
-                      <button
-                        onClick={() => setReplyTo({ id: msg.id, waMsgId: msg.waMsgId, from: msg.from, text: msg.text, mediaType: msg.mediaType })}
-                        title="Responder"
-                        style={{
-                          background: 'var(--g-100)', border: 'none', borderRadius: '50%',
-                          width: 26, height: 26, cursor: 'pointer', flexShrink: 0,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          color: 'var(--g-500)', fontSize: 14,
-                        }}
-                      >↩</button>
-                    )}
-                  <div className={`bubble ${msg.from === 'out' ? 'bubble-out' : 'bubble-in'}`}>
-                    {/* Bloco citado — aparece quando é uma resposta */}
-                    {msg.replyTo && (
-                      <div style={{
-                        borderLeft: `3px solid ${msg.from === 'out' ? 'rgba(255,255,255,0.5)' : 'var(--red)'}`,
-                        background: msg.from === 'out' ? 'rgba(0,0,0,0.15)' : 'var(--g-100)',
-                        borderRadius: 4, padding: '4px 8px', marginBottom: 6, cursor: 'default',
-                      }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 2, color: msg.from === 'out' ? 'rgba(255,255,255,0.7)' : 'var(--red)' }}>
-                          {msg.replyTo.from === 'out' ? 'Você' : (active?.name || 'Cliente')}
+              {/* Composer */}
+              <footer className="lc-composer-bar" style={{ position: 'relative' }}>
+                {/* Popovers */}
+                {showSlash && (
+                  <div className="lc-popover lc-slash">
+                    <div className="lc-pop-head">Comandos IA</div>
+                    {AI_COMMANDS.map(c => (
+                      <button key={c.cmd} className="lc-pop-item" onClick={() => runCommand(c.cmd)}>
+                        <Icon name={c.icon} size={14} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, color: 'white', fontWeight: 600 }}>{c.label}</div>
+                          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)' }}>{c.desc}</div>
                         </div>
-                        {msg.replyTo.mediaType === 'image' && msg.replyTo.mediaUrl ? (
-                          <img
-                            src={msg.replyTo.mediaUrl}
-                            alt="imagem citada"
-                            onClick={e => { e.stopPropagation(); setLightboxUrl(msg.replyTo.mediaUrl); }}
-                            style={{ maxWidth: 120, maxHeight: 60, borderRadius: 4, display: 'block', cursor: 'zoom-in', marginTop: 2 }}
-                          />
-                        ) : (
-                          <div style={{ fontSize: 11, opacity: 0.85, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>
-                            {msg.replyTo.mediaType === 'image' ? '🖼 Imagem'
-                             : msg.replyTo.mediaType === 'video' ? '🎬 Vídeo'
-                             : msg.replyTo.mediaType?.includes('audio') ? '🎵 Áudio'
-                             : msg.replyTo.mediaType === 'document' ? '📄 Arquivo'
-                             : msg.replyTo.text || '↩ Mensagem'}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {msg.mediaType === 'image' && msg.mediaUrl ? (
-                      <div>
-                        <div style={{ position: 'relative', display: 'inline-block' }}>
-                          <img
-                            src={msg.mediaUrl}
-                            alt={msg.text || 'imagem'}
-                            style={{ maxWidth: 260, maxHeight: 260, borderRadius: 6, display: 'block', cursor: 'pointer' }}
-                            onClick={() => setLightboxUrl(msg.mediaUrl)}
-                          />
-                          <button
-                            onClick={() => downloadMedia(msg.mediaUrl, msg.text || 'imagem.jpg')}
-                            title="Baixar imagem"
-                            style={{
-                              position: 'absolute', bottom: 6, right: 6,
-                              background: 'rgba(0,0,0,0.55)', border: 'none', borderRadius: 6,
-                              color: '#fff', width: 28, height: 28, cursor: 'pointer',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            }}
-                          ><Icon name="download" size={14} /></button>
-                        </div>
-                        {msg.text && msg.text !== '🖼 Imagem' && (
-                          <div style={{ marginTop: 4, fontSize: 13 }}>{msg.text}</div>
-                        )}
-                      </div>
-                    ) : msg.mediaType === 'video' && msg.mediaUrl ? (
-                      <div>
-                        <video
-                          src={msg.mediaUrl}
-                          controls
-                          style={{ maxWidth: 280, maxHeight: 200, borderRadius: 6, display: 'block' }}
-                        />
-                        <button
-                          onClick={() => downloadMedia(msg.mediaUrl, msg.text || 'video.mp4')}
-                          title="Baixar vídeo"
-                          style={{
-                            marginTop: 4, display: 'flex', alignItems: 'center', gap: 5,
-                            background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-                            fontSize: 12, color: msg.from === 'out' ? 'rgba(255,255,255,0.8)' : 'var(--g-600)',
-                          }}
-                        ><Icon name="download" size={13} /> Baixar vídeo</button>
-                      </div>
-                    ) : msg.mediaType === 'document' && msg.mediaUrl ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 22, flexShrink: 0 }}>📄</span>
-                        <span style={{ fontSize: 12, wordBreak: 'break-all', flex: 1, color: msg.from === 'out' ? 'white' : 'var(--g-900)' }}>
-                          {msg.text || 'Arquivo'}
-                        </span>
-                        <button
-                          onClick={() => downloadMedia(msg.mediaUrl, msg.text || 'arquivo')}
-                          title="Baixar arquivo"
-                          style={{
-                            background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0,
-                            color: msg.from === 'out' ? 'rgba(255,255,255,0.8)' : 'var(--g-600)',
-                            display: 'flex', alignItems: 'center',
-                          }}
-                        ><Icon name="download" size={15} /></button>
-                      </div>
-                    ) : msg.mediaType?.includes('audio') ? (
-                      msg.mediaUrl ? (
-                        <div>
-                          <AudioMessage url={msg.mediaUrl} isOut={msg.from === 'out'} />
-                          <button
-                            onClick={() => downloadMedia(msg.mediaUrl, msg.text || 'audio.ogg')}
-                            title="Baixar áudio"
-                            style={{
-                              marginTop: 4, display: 'flex', alignItems: 'center', gap: 5,
-                              background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-                              fontSize: 12, color: msg.from === 'out' ? 'rgba(255,255,255,0.8)' : 'var(--g-600)',
-                            }}
-                          ><Icon name="download" size={13} /> Baixar áudio</button>
-                        </div>
-                      ) : (
-                        <div style={{ fontSize: 12, color: msg.from === 'out' ? 'rgba(255,255,255,0.7)' : 'var(--g-500)', fontStyle: 'italic' }}>🎵 Carregando áudio…</div>
-                      )
-                    ) : msg.from === 'out' && msg.agentName ? (
-                      <>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.75)', marginBottom: 4 }}>{msg.agentName}:</div>
-                        <span dangerouslySetInnerHTML={{ __html: formatWAText(msg.text) }} />
-                      </>
-                    ) : <span dangerouslySetInnerHTML={{ __html: formatWAText(msg.text) }} />}
+                        <kbd className="lc-kbd">{c.cmd}</kbd>
+                      </button>
+                    ))}
                   </div>
-                    {msg.from === 'in' && hoveredMsgId === (msg.id || i) && (
-                      <button
-                        onClick={() => setReplyTo({ id: msg.id, waMsgId: msg.waMsgId, from: msg.from, text: msg.text, mediaType: msg.mediaType })}
-                        title="Responder"
-                        style={{
-                          background: 'var(--g-100)', border: 'none', borderRadius: '50%',
-                          width: 26, height: 26, cursor: 'pointer', flexShrink: 0,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          color: 'var(--g-500)', fontSize: 14,
-                        }}
-                      >↩</button>
-                    )}
-                  </div>
-                  <div className="bubble-meta" style={{ color: 'var(--g-500)' }}>{msg.time}</div>
-                </div>
-              ))}
-              {typing && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 6 }} className="fade-in">
-                  <div className="bubble bubble-in" style={{ padding: '10px 14px', display: 'inline-flex', gap: 4 }}>
-                    <span style={{ width: 6, height: 6, background: 'var(--g-500)', borderRadius: '50%', animation: 'typing 1.2s infinite 0s' }} />
-                    <span style={{ width: 6, height: 6, background: 'var(--g-500)', borderRadius: '50%', animation: 'typing 1.2s infinite 0.2s' }} />
-                    <span style={{ width: 6, height: 6, background: 'var(--g-500)', borderRadius: '50%', animation: 'typing 1.2s infinite 0.4s' }} />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Área de input */}
-            <div style={{ padding: '8px 14px 12px', background: 'var(--white)', borderTop: '1px solid var(--g-200)', flexShrink: 0 }}>
-
-              {/* ── Estado: gravando ───────────────────────── */}
-              {recState === 'recording' && (
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '14px 16px', borderRadius: 'var(--r-sm)',
-                  border: '1px solid rgba(183,12,0,0.25)', background: 'var(--red-soft)',
-                }}>
-                  <span className="rec-dot" style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--red)', flexShrink: 0 }} />
-                  <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--red)' }}>Gravando…</span>
-                  <span style={{ fontSize: 13, color: 'var(--g-600)', fontVariantNumeric: 'tabular-nums' }}>{fmtRecTime(recSeconds)}</span>
-                  <button
-                    className="btn-primary"
-                    style={{ marginLeft: 'auto', padding: '7px 14px', fontSize: 12 }}
-                    onClick={stopRecording}
-                  >
-                    <Icon name="squarestop" size={12} /> Parar
-                  </button>
-                  <button className="btn-secondary" style={{ fontSize: 12, padding: '7px 12px' }} onClick={cancelRecording}>
-                    Cancelar
-                  </button>
-                </div>
-              )}
-
-              {/* ── Estado: preview do áudio ───────────────── */}
-              {recState === 'preview' && audioPreview && (
-                <div style={{
-                  padding: '14px 16px', borderRadius: 'var(--r-sm)',
-                  border: '1px solid var(--g-200)', background: 'var(--g-50)',
-                  display: 'flex', flexDirection: 'column', gap: 12,
-                }}>
-                  <div style={{ fontSize: 12, color: 'var(--g-500)', fontWeight: 600 }}>Prévia do áudio</div>
-                  <AudioMessage url={audioPreview.url} isOut={false} />
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      className="btn-primary"
-                      style={{ fontSize: 13, padding: '8px 16px' }}
-                      onClick={sendAudio}
-                      disabled={sending}
-                    >
-                      {sending ? 'Enviando…' : <><Icon name="send" size={13} /> Enviar áudio</>}
-                    </button>
-                    <button className="btn-secondary" style={{ fontSize: 13 }} onClick={cancelRecording}>
-                      Descartar
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Estado: normal (escrita) ───────────────── */}
-              {recState === 'idle' && (
-                <>
-                  {suggestion && (
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10,
-                      padding: '8px 12px',
-                      background: 'linear-gradient(to right, rgba(183,12,0,0.06), rgba(183,12,0,0.01))',
-                      border: '1px solid rgba(183,12,0,0.2)', borderRadius: 6, fontSize: 12,
-                    }}>
-                      <AgentAvatar id="deli" size={22} />
-                      <span style={{ color: 'var(--g-700)' }}>
-                        <strong style={{ color: 'var(--red)' }}>DELI sugeriu</strong> uma resposta baseada no histórico
-                      </span>
-                      <span className="copilot-hint" style={{ marginLeft: 'auto' }}>
-                        Pressione <kbd>Tab</kbd> pra aceitar
-                      </span>
-                    </div>
-                  )}
-                  {/* ── Preview de resposta ── */}
-                  {replyTo && (
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '6px 10px', marginBottom: 6,
-                      background: 'var(--g-50)', borderRadius: 6,
-                      border: '1px solid var(--g-200)', borderLeft: '3px solid var(--red)',
-                    }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--red)', marginBottom: 1 }}>
-                          Respondendo a {replyTo.from === 'out' ? 'você mesmo' : (active?.name || 'cliente')}
+                )}
+                {showMention && (
+                  <div className="lc-popover lc-mention">
+                    <div className="lc-pop-head">Mencionar superagente</div>
+                    {AI_SUPERAGENTS.map(a => (
+                      <button key={a.id} className="lc-pop-item" onClick={() => insertMention(a.id)}>
+                        <AgentAvatar id={a.id} size={22} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, color: 'white', fontWeight: 600 }}>@{a.name}</div>
+                          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)' }}>{a.desc}</div>
                         </div>
-                        <div style={{ fontSize: 12, color: 'var(--g-600)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {replyTo.mediaType === 'image' ? '🖼 Imagem'
-                           : replyTo.mediaType === 'video' ? '🎬 Vídeo'
-                           : replyTo.mediaType?.includes('audio') ? '🎵 Áudio'
-                           : replyTo.mediaType === 'document' ? '📄 Arquivo'
-                           : replyTo.text || ''}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {showQR && (
+                  <div className="lc-popover lc-qr">
+                    <div className="lc-pop-head">Respostas rápidas</div>
+                    {(quickReplies.length > 0 ? quickReplies : QUICK_REPLIES_DEFAULT).map(qr => (
+                      <button key={qr.id} className="lc-pop-item" onClick={() => insertQR(qr)}>
+                        <Icon name="star" size={14} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, color: 'white', fontWeight: 600 }}>{qr.title || qr.label}</div>
+                          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{qr.content || qr.text}</div>
                         </div>
-                      </div>
-                      <button
-                        onClick={() => setReplyTo(null)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--g-400)', fontSize: 18, lineHeight: 1, padding: '0 2px' }}
-                        title="Cancelar resposta"
-                      >×</button>
-                    </div>
-                  )}
-                  <div className="copilot-wrap" style={{ position: 'relative' }}>
-                    {/* ── Popup de mensagens rápidas (trigger: "/") ── */}
-                    {showQRPopup && (() => {
-                      const filtered = quickReplies.filter(qr =>
-                        !qrFilter ||
-                        qr.title.toLowerCase().includes(qrFilter) ||
-                        qr.content.toLowerCase().includes(qrFilter)
-                      );
-                      return filtered.length > 0 ? (
-                        <div style={{
-                          position: 'absolute', bottom: '100%', left: 0, right: 0, zIndex: 200,
-                          background: 'var(--white)', border: '1px solid var(--g-200)',
-                          borderRadius: 8, boxShadow: 'var(--sh-card)',
-                          maxHeight: 220, overflowY: 'auto', marginBottom: 4,
-                        }}>
-                          <div style={{ padding: '6px 12px', fontSize: 10, fontWeight: 700, color: 'var(--g-500)', borderBottom: '1px solid var(--g-100)', display: 'flex', justifyContent: 'space-between' }}>
-                            <span>MENSAGENS RÁPIDAS</span>
-                            <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: 'var(--red)', fontWeight: 700 }} onClick={() => setShowQRManager(true)}>Gerenciar</button>
-                          </div>
-                          {filtered.map(qr => (
-                            <div
-                              key={qr.id}
-                              onClick={() => { setDraft(qr.content); setShowQRPopup(false); setQrFilter(''); }}
-                              style={{ padding: '8px 14px', cursor: 'pointer', borderBottom: '1px solid var(--g-100)' }}
-                              onMouseEnter={e => e.currentTarget.style.background = 'var(--g-100)'}
-                              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                            >
-                              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--g-900)' }}>/{qr.title}</div>
-                              <div style={{ fontSize: 11, color: 'var(--g-500)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{qr.content}</div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : null;
-                    })()}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* DELI suggestion tip */}
+                {showGhost && (
+                  <div className="lc-deli-tip">
+                    <AgentAvatar id="deli" size={20} />
+                    <span><strong style={{ color: 'var(--red-light)' }}>DELI sugeriu</strong> — pressione <kbd>Tab</kbd> para aceitar</span>
+                  </div>
+                )}
+
+                <div className="lc-composer">
+                  <button className="lc-comp-icon" title="Anexar"><Icon name="plus" size={16} /></button>
+                  <button className="lc-comp-icon" title="Resposta rápida" onClick={() => setShowQR(v => !v)}><Icon name="star" size={15} /></button>
+                  <button className="lc-comp-icon ai" title="Comandos IA (/)" onClick={() => setShowSlash(v => !v)}><Icon name="sparkles" size={15} /></button>
+                  <div className="lc-comp-input-wrap">
                     <textarea
                       ref={textareaRef}
                       value={draft}
-                      onChange={e => {
-                        const val = e.target.value;
-                        setDraft(val);
-                        if (val.startsWith('/')) {
-                          setQrFilter(val.slice(1).toLowerCase());
-                          setShowQRPopup(true);
-                        } else {
-                          setShowQRPopup(false);
-                          setQrFilter('');
-                        }
-                      }}
-                      onKeyDown={e => {
-                        if (e.key === 'Escape' && showQRPopup) { setShowQRPopup(false); setQrFilter(''); return; }
-                        onKeyDown(e);
-                      }}
-                      onPaste={e => {
-                        const items = Array.from(e.clipboardData?.items || []);
-                        const imageItem = items.find(item => item.type.startsWith('image/'));
-                        if (imageItem) {
-                          e.preventDefault();
-                          const blob = imageItem.getAsFile();
-                          if (blob) {
-                            const ext = blob.type.split('/')[1] || 'png';
-                            const file = new File([blob], `imagem-colada.${ext}`, { type: blob.type });
-                            const previewUrl = URL.createObjectURL(blob);
-                            setPastedImage({ file, previewUrl, caption: '' });
-                          }
-                        }
-                      }}
-                      className="copilot-textarea"
-                      placeholder="Escreva uma mensagem… (Shift+Enter = nova linha)"
-                      rows={2}
+                      onChange={e => onDraftChange(e.target.value)}
+                      onKeyDown={onKeyDown}
+                      className="lc-comp-input"
+                      placeholder={aiMode === 'ia' ? 'IA respondendo automaticamente…' : 'Mensagem… (/ para comandos, @ para agente IA)'}
+                      rows={1}
+                      disabled={aiMode === 'ia' || sending}
                     />
-                    {showGhost && <div className="copilot-ghost">{suggestion}</div>}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px 10px' }}>
-                      <div style={{ display: 'flex', gap: 2, position: 'relative' }}>
-                        <button className="btn-icon" style={{ width: 30, height: 30 }} title="Anexar arquivo"
-                          onClick={() => document.getElementById('chat-file-input').click()}>
-                          <Icon name="paperclip" size={15} />
-                        </button>
-                        <input id="chat-file-input" type="file" style={{ display: 'none' }}
-                          accept="image/*,video/*,.pdf,.doc,.docx"
-                          onChange={async e => {
-                            const file = e.target.files?.[0];
-                            if (file) await sendFile(file);
-                            e.target.value = '';
-                          }} />
-                        <button className="btn-icon" style={{ width: 30, height: 30, background: showEmoji ? 'var(--g-100)' : 'transparent' }}
-                          title="Emoji" onClick={() => setShowEmoji(v => !v)}>
-                          <Icon name="smile" size={15} />
-                        </button>
-                        {showEmoji && <EmojiPicker onSelect={insertEmoji} onClose={() => setShowEmoji(false)} />}
-                        <button
-                          className="btn-icon"
-                          style={{ width: 30, height: 30 }}
-                          title="Gravar áudio"
-                          onClick={startRecording}
-                        >
-                          <Icon name="mic" size={15} />
-                        </button>
-                        <button className="btn-icon" style={{ width: 30, height: 30, color: 'var(--red)' }} title="Sugerir resposta com DELI">
-                          <Icon name="sparkles" size={15} />
-                        </button>
-                        <button
-                          className="btn-icon"
-                          style={{ width: 30, height: 30, fontWeight: 700, fontSize: 14 }}
-                          title="Mensagens rápidas (/atalho)"
-                          onClick={() => setShowQRManager(true)}
-                        >
-                          /
-                        </button>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        {currentUser && (active.type === 'whatsapp' || active.type === 'group') && (
-                          <span
-                            title="Assinatura ativa"
-                            style={{
-                              fontSize: 11, padding: '3px 8px', borderRadius: 9999,
-                              background: 'var(--red)',
-                              color:      'white',
-                              border: '1px solid var(--red)',
-                              fontWeight: 600, whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {currentUser.name}
-                          </span>
-                        )}
-                        <button
-                          onClick={send}
-                          className="btn-primary"
-                          style={{ padding: '8px 14px', fontSize: 13, opacity: draft.trim() && !sending ? 1 : 0.5 }}
-                          disabled={!draft.trim() || sending}
-                        >
-                          {sending ? 'Enviando…' : 'Enviar'} <Icon name="send" size={13} />
-                        </button>
-                      </div>
-                    </div>
+                    {showGhost && <div className="lc-comp-ghost">{suggestion}</div>}
                   </div>
-                </>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* ── Col 3: Painel de info / mensagens fixadas ─────── */}
-      {showInfo && !isChannel && !isMobile && (
-        <div className="slide-right" style={{
-          background: 'var(--white)', borderLeft: '1px solid var(--g-200)',
-          display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        }}>
-          <LeadPanel
-            conversation={{
-              id:          active.id,
-              status_v2:   active.status_v2 || 'open',
-              tenant_id:   active.tenant_id || tenantDbId,
-              channel:     active.type === 'group' ? 'group' : 'whatsapp',
-            }}
-            customer={activeCustomer}
-            tenantId={tenantDbId}
-            members={members}
-            onClose={() => setShowInfo(false)}
-            onReopened={() => setConvs(prev => prev.map(c =>
-              c.id === active.id ? { ...c, status_v2: 'in_progress' } : c
-            ))}
-          />
-        </div>
-      )}
-
-      {showPinned && isChannel && (
-        <div className="slide-right scroll" style={{
-          background: 'var(--white)', borderLeft: '1px solid var(--g-200)', overflowY: 'auto',
-          display: 'flex', flexDirection: 'column',
-        }}>
-          <div style={{
-            padding: '12px 16px', borderBottom: '1px solid var(--g-200)',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0,
-          }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--g-900)' }}>
-              📌 Mensagens fixadas ({pinnedMsgs.length})
-            </span>
-            <button className="btn-icon" onClick={() => setShowPinned(false)}><Icon name="x" size={16} /></button>
-          </div>
-          {pinnedMsgs.length === 0 ? (
-            <div style={{ padding: 32, textAlign: 'center', color: 'var(--g-400)', fontSize: 13 }}>
-              Nenhuma mensagem fixada
-            </div>
-          ) : (
-            pinnedMsgs.map(msg => (
-              <div key={msg.id} style={{
-                padding: '12px 16px', borderBottom: '1px solid var(--g-100)',
-                display: 'flex', flexDirection: 'column', gap: 4,
-              }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--g-600)' }}>{msg.sender_name}</div>
-                <div style={{ fontSize: 13, color: 'var(--g-900)', lineHeight: 1.4 }}>{msg.text}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                  <div style={{ fontSize: 10, color: 'var(--g-400)' }}>
-                    {msg.created_at ? new Date(msg.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}
-                  </div>
-                  <button
-                    className="btn-icon"
-                    style={{ width: 22, height: 22, fontSize: 10, marginLeft: 'auto', color: 'var(--g-500)' }}
-                    title="Desafixar"
-                    onClick={() => togglePin(active.chanId, msg.id, true)}
-                  >
-                    <Icon name="x" size={11} />
+                  <button className="lc-comp-icon" title="Emoji"><Icon name="smile" size={15} /></button>
+                  <button onClick={send} className={`lc-comp-send${draft.trim() ? ' ready' : ''}`} disabled={!draft.trim() || sending} title="Enviar">
+                    <Icon name="send" size={15} />
                   </button>
                 </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
-
-      {/* ── Modal: nova conversa interna ───────────────────── */}
-      {showNewInternal && (
-        <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(13,13,13,0.35)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          onClick={() => setShowNewInternal(false)}
-        >
-          <NewInternalModal
-            members={members}
-            onSelect={createInternalConv}
-            onClose={() => setShowNewInternal(false)}
-          />
-        </div>
-      )}
-
-      {/* ── Modal: criar tarefa a partir de mensagem ──────── */}
-      {taskFromMsg && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          onClick={() => setTaskFromMsg(null)}
-        >
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }} />
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{
-              position: 'relative', zIndex: 1, background: 'var(--white)', borderRadius: 12,
-              width: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', padding: 24,
-            }}
-          >
-            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4, color: 'var(--g-900)' }}>Criar tarefa</div>
-            <div style={{ fontSize: 12, color: 'var(--g-500)', marginBottom: 18 }}>A partir de uma mensagem do canal</div>
-
-            <label className="label" style={{ marginBottom: 6, display: 'block' }}>Título</label>
-            <input
-              className="input"
-              value={taskFromMsgTitle}
-              onChange={e => setTaskFromMsgTitle(e.target.value)}
-              placeholder="Título da tarefa…"
-              style={{ marginBottom: 14 }}
-              autoFocus
-            />
-
-            <label className="label" style={{ marginBottom: 6, display: 'block' }}>Mensagem de origem</label>
-            <div style={{
-              padding: '10px 12px', background: 'var(--g-50)', borderRadius: 8,
-              border: '1px solid var(--g-200)', fontSize: 12, color: 'var(--g-700)',
-              marginBottom: 20, lineHeight: 1.5,
-            }}>
-              {taskFromMsg.text}
-            </div>
-
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button className="btn-secondary" onClick={() => setTaskFromMsg(null)}>Cancelar</button>
-              <button
-                className="btn-primary"
-                onClick={createTaskFromMsg}
-                disabled={savingTask || !taskFromMsgTitle.trim()}
-              >
-                {savingTask ? 'Salvando…' : '✅ Criar tarefa'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Modal: Templates (mensagens rápidas) ─────────── */}
-      {showQRManager && (
-        <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          onClick={e => { if (e.target === e.currentTarget) { setShowQRManager(false); setQrExpandedId(null); setQrCreating(false); setQrEditId(null); setQrEditTitle(''); setQrEditContent(''); } }}
-        >
-          <div
-            style={{ background: 'var(--black-soft)', borderRadius: 14, width: 500, maxWidth: '95vw', maxHeight: '82vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 60px rgba(0,0,0,0.5)' }}
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div style={{ padding: '18px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-              <span style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>Templates</span>
-              <button
-                onClick={() => { setShowQRManager(false); setQrExpandedId(null); setQrCreating(false); setQrEditId(null); setQrEditTitle(''); setQrEditContent(''); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.5)', fontSize: 20, lineHeight: 1, padding: 4 }}
-              >✕</button>
-            </div>
-
-            {/* Tab label */}
-            <div style={{ padding: '12px 20px 0', borderBottom: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
-              <div style={{ display: 'inline-block', padding: '8px 4px', fontSize: 13, fontWeight: 600, color: 'var(--red)', borderBottom: '2px solid var(--red)' }}>
-                Mensagens rápidas
-              </div>
-            </div>
-
-            {/* Content */}
-            <div style={{ overflowY: 'auto', flex: 1 }}>
-              <>
-                {/* Form: new / edit */}
-                {(qrCreating || qrEditId) && (
-                  <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)' }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', marginBottom: 10, letterSpacing: '0.05em' }}>
-                      {qrEditId ? 'EDITAR MENSAGEM' : 'NOVA MENSAGEM RÁPIDA'}
-                    </div>
-                    <input
-                      style={{ display: 'block', width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13, padding: '8px 12px', marginBottom: 8, outline: 'none' }}
-                      placeholder="Atalho (ex: saudacao)"
-                      value={qrEditTitle}
-                      onChange={e => setQrEditTitle(e.target.value.replace(/\s/g, ''))}
-                    />
-                    <textarea
-                      style={{ display: 'block', width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13, padding: '8px 12px', resize: 'vertical', minHeight: 72, outline: 'none' }}
-                      placeholder="Texto completo da mensagem…"
-                      value={qrEditContent}
-                      onChange={e => setQrEditContent(e.target.value)}
-                    />
-                    <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                      <button
-                        onClick={saveQuickReply}
-                        disabled={!qrEditTitle.trim() || !qrEditContent.trim()}
-                        style={{ background: 'var(--red)', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: (!qrEditTitle.trim() || !qrEditContent.trim()) ? 0.4 : 1 }}
-                      >
-                        {qrEditId ? 'Atualizar' : 'Salvar'}
-                      </button>
-                      <button
-                        onClick={() => { setQrCreating(false); setQrEditId(null); setQrEditTitle(''); setQrEditContent(''); }}
-                        style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-                      >
-                        Cancelar
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Cards list */}
-                {quickReplies.length === 0 && !qrCreating ? (
-                  <div style={{ padding: '40px 24px', textAlign: 'center', fontSize: 13 }}>
-                    <div style={{ fontSize: 32, marginBottom: 12 }}>💬</div>
-                    <div style={{ fontWeight: 600, color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>Nenhuma mensagem rápida</div>
-                    <div style={{ color: 'rgba(255,255,255,0.3)' }}>Crie uma e use <strong style={{ color: 'var(--red)' }}>/atalho</strong> no chat.</div>
-                  </div>
-                ) : quickReplies.map(qr => {
-                  const isExpanded = qrExpandedId === qr.id;
-                  const isEditing  = qrEditId === qr.id;
-                  return (
-                    <div key={qr.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-                      {/* Card header row */}
-                      <div
-                        style={{ display: 'flex', alignItems: 'center', padding: '14px 20px', cursor: 'pointer', gap: 12 }}
-                        onClick={() => { setQrExpandedId(isExpanded ? null : qr.id); setQrEditId(null); setQrEditTitle(''); setQrEditContent(''); setQrCreating(false); }}
-                      >
-                        <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(183,12,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>💬</div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', marginBottom: 3 }}>/{qr.title}</div>
-                          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.4 }}>
-                            {qr.content}
-                          </div>
-                        </div>
-                        <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12, flexShrink: 0, transition: 'transform 0.2s', transform: isExpanded ? 'rotate(180deg)' : 'none' }}>▼</div>
-                      </div>
-
-                      {/* Expanded: full text + actions */}
-                      {isExpanded && (
-                        <div style={{ padding: '0 20px 16px 68px' }}>
-                          {isEditing ? (
-                            <div>
-                              <input
-                                style={{ display: 'block', width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13, padding: '8px 12px', marginBottom: 8, outline: 'none' }}
-                                value={qrEditTitle}
-                                onChange={e => setQrEditTitle(e.target.value.replace(/\s/g, ''))}
-                              />
-                              <textarea
-                                style={{ display: 'block', width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 13, padding: '8px 12px', resize: 'vertical', minHeight: 72, outline: 'none' }}
-                                value={qrEditContent}
-                                onChange={e => setQrEditContent(e.target.value)}
-                              />
-                              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                                <button
-                                  onClick={saveQuickReply}
-                                  disabled={!qrEditTitle.trim() || !qrEditContent.trim()}
-                                  style={{ background: 'var(--red)', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (!qrEditTitle.trim() || !qrEditContent.trim()) ? 0.4 : 1 }}
-                                >Atualizar</button>
-                                <button
-                                  onClick={() => { setQrEditId(null); setQrEditTitle(''); setQrEditContent(''); }}
-                                  style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-                                >Cancelar</button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div>
-                              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginBottom: 12, lineHeight: 1.5 }}>{qr.content}</div>
-                              <div style={{ display: 'flex', gap: 8 }}>
-                                <button
-                                  onClick={() => { setQrEditId(qr.id); setQrEditTitle(qr.title); setQrEditContent(qr.content); setQrCreating(false); }}
-                                  style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.7)', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
-                                >✏️ Editar</button>
-                                <button
-                                  onClick={() => deleteQuickReply(qr.id)}
-                                  style={{ background: 'var(--red-soft)', color: 'var(--red)', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
-                                >🗑 Apagar</button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-
-                {/* Footer: new message button */}
-                {!qrCreating && !qrEditId && (
-                  <div style={{ padding: '14px 20px' }}>
-                    <button
-                      onClick={() => { setQrCreating(true); setQrEditId(null); setQrEditTitle(''); setQrEditContent(''); setQrExpandedId(null); }}
-                      style={{ background: 'var(--red)', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
-                    >+ Nova mensagem rápida</button>
-                  </div>
-                )}
-              </>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-    {pastedImage && (
-      <div style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        zIndex: 9999,
-      }} onClick={() => { URL.revokeObjectURL(pastedImage.previewUrl); setPastedImage(null); }}>
-        <div style={{
-          background: 'var(--bg-secondary, #1e1e2e)', borderRadius: 12, padding: 20,
-          display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 480, width: '90%',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-        }} onClick={e => e.stopPropagation()}>
-          <p style={{ margin: 0, fontWeight: 600, color: 'var(--text-primary, #fff)' }}>Pré-visualização da imagem</p>
-          <img src={pastedImage.previewUrl} alt="preview"
-            style={{ maxHeight: 280, objectFit: 'contain', borderRadius: 8, background: '#111' }} />
-          <input
-            autoFocus
-            type="text"
-            placeholder="Legenda (opcional)…"
-            value={pastedImage.caption}
-            onChange={e => setPastedImage(p => ({ ...p, caption: e.target.value }))}
-            onKeyDown={e => {
-              if (e.key === 'Enter') {
-                const { file, caption } = pastedImage;
-                URL.revokeObjectURL(pastedImage.previewUrl);
-                setPastedImage(null);
-                sendFile(file, caption);
-              }
-              if (e.key === 'Escape') { URL.revokeObjectURL(pastedImage.previewUrl); setPastedImage(null); }
-            }}
-            style={{
-              background: 'var(--bg-tertiary, #2a2a3e)', border: '1px solid var(--border, #444)',
-              borderRadius: 8, padding: '8px 12px', color: 'var(--text-primary, #fff)',
-              fontSize: 14, outline: 'none',
-            }}
-          />
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-            <button onClick={() => { URL.revokeObjectURL(pastedImage.previewUrl); setPastedImage(null); }}
-              style={{
-                padding: '8px 18px', borderRadius: 8, border: '1px solid var(--border, #444)',
-                background: 'transparent', color: 'var(--text-secondary, #aaa)', cursor: 'pointer', fontSize: 14,
-              }}>Cancelar</button>
-            <button onClick={() => {
-                const { file, caption } = pastedImage;
-                URL.revokeObjectURL(pastedImage.previewUrl);
-                setPastedImage(null);
-                sendFile(file, caption);
-              }}
-              style={{
-                padding: '8px 18px', borderRadius: 8, border: 'none',
-                background: 'var(--accent, #e04b2f)', color: '#fff', cursor: 'pointer',
-                fontSize: 14, fontWeight: 600,
-              }}>Enviar</button>
-          </div>
-        </div>
-      </div>
-    )}
-    {lightboxUrl && <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
-    </>
-  );
-}
-
-/* ── AudioMessage ───────────────────────────────────────── */
-function AudioMessage({ url, isOut }) {
-  const [playing, setPlaying]   = useState(false);
-  const [current, setCurrent]   = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [srcUrl, setSrcUrl]     = useState(null);
-  const audioRef = useRef(null);
-
-  // Convert data URIs to blob URLs — <audio> handles blobs more reliably for large files
-  useEffect(() => {
-    if (!url) { setSrcUrl(null); return; }
-    if (!url.startsWith('data:')) { setSrcUrl(url); return; }
-    let blobUrl;
-    fetch(url)
-      .then(r => r.blob())
-      .then(blob => { blobUrl = URL.createObjectURL(blob); setSrcUrl(blobUrl); })
-      .catch(() => setSrcUrl(url)); // fallback: use data URI directly
-    return () => { if (blobUrl) URL.revokeObjectURL(blobUrl); };
-  }, [url]);
-
-  function fmt(s) {
-    if (!s || !isFinite(s)) return '0:00';
-    const m = Math.floor(s / 60);
-    return `${m}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
-  }
-
-  function toggle() {
-    const a = audioRef.current;
-    if (!a) return;
-    if (playing) { a.pause(); setPlaying(false); }
-    else { a.play().then(() => setPlaying(true)).catch(() => {}); }
-  }
-
-  function seek(e) {
-    const a = audioRef.current;
-    if (!a || !duration) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    a.currentTime = ((e.clientX - rect.left) / rect.width) * duration;
-  }
-
-  const pct = duration > 0 ? (current / duration) * 100 : 0;
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 200, maxWidth: 260 }}>
-      <audio
-        ref={audioRef}
-        src={srcUrl}
-        preload="metadata"
-        onTimeUpdate={() => setCurrent(audioRef.current?.currentTime || 0)}
-        onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
-        onEnded={() => { setPlaying(false); setCurrent(0); }}
-      />
-      <button
-        onClick={toggle}
-        style={{
-          width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
-          background: isOut ? 'rgba(255,255,255,0.22)' : 'var(--g-200)',
-          border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: isOut ? 'white' : 'var(--g-700)', fontSize: 13,
-        }}
-      >
-        {playing ? '⏸' : '▶'}
-      </button>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
-        <div
-          onClick={seek}
-          style={{
-            height: 4, borderRadius: 2, cursor: 'pointer', overflow: 'hidden',
-            background: isOut ? 'rgba(255,255,255,0.3)' : 'var(--g-300)',
-          }}
-        >
-          <div style={{
-            height: '100%', width: `${pct}%`, borderRadius: 2,
-            background: isOut ? 'white' : 'var(--red)',
-            transition: 'width 100ms linear',
-          }} />
-        </div>
-        <span style={{ fontSize: 10, color: isOut ? 'rgba(255,255,255,0.7)' : 'var(--g-500)' }}>
-          {playing ? fmt(current) : fmt(duration)}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-/* ── SidebarSection ─────────────────────────────────────── */
-function SidebarSection({ label, action }) {
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '12px 16px 4px',
-    }}>
-      <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--g-500)', letterSpacing: 0.8, textTransform: 'uppercase' }}>
-        {label}
-      </span>
-      {action}
-    </div>
-  );
-}
-
-/* ── ChannelMessage ─────────────────────────────────────── */
-function ChannelMessage({ msg, onPin, onCreateTask }) {
-  const [hovered, setHovered] = useState(false);
-  const isOwn = msg.sender_name === 'Você';
-  const time  = msg.created_at
-    ? new Date(msg.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-    : '';
-
-  return (
-    <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{ display: 'flex', flexDirection: 'column', alignItems: isOwn ? 'flex-end' : 'flex-start' }}
-      className="slide-up"
-    >
-      {!isOwn && (
-        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--g-700)', marginBottom: 2, paddingLeft: 4 }}>
-          {msg.sender_name}
-        </div>
-      )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexDirection: isOwn ? 'row-reverse' : 'row' }}>
-        <div className={`bubble ${isOwn ? 'bubble-out' : 'bubble-in'}`}>
-          {msg.is_pinned && <span style={{ marginRight: 4, fontSize: 10 }}>📌</span>}
-          {msg.text}
-        </div>
-        {hovered && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <button
-              className="btn-icon"
-              onClick={onPin}
-              title={msg.is_pinned ? 'Desafixar mensagem' : 'Fixar mensagem'}
-              style={{
-                width: 26, height: 26, fontSize: 13,
-                background: msg.is_pinned ? 'rgba(37,99,235,0.1)' : 'transparent',
-              }}
-            >
-              📌
-            </button>
-            <button
-              className="btn-icon"
-              onClick={onCreateTask}
-              title="Criar tarefa a partir desta mensagem"
-              style={{ width: 26, height: 26, fontSize: 13 }}
-            >
-              ✅
-            </button>
-          </div>
-        )}
-      </div>
-      <div className="bubble-meta" style={{ color: 'var(--g-500)' }}>{time}</div>
-    </div>
-  );
-}
-
-/* ── ConvAvatar ─────────────────────────────────────────── */
-function ConvAvatar({ conv, size = 36 }) {
-  const [imgErr, setImgErr] = useState(false);
-
-  if (conv.type === 'agent') return <AgentAvatar id={conv.name.toLowerCase()} size={size} />;
-
-  const isGroup   = conv.type === 'group';
-  const isChannel = conv.type === 'internal' && conv.id?.startsWith('chan-');
-  const hasPhoto  = !!conv.photoUrl && !imgErr;
-
-  const bg = hasPhoto       ? 'transparent'
-    : isChannel             ? (conv.color || '#2563EB')
-    : conv.type === 'internal' ? '#374151'
-    : isGroup               ? '#0559A8'
-    : '#1e293b'; // fundo fixo escuro para contatos WA — não depende de variável de tema
-
-  return (
-    <div style={{
-      width: size, height: size, borderRadius: isChannel ? 10 : '50%',
-      background: bg,
-      color: conv.type === 'internal' && !isChannel ? '#d1d5db' : 'white',
-      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-      fontWeight: 700, fontSize: size * 0.36, flexShrink: 0, position: 'relative',
-      overflow: 'hidden',
-    }}>
-      {hasPhoto ? (
-        <img
-          src={conv.photoUrl}
-          alt={conv.name}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: isChannel ? 10 : '50%' }}
-          onError={() => setImgErr(true)}
-        />
-      ) : isChannel
-        ? <span style={{ fontSize: size * 0.48, fontWeight: 800, lineHeight: 1 }}>#</span>
-        : isGroup
-        ? <Icon name="users" size={size * 0.42} />
-        : conv.avatar}
-      {(conv.type === 'whatsapp' || conv.type === 'group') && (
-        <span style={{
-          position: 'absolute', bottom: -1, right: -1,
-          width: size * 0.38, height: size * 0.38, borderRadius: '50%',
-          background: '#25D366', border: '2px solid white',
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <svg width={size * 0.22} height={size * 0.22} viewBox="0 0 24 24" fill="white">
-            <path d="M12 2a10 10 0 0 0-8.5 15.2L2 22l4.9-1.5A10 10 0 1 0 12 2Z" />
-          </svg>
-        </span>
-      )}
-    </div>
-  );
-}
-
-/* ── ConvItem ───────────────────────────────────────────── */
-function ConvItem({ conv, active, onClick, lastMsg, members = [], departments = [] }) {
-  const isChannel = conv.type === 'internal' && conv.id?.startsWith('chan-');
-
-  // Preview: usa a última mensagem real se disponível
-  const previewText = lastMsg?.text || conv.preview || '';
-  const truncated   = previewText.length > 34 ? previewText.slice(0, 34) + '…' : previewText;
-  // 'in' = cliente → vermelho | 'out' = equipe → cinza
-  const resolvedFrom = lastMsg?.from || conv.previewFrom || 'out';
-  const previewColor = previewText
-    ? (resolvedFrom === 'in' ? 'var(--red)' : 'var(--g-500)')
-    : 'var(--g-500)';
-  const previewWeight = resolvedFrom === 'in' && !active ? 600 : 400;
-
-  // Status badge
-  const status = conv.status || 'aguardando';
-  const sColor = STATUS_COLORS[status] || STATUS_COLORS.aguardando;
-  const sLabel = STATUS_LABELS[status] || STATUS_LABELS.aguardando;
-  const sEmoji = STATUS_EMOJI[status] || '❓';
-
-  // Assignee badge
-  const assigneeName = members.find(m => m.id === conv.assigned_to)?.full_name || null;
-  const dept = departments.find(d => d.id === conv.department_id);
-
-  return (
-    <div
-      onClick={onClick}
-      style={{
-        padding: isChannel ? '6px 12px' : '8px 12px',
-        cursor: 'pointer', display: 'flex', gap: 8, alignItems: 'center',
-        background: active ? 'var(--red-soft)' : 'transparent',
-        borderLeft: active ? '3px solid var(--red)' : '3px solid transparent',
-        transition: 'all 150ms',
-      }}
-      onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--g-200)'; }}
-      onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
-    >
-      {isChannel ? (
-        /* Canal: avatar # colorido menor + nome inline */
-        <>
-          <ConvAvatar conv={conv} size={24} />
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 13, fontWeight: active ? 700 : 500, color: 'var(--g-900)' }} className="truncate">
-              {conv.name}
-            </span>
-            {conv.isGlobal && (
-              <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 9999, background: 'rgba(37,99,235,0.1)', color: '#2563EB', flexShrink: 0 }}>
-                Global
-              </span>
-            )}
-          </div>
-          {conv.unread > 0 && (
-            <span style={{ background: 'var(--red)', color: 'white', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 9999, minWidth: 18, textAlign: 'center' }}>
-              {conv.unread}
-            </span>
-          )}
-        </>
-      ) : (
-        /* DM / WA / Grupo: card reformulado com status + atendente */
-        <>
-          <ConvAvatar conv={conv} size={34} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            {/* Linha 1: nome + tempo */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <div style={{ fontSize: 13, fontWeight: active ? 700 : 600, color: 'var(--g-900)' }} className="truncate">
-                {conv.name}
-              </div>
-              <div style={{ fontSize: 10, color: 'var(--g-500)', flexShrink: 0 }}>{conv.time}</div>
-            </div>
-            {/* Linha 2: preview + unread */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flex: 1 }}>
-                {conv.type === 'group' && conv.groupType && (
-                  <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 9999, background: '#25D36622', color: '#166534', flexShrink: 0, textTransform: 'uppercase' }}>
-                    {conv.groupType}
-                  </span>
-                )}
-                {resolvedFrom === 'in' && previewText && (
-                  <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--red)', flexShrink: 0 }}>●</span>
-                )}
-                <div style={{ fontSize: 12, color: previewColor, fontWeight: previewWeight }} className="truncate">
-                  {truncated}
-                </div>
-              </div>
-              {conv.unread > 0 && (
-                <span style={{ background: 'var(--red)', color: 'white', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 9999, minWidth: 18, textAlign: 'center', flexShrink: 0, marginLeft: 6 }}>
-                  {conv.unread}
-                </span>
-              )}
-            </div>
-            {/* Linha 3: tags de status + departamento + atendente */}
-            <div style={{ display: 'flex', gap: 4, marginTop: 3, flexWrap: 'wrap', alignItems: 'center' }}>
-              <span
-                title={sLabel}
-                style={{
-                  fontSize: 11, padding: '1px 4px', borderRadius: 4,
-                  background: sColor.bg, border: `1px solid ${sColor.dot}`,
-                  flexShrink: 0, lineHeight: 1.4,
-                }}
-              >
-                {sEmoji}
-              </span>
-              {dept && <DepartmentBadge name={dept.name} color={dept.color} />}
-              {assigneeName && (
-                <span style={{
-                  fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 4,
-                  background: 'var(--g-100)', color: 'var(--g-600)', border: '1px solid var(--g-200)',
-                  flexShrink: 0,
-                }}>
-                  {assigneeName}
-                </span>
-              )}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-/* ── CollapsibleSection ───────────────────────────────── */
-function CollapsibleSection({ title, children, defaultOpen = true }) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div style={{ marginTop: 4, borderBottom: '1px solid var(--g-200)', paddingBottom: 14 }}>
-      <button
-        onClick={() => setOpen(v => !v)}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          background: 'none', border: 'none', cursor: 'pointer', padding: '8px 0',
-          fontSize: 11, fontWeight: 700, color: 'var(--g-600)', textTransform: 'uppercase', letterSpacing: 0.6,
-        }}
-      >
-        {title}
-        <span style={{ fontSize: 13, color: 'var(--g-500)' }}>{open ? '▾' : '▸'}</span>
-      </button>
-      {open && <div style={{ marginTop: 6 }}>{children}</div>}
-    </div>
-  );
-}
-
-/* ── ContactPanel ───────────────────────────────────────── */
-const PIPELINES = ['Prospecção', 'Negociação', 'Fechamento', 'Pós-venda', 'Reativação'];
-
-function ContactPanel({ conv, onNavigate, members = [], tenantDbId, onNameSaved, instanceName, onStatusChange }) {
-  const isGroup = conv.type === 'group';
-
-  // Edição de nome/telefone
-  const [isEditing, setIsEditing] = useState(false);
-  const [editName, setEditName]   = useState(conv.name);
-  const phone = conv.whatsapp_chat_id ? `+${conv.whatsapp_chat_id.split('@')[0]}` : conv.phone || '';
-  const [editPhone, setEditPhone] = useState(phone);
-  const [editNote, setEditNote]   = useState(
-    conv.type === 'whatsapp' ? 'Cliente sensível a atrasos — oferecer sempre alguma cortesia.' : ''
-  );
-
-  // Tags locais
-  const [tags, setTags]           = useState(conv.tags || []);
-  const [tagInput, setTagInput]   = useState('');
-  const [showTagInput, setShowTagInput] = useState(false);
-
-  // Pipeline
-  const [showPipeline, setShowPipeline] = useState(false);
-  const [pipeline, setPipeline]         = useState('');
-  const [pipelineOk, setPipelineOk]     = useState(false);
-
-  // Transferência
-  const [showTransfer, setShowTransfer] = useState(false);
-  const [transferTo, setTransferTo]     = useState('');
-  const [transferOk, setTransferOk]     = useState(false);
-
-  // Criar tarefa
-  const [showTaskForm, setShowTaskForm] = useState(false);
-  const [taskTitle, setTaskTitle]       = useState('');
-  const [taskDue, setTaskDue]           = useState('');
-  const [taskAssignee, setTaskAssignee] = useState('');
-  const [taskSaving, setTaskSaving]     = useState(false);
-  const [taskOk, setTaskOk]             = useState(false);
-
-  // Finalizar atendimento
-  const [showFinishConfirm, setShowFinishConfirm] = useState(false);
-
-  // Grupo: participantes e gerenciamento
-  const [groupParticipants, setGroupParticipants] = useState([]);
-  const [loadingParticipants, setLoadingParticipants] = useState(false);
-  const [showAddParticipant, setShowAddParticipant] = useState(false);
-  const [newParticipantPhone, setNewParticipantPhone] = useState('');
-  const [groupActionLoading, setGroupActionLoading] = useState(false);
-
-  useEffect(() => {
-    if (!isGroup || !conv.whatsapp_chat_id) return;
-    setLoadingParticipants(true);
-    fetchWAGroupParticipants(instanceName || 'teste', conv.whatsapp_chat_id)
-      .then(data => {
-        const list = Array.isArray(data) ? data : (data?.participants || []);
-        setGroupParticipants(list);
-      })
-      .catch(() => setGroupParticipants([]))
-      .finally(() => setLoadingParticipants(false));
-  }, [isGroup, conv.whatsapp_chat_id, instanceName]);
-
-  function addTag(e) {
-    e.preventDefault();
-    const t = tagInput.trim();
-    if (t && !tags.includes(t)) setTags(prev => [...prev, t]);
-    setTagInput('');
-    setShowTagInput(false);
-  }
-
-  function removeTag(t) { setTags(prev => prev.filter(x => x !== t)); }
-
-  function confirmPipeline() {
-    if (!pipeline) return;
-    setPipelineOk(true);
-    setShowPipeline(false);
-    setTimeout(() => setPipelineOk(false), 3000);
-  }
-
-  function confirmTransfer() {
-    if (!transferTo) return;
-    setTransferOk(true);
-    setShowTransfer(false);
-    setTimeout(() => setTransferOk(false), 3000);
-  }
-
-  async function saveTask() {
-    if (!taskTitle.trim()) return;
-    setTaskSaving(true);
-    try {
-      await supabase.from('tasks').insert({
-        title: taskTitle.trim(),
-        tenant_id: tenantDbId,
-        col: 'todo',
-        due_at: taskDue || null,
-        assignee_id: taskAssignee || null,
-      });
-      setTaskOk(true);
-      setShowTaskForm(false);
-      setTaskTitle(''); setTaskDue(''); setTaskAssignee('');
-      setTimeout(() => setTaskOk(false), 3000);
-    } catch { /* ignore */ }
-    setTaskSaving(false);
-  }
-
-  function finishAtendimento() {
-    if (onStatusChange) onStatusChange('finalizado');
-    setShowFinishConfirm(false);
-  }
-
-  return (
-    <div style={{ padding: '12px 16px' }}>
-
-      {/* ── PERFIL ─────────────────────────────────────────── */}
-      <CollapsibleSection title="Perfil" defaultOpen={true}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ display: 'inline-block' }}><ConvAvatar conv={conv} size={72} /></div>
-          {isEditing ? (
-            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <input className="input" style={{ fontSize: 13, textAlign: 'center' }} value={editName} onChange={e => setEditName(e.target.value)} placeholder="Nome" />
-              <input className="input" style={{ fontSize: 13, textAlign: 'center' }} value={editPhone} onChange={e => setEditPhone(e.target.value)} placeholder="Telefone" />
-              <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 4 }}>
-                <button
-                  className="btn-primary"
-                  style={{ padding: '6px 12px', fontSize: 12 }}
-                  onClick={async () => {
-                    setIsEditing(false);
-                    try {
-                      await supabase.from('conversations')
-                        .update({ push_name: editName, contact_name: editName })
-                        .eq('id', conv.id);
-                      if (onNameSaved) onNameSaved(editName);
-                    } catch { /* ignore */ }
-                  }}
-                >Salvar</button>
-                <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => { setIsEditing(false); setEditName(conv.name); }}>Cancelar</button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--g-900)', marginTop: 10 }}>{editName}</div>
-              <div style={{ fontSize: 12, color: 'var(--g-500)', marginTop: 4 }}>
-                {isGroup ? 'Grupo WhatsApp' : editPhone || conv.role || conv.type}
-              </div>
-              {tags.length > 0 && (
-                <div style={{ display: 'flex', gap: 5, justifyContent: 'center', flexWrap: 'wrap', marginTop: 10 }}>
-                  {tags.map(t => (
-                    <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}
-                      className={`badge ${t === 'VIP' ? 'badge-red' : 'badge-gray'}`}>
-                      {t}
-                      <button onClick={() => removeTag(t)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1, opacity: 0.6, fontSize: 10 }}>×</button>
-                    </span>
-                  ))}
-                </div>
-              )}
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 14, flexWrap: 'wrap' }}>
-                {!isGroup && <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: 12 }}><Icon name="phone" size={12} /> Ligar</button>}
-                {!isGroup && onNavigate && (
-                  <button className="btn-primary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => onNavigate('crm')}>Ver no CRM</button>
-                )}
-                <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => setIsEditing(true)}><Icon name="edit" size={12} /> Editar</button>
-              </div>
+              </footer>
             </>
           )}
-        </div>
-      </CollapsibleSection>
-
-      {/* ── NOTAS ──────────────────────────────────────────── */}
-      <CollapsibleSection title="Notas" defaultOpen={false}>
-        <textarea
-          className="input" placeholder="Adicione uma nota interna…"
-          style={{ minHeight: 80, resize: 'vertical', fontSize: 12, width: '100%' }}
-          value={editNote} onChange={e => setEditNote(e.target.value)}
-        />
-      </CollapsibleSection>
-
-      {/* ── ENDEREÇO ───────────────────────────────────────── */}
-      <CollapsibleSection title="Endereço" defaultOpen={false}>
-        <div style={{ fontSize: 12, color: 'var(--g-500)', padding: '6px 0' }}>
-          Endereço não cadastrado.
-        </div>
-      </CollapsibleSection>
-
-      {/* ── DADOS DO LEAD ────────────────────────────────── */}
-      <CollapsibleSection title="Dados do Lead" defaultOpen={true}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {/* Pipeline */}
-          {pipelineOk ? (
-            <div style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600, padding: '4px 0' }}>✅ Adicionado ao pipeline "{pipeline}"</div>
-          ) : showPipeline ? (
-            <div style={{ display: 'flex', gap: 6 }}>
-              <div style={{ flex: 1 }}>
-                <CustomSelect
-                  compact
-                  value={pipeline}
-                  onChange={v => setPipeline(v)}
-                  options={[{ value:'', label:'Selecionar pipeline…' }, ...PIPELINES.map(p => ({ value:p, label:p }))]}
-                />
-              </div>
-              <button className="btn-primary" style={{ padding: '6px 10px', fontSize: 12 }} onClick={confirmPipeline}>OK</button>
-              <button className="btn-icon" onClick={() => setShowPipeline(false)}><Icon name="x" size={13} /></button>
-            </div>
-          ) : (
-            <button className="btn-secondary" style={{ justifyContent: 'flex-start', fontSize: 12, gap: 8, width: '100%' }}
-              onClick={() => setShowPipeline(true)}>
-              <Icon name="chart" size={14} /> Adicionar ao Pipeline
-            </button>
-          )}
-
-          {/* Tag */}
-          <div>
-            {showTagInput ? (
-              <form onSubmit={addTag} style={{ display: 'flex', gap: 6 }}>
-                <input
-                  className="input" style={{ flex: 1, fontSize: 12, padding: '6px 8px' }}
-                  placeholder="Nome da tag…" value={tagInput} onChange={e => setTagInput(e.target.value)}
-                  autoFocus list="tag-suggestions"
-                />
-                <datalist id="tag-suggestions">
-                  {['VIP', 'Recorrente', 'Inadimplente', 'Novo', 'Parceiro'].map(s => <option key={s} value={s} />)}
-                </datalist>
-                <button type="submit" className="btn-primary" style={{ padding: '6px 10px', fontSize: 12 }}>OK</button>
-                <button type="button" className="btn-icon" onClick={() => setShowTagInput(false)}><Icon name="x" size={13} /></button>
-              </form>
-            ) : (
-              <button className="btn-secondary" style={{ justifyContent: 'flex-start', fontSize: 12, gap: 8, width: '100%' }}
-                onClick={() => setShowTagInput(true)}>
-                <Icon name="plus" size={14} /> Adicionar Tag
-              </button>
-            )}
+        </section>
+      ) : (
+        <section className="lc-chat" style={{ gridArea: 'chat', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.35)', fontSize: 14 }}>
+            <AgentAvatar id="deli" size={48} />
+            <div style={{ marginTop: 16, fontWeight: 600 }}>Selecione uma conversa</div>
+            <div style={{ fontSize: 12, marginTop: 6, opacity: 0.7 }}>ou conecte uma instância Evolution</div>
           </div>
-
-          {/* Análise DELI */}
-          {(conv.type === 'whatsapp' || conv.type === 'group') && (
-            <div style={{
-              marginTop: 6, padding: 12,
-              background: 'linear-gradient(135deg, rgba(183,12,0,0.05), rgba(183,12,0,0.01))',
-              border: '1px solid rgba(183,12,0,0.15)', borderRadius: 8,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                <Icon name="sparkles" size={14} style={{ color: 'var(--red)' }} />
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--red)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Análise DELI</span>
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--g-700)', lineHeight: 1.5 }}>
-                {isGroup
-                  ? <>Grupo ativo com membros recorrentes. Nível de engajamento: <strong style={{ color: 'var(--success)' }}>bom</strong>.</>
-                  : <>Cliente <strong>frustrado</strong> por atraso repetido. Sentimento: <strong style={{ color: 'var(--warn)' }}>negativo</strong>.{' '}
-                    Risco de churn: <strong style={{ color: 'var(--red)' }}>alto</strong>. Recomendo reembolso parcial + cortesia dupla.</>}
-              </div>
-            </div>
-          )}
-        </div>
-      </CollapsibleSection>
-
-      {/* ── IFOOD ──────────────────────────────────────────── */}
-      {conv.orders && (
-        <CollapsibleSection title="iFood" defaultOpen={false}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {conv.orders.map((o, i) => (
-              <div key={i} style={{ padding: 10, background: 'var(--g-50)', borderRadius: 6 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--g-900)' }}>{o.date}</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--red)' }}>{o.total}</span>
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--g-500)', marginTop: 2 }}>{o.items}</div>
-              </div>
-            ))}
-          </div>
-        </CollapsibleSection>
+        </section>
       )}
 
-      {/* ── MEMBROS DO GRUPO ───────────────────────────────── */}
-      {isGroup && (
-        <CollapsibleSection title="Membros do Grupo" defaultOpen={false}>
-          {loadingParticipants ? (
-            <div style={{ fontSize: 12, color: 'var(--g-400)', padding: '8px 0' }}>Carregando…</div>
-          ) : groupParticipants.length === 0 ? (
-            <div style={{ fontSize: 12, color: 'var(--g-400)', padding: '8px 0' }}>Nenhum participante encontrado</div>
-          ) : (
-            <div style={{ maxHeight: 240, overflowY: 'auto', border: '1px solid var(--g-200)', borderRadius: 8 }}>
-              {groupParticipants.map((p, i) => {
-                const jid    = typeof p === 'string' ? p : (p.id || p.jid || '');
-                const num    = jid.split('@')[0];
-                const name   = typeof p === 'string' ? '' : (p.name || p.pushName || '');
-                const isAdmin = typeof p === 'string' ? false : (p.admin === true || p.isAdmin === true || p.adminType === 'admin' || p.adminType === 'superadmin');
-                return (
-                  <div key={jid || i} style={{
-                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
-                    borderBottom: i < groupParticipants.length - 1 ? '1px solid var(--g-100)' : 'none',
-                  }}>
-                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--g-200)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--g-700)', flexShrink: 0 }}>
-                      {(name || num).slice(0, 2).toUpperCase()}
+      {/* ─── COL 3: Painel direito (inspector) ───────────────── */}
+      <aside className="lc-inspector dark-scroll" style={{ gridArea: 'inspector' }}>
+        {active && (
+          <>
+            <div className="lc-insp-head">
+              <ConvAvatar conv={active} size={36} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="lc-insp-name">
+                  {active.name}
+                  <Icon name="arrowright" size={12} style={{ color: 'rgba(255,255,255,0.4)' }} />
+                </div>
+                <button className="lc-tag-btn"><Icon name="plus" size={11} /> Adicionar tags</button>
+              </div>
+            </div>
+
+            {/* Copiloto DELI */}
+            {showCopilot && (
+              <CollapseSection title="Copiloto DELI" open={openIA} onToggle={() => setOpenIA(v => !v)} accent>
+                <div className="lc-copilot-card">
+                  {active.type === 'whatsapp' || active.type === 'group' ? (
+                    <>
+                      <div className="lc-copilot-row">
+                        <span className="lc-copilot-k">Status</span>
+                        <ConversationStatusBadge status={active.status_v2 || 'open'} />
+                      </div>
+                      <div className="lc-copilot-row">
+                        <span className="lc-copilot-k">Atendente</span>
+                        <span className="lc-copilot-v">{STATUS_EMOJI[convStatus] || '❓'} {convStatus || 'aguardando'}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="lc-copilot-row">
+                      <span className="lc-copilot-k">Canal</span>
+                      <span className="lc-copilot-v">{active.name}</span>
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--g-900)' }}>{name || num}</div>
-                      {name && <div style={{ fontSize: 11, color: 'var(--g-500)' }}>+{num}</div>}
-                    </div>
-                    {isAdmin && <span style={{ fontSize: 10, color: 'var(--red)', fontWeight: 700 }}>ADMIN</span>}
+                  )}
+                  <div className="lc-copilot-row">
+                    <span className="lc-copilot-k">Mensagens</span>
+                    <span className="lc-copilot-v">{activeMsgs.length}</span>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </CollapsibleSection>
-      )}
-
-      {/* ── NEGÓCIO ────────────────────────────────────────── */}
-      <CollapsibleSection title="Negócio" defaultOpen={true}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {/* Transferir */}
-          {transferOk ? (
-            <div style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600, padding: '4px 0' }}>✅ Conversa transferida com sucesso</div>
-          ) : showTransfer ? (
-            <div style={{ display: 'flex', gap: 6 }}>
-              <div style={{ flex: 1 }}>
-                <CustomSelect
-                  compact
-                  value={transferTo}
-                  onChange={v => setTransferTo(v)}
-                  options={[{ value:'', label:'Selecionar agente…' }, ...members.map(m => ({ value:m.id, label:m.full_name || m.email }))]}
-                />
-              </div>
-              <button className="btn-primary" style={{ padding: '6px 10px', fontSize: 12 }} onClick={confirmTransfer}>OK</button>
-              <button className="btn-icon" onClick={() => setShowTransfer(false)}><Icon name="x" size={13} /></button>
-            </div>
-          ) : (
-            <button className="btn-secondary" style={{ justifyContent: 'flex-start', fontSize: 12, gap: 8, width: '100%' }}
-              onClick={() => setShowTransfer(true)}>
-              <Icon name="users" size={14} /> Transferir conversa
-            </button>
-          )}
-
-          {/* Criar Tarefa */}
-          {taskOk ? (
-            <div style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600, padding: '4px 0' }}>✅ Tarefa criada com sucesso</div>
-          ) : showTaskForm ? (
-            <div style={{ background: 'var(--g-50)', border: '1px solid var(--g-200)', borderRadius: 8, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <input className="input" style={{ fontSize: 12, padding: '6px 8px' }} placeholder="Título da tarefa *" value={taskTitle} onChange={e => setTaskTitle(e.target.value)} autoFocus />
-              <input className="input" style={{ fontSize: 12, padding: '6px 8px' }} type="date" value={taskDue} onChange={e => setTaskDue(e.target.value)} />
-              <CustomSelect
-                compact
-                value={taskAssignee}
-                onChange={v => setTaskAssignee(v)}
-                options={[{ value:'', label:'Responsável (opcional)' }, ...members.map(m => ({ value:m.id, label:m.full_name || m.email }))]}
-              />
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button className="btn-primary" style={{ flex: 1, fontSize: 12, padding: '6px 0', justifyContent: 'center' }}
-                  onClick={saveTask} disabled={taskSaving || !taskTitle.trim()}>
-                  {taskSaving ? 'Salvando…' : 'Criar tarefa'}
-                </button>
-                <button className="btn-icon" onClick={() => setShowTaskForm(false)}><Icon name="x" size={13} /></button>
-              </div>
-            </div>
-          ) : (
-            <button className="btn-secondary" style={{ justifyContent: 'flex-start', fontSize: 12, gap: 8, width: '100%' }}
-              onClick={() => setShowTaskForm(true)}>
-              <Icon name="check" size={14} /> Criar Tarefa
-            </button>
-          )}
-
-          {/* Grupo: adicionar participante */}
-          {isGroup && (
-            <div>
-              {showAddParticipant ? (
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <input
-                    className="input" style={{ flex: 1, fontSize: 12, padding: '6px 8px' }}
-                    placeholder="Número do participante…" value={newParticipantPhone}
-                    onChange={e => setNewParticipantPhone(e.target.value)} autoFocus
-                  />
-                  <button
-                    className="btn-primary" style={{ padding: '6px 10px', fontSize: 12 }}
-                    disabled={groupActionLoading || !newParticipantPhone.trim()}
-                    onClick={async () => {
-                      setGroupActionLoading(true);
-                      try {
-                        const phone = newParticipantPhone.replace(/\D/g, '');
-                        if (phone && conv.whatsapp_chat_id) {
-                          await addWAGroupParticipants(instanceName || 'teste', conv.whatsapp_chat_id, [`${phone}@s.whatsapp.net`]);
-                          setNewParticipantPhone('');
-                          setShowAddParticipant(false);
-                          const data = await fetchWAGroupParticipants(instanceName || 'teste', conv.whatsapp_chat_id);
-                          setGroupParticipants(Array.isArray(data) ? data : (data?.participants || []));
-                        }
-                      } catch (err) { console.error('Erro ao adicionar participante:', err); }
-                      finally { setGroupActionLoading(false); }
-                    }}
-                  >
-                    {groupActionLoading ? '…' : 'Adicionar'}
-                  </button>
-                  <button className="btn-icon" onClick={() => { setShowAddParticipant(false); setNewParticipantPhone(''); }}><Icon name="x" size={13} /></button>
                 </div>
-              ) : (
-                <button className="btn-secondary" style={{ justifyContent: 'flex-start', fontSize: 12, gap: 8, width: '100%' }}
-                  onClick={() => setShowAddParticipant(true)}>
-                  <Icon name="plus" size={14} /> Adicionar participante
-                </button>
-              )}
-            </div>
-          )}
+                <div className="lc-copilot-actions">
+                  <button className="lc-mini-action" onClick={() => runCommand('/resumir')}><Icon name="sparkles" size={12} /> Resumir agora</button>
+                  <button className="lc-mini-action" onClick={() => runCommand('/proxima')}><Icon name="arrowright" size={12} /> Próxima ação</button>
+                  <button className="lc-mini-action" onClick={() => runCommand('/tarefa')}><Icon name="check" size={12} /> Criar tarefa</button>
+                  <button className="lc-mini-action" onClick={() => runCommand('/cobranca')}><Icon name="dollar" size={12} /> Acionar CORA</button>
+                </div>
+              </CollapseSection>
+            )}
 
-          {/* Grupo: sair do grupo */}
-          {isGroup && (
-            <button
-              className="btn-secondary"
-              style={{ justifyContent: 'flex-start', fontSize: 12, gap: 8, width: '100%', color: 'var(--red)' }}
-              disabled={groupActionLoading}
-              onClick={async () => {
-                if (!confirm('Deseja sair deste grupo?')) return;
-                setGroupActionLoading(true);
-                try {
-                  if (conv.whatsapp_chat_id) {
-                    await leaveWAGroup(instanceName || 'teste', conv.whatsapp_chat_id);
-                  }
-                } catch (err) { console.error('Erro ao sair do grupo:', err); }
-                finally { setGroupActionLoading(false); }
-              }}
-            >
-              <Icon name="logout" size={14} /> Sair do grupo
-            </button>
-          )}
-
-          {/* Finalizar atendimento */}
-          {showFinishConfirm ? (
-            <div style={{ background: 'rgba(183,12,0,0.05)', border: '1px solid rgba(183,12,0,0.2)', borderRadius: 8, padding: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--g-900)', marginBottom: 10 }}>
-                Deseja finalizar este atendimento?
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--g-500)', marginBottom: 12 }}>
-                A conversa será marcada como resolvida e arquivada.
-              </div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button className="btn-primary" style={{ flex: 1, fontSize: 12, padding: '6px 0', justifyContent: 'center', background: 'var(--red)' }}
-                  onClick={finishAtendimento}>
-                  Confirmar
-                </button>
-                <button className="btn-secondary" style={{ fontSize: 12, padding: '6px 12px' }}
-                  onClick={() => setShowFinishConfirm(false)}>
-                  Cancelar
-                </button>
+            {/* Ações rápidas */}
+            <div className="lc-insp-section">
+              <div className="lc-insp-title">Ações</div>
+              <div className="lc-actions-grid">
+                <button className="lc-mini-action"><Icon name="plus" size={12} /> Adicionar negócio</button>
+                <button className="lc-mini-action"><Icon name="sparkles" size={12} /> Executar automação</button>
+                <button className="lc-mini-action" onClick={() => onNavigate?.('tasks')}><Icon name="check" size={12} /> Ver tarefas</button>
               </div>
             </div>
-          ) : (
-            <button
-              onClick={() => setShowFinishConfirm(true)}
-              style={{
-                width: '100%', padding: '9px 14px', fontSize: 12, fontWeight: 700,
-                background: 'var(--red)', color: 'white', border: 'none', borderRadius: 'var(--r-sm)',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                transition: 'opacity 150ms',
-              }}
-              onMouseEnter={e => e.currentTarget.style.opacity = '0.88'}
-              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-            >
-              <Icon name="x" size={14} /> Finalizar atendimento
-            </button>
-          )}
-        </div>
-      </CollapsibleSection>
-    </div>
-  );
-}
 
-/* ── EmojiPicker ────────────────────────────────────────── */
-const EMOJIS = [
-  '😀','😂','😊','😍','🤔','😅','😎','😢','😡','🥳',
-  '👍','👎','👋','🙌','🤝','❤️','🔥','✅','⭐','🎉',
-  '🍕','🚀','💪','🎯','💬','🌟','⚡','💡','🎊','🏆',
-  '😆','🤣','😇','🤩','😏','😬','🙄','😴','🤗','😤',
-  '👀','💯','🙏','✨','🎶','📱','💰','🏅','🎁','🌹',
-];
+            {/* Perfil do cliente */}
+            {activeCustomer ? (
+              <CollapseSection title="Perfil" open={openPerfil} onToggle={() => setOpenPerfil(v => !v)}>
+                <FieldRow label="Nome"      value={activeCustomer.name} />
+                <FieldRow label="Telefone"  value={activeCustomer.phone} hint="—" />
+                <FieldRow label="E-mail"    value={activeCustomer.email} hint="—" />
+                <FieldRow label="Documento" value={activeCustomer.document} hint="—" />
+              </CollapseSection>
+            ) : active.whatsapp_chat_id ? (
+              <CollapseSection title="Perfil" open={openPerfil} onToggle={() => setOpenPerfil(v => !v)}>
+                <FieldRow label="Nome"     value={active.name} />
+                <FieldRow label="Telefone" value={active.whatsapp_chat_id?.split('@')[0]} hint="—" />
+              </CollapseSection>
+            ) : null}
 
-function EmojiPicker({ onSelect, onClose }) {
-  const ref = useRef(null);
-  useEffect(() => {
-    function handleClick(e) { if (ref.current && !ref.current.contains(e.target)) onClose(); }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [onClose]);
+            {/* Notas */}
+            <CollapseSection title="Notas" open={openNotas} onToggle={() => setOpenNotas(v => !v)}>
+              <textarea className="lc-notes" placeholder="Adicione uma nota interna…" />
+            </CollapseSection>
 
-  return (
-    <div ref={ref} style={{
-      position: 'absolute', bottom: 'calc(100% + 4px)', left: 0,
-      background: 'var(--white)', border: '1px solid var(--g-200)', borderRadius: 10, padding: 10, zIndex: 50,
-      display: 'grid', gridTemplateColumns: 'repeat(10, 30px)', gap: 2,
-      boxShadow: '0 8px 24px rgba(0,0,0,0.14)',
-    }}>
-      {EMOJIS.map(e => (
-        <button key={e} onClick={() => { onSelect(e); onClose(); }} style={{
-          fontSize: 18, background: 'transparent', borderRadius: 4,
-          width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer', transition: 'background 100ms',
-        }}
-        onMouseEnter={ev => ev.currentTarget.style.background = 'var(--g-100)'}
-        onMouseLeave={ev => ev.currentTarget.style.background = 'transparent'}
-        >{e}</button>
-      ))}
-    </div>
-  );
-}
+            {/* iFood */}
+            <CollapseSection title="iFood" open={openIfood} onToggle={() => setOpenIfood(v => !v)}>
+              <FieldRow label="ID Loja"     value="—" />
+              <FieldRow label="Pedidos 30d" value="—" />
+            </CollapseSection>
 
-/* ── NewInternalModal ───────────────────────────────────── */
-function NewInternalModal({ members, onSelect, onClose }) {
-  const [search, setSearch] = useState('');
-  const filtered = members.filter(m =>
-    !search || (m.full_name || m.email || '').toLowerCase().includes(search.toLowerCase())
-  );
-
-  return (
-    <div onClick={e => e.stopPropagation()} style={{
-      background: 'var(--white)', borderRadius: 12, width: 340,
-      boxShadow: '0 16px 40px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', maxHeight: 440,
-    }}>
-      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--g-200)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--g-900)' }}>Nova mensagem direta</span>
-        <button className="btn-icon" onClick={onClose}><Icon name="x" size={15} /></button>
-      </div>
-      <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--g-100)' }}>
-        <div style={{ position: 'relative' }}>
-          <Icon name="search" size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--g-400)', pointerEvents: 'none' }} />
-          <input className="input" style={{ paddingLeft: 32, fontSize: 13 }} placeholder="Buscar membro..." value={search} onChange={e => setSearch(e.target.value)} autoFocus />
-        </div>
-      </div>
-      <div className="scroll" style={{ flex: 1, overflowY: 'auto' }}>
-        {filtered.length === 0 && (
-          <div style={{ padding: 32, textAlign: 'center', color: 'var(--g-400)', fontSize: 13 }}>
-            {members.length === 0 ? 'Nenhum membro encontrado no banco.' : 'Nenhum resultado.'}
-          </div>
+            {/* Lead Panel (se disponível) */}
+            {activeCustomer && active && (
+              <LeadPanel conversation={active} customer={activeCustomer} tenantId={tenantDbId} members={members} />
+            )}
+          </>
         )}
-        {filtered.map(m => {
-          const initials = (m.full_name || 'TM').split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
-          return (
-            <div key={m.id} onClick={() => onSelect(m)} style={{
-              display: 'flex', alignItems: 'center', gap: 12, padding: '10px 20px',
-              cursor: 'pointer', transition: 'background 150ms',
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--g-50)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-            >
-              <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--g-200)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 13, color: 'var(--g-700)', flexShrink: 0 }}>
-                {initials}
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--g-900)' }}>{m.full_name || 'Sem nome'}</div>
-                <div style={{ fontSize: 11, color: 'var(--g-500)' }}>{m.email}</div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      </aside>
     </div>
+
+    {/* Lightbox de imagem */}
+    {lightboxUrl && <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
+    </>
   );
 }

@@ -1,263 +1,356 @@
-import { useState, useEffect } from 'react';
+import { useState as uSRep, useMemo as uMRep } from 'react';
 import Icon from '../components/Icon.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
-import RequireRole from '../components/auth/RequireRole.jsx';
-import { AGENTS } from '../data.js';
-import { getKPIs, getChart7d, getAgentActions } from '../lib/api.js';
+import UserAvatar from '../components/UserAvatar.jsx';
+import { TENANTS, AGENTS, REPORTS_DATA_EXTRA } from '../data.js';
 
-const DAYS_7 = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
-
-const REPORT_STATUS = {
-  ready:      { label: 'Pronto',   cls: 'badge-green'  },
-  generating: { label: 'Gerando',  cls: 'badge-yellow' },
-  scheduled:  { label: 'Agendado', cls: 'badge-gray'   },
-};
-
-function fmt(v, type) {
-  if (v == null) return '—';
-  if (type === 'currency') return Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  if (type === 'integer')  return Number(v).toLocaleString('pt-BR');
-  return String(v);
-}
-function fmtTime(iso) {
-  if (!iso) return '';
-  return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-}
-function mapKpis(raw) {
-  return {
-    receita:    { value: fmt(raw?.receita_mes,    'currency'), delta: '—', trend: 'neutral' },
-    pedidos:    { value: fmt(raw?.pedidos_mes,    'integer'),  delta: '—', trend: 'neutral' },
-    ticket:     { value: fmt(raw?.ticket_medio,   'currency'), delta: '—', trend: 'neutral' },
-    recuperado: { value: fmt(raw?.recuperado_cora,'currency'), delta: '—', trend: 'neutral' },
+const ReportsScreen = ({ tenant, tenantDbId, userId }) => {
+  const data = REPORTS_DATA_EXTRA[tenant] || REPORTS_DATA_EXTRA['pizza-joao'] || {
+    revenueTrend30: [], channels: [], sentimentSeries: [], funnel: [], agentPerf: [], insights: [],
   };
-}
 
-export default function ReportsScreen({ tenant, tenantDbId, userId }) {
-  const [kpis, setKpis]           = useState(mapKpis(null));
-  const [chart7d, setChart7d]     = useState([0,0,0,0,0,0,0]);
-  const [veraActions, setVeraActions] = useState([]);
+  const [period, setPeriod] = uSRep('30d');
+  const [tab, setTab]       = uSRep('overview');
 
-  useEffect(() => {
-    if (!tenantDbId) return;
-    Promise.all([
-      getKPIs(tenantDbId),
-      getChart7d(tenantDbId),
-      getAgentActions(tenantDbId, 5),
-    ]).then(([rawKpis, chart, actions]) => {
-      setKpis(mapKpis(rawKpis));
-      setChart7d(chart);
-      setVeraActions(actions.map(a => ({ text: a.text ?? '', time: fmtTime(a.occurred_at) })));
-    }).catch(err => console.error('[ReportsScreen]', err));
-  }, [tenantDbId]);
+  const periods = [
+    { id: '7d',  label: '7 dias' },
+    { id: '30d', label: '30 dias' },
+    { id: '90d', label: '90 dias' },
+    { id: 'ytd', label: 'Ano' },
+  ];
+  const tabs = [
+    { id: 'overview',  label: 'Visão geral',  icon: 'chart' },
+    { id: 'channels',  label: 'Canais',       icon: 'msg' },
+    { id: 'agents',    label: 'Agentes',      icon: 'sparkles' },
+    { id: 'funnel',    label: 'Funil',        icon: 'paper' },
+    { id: 'sentiment', label: 'Sentimento',   icon: 'heart' },
+  ];
 
-  const [period, setPeriod] = useState('7d');
-  const chart = chart7d;
-  const max   = Math.max(1, ...chart);
+  const totalRevenue = (data.revenueTrend30 || []).reduce((s, v) => s + v, 0);
+  const lastWeek = (data.revenueTrend30 || []).slice(-7).reduce((s, v) => s + v, 0);
+  const prevWeek = (data.revenueTrend30 || []).slice(-14, -7).reduce((s, v) => s + v, 0);
+  const growth   = prevWeek ? ((lastWeek - prevWeek) / prevWeek * 100).toFixed(1) : 0;
+  const fmt = (n) => 'R$ ' + (n / 1000).toFixed(1) + 'k';
+  const fmtBig = (n) => n.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+
+  const kpis = [
+    { label: 'Faturamento',     value: 'R$ ' + fmtBig(totalRevenue),  delta: '+' + growth + '%',  good: true },
+    { label: 'Conversas',       value: '1.240',                       delta: '+18%',              good: true },
+    { label: 'Ticket médio',    value: 'R$ 89,40',                    delta: '+8%',               good: true },
+    { label: 'Conversão',       value: '23,1%',                       delta: '+3,2pp',            good: true },
+    { label: 'NPS médio',       value: '8,4',                         delta: '+0,6',              good: true },
+    { label: 'SLA quebrado',    value: '8%',                          delta: '+2pp',              good: false },
+  ];
 
   return (
-    <RequireRole resource="reports" action="view" userId={userId}>
-    <div className="route-enter page-container" style={{ padding: 32, maxWidth: 1400, margin: '0 auto' }}>
-
+    <div className="route-enter" style={{ padding: '28px 32px 56px', maxWidth: 1480, margin: '0 auto' }}>
       {/* Header */}
-      <div className="header-wrap" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <AgentAvatar id="vera" size={56} />
-          <div>
-            <h1 className="page-h1">Relatórios</h1>
-            <p className="page-sub">
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ width: 7, height: 7, background: 'var(--cyan)', borderRadius: '50%' }} className="pulse-green" />
-                <strong style={{ color: 'var(--cyan)' }}>VERA ativa</strong>
-                {' · Todos os relatórios em dia'}
-              </span>
-            </p>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', marginBottom: 24, flexWrap:'wrap', gap: 16 }}>
+        <div>
+          <h1 className="page-h1">Relatórios</h1>
+          <div className="page-sub" style={{ display:'inline-flex', alignItems:'center', gap: 6 }}>
+            Powered by <AgentAvatar id="vera" size={16}/> VERA · análise contínua de toda a operação
           </div>
         </div>
-        <div className="btn-wrap" style={{ display: 'flex', gap: 8 }}>
-          <button className="btn-secondary btn-full-mobile"><Icon name="paper" size={14} /> Exportar PDF</button>
-          <button className="btn-primary"><Icon name="plus" size={14} /> Novo relatório</button>
+        <div style={{ display:'flex', gap: 8 }}>
+          <div className="rep-period">
+            {periods.map(p => (
+              <button key={p.id} className={`rep-period-btn ${period === p.id ? 'on' : ''}`} onClick={() => setPeriod(p.id)}>{p.label}</button>
+            ))}
+          </div>
+          <button className="btn-secondary"><Icon name="paper" size={14}/> CSV</button>
+          <button className="btn-secondary"><Icon name="paper" size={14}/> PDF</button>
         </div>
       </div>
 
-      {/* KPIs */}
-      <div className="kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
-        <KPI label="Receita do mês"   value={kpis.receita.value}    delta={kpis.receita.delta}    trend={kpis.receita.trend}    icon="dollar"   accent />
-        <KPI label="Pedidos do mês"   value={kpis.pedidos.value}    delta={kpis.pedidos.delta}    trend={kpis.pedidos.trend}    icon="paper" />
-        <KPI label="Ticket médio"     value={kpis.ticket.value}     delta={kpis.ticket.delta}     trend={kpis.ticket.trend}     icon="chart" />
-        <KPI label="Recuperado CORA"  value={kpis.recuperado.value} delta={kpis.recuperado.delta} trend={kpis.recuperado.trend} icon="sparkles" />
+      {/* VERA insight banner */}
+      <div className="rep-insight">
+        <AgentAvatar id="vera" size={44}/>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color:'#A78BFA', letterSpacing: 1, textTransform:'uppercase', marginBottom: 6 }}>VERA · Análise do período</div>
+          <div style={{ fontSize: 14, color:'white', lineHeight: 1.55 }}>
+            Faturamento subiu <strong style={{ color:'#10B981' }}>+{growth}%</strong> nos últimos 7 dias.
+            DELI está convertendo <strong>72%</strong> dos atendimentos de vendas.
+            Ponto de atenção: <strong style={{ color:'#F59E0B' }}>SLA quebrado</strong> em 8% das conversas no horário das 19h–21h.
+          </div>
+        </div>
+        <button className="btn-primary" style={{ background:'white', color:'#0D0D0D', flexShrink: 0 }}>
+          Aprofundar <Icon name="arrowright" size={13}/>
+        </button>
       </div>
 
-      {/* Main 2-col layout */}
-      <div className="two-col" style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 24, marginBottom: 28 }}>
+      {/* KPI strip */}
+      <div className="rep-kpi-grid">
+        {kpis.map(k => (
+          <div key={k.label} className="card rep-kpi">
+            <div style={{ fontSize: 11, color:'var(--g-500)', textTransform:'uppercase', letterSpacing: 0.5, fontWeight: 700 }}>{k.label}</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color:'var(--g-900)', marginTop: 4, fontFeatureSettings:"'tnum'" }}>{k.value}</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: k.good ? '#10B981' : '#EF4444', marginTop: 2 }}>{k.delta}</div>
+          </div>
+        ))}
+      </div>
 
-        {/* Left */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Tabs */}
+      <div className="rep-tabs">
+        {tabs.map(t => (
+          <button key={t.id} className={`rep-tab ${tab === t.id ? 'on' : ''}`} onClick={() => setTab(t.id)}>
+            <Icon name={t.icon} size={14}/> {t.label}
+          </button>
+        ))}
+      </div>
 
-          {/* Chart */}
-          <div className="card" style={{ padding: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+      {/* Tab content */}
+      {tab === 'overview' && (
+        <div className="rep-grid-2">
+          <div className="chart-card">
+            <div className="chart-card-h">
               <div>
-                <h2 className="card-h3">Pedidos · últimos 7 dias</h2>
-                <p style={{ fontSize: 12, color: 'var(--g-500)', marginTop: 4 }}>
-                  Total: <strong style={{ color: 'var(--g-900)' }}>{chart.reduce((s, v) => s + v, 0).toLocaleString('pt-BR')}</strong> pedidos
-                </p>
+                <div className="chart-card-title">Receita · últimos 30 dias</div>
+                <div className="chart-card-sub">Total: R$ {fmtBig(totalRevenue)}</div>
+              </div>
+              <span className="badge badge-green">+{growth}%</span>
+            </div>
+            <RevenueChart data={data.revenueTrend30 || []}/>
+          </div>
+          <div className="chart-card">
+            <div className="chart-card-h">
+              <div>
+                <div className="chart-card-title">Mix de canais</div>
+                <div className="chart-card-sub">Distribuição por origem</div>
               </div>
             </div>
-
-            <div className="chart-wrap" style={{ display: 'flex', alignItems: 'flex-end', gap: 16, height: 220 }}>
-              {chart.map((v, i) => {
-                const h       = max > 0 ? (v / max) * 100 : 0;
-                const isMax   = v === max && v > 0;
-                const isToday = i === chart.length - 1;
-                return (
-                  <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                    <div style={{
-                      fontSize: isMax ? 20 : 15, fontWeight: isMax ? 800 : 700,
-                      color: isMax ? 'var(--red)' : 'var(--g-900)',
-                      fontVariantNumeric: 'tabular-nums',
-                    }}>{v}</div>
-                    <div style={{
-                      width: '100%', height: `${h}%`,
-                      background: isToday || isMax ? 'var(--red)' : 'var(--g-900)',
-                      opacity: isToday || isMax ? 1 : 0.13,
-                      borderRadius: '4px 4px 0 0',
-                      animation: `slideUp 600ms var(--ease-out) ${i * 70}ms both`,
-                    }} />
-                    <div style={{
-                      fontSize: 11, fontWeight: isToday ? 700 : 500,
-                      color: isToday ? 'var(--red)' : 'var(--g-500)',
-                      textTransform: 'uppercase', letterSpacing: 0.5,
-                    }}>{DAYS_7[i]}</div>
-                  </div>
-                );
-              })}
-            </div>
+            <ChannelBars channels={data.channels || []}/>
           </div>
-
-          {/* Top produtos — sem dados ainda (sem view no Supabase) */}
-          <div className="card" style={{ padding: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h2 className="card-h3">Produtos mais vendidos</h2>
+          <div className="chart-card" style={{ gridColumn: '1 / -1' }}>
+            <div className="chart-card-h">
+              <div>
+                <div className="chart-card-title">Insights da VERA</div>
+                <div className="chart-card-sub">Padrões detectados automaticamente no período</div>
+              </div>
             </div>
-            <div style={{ textAlign: 'center', padding: 24, color: 'var(--g-500)', fontSize: 13 }}>
-              Sem dados de produtos neste período.
-            </div>
-          </div>
-        </div>
-
-        {/* Right */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-          {/* VERA ao vivo */}
-          <div className="card" style={{
-            padding: 20,
-            background: 'linear-gradient(to bottom, #0D0D0D, #1A1A1A)',
-            border: 'none', color: 'white',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-              <span className="live-dot" style={{ background: 'var(--cyan)' }} />
-              <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>
-                VERA em ação agora
-              </span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {veraActions.map((a, i) => (
-                <div key={i} style={{
-                  padding: 12,
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  borderRadius: 8,
-                }} className="slide-right">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--cyan)' }}>VERA</span>
-                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>{a.time}</span>
-                  </div>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)', lineHeight: 1.45 }}>{a.text}</div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
+              {(data.insights || []).map((i, idx) => (
+                <div key={idx} style={{
+                  display:'flex', gap: 10, alignItems:'flex-start',
+                  background:'var(--g-50)', border: '1px solid var(--g-100)',
+                  borderRadius: 10, padding: 12,
+                }}>
+                  <span style={{ width: 24, height: 24, background: '#A78BFA22', color: '#7C3AED', borderRadius: 6, display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink: 0, fontWeight: 800, fontSize: 11 }}>★</span>
+                  <div style={{ fontSize: 13, color:'var(--g-700)', lineHeight: 1.5 }}>{i}</div>
                 </div>
               ))}
-              {veraActions.length === 0 && (
-                <div style={{ textAlign: 'center', padding: 16, color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
-                  Nenhuma ação agora.
-                </div>
-              )}
             </div>
           </div>
+        </div>
+      )}
 
-          {/* Agentes analistas */}
-          <div className="card" style={{ padding: 20 }}>
-            <div className="label" style={{ marginBottom: 14 }}>Agentes analistas</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {[
-                { id: 'vera', desc: 'Gera todos os relatórios e dashboards' },
-                { id: 'cora', desc: 'Relatórios de inadimplência e cobrança' },
-                { id: 'max',  desc: 'Análise de performance no iFood' },
-              ].map(a => {
-                const agent = AGENTS.find(ag => ag.id === a.id);
-                return (
-                  <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <AgentAvatar id={a.id} size={30} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--g-900)' }}>{agent?.name}</div>
-                      <div style={{ fontSize: 10, color: 'var(--g-500)', lineHeight: 1.3 }}>{a.desc}</div>
+      {tab === 'channels' && (
+        <div className="chart-card">
+          <div className="chart-card-h">
+            <div>
+              <div className="chart-card-title">Performance por canal</div>
+              <div className="chart-card-sub">Volume relativo no período</div>
+            </div>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: 24, alignItems:'center' }}>
+            <ChannelBars channels={data.channels || []} large/>
+            <DonutChart data={data.channels || []}/>
+          </div>
+        </div>
+      )}
+
+      {tab === 'agents' && (
+        <div className="chart-card">
+          <div className="chart-card-h">
+            <div>
+              <div className="chart-card-title">Performance dos agentes IA</div>
+              <div className="chart-card-sub">{(data.agentPerf || []).length} agentes ativos no período</div>
+            </div>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+            {(data.agentPerf || []).map(a => {
+              const agent = AGENTS.find(x => x.id === a.id);
+              if (!agent) return null;
+              return (
+                <div key={a.id} style={{ background:'var(--g-50)', border:'1px solid var(--g-100)', borderRadius: 10, padding: 14 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap: 10, marginBottom: 10 }}>
+                    <AgentAvatar id={a.id} size={32}/>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 800, color:'var(--g-900)' }}>{agent.name}</div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: agent.color }}>{agent.role}</div>
                     </div>
                   </div>
-                );
-              })}
-            </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: 8 }}>
+                    <Mini label="conversas" value={a.conv}/>
+                    <Mini label="sucesso"   value={a.success + '%'}/>
+                  </div>
+                  <div style={{ marginTop: 10, fontSize: 13, fontWeight: 700, color: 'var(--g-900)' }}>
+                    {a.value !== '—' ? a.value : <span style={{ color: 'var(--g-400)', fontWeight: 500 }}>sem receita atribuída</span>}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Histórico de relatórios */}
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2 className="section-h2">Histórico de relatórios</h2>
+      {tab === 'funnel' && (
+        <div className="chart-card">
+          <div className="chart-card-h">
+            <div>
+              <div className="chart-card-title">Funil de conversão</div>
+              <div className="chart-card-sub">Da conversa ao pagamento aprovado</div>
+            </div>
+          </div>
+          {(() => {
+            const max = Math.max(...(data.funnel || [{ count: 1 }]).map(f => f.count));
+            return (data.funnel || []).map((f, i) => {
+              const prev = i > 0 ? data.funnel[i - 1].count : null;
+              const drop = prev ? Math.round((1 - f.count / prev) * 100) : 0;
+              return (
+                <div key={f.stage} className="funnel-row">
+                  <div className="funnel-label">
+                    {f.stage}
+                    {prev && drop > 0 && <span style={{ marginLeft: 6, fontSize: 11, color:'#EF4444' }}>−{drop}%</span>}
+                  </div>
+                  <div className="funnel-bar" style={{ width: ((f.count / max) * 100) + '%', background: `linear-gradient(90deg, var(--red), #FF6F4D)` }}/>
+                  <div className="funnel-v">{fmtBig(f.count)}</div>
+                </div>
+              );
+            });
+          })()}
         </div>
-        <div className="card tbl-wrap" style={{ overflow: 'hidden' }}>
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Relatório</th>
-                <th>Gerado por</th>
-                <th>Status</th>
-                <th>Data</th>
-                <th style={{ textAlign: 'right' }}>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td colSpan={5} style={{ textAlign: 'center', padding: 48, color: 'var(--g-500)' }}>
-                  Nenhum relatório gerado ainda.
-                </td>
-              </tr>
-            </tbody>
-          </table>
+      )}
+
+      {tab === 'sentiment' && (
+        <div className="chart-card">
+          <div className="chart-card-h">
+            <div>
+              <div className="chart-card-title">Sentimento ao longo da semana</div>
+              <div className="chart-card-sub">Análise IA de todas as conversas</div>
+            </div>
+            <div style={{ display:'flex', gap: 12, fontSize: 12 }}>
+              <span style={{ display:'inline-flex', alignItems:'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background:'#10B981' }}/> Positivo</span>
+              <span style={{ display:'inline-flex', alignItems:'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background:'#9CA3AF' }}/> Neutro</span>
+              <span style={{ display:'inline-flex', alignItems:'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background:'#EF4444' }}/> Negativo</span>
+            </div>
+          </div>
+          <SentimentChart data={data.sentimentSeries || []}/>
         </div>
-      </div>
+      )}
     </div>
-    </RequireRole>
   );
-}
+};
 
-function KPI({ label, value, delta, trend, icon, accent }) {
+const Mini = ({ label, value }) => (
+  <div style={{ background: 'white', borderRadius: 6, padding: '6px 10px' }}>
+    <div style={{ fontSize: 14, fontWeight: 800, color:'var(--g-900)', fontFeatureSettings:"'tnum'" }}>{value}</div>
+    <div style={{ fontSize: 10, color:'var(--g-500)', textTransform:'uppercase', fontWeight: 600 }}>{label}</div>
+  </div>
+);
+
+const RevenueChart = ({ data }) => {
+  if (!data.length) return <div style={{ padding: 40, textAlign:'center', color:'var(--g-400)' }}>Sem dados</div>;
+  const max = Math.max(...data);
+  const min = Math.min(...data);
+  const w = 580, h = 180, pad = 12;
+  const xs = data.map((_, i) => pad + (i * (w - pad * 2) / (data.length - 1)));
+  const ys = data.map(v => h - pad - ((v - min) / (max - min)) * (h - pad * 2));
+  const path = xs.map((x, i) => `${i === 0 ? 'M' : 'L'}${x},${ys[i]}`).join(' ');
+  const area = path + ` L${xs[xs.length - 1]},${h} L${xs[0]},${h} Z`;
   return (
-    <div className="kpi">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div className="kpi-label">{label}</div>
-        <div style={{
-          width: 30, height: 30, borderRadius: 8,
-          background: accent ? 'var(--red-soft)' : 'var(--g-100)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: accent ? 'var(--red)' : 'var(--g-500)',
-        }}>
-          <Icon name={icon} size={14} />
+    <svg viewBox={`0 0 ${w} ${h}`} style={{ width:'100%', height: 180 }}>
+      <defs>
+        <linearGradient id="rev-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#B70C00" stopOpacity="0.3"/>
+          <stop offset="100%" stopColor="#B70C00" stopOpacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d={area} fill="url(#rev-grad)"/>
+      <path d={path} stroke="#B70C00" strokeWidth="2" fill="none"/>
+      {xs.map((x, i) => (
+        <circle key={i} cx={x} cy={ys[i]} r={i === xs.length - 1 ? 4 : 0} fill="#B70C00"/>
+      ))}
+    </svg>
+  );
+};
+
+const ChannelBars = ({ channels, large }) => {
+  const total = channels.reduce((s, c) => s + c.value, 0) || 1;
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap: large ? 14 : 10 }}>
+      {channels.map(c => (
+        <div key={c.name}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 4 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color:'var(--g-700)' }}>{c.name}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color:'var(--g-900)' }}>{c.value}%</span>
+          </div>
+          <div style={{ height: large ? 14 : 10, background:'var(--g-100)', borderRadius: 999, overflow:'hidden' }}>
+            <div style={{ height:'100%', width: ((c.value / total) * 100) + '%', background: c.color, borderRadius: 999 }}/>
+          </div>
         </div>
-      </div>
-      <div className={`kpi-value${accent ? ' accent' : ''}`} style={{ marginTop: 8 }}>{value}</div>
-      <div className={`kpi-delta ${trend}`} style={{ marginTop: 8 }}>
-        <Icon name={trend === 'up' ? 'arrowup' : trend === 'down' ? 'arrowdown' : 'info'} size={11} />
-        {delta}
-      </div>
+      ))}
     </div>
   );
-}
+};
+
+const DonutChart = ({ data }) => {
+  const total = data.reduce((s, c) => s + c.value, 0) || 1;
+  const r = 80, cx = 110, cy = 110, sw = 30;
+  let offset = 0;
+  return (
+    <svg viewBox="0 0 220 220" style={{ width:'100%', maxWidth: 220 }}>
+      {data.map(c => {
+        const pct = c.value / total;
+        const len = pct * 2 * Math.PI * r;
+        const dash = `${len} ${2 * Math.PI * r}`;
+        const el = (
+          <circle
+            key={c.name}
+            cx={cx} cy={cy} r={r}
+            fill="none"
+            stroke={c.color}
+            strokeWidth={sw}
+            strokeDasharray={dash}
+            strokeDashoffset={-offset}
+            transform={`rotate(-90 ${cx} ${cy})`}
+          />
+        );
+        offset += len;
+        return el;
+      })}
+      <text x={cx} y={cy - 4} textAnchor="middle" fontSize="14" fill="var(--g-500)" fontWeight="600">Total</text>
+      <text x={cx} y={cy + 18} textAnchor="middle" fontSize="22" fill="var(--g-900)" fontWeight="800">{total}%</text>
+    </svg>
+  );
+};
+
+const SentimentChart = ({ data }) => {
+  if (!data.length) return <div style={{ padding: 40, textAlign:'center', color:'var(--g-400)' }}>Sem dados</div>;
+  const w = 580, h = 220, pad = 24;
+  const cw = (w - pad * 2) / data.length;
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} style={{ width:'100%', height: 220 }}>
+      {data.map((d, i) => {
+        const x = pad + i * cw;
+        const cx = x + cw / 2;
+        const total = d.pos + d.neu + d.neg;
+        const bar = (h - pad * 2) * 0.9;
+        const posH = (d.pos / total) * bar;
+        const neuH = (d.neu / total) * bar;
+        const negH = (d.neg / total) * bar;
+        const bw = cw - 14;
+        return (
+          <g key={d.d}>
+            <rect x={cx - bw / 2} y={h - pad - posH}             width={bw} height={posH} fill="#10B981" rx="3"/>
+            <rect x={cx - bw / 2} y={h - pad - posH - neuH}      width={bw} height={neuH} fill="#9CA3AF"/>
+            <rect x={cx - bw / 2} y={h - pad - posH - neuH - negH} width={bw} height={negH} fill="#EF4444" rx="3"/>
+            <text x={cx} y={h - 6} textAnchor="middle" fontSize="11" fill="var(--g-500)" fontWeight="600">{d.d}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+};
+
+export default ReportsScreen;

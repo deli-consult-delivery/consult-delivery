@@ -159,7 +159,7 @@ export default function App() {
         {route === 'tarefas-cliente' && <TarefasClienteScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'crm'             && <CRMScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'reports'         && <ReportsScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'agents'           && <AgentsPage tenantId={tenantDbId} userId={session?.user?.id} />}
+        {route === 'agents'           && <AgentsPage tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'campanhas' && <CampanhasScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'lara'      && <LaraScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'drafts-pendentes' && <DraftsPendentesScreen tenantId={tenantDbId} userId={session?.user?.id} />}

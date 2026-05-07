@@ -530,3 +530,150 @@ export const INADIMPLENTES = {
     liveActions: [],
   },
 };
+
+// ─── DADOS EXTRAS (portados do handoff) ──────────────────────────
+
+// Quick reply / WhatsApp-approved templates (Meta)
+export const META_TEMPLATES = [
+  { id: 'tpl1', name: 'boas_vindas',         category: 'Marketing',     status: 'approved', lang: 'pt-BR', preview: 'Olá {{1}}! Aqui é a {{2}}, prazer em ter você por aqui 🚀 Como podemos ajudar?' },
+  { id: 'tpl2', name: 'pedido_confirmado',   category: 'Utilidade',     status: 'approved', lang: 'pt-BR', preview: 'Seu pedido #{{1}} foi confirmado! Total: R$ {{2}}. Previsão de entrega: {{3}}.' },
+  { id: 'tpl3', name: 'cobranca_amigavel',   category: 'Cobrança',      status: 'approved', lang: 'pt-BR', preview: 'Oi {{1}}, tudo bem? Notei que ficou pendente o pedido de R$ {{2}}. Posso te ajudar com algum parcelamento?' },
+  { id: 'tpl4', name: 'avaliacao_pos_pedido',category: 'NPS',           status: 'approved', lang: 'pt-BR', preview: 'E aí {{1}}, ficou tudo ok com seu pedido? De 0 a 10, quanto você indicaria pra um amigo?' },
+  { id: 'tpl5', name: 'campanha_terca_dobro',category: 'Marketing',     status: 'pending',  lang: 'pt-BR', preview: 'Hoje é Terça do Dobro 🍔 — peça 1 hambúrguer e ganhe outro grátis até as 22h!' },
+  { id: 'tpl6', name: 'recuperacao_carrinho',category: 'Re-engajamento',status: 'approved', lang: 'pt-BR', preview: 'Vi que você quase fez seu pedido… 👀 Quer que eu reserve com 10% off só pra você?' },
+];
+
+// Departments (kanban-by-department view)
+export const DEPARTMENTS = [
+  { id: 'atend', name: 'Atendimento', color: '#B70C00', sla: '15min',  agents: 3 },
+  { id: 'vendas',name: 'Vendas',      color: '#F59E0B', sla: '30min',  agents: 2 },
+  { id: 'cobr', name: 'Cobrança',     color: '#10B981', sla: '2h',     agents: 1 },
+  { id: 'oper', name: 'Operações',    color: '#3B82F6', sla: '1h',     agents: 2 },
+  { id: 'mkt',  name: 'Marketing',    color: '#EC4899', sla: '4h',     agents: 1 },
+];
+
+// Bots status (CHAT > BOTS tab)
+export const BOTS_STATUS = [
+  { id: 'deli', active: true,  conversations: 14, success: 87,  channels: ['whatsapp','instagram','site'], lastAction: 'Roteou conversa #13072 pra Atendimento', latency: '420ms' },
+  { id: 'cora', active: true,  conversations:  8, success: 91,  channels: ['whatsapp'],                    lastAction: 'Negociou parcelamento com Fernanda O.', latency: '380ms' },
+  { id: 'breno',active: true,  conversations: 22, success: 78,  channels: ['whatsapp','site'],             lastAction: 'Respondeu dúvida sobre cardápio',       latency: '510ms' },
+  { id: 'lara', active: false, conversations:  0, success: 0,   channels: ['instagram'],                   lastAction: 'Aguardando aprovação de criativo',       latency: '—' },
+  { id: 'max',  active: true,  conversations:  3, success: 95,  channels: ['whatsapp'],                    lastAction: 'Avisou sobre 3 fotos ruins no iFood',    latency: '210ms' },
+  { id: 'sofia',active: true,  conversations:  6, success: 64,  channels: ['whatsapp','instagram'],        lastAction: 'Prospectou 12 novos restaurantes',        latency: '600ms' },
+  { id: 'vera', active: true,  conversations:  1, success: 100, channels: ['whatsapp'],                    lastAction: 'Enviou relatório semanal pro Wandson',   latency: '180ms' },
+];
+
+// Protocols (CHAT > PROTOCOLOS tab)
+export const PROTOCOLS = [
+  { id: '#13072', client: 'Carlos Mendes',     dept: 'Atendimento', status: 'open',   opened: '07/05 09:21', sla: 'estourando', agent: 'deli',  channel: 'WhatsApp',  unread: 2,  duration: '1h 24m' },
+  { id: '#13071', client: 'Yasmin Lima',       dept: 'Marketing',   status: 'open',   opened: '07/05 08:55', sla: 'ok',         agent: null,    channel: 'Instagram', unread: 1,  duration: '1h 50m' },
+  { id: '#13070', client: 'Sistema',           dept: 'Operações',   status: 'auto',   opened: '07/05 08:30', sla: 'ok',         agent: 'deli',  channel: 'Sistema',   unread: 0,  duration: '2h 15m' },
+  { id: '#13069', client: 'Mariana Souza',     dept: 'Atendimento', status: 'closed', opened: '07/05 07:48', sla: 'ok',         agent: 'breno', channel: 'WhatsApp',  unread: 0,  duration: '12m' },
+  { id: '#13068', client: 'João Paulo R.',     dept: 'Vendas',      status: 'open',   opened: '07/05 06:20', sla: 'atencao',    agent: 'sofia', channel: 'iFood',     unread: 0,  duration: '4h 30m' },
+  { id: '#13067', client: 'Bruno Silva',       dept: 'Cobrança',    status: 'open',   opened: '06/05 23:05', sla: 'ok',         agent: 'cora',  channel: 'WhatsApp',  unread: 0,  duration: '11h' },
+  { id: '#13066', client: 'Rafael Alves',      dept: 'Vendas',      status: 'paused', opened: '06/05 21:55', sla: 'estourado',  agent: null,    channel: 'WhatsApp',  unread: 1,  duration: '12h 50m' },
+  { id: '#13065', client: 'Equipe Cozinha',    dept: 'Operações',   status: 'closed', opened: '06/05 18:30', sla: 'ok',         agent: null,    channel: 'Sistema',   unread: 0,  duration: '3m' },
+  { id: '#13064', client: 'Pedro Costa',       dept: 'Vendas',      status: 'open',   opened: '06/05 14:10', sla: 'ok',         agent: 'sofia', channel: 'WhatsApp',  unread: 0,  duration: '20h' },
+  { id: '#13063', client: 'Patrícia Nunes',    dept: 'Cobrança',    status: 'closed', opened: '06/05 10:00', sla: 'ok',         agent: 'cora',  channel: 'WhatsApp',  unread: 0,  duration: '2h 40m' },
+  { id: '#13062', client: 'Henrique Lima',     dept: 'Cobrança',    status: 'open',   opened: '06/05 08:30', sla: 'ok',         agent: 'cora',  channel: 'WhatsApp',  unread: 0,  duration: '1d' },
+  { id: '#13061', client: 'Juliana Campos',    dept: 'Cobrança',    status: 'closed', opened: '05/05 16:00', sla: 'ok',         agent: 'cora',  channel: 'WhatsApp',  unread: 0,  duration: '4h' },
+];
+
+// CRM — Customers (full base for CRM tab, multi-tenant)
+export const CRM_CUSTOMERS = {
+  'pizza-joao': [
+    { id: 'cu1',  name: 'Carlos Mendes',     avatar: 'CM', phone: '+55 11 98765-4321', email: 'carlos.mendes@email.com', segment: 'VIP',        lifetime: 'R$ 4.820', orders: 47, last: '22/04', nps: 9,    risk: 'low',    tags: ['VIP','frequente'],         channel: 'WhatsApp', city: 'São Paulo' },
+    { id: 'cu2',  name: 'Mariana Souza',     avatar: 'MS', phone: '+55 11 91111-2222', email: 'mariana@email.com',       segment: 'Recorrente', lifetime: 'R$ 1.940', orders: 14, last: '24/04', nps: 10,   risk: 'low',    tags: ['recorrente'],              channel: 'WhatsApp', city: 'São Paulo' },
+    { id: 'cu3',  name: 'Fernanda Oliveira', avatar: 'FO', phone: '+55 11 93333-1100', email: 'fer@email.com',           segment: 'Em risco',   lifetime: 'R$ 980',   orders: 8,  last: '12/04', nps: 6,    risk: 'high',   tags: ['inadimplente'],            channel: 'WhatsApp', city: 'Guarulhos' },
+    { id: 'cu4',  name: 'Bruno Silva',       avatar: 'BS', phone: '+55 11 94444-2200', email: 'bruno@email.com',         segment: 'Novo',       lifetime: 'R$ 89',    orders: 1,  last: '01/05', nps: 8,    risk: 'low',    tags: ['novo'],                    channel: 'iFood',    city: 'São Paulo' },
+    { id: 'cu5',  name: 'Ana Paula Ribeiro', avatar: 'AP', phone: '+55 11 95555-3300', email: 'ana@email.com',           segment: 'Em risco',   lifetime: 'R$ 2.100', orders: 9,  last: '15/03', nps: 4,    risk: 'high',   tags: ['inadimplente','crítico'],  channel: 'WhatsApp', city: 'São Paulo' },
+    { id: 'cu6',  name: 'Ricardo Tavares',   avatar: 'RT', phone: '+55 11 96666-4400', email: 'ricardo@email.com',       segment: 'Recorrente', lifetime: 'R$ 1.420', orders: 12, last: '03/05', nps: 9,    risk: 'low',    tags: ['fidelidade'],              channel: 'WhatsApp', city: 'São Caetano' },
+    { id: 'cu7',  name: 'Juliana Campos',    avatar: 'JC', phone: '+55 11 97777-5500', email: 'juliana@email.com',       segment: 'Recorrente', lifetime: 'R$ 720',   orders: 6,  last: '02/05', nps: 8,    risk: 'low',    tags: ['estudante'],               channel: 'WhatsApp', city: 'São Paulo' },
+    { id: 'cu8',  name: 'Marcelo Duarte',    avatar: 'MD', phone: '+55 11 98888-6600', email: 'marcelo@email.com',       segment: 'Em risco',   lifetime: 'R$ 6.300', orders: 21, last: '02/03', nps: 3,    risk: 'high',   tags: ['VIP','crítico'],           channel: 'WhatsApp', city: 'São Paulo' },
+    { id: 'cu9',  name: 'Patrícia Nunes',    avatar: 'PN', phone: '+55 11 99999-7700', email: 'patricia@email.com',      segment: 'Recorrente', lifetime: 'R$ 1.180', orders: 9,  last: '04/05', nps: 9,    risk: 'low',    tags: ['fidelidade'],              channel: 'WhatsApp', city: 'Diadema' },
+    { id: 'cu10', name: 'Rafael Alves',      avatar: 'RA', phone: '+55 11 91010-1010', email: '—',                       segment: 'Lead',       lifetime: 'R$ 0',     orders: 0,  last: '07/05', nps: null, risk: 'medium', tags: ['lead-frio'],               channel: 'WhatsApp', city: 'São Paulo' },
+    { id: 'cu11', name: 'João Paulo R.',     avatar: 'JP', phone: '+55 11 92020-2020', email: 'jp@email.com',            segment: 'Lead',       lifetime: 'R$ 0',     orders: 0,  last: '07/05', nps: null, risk: 'medium', tags: ['lead'],                    channel: 'iFood',    city: 'Osasco' },
+    { id: 'cu12', name: 'Lucas Fernandes',   avatar: 'LF', phone: '+55 11 93030-3030', email: 'lucas@email.com',         segment: 'Novo',       lifetime: 'R$ 67',    orders: 1,  last: '06/05', nps: 8,    risk: 'low',    tags: ['novo'],                    channel: 'WhatsApp', city: 'São Paulo' },
+  ],
+  'burger': [
+    { id: 'bcu1', name: 'Pedro Costa',   avatar: 'PC', phone: '+55 11 91111-9999', email: 'pedro@email.com',  segment: 'Recorrente', lifetime: 'R$ 820', orders: 9, last: '01/05', nps: 9, risk: 'low',  tags: ['hambúrguer-lover'], channel: 'WhatsApp', city: 'São Paulo' },
+    { id: 'bcu2', name: 'Henrique Lima', avatar: 'HL', phone: '+55 11 92222-9999', email: 'h.lima@email.com', segment: 'Em risco',   lifetime: 'R$ 420', orders: 3, last: '02/05', nps: 6, risk: 'high', tags: ['inadimplente'],     channel: 'WhatsApp', city: 'Santo André' },
+    { id: 'bcu3', name: 'Camila Reis',   avatar: 'CR', phone: '+55 11 93333-9999', email: 'camila@email.com', segment: 'Recorrente', lifetime: 'R$ 540', orders: 5, last: '05/05', nps: 8, risk: 'low',  tags: ['vip'],              channel: 'iFood',    city: 'São Paulo' },
+  ],
+  'acai': [
+    { id: 'acu1', name: 'Bia Ramos', avatar: 'BR', phone: '+55 11 94444-9999', email: 'bia@email.com', segment: 'VIP', lifetime: 'R$ 1.230', orders: 18, last: '07/05', nps: 10, risk: 'low', tags: ['VIP'], channel: 'WhatsApp', city: 'São Paulo' },
+  ],
+  'sushi': [
+    { id: 'scu1', name: 'Lucas Wei', avatar: 'LW', phone: '+55 11 95555-9999', email: 'lucas.wei@email.com', segment: 'Em risco', lifetime: 'R$ 2.100', orders: 6, last: '30/04', nps: 2, risk: 'high', tags: ['avaliação-ruim'], channel: 'WhatsApp', city: 'São Paulo' },
+  ],
+  'tapioca': [
+    { id: 'tcu1', name: 'Dona Zélia', avatar: 'DZ', phone: '+55 11 96666-9999', email: '—', segment: 'Recorrente', lifetime: 'R$ 380', orders: 21, last: '07/05', nps: 10, risk: 'low', tags: ['fiel'], channel: 'WhatsApp', city: 'São Paulo' },
+  ],
+};
+
+// Reports extra — VERA analytics (estrutura estendida para gráficos avançados)
+// Nota: REPORTS_DATA já existe acima com estrutura de KPIs/listas. Esta versão (REPORTS_DATA_EXTRA)
+// contém dados de séries temporais, canais, funil e performance por agente.
+export const REPORTS_DATA_EXTRA = {
+  'pizza-joao': {
+    revenueTrend30: [4200,4500,4800,5100,4900,5300,5800,5400,5700,6100,5900,6300,6800,6500,6900,7200,7000,7400,7800,7500,7900,8200,8000,8400,8800,8500,8900,9200,9000,9400],
+    channels: [
+      { name: 'iFood',     value: 58, color: '#EA1D2C' },
+      { name: 'WhatsApp',  value: 26, color: '#25D366' },
+      { name: 'Cardápio',  value: 11, color: '#B70C00' },
+      { name: 'Instagram', value:  5, color: '#E1306C' },
+    ],
+    sentimentSeries: [
+      { d: 'Seg', pos: 62, neu: 28, neg: 10 },
+      { d: 'Ter', pos: 58, neu: 30, neg: 12 },
+      { d: 'Qua', pos: 65, neu: 25, neg: 10 },
+      { d: 'Qui', pos: 70, neu: 22, neg:  8 },
+      { d: 'Sex', pos: 74, neu: 20, neg:  6 },
+      { d: 'Sáb', pos: 80, neu: 15, neg:  5 },
+      { d: 'Dom', pos: 78, neu: 17, neg:  5 },
+    ],
+    funnel: [
+      { stage: 'Conversas iniciadas', count: 1240 },
+      { stage: 'Engajaram com bot',   count:  980 },
+      { stage: 'Pediram cardápio',    count:  640 },
+      { stage: 'Carrinho criado',     count:  420 },
+      { stage: 'Pedido confirmado',   count:  312 },
+      { stage: 'Pagamento aprovado',  count:  287 },
+    ],
+    agentPerf: [
+      { id: 'cora',  conv: 312,  success: 91,  value: 'R$ 14.200' },
+      { id: 'breno', conv: 540,  success: 78,  value: '—' },
+      { id: 'deli',  conv: 1240, success: 96,  value: '—' },
+      { id: 'lara',  conv:  64,  success: 88,  value: 'R$ 6.300' },
+      { id: 'max',   conv:  42,  success: 95,  value: 'R$ 2.100' },
+      { id: 'sofia', conv: 128,  success: 64,  value: 'R$ 4.500' },
+      { id: 'vera',  conv:  18,  success: 100, value: '—' },
+    ],
+    insights: [
+      'Sextas têm ticket médio 22% maior — vale dobrar promoção',
+      'Clientes de R$ 300-500 pagam 3x mais rápido que os maiores',
+      'iFood concentra 58% mas tem margem 18% menor que cardápio próprio',
+      'Sentimento positivo subiu 12pp após DELI assumir triagem inicial',
+    ],
+  },
+};
+
+// Dashboard — Live event feed (right rail)
+export const EVENT_FEED = [
+  { id: 'e1', agent: 'deli',  text: 'Roteou conversa #13072 pra Atendimento',          time: 'agora', cta: 'Ver chat' },
+  { id: 'e2', agent: 'cora',  text: 'Recuperou R$ 1.240 hoje (8 negociações)',          time: '5min',  cta: 'Abrir CORA' },
+  { id: 'e3', agent: 'max',   text: 'Detectou 3 fotos ruins no iFood',                  time: '12min', cta: 'Auditar cardápio' },
+  { id: 'e4', agent: 'lara',  text: 'Publicou post "Pizza Sexta-Feira" no Instagram',  time: '38min', cta: 'Ver post' },
+  { id: 'e5', agent: 'vera',  text: 'Gerou relatório semanal — ticket subiu 8%',        time: '1h',    cta: 'Ver relatório' },
+  { id: 'e6', agent: 'breno', text: 'Respondeu 14 mensagens no WhatsApp',               time: '2h',    cta: 'Ver caixa' },
+  { id: 'e7', agent: 'sofia', text: 'Prospectou 12 novos restaurantes',                  time: '3h',    cta: 'Ver leads' },
+];
+
+// Dashboard — Calendar / Agenda
+export const AGENDA = [
+  { id: 'a1', time: '10:30', title: 'Reunião com Pizzaria do João',   kind: 'meeting',  who: 'Wandson', soon: true  },
+  { id: 'a2', time: '11:00', title: 'Auditoria iFood — Burger House', kind: 'task',     who: 'MAX',     soon: false },
+  { id: 'a3', time: '14:00', title: 'Follow-up Sushi Master',          kind: 'followup', who: 'CORA',    soon: false },
+  { id: 'a4', time: '16:00', title: 'Aprovar campanha Tapioca',        kind: 'review',   who: 'Wandson', soon: false },
+  { id: 'a5', time: '17:30', title: 'Briefing semanal com VERA',       kind: 'meeting',  who: 'Wandson', soon: false },
+];
