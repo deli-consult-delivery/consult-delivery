@@ -20,8 +20,10 @@ const NEXUS_BASE_URL         = process.env.NEXUS_BASE_URL;
 const NEXUS_API_KEY          = process.env.NEXUS_API_KEY;
 const NEXUS_TICKET_BASE      = process.env.NEXUS_TICKET_BASE || 'http://187.127.25.24:8080';
 const NEXUS_TICKET_TOKEN     = process.env.NEXUS_TICKET_TOKEN;
-// Mapeamento tipo de sub-agente → agente EvoNexus
-const NEXUS_AGENTS = { pesquisa: 'pixel-social-media', regua: 'clawdia-assistant', midia: 'pixel-social-media' };
+// EvoNexus webhook trigger IDs (visibilidade no painel, fire-and-forget)
+const NEXUS_TRIGGER_IDS = { pesquisa: 3, regua: 2, midia: 1 };
+// In-memory job store para polling de status (request_id → estado)
+const nexusJobs = new Map();
 const GOOGLE_API_KEY         = process.env.GOOGLE_API_KEY || '';
 const EDGE_CALLBACK          = `${SUPABASE_URL}/functions/v1/analista-callback`;
 const TRANSCRICOES           = '/root/.openclaw/agents/analista-ifood/workspace/transcricoes';
@@ -88,7 +90,7 @@ function runOpenclawAgent(agentId, message, sessionId) {
       if (code !== 0) return reject(new Error(`openclaw ${agentId} exit ${code}: ${stderr.slice(0, 400)}`));
       try {
         const w = JSON.parse(stdout);
-        const text = w.result?.meta?.finalAssistantRawText || w.response || w.content || w.text || stdout;
+        const text = w.result?.payloads?.[0]?.text || w.result?.meta?.finalAssistantRawText || w.response || w.content || w.text || stdout;
         resolve(typeof text === 'string' ? text : JSON.stringify(text));
       } catch (_) { resolve(stdout); }
     });
@@ -147,7 +149,7 @@ app.post('/invoke/lara', requireJwt, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// 2. POST /api/nexus-dispatch/:agent — LARA → Nexus (proxy interno)
+// 2. POST /api/nexus-dispatch/:agent — LARA → sub-agente (async via openclaw)
 // ════════════════════════════════════════════════════════════════════════════
 app.post('/api/nexus-dispatch/:agent', requireInternalToken, async (req, res) => {
   const { agent } = req.params;
@@ -155,44 +157,60 @@ app.post('/api/nexus-dispatch/:agent', requireInternalToken, async (req, res) =>
     return res.status(400).json({ error: 'agent inválido' });
 
   const { request_id = crypto.randomUUID(), tenant_id, loja_id, payload } = req.body;
-
-  // Registra no Supabase (best-effort)
-  supabaseInsert('nexus_requests', {
-    tenant_id, loja_id, agent, request_id, status: 'queued',
-    request_payload: payload || {},
-  }).catch(e => console.warn('[bridge/nexus-dispatch] insert:', e.message));
-
-  if (!NEXUS_TICKET_TOKEN) {
-    console.log(`[bridge/nexus-dispatch] NEXUS_TICKET_TOKEN não configurado — mock para ${agent}`);
-    return res.json({ ok: true, request_id, estimated_duration_seconds: 90, queued_at: new Date().toISOString(), mock: true });
-  }
-
   const prompt = payload?.prompt || JSON.stringify({ request_id, tenant_id, loja_id, ...payload });
 
-  try {
-    const r = await fetch(`${NEXUS_TICKET_BASE}/api/tickets`, {
+  // Registra job em memória
+  nexusJobs.set(request_id, { status: 'queued', agent, loja_id, queued_at: new Date().toISOString() });
+
+  // Dispara webhook EvoNexus para visibilidade no painel (fire-and-forget)
+  if (NEXUS_TICKET_TOKEN) {
+    fetch(`${NEXUS_TICKET_BASE}/api/triggers/webhook/${NEXUS_TRIGGER_IDS[agent]}`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${NEXUS_TICKET_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: `LARA:${agent}:${loja_id || request_id}`, prompt, assignee_agent: NEXUS_AGENTS[agent] }),
-    });
-    const ticket = await r.json();
-    console.log(`[bridge/nexus-dispatch] ticket criado id=${ticket.id} agent=${NEXUS_AGENTS[agent]}`);
-
-    // Atualiza nexus_requests com ticket_id
-    supabaseInsert && supabaseInsert('nexus_requests', {}).catch(() => {});
-    if (SUPABASE_SERVICE_KEY && ticket.id) {
-      fetch(`${SUPABASE_URL}/rest/v1/nexus_requests?request_id=eq.${request_id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` },
-        body: JSON.stringify({ status: 'running', response_payload: { ticket_id: ticket.id } }),
-      }).catch(() => {});
-    }
-
-    res.json({ ok: r.ok, request_id, ticket_id: ticket.id, assignee_agent: NEXUS_AGENTS[agent], estimated_duration_seconds: 90 });
-  } catch (err) {
-    console.error('[bridge/nexus-dispatch] erro Nexus tickets:', err.message);
-    res.status(502).json({ error: 'nexus unreachable', detail: err.message });
+      body: JSON.stringify({ prompt, request_id, loja_id }),
+    }).catch(e => console.warn('[nexus-dispatch] evonexus webhook:', e.message));
   }
+
+  // Responde imediatamente (execução ocorre em background)
+  res.json({ ok: true, request_id, estimated_duration_seconds: 120, queued_at: new Date().toISOString() });
+
+  // Background: executa via openclaw LARA em sessão isolada
+  const sessionId = crypto.randomUUID();
+  const agentPrompts = {
+    pesquisa: `NEXUS-PESQUISA\nrequest_id: ${request_id}\nloja_id: ${loja_id || 'não informado'}\n\n${prompt}\n\nExecute a pesquisa e retorne um JSON estruturado com o resultado.`,
+    regua:    `NEXUS-RÉGUA\nrequest_id: ${request_id}\nloja_id: ${loja_id || 'não informado'}\n\n${prompt}\n\nCrie a régua de disparo e retorne um JSON estruturado.`,
+    midia:    `NEXUS-MÍDIA\nrequest_id: ${request_id}\nloja_id: ${loja_id || 'não informado'}\n\n${prompt}\n\nCrie sugestões de mídia e retorne um JSON estruturado.`,
+  };
+
+  nexusJobs.get(request_id).status = 'running';
+  console.log(`[nexus-dispatch] iniciando ${agent} session=${sessionId} request_id=${request_id}`);
+
+  runOpenclawAgent('lara', agentPrompts[agent], sessionId)
+    .then(text => {
+      nexusJobs.set(request_id, { status: 'done', agent, loja_id, result: text, done_at: new Date().toISOString() });
+      console.log(`[nexus-dispatch] ${agent} concluído request_id=${request_id}`);
+      if (SUPABASE_SERVICE_KEY) {
+        fetch(`${SUPABASE_URL}/rest/v1/nexus_requests?request_id=eq.${request_id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` },
+          body: JSON.stringify({ status: 'done', response_payload: { text }, responded_at: new Date().toISOString() }),
+        }).catch(() => {});
+      }
+    })
+    .catch(err => {
+      nexusJobs.set(request_id, { status: 'error', agent, loja_id, error: err.message, done_at: new Date().toISOString() });
+      console.error(`[nexus-dispatch] ${agent} erro request_id=${request_id}:`, err.message);
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 2b. GET /api/nexus-status/:request_id — LARA faz polling do resultado
+// ════════════════════════════════════════════════════════════════════════════
+app.get('/api/nexus-status/:request_id', requireInternalToken, (req, res) => {
+  const { request_id } = req.params;
+  const job = nexusJobs.get(request_id);
+  if (!job) return res.status(404).json({ error: 'request_id não encontrado', request_id });
+  res.json({ request_id, ...job });
 });
 
 // ════════════════════════════════════════════════════════════════════════════
