@@ -563,6 +563,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               preview,
               time,
               unread: isActive ? 0 : (conv.unread || 0) + (isInbound ? 1 : 0),
+              // Mensagem inbound reabre conversa finalizada → volta para Aberto
+              ...(isInbound && conv.status === 'finalizado'
+                ? { status: 'aguardando', status_v2: 'open' } : {}),
             };
             return [updated, ...prev.filter(c => c.id !== convId)];
           });
