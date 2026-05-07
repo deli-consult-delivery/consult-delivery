@@ -1,5 +1,8 @@
 # Wiki Log
 
+## [2026-05-07 06:35] session | LARA sub-agentes via openclaw async — E2E completo
+Touched: LARA — Agente Régua
+
 Chronological, append-only record of everything that's happened in this wiki.
 
 **Format:**
@@ -101,4 +104,10 @@ Touched: none
 Touched: none
 
 ## [2026-05-05 15:00] session | Bugs chat ao vivo — fotos grupo, dedup msgs, celular físico
+Touched: none
+
+## [2026-05-06 18:15] session | deploy LARA no OpenClaw + wiki procedimento
+Touched: Deploy de Agentes OpenClaw, LARA — Agente Régua, index
+
+## [2026-05-07 03:30] session | LARA integracao EvoNexus tickets API
 Touched: none

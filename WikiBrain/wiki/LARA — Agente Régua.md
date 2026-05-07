@@ -1,7 +1,7 @@
 # LARA — Agente Régua
 
 Agente de CRM food service e régua de disparo da Consult Delivery.
-Ativa no OpenClaw desde 06/05/2026.
+Ativa no OpenClaw desde 06/05/2026. Pipeline completo funcionando desde 07/05/2026.
 
 ---
 
@@ -10,50 +10,83 @@ Ativa no OpenClaw desde 06/05/2026.
 - **Papel:** CRM food service + régua de disparo automatizada
 - **Audiência:** equipe interna APENAS (Wélida como usuária principal)
 - **Nunca responde cliente final** — tudo via drafts aprovados
-- **Sub-agentes:** NEXUS-PESQUISA, NEXUS-RÉGUA, NEXUS-MÍDIA (async, callback HMAC-SHA256)
+- **Sub-agentes:** execução via openclaw LARA em sessão isolada (ver arquitetura abaixo)
 
 ## Localização dos artefatos
 
 | Artefato | Caminho |
 |---|---|
-| System prompt | `.openclaw/agents/lara/system_prompt.md` |
-| Base de regras | `.openclaw/agents/lara/base_regras.yaml` |
-| Spec sub-agentes | `.openclaw/agents/lara/nexus_subagents_spec.md` |
-| Diagrama de fluxo | `docs/fluxos/lara-regua.md` |
+| System prompt | VPS: `/root/.openclaw/agents/lara/workspace/system_prompt.md` |
+| TOOLS.md | VPS: `/root/.openclaw/agents/lara/workspace/TOOLS.md` |
+| Bridge dispatch | `bridge-server/index.js` linhas ~149-215 |
 | Migration SQL | `supabase/migrations/20260506_001_lara_regua.sql` |
-| Spec Bridge Server | `bridge-server/docs/lara-endpoints.md` |
-| Seed RBAC | `supabase/seed/lara_rbac.sql` |
+| Frontend | `src/screens/LaraScreen.jsx` |
 
-## Status de implementação
+## Status de implementação (07/05/2026)
 
-- [x] Artefatos no repo (branch `wandson/lara-agente-regua`, commit `4bad97e`)
 - [x] LARA ativa no OpenClaw (06/05/2026)
-- [ ] Endpoints Bridge Server (`/invoke/lara`, `/api/nexus-dispatch/:agent`, `/api/nexus-callback`) — Yasmin
-- [ ] Sub-agentes Nexus implementados — equipe Nexus
-- [ ] Aba frontend "Agente de Régua" — Yasmin
-- [ ] Piloto com loja real (candidato: Salgados da Mônica)
+- [x] `POST /invoke/lara` — frontend → LARA via SSE
+- [x] `POST /api/nexus-dispatch/:agent` — LARA → sub-agente async via openclaw
+- [x] `GET /api/nexus-status/:request_id` — polling do resultado
+- [x] Supabase: trigger auto-cria `loja` ao inserir `customer` no CRM
+- [x] Teste E2E completo: pesquisa real da Varanda's (Garanhuns/PE) em ~60s
+- [ ] Teste end-to-end pela tela LARA (Wélida usando)
+- [ ] Geração de régua completa validada
+- [ ] Agentes dedicados por tarefa (nexus-pesquisa, nexus-regua, nexus-midia) — opcional
 
-## Como invocar (hoje)
+## Arquitetura dos sub-agentes (decisão 07/05/2026)
 
-Via CLI da VPS:
-```bash
-ssh -i ~/.ssh/vps_openclaw root@45.39.210.183
-openclaw agent --agent lara -m "sua mensagem aqui"
+**EvoNexus é UI-driven — não API-first.** Tickets criados via API ficam em `status: open` sem processamento automático (sem heartbeat configurado). Webhooks disparam mas resultado fica no chat interno do EvoNexus, inacessível via API.
+
+**Solução adotada:** Bridge Server spawna openclaw LARA em sessão isolada para cada sub-task.
+
+```
+LARA principal (OpenClaw)
+  → curl POST /api/nexus-dispatch/pesquisa
+    → Bridge recebe, registra job em memória
+    → Spawna: openclaw agent --agent lara --json --session-id <uuid novo>
+    → Responde imediatamente: {"ok":true, "request_id":"..."}
+  → LARA faz polling: GET /api/nexus-status/{request_id}
+    → status: queued → running → done
+    → result: JSON com resultado da pesquisa/régua/mídia
 ```
 
-Via Bridge Server (quando Yasmin implementar):
+EvoNexus webhook ainda dispara (fire-and-forget) para visibilidade no painel.
+
+## Como invocar (produção)
+
+Via frontend (LaraScreen.jsx):
 ```
 POST /invoke/lara
-Authorization: Bearer <INTERNAL_BRIDGE_TOKEN>
-{"message": "...", "loja_id": "...", "user_id": "..."}
+Authorization: Bearer <Supabase JWT>
+{"message": "...", "loja_id": "...", "tenant_id": "...", "session_id": "..."}
 ```
 
-## Secrets necessários (Infisical)
+Via Bridge (interno, LARA chamando sub-agentes):
+```
+POST http://localhost:3001/api/nexus-dispatch/pesquisa
+X-Internal-Token: <INTERNAL_BRIDGE_TOKEN>
+{"tenant_id":"...","loja_id":"...","payload":{"prompt":"..."}}
+```
 
-- `NEXUS_API_KEY` — autenticação com Nexus
-- `NEXUS_BASE_URL` — URL base dos sub-agentes Nexus
-- `NEXUS_CALLBACK_SECRET` — HMAC-SHA256 para callbacks
-- `INTERNAL_BRIDGE_TOKEN` — autenticação Bridge Server → OpenClaw
+Polling:
+```
+GET http://localhost:3001/api/nexus-status/{request_id}
+X-Internal-Token: <INTERNAL_BRIDGE_TOKEN>
+→ {"status":"done","result":"..."}
+```
+
+## Lojas de referência
+
+| Loja | loja_id |
+|---|---|
+| Varanda's Restaurante & Pizzaria (Garanhuns/PE) | `6a8c6978-8575-45a2-b971-00bd9a81c754` |
+
+## Secrets (bridge-server/.env na VPS)
+
+- `INTERNAL_BRIDGE_TOKEN` — token para LARA chamar o Bridge
+- `NEXUS_TICKET_TOKEN` — token EvoNexus (para webhook de visibilidade)
+- `NEXUS_TICKET_BASE` — URL EvoNexus: `https://ia.consultdelivery.com.br`
 
 ---
 
