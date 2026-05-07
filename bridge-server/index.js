@@ -28,7 +28,7 @@ const GOOGLE_API_KEY         = process.env.GOOGLE_API_KEY || '';
 const EDGE_CALLBACK          = `${SUPABASE_URL}/functions/v1/analista-callback`;
 const TRANSCRICOES           = '/root/.openclaw/agents/analista-ifood/workspace/transcricoes';
 
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '2mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
 
 // ── CORS ─────────────────────────────────────────────────────────────────────
 app.use((req, res, next) => {
@@ -216,76 +216,60 @@ app.get('/api/nexus-status/:request_id', requireInternalToken, (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════
 // 3. POST /api/nexus-callback — Nexus → Bridge (HMAC)
 // ════════════════════════════════════════════════════════════════════════════
-app.post('/api/nexus-callback', express.json(), async (req, res) => {
-  // Valida assinatura HMAC
-  if (NEXUS_CALLBACK_SECRET) {
-    const sig      = req.headers['x-nexus-signature'] || '';
-    const expected = crypto.createHmac('sha256', NEXUS_CALLBACK_SECRET)
-                           .update(JSON.stringify(req.body)).digest('hex');
-    if (sig !== expected) {
-      console.warn('[bridge/nexus-callback] assinatura inválida');
-      return res.status(401).json({ error: 'invalid signature' });
-    }
+// rawBody capturado via verify no express.json global — necessário para HMAC sobre bytes exatos
+app.post('/api/nexus-callback', (req, res) => {
+  const sig     = req.headers['x-nexus-signature'] || '';
+  const rawBody = req.rawBody; // Buffer salvo pelo verify do express.json global
+
+  if (!sig || !NEXUS_CALLBACK_SECRET) {
+    console.warn('[nexus-callback] assinatura ou secret ausente');
+    return res.status(401).json({ error: 'Assinatura ou segredo ausente' });
   }
 
-  const { event, request_id, tenant_id, loja_id } = req.body;
-  if (!request_id) return res.status(400).json({ error: 'request_id required' });
+  const expected = 'sha256=' + crypto
+    .createHmac('sha256', NEXUS_CALLBACK_SECRET)
+    .update(rawBody)
+    .digest('hex');
 
-  console.log(`[bridge/nexus-callback] evento=${event} request_id=${request_id}`);
-
-  // Persiste conforme tipo de evento
-  let persistedId = null;
-  try {
-    if (event === 'pesquisa_concluida') {
-      const row = await supabaseInsert('marca_pesquisa', {
-        tenant_id, loja_id,
-        documento_jsonb: req.body.documento || req.body,
-        fontes: req.body.fontes || [],
-        origem: 'nexus_pesquisa',
-      });
-      persistedId = row?.id;
-    } else if (event === 'regua_concluida') {
-      const row = await supabaseInsert('reguas', {
-        tenant_id, loja_id,
-        pesquisa_id: req.body.pesquisa_id || null,
-        status: 'rascunho',
-        cobertura_dias: req.body.cobertura_dias || 90,
-        criada_por_agente: 'nexus_regua',
-        metadata: req.body,
-      });
-      persistedId = row?.id;
-    } else if (event === 'midia_concluida') {
-      const row = await supabaseInsert('campanha_ativos', {
-        tenant_id,
-        campanha_id: req.body.campanha_id,
-        variacao: req.body.variacao || 1,
-        legenda: req.body.legenda || '',
-        midia_url: req.body.midia_url || null,
-        tipo_midia: req.body.tipo_midia || null,
-        fonte: 'nexus',
-        metadata: req.body,
-      });
-      persistedId = row?.id;
-    }
-
-    // Atualiza nexus_requests
-    if (SUPABASE_SERVICE_KEY) {
-      await fetch(`${SUPABASE_URL}/rest/v1/nexus_requests?request_id=eq.${request_id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: SUPABASE_SERVICE_KEY,
-          Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
-        },
-        body: JSON.stringify({ status: 'done', responded_at: new Date().toISOString(), response_payload: req.body }),
-      });
-    }
-  } catch (err) {
-    console.error('[bridge/nexus-callback] persist erro:', err.message);
-    return res.status(500).json({ error: 'persist failed', detail: err.message });
+  const sigBuf = Buffer.from(sig);
+  const expBuf = Buffer.from(expected);
+  if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+    console.warn('[nexus-callback] assinatura inválida');
+    return res.status(401).json({ error: 'Assinatura inválida' });
   }
 
-  res.json({ ok: true, persisted_id: persistedId });
+  const { request_id, loja_id, result, status, agent } = req.body;
+  console.log(`[nexus-callback] ${agent} | request_id=${request_id} | status=${status}`);
+
+  // Atualiza job em memória
+  if (nexusJobs.has(request_id)) {
+    nexusJobs.set(request_id, {
+      ...nexusJobs.get(request_id),
+      status: status === 'concluido' ? 'done' : status,
+      result,
+      done_at: new Date().toISOString(),
+      source: 'evonexus',
+    });
+  }
+
+  // Persiste no Supabase
+  if (SUPABASE_SERVICE_KEY && request_id) {
+    fetch(`${SUPABASE_URL}/rest/v1/nexus_requests?request_id=eq.${request_id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: SUPABASE_SERVICE_KEY,
+        Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+      },
+      body: JSON.stringify({
+        status: status === 'concluido' ? 'done' : status,
+        response_payload: { text: result },
+        responded_at: new Date().toISOString(),
+      }),
+    }).catch(e => console.warn('[nexus-callback] supabase patch:', e.message));
+  }
+
+  res.json({ ok: true });
 });
 
 // ════════════════════════════════════════════════════════════════════════════
