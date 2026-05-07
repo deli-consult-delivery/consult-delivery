@@ -18,6 +18,10 @@ const INTERNAL_BRIDGE_TOKEN  = process.env.INTERNAL_BRIDGE_TOKEN;
 const NEXUS_CALLBACK_SECRET  = process.env.NEXUS_CALLBACK_SECRET;
 const NEXUS_BASE_URL         = process.env.NEXUS_BASE_URL;
 const NEXUS_API_KEY          = process.env.NEXUS_API_KEY;
+const NEXUS_TICKET_BASE      = process.env.NEXUS_TICKET_BASE || 'http://187.127.25.24:8080';
+const NEXUS_TICKET_TOKEN     = process.env.NEXUS_TICKET_TOKEN;
+// Mapeamento tipo de sub-agente → agente EvoNexus
+const NEXUS_AGENTS = { pesquisa: 'pixel-social-media', regua: 'clawdia-assistant', midia: 'pixel-social-media' };
 const GOOGLE_API_KEY         = process.env.GOOGLE_API_KEY || '';
 const EDGE_CALLBACK          = `${SUPABASE_URL}/functions/v1/analista-callback`;
 const TRANSCRICOES           = '/root/.openclaw/agents/analista-ifood/workspace/transcricoes';
@@ -158,22 +162,35 @@ app.post('/api/nexus-dispatch/:agent', requireInternalToken, async (req, res) =>
     request_payload: payload || {},
   }).catch(e => console.warn('[bridge/nexus-dispatch] insert:', e.message));
 
-  // Se Nexus não configurado, retorna mock
-  if (!NEXUS_BASE_URL || !NEXUS_API_KEY) {
-    console.log(`[bridge/nexus-dispatch] NEXUS_BASE_URL não configurado — mock para ${agent}`);
+  if (!NEXUS_TICKET_TOKEN) {
+    console.log(`[bridge/nexus-dispatch] NEXUS_TICKET_TOKEN não configurado — mock para ${agent}`);
     return res.json({ ok: true, request_id, estimated_duration_seconds: 90, queued_at: new Date().toISOString(), mock: true });
   }
 
+  const prompt = payload?.prompt || JSON.stringify({ request_id, tenant_id, loja_id, ...payload });
+
   try {
-    const r = await fetch(`${NEXUS_BASE_URL}/agents/${agent}/run`, {
+    const r = await fetch(`${NEXUS_TICKET_BASE}/api/tickets`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${NEXUS_API_KEY}` },
-      body: JSON.stringify({ request_id, tenant_id, loja_id, payload, callback_url: `https://app.consultdelivery.com.br/api/nexus-callback` }),
+      headers: { 'Authorization': `Bearer ${NEXUS_TICKET_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: `LARA:${agent}:${loja_id || request_id}`, prompt, assignee_agent: NEXUS_AGENTS[agent] }),
     });
-    const data = await r.json();
-    res.status(r.ok ? 200 : r.status).json({ ok: r.ok, request_id, ...data });
+    const ticket = await r.json();
+    console.log(`[bridge/nexus-dispatch] ticket criado id=${ticket.id} agent=${NEXUS_AGENTS[agent]}`);
+
+    // Atualiza nexus_requests com ticket_id
+    supabaseInsert && supabaseInsert('nexus_requests', {}).catch(() => {});
+    if (SUPABASE_SERVICE_KEY && ticket.id) {
+      fetch(`${SUPABASE_URL}/rest/v1/nexus_requests?request_id=eq.${request_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` },
+        body: JSON.stringify({ status: 'running', response_payload: { ticket_id: ticket.id } }),
+      }).catch(() => {});
+    }
+
+    res.json({ ok: r.ok, request_id, ticket_id: ticket.id, assignee_agent: NEXUS_AGENTS[agent], estimated_duration_seconds: 90 });
   } catch (err) {
-    console.error('[bridge/nexus-dispatch] erro Nexus:', err.message);
+    console.error('[bridge/nexus-dispatch] erro Nexus tickets:', err.message);
     res.status(502).json({ error: 'nexus unreachable', detail: err.message });
   }
 });

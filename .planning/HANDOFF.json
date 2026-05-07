@@ -1,48 +1,49 @@
 {
   "version": "1.0",
-  "timestamp": "2026-05-06T16:15:53Z",
+  "timestamp": "2026-05-07T03:30:00Z",
   "phase": null,
-  "phase_name": "Ad-hoc chat fixes",
+  "phase_name": "LARA — Integração EvoNexus (ad-hoc)",
   "phase_dir": null,
-  "plan": null,
-  "task": null,
-  "total_tasks": null,
   "status": "paused",
   "completed_tasks": [
-    {"id": 1, "name": "onPaste para colar texto e imagens/prints no campo de mensagem", "status": "done", "commit": "7a8df4e"},
-    {"id": 2, "name": "ImageLightbox — visualização de imagem com zoom e arrastar", "status": "done", "commit": "26c834f"},
-    {"id": 3, "name": "Download de mídias (imagem, vídeo, documento, áudio)", "status": "done", "commit": "ff00d84"},
-    {"id": 4, "name": "Fix áudio do celular não aparecia (INSERT filter muito restritivo)", "status": "done", "commit": "694ccaa"},
-    {"id": 5, "name": "Formatação WhatsApp (*bold*, _itálico_, ~tachado~, ```mono```)", "status": "done", "commit": "694ccaa"},
-    {"id": 6, "name": "Layout compacto — mais mensagens visíveis a 100% zoom", "status": "done", "commit": "95e4485"},
-    {"id": 7, "name": "Fix webhook fromMe — nome da conversa era 'Consult Delivery' em vez do cliente", "status": "done", "commit": "e39aefa"}
+    {"id": 1, "name": "Diagnosticar blockers da LARA", "status": "done"},
+    {"id": 2, "name": "NEXUS secrets no .env da VPS", "status": "done"},
+    {"id": 3, "name": "Criar loja Varanda no Supabase", "status": "done"},
+    {"id": 4, "name": "Trigger auto-criar loja ao cadastrar customer", "status": "done"},
+    {"id": 5, "name": "Descobrir tickets API do EvoNexus", "status": "done"},
+    {"id": 6, "name": "Atualizar bridge-server para tickets API", "status": "done"},
+    {"id": 7, "name": "TOOLS.md LARA com HTTPS + polling", "status": "done"},
+    {"id": 8, "name": "system_prompt.md Etapas 2/3/4 com curl concreto", "status": "done"},
+    {"id": 9, "name": "Migrar para HTTPS ia.consultdelivery.com.br", "status": "done"},
+    {"id": 10, "name": "Teste E2E dispatch → ticket criado EvoNexus", "status": "done"}
   ],
   "remaining_tasks": [
-    {"id": 8, "name": "Marca d'água nas fotos de perfil — WATERMARK_ON_MESSAGES=false não funcionou", "status": "not_started"}
+    {"id": 11, "name": "Atribuir agente ao Trigger 3 (pesquisa) no painel EvoNexus", "status": "human_action"},
+    {"id": 12, "name": "Confirmar mapeamento agentes: pesquisa/regua/midia", "status": "not_started"},
+    {"id": 13, "name": "Testar polling completo — ticket resolve + LARA lê resultado via comments", "status": "not_started"},
+    {"id": 14, "name": "Teste E2E pela tela da LARA (frontend → LARA → EvoNexus → resultado)", "status": "not_started"}
   ],
-  "blockers": [
+  "human_actions_pending": [
     {
-      "description": "Marca d'água nas fotos de perfil ainda aparece mesmo com WATERMARK_ON_MESSAGES=false no EasyPanel",
-      "type": "external",
-      "workaround": "Investigar logs do container Evolution API no EasyPanel, tentar restart do container ou variável alternativa"
+      "action": "Atribuir agente ao Trigger 3 (pesquisa) no painel EvoNexus",
+      "context": "Trigger 3 tem agent=null — sem agente atribuído nada processa",
+      "blocking": true,
+      "url": "https://ia.consultdelivery.com.br → Triggers"
     }
   ],
-  "human_actions_pending": [],
   "decisions": [
-    {"decision": "onPaste cria File com nome 'imagem-colada.ext' para clipboard images sem nome", "rationale": "Supabase content column precisa de string não-vazia", "phase": null},
-    {"decision": "ImageLightbox como componente standalone antes de ChatScreen", "rationale": "Evita closure de estado dentro do return", "phase": null},
-    {"decision": "Download via fetch→blob", "rationale": "download attribute não funciona cross-origin (Evolution API / Supabase Storage)", "phase": null},
-    {"decision": "Filtro INSERT corrigido para !text && !media_url && !media_type", "rationale": "Áudio chega com media_url=null no INSERT, preenchido no UPDATE posterior", "phase": null},
-    {"decision": "formatWAText escapa HTML antes do parse markdown", "rationale": "Prevenir XSS em conteúdo de WhatsApp", "phase": null},
-    {"decision": "Webhook fromMe usa whatsapp_contacts.display_name como nome da conversa", "rationale": "pushName em fromMe é o nome da nossa conta, não do cliente", "phase": null},
-    {"decision": "Edge function evolution-webhook v22 deployada via MCP Supabase", "rationale": "Fix de nome da conversa ativo imediatamente sem aguardar CI", "phase": null}
+    {"decision": "Usar tickets API em vez de triggers", "rationale": "Tickets permitem polling de status e leitura do resultado via GET /api/tickets/{id}"},
+    {"decision": "Bridge cria ticket com assignee_agent: pesquisa→pixel-social-media, regua→clawdia-assistant, midia→pixel-social-media"},
+    {"decision": "Trigger banco auto-cria loja ao inserir customer no CRM"}
   ],
-  "uncommitted_files": [
-    ".claude/settings.json",
-    ".planning/STATE.md",
-    "WikiBrain/.obsidian/community-plugins.json",
-    "WikiBrain/.obsidian/workspace.json"
-  ],
-  "next_action": "Investigar marca d'água nas fotos de perfil: acessar EasyPanel → container Evolution API → logs → variável WATERMARK_ON_MESSAGES. Tentar restart do container se variável já está correta.",
-  "context_notes": "Toda a sessão foi bug fixing ad-hoc no ChatScreen e webhook evolution. Sem fase GSD ativa. Todos os 7 fixes foram commitados e pushados direto no main. edge function evolution-webhook está na versão 22."
+  "uncommitted_files": ["bridge-server/index.js"],
+  "next_action": "Verificar Trigger 3 no EvoNexus, testar polling completo, depois E2E pela tela LARA.",
+  "infrastructure_state": {
+    "bridge_server": "active VPS 45.39.210.183:3001 (systemd)",
+    "openclaw": "active VPS porta 18789 (systemd)",
+    "lara_agent": "ativa no OpenClaw, system_prompt.md + TOOLS.md atualizados",
+    "evonexus": "https://ia.consultdelivery.com.br HTTPS Let's Encrypt, token nC5Re2w...",
+    "nexus_ticket_base": "https://ia.consultdelivery.com.br/api/tickets",
+    "supabase": "migrations lara_regua + nexus_requests aplicadas, loja Varanda cadastrada (id: 6a8c6978...)"
+  }
 }
