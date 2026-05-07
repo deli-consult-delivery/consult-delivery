@@ -651,7 +651,7 @@ async function upsertConversation({ tenantId, instanceId, chatId, isGroup, pushN
 }): Promise<string | null> {
   const { data: existing } = await supabase
     .from('conversations')
-    .select('id, status_v2, is_group')
+    .select('id, status, status_v2, is_group')
     .eq('whatsapp_chat_id', chatId)
     .eq('instance_id', instanceId)
     .order('created_at', { ascending: false })
@@ -661,8 +661,13 @@ async function upsertConversation({ tenantId, instanceId, chatId, isGroup, pushN
   if (existing) {
     const upd: Record<string, string | boolean | null> = { updated_at: new Date().toISOString(), tenant_id: tenantId };
     if (!isGroup && pushName && pushName !== 'Desconhecido') upd.push_name = pushName;
-    if (existing.status_v2 === 'closed') upd.status_v2 = 'in_progress';
     if (isGroup && !existing.is_group) upd.is_group = true;
+    // Reabrir conversa finalizada quando nova mensagem inbound chega
+    if (existing.status === 'finalizado' || existing.status_v2 === 'closed') {
+      upd.status    = 'aguardando';
+      upd.status_v2 = 'open';
+      upd.reopened_at = new Date().toISOString();
+    }
     await supabase.from('conversations').update(upd).eq('id', existing.id);
     return existing.id;
   }
