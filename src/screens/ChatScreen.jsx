@@ -173,7 +173,7 @@ function ConvRow({ conv, active, onClick, statusCounts }) {
     aguardando:         'Não iniciado',
     em_atendimento:     'Aguardando',
     atendimento_aberto: 'Em aberto',
-    finalizado:         'Oculto',
+    finalizado:         'Finalizado',
     archived:           'Oculto',
     automacao:          'Automação',
     falha:              'Falha',
@@ -680,9 +680,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
   async function loadMsgs(convId) {
     try {
-      const { data } = await supabase.from('messages').select('id, direction, content, body, created_at, sender_name, media_url, media_type, whatsapp_msg_id, quoted_content').eq('conversation_id', convId).order('created_at').limit(100);
+      const { data } = await supabase.from('messages').select('id, direction, content, body, created_at, sender_name, media_url, media_type, whatsapp_msg_id, quoted_content').eq('conversation_id', convId).order('created_at', { ascending: false }).limit(100);
       if (data) {
-        setMessages(m => ({ ...m, [convId]: data.filter(msg => msg.content || msg.body || msg.media_url).map(msg => ({ id: msg.id, from: msg.direction === 'outbound' ? 'out' : 'in', text: msg.content || msg.body || '', time: new Date(msg.created_at || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), mediaType: msg.media_type || null, mediaUrl: msg.media_url || null, agentName: msg.sender_name || null, waMsgId: msg.whatsapp_msg_id || null, replyTo: msg.quoted_content || null })) }));
+        setMessages(m => ({ ...m, [convId]: data.reverse().filter(msg => msg.content || msg.body || msg.media_url).map(msg => ({ id: msg.id, from: msg.direction === 'outbound' ? 'out' : 'in', text: msg.content || msg.body || '', time: new Date(msg.created_at || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), mediaType: msg.media_type || null, mediaUrl: msg.media_url || null, agentName: msg.sender_name || null, waMsgId: msg.whatsapp_msg_id || null, replyTo: msg.quoted_content || null })) }));
       }
     } catch { /* ignore */ }
   }
@@ -705,7 +705,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       try {
         // Salva no banco ANTES de chamar a Evolution para que o DEDUP do webhook
         // encontre a linha e não insira duplicata quando o evento fromMe chegar.
-        await supabase.from('messages').insert({ conversation_id: active.id, direction: 'outbound', content: text, sender_name: agentName || null, created_at: now.toISOString(), ...(currentReplyTo ? { quoted_content: currentReplyTo } : {}) });
+        const { error: insertErr } = await supabase.from('messages').insert({ tenant_id: active.tenant_id || null, conversation_id: active.id, direction: 'outbound', content: text, sender_name: agentName || null, created_at: now.toISOString(), ...(currentReplyTo ? { quoted_content: currentReplyTo } : {}) });
+        if (insertErr) console.error('Falha ao salvar mensagem no banco:', insertErr);
         await sendTextMessage(selectedInstance, active.whatsapp_chat_id, textToSend, waQuoted);
         // Equipe enviou → conversa entra em "Aguardando cliente" (em_atendimento)
         const canUpdateStatus = !['em_atendimento', 'finalizado', 'falha', 'archived'].includes(convStatus);
