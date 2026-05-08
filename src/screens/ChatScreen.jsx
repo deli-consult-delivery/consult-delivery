@@ -50,7 +50,7 @@ const AI_COMMANDS = [
 // ─── SOM DE NOTIFICAÇÃO ─────────────────────────────────────────
 function playNotificationSound() {
   try {
-    const audio = new Audio('/assets/universfield-new-notification-050-494248.mp3');
+    const audio = new Audio('/assets/u_03k5gu83c1-livechat-129007.mp3');
     audio.volume = 1.0;
     audio.play().catch(() => {});
   } catch { /* ignore */ }
@@ -830,7 +830,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         gridTemplateColumns: 'minmax(320px, 360px) minmax(0, 1fr) 320px',
         gridTemplateRows: '52px 1fr',
         gridTemplateAreas: '"header header header" "list chat inspector"',
-        height: '100vh',
+        height: '100%',
         background: '#0E0E0E',
         overflow: 'hidden',
       }}
