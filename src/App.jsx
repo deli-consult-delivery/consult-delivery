@@ -20,6 +20,7 @@ import GruposScreen from './screens/GruposScreen.jsx';
 import { CONVERSATIONS, INADIMPLENTES, TENANTS } from './data.js';
 import { supabase } from './lib/supabase.js';
 import { listTenants } from './lib/api.js';
+import { registerPushSubscription } from './lib/pushNotifications.js';
 
 const TWEAK_DEFAULTS = {
   primaryColor: '#B70C00',
@@ -95,8 +96,15 @@ export default function App() {
     reloadTenants();
   }, [session]);
 
+  // Registra Service Worker + Web Push subscription após ter session + tenantDbId
+  useEffect(() => {
+    if (!session?.user?.id || !tenantDbId) return;
+    registerPushSubscription(tenantDbId, session.user.id);
+  }, [session?.user?.id, tenantDbId]);
+
   // ── Notificações globais de chat ─────────────────────────────────────────────
-  const routeRef = useRef(route);
+  const routeRef    = useRef(route);
+  const lastSoundRef = useRef(0);
   useEffect(() => { routeRef.current = route; }, [route]);
 
   useEffect(() => {
@@ -116,9 +124,13 @@ export default function App() {
         const msg = payload.new;
         if (msg.direction !== 'inbound') return;
 
-        // Som — toca sempre que chegar mensagem inbound
-        notifAudio.currentTime = 0;
-        notifAudio.play().catch(() => {});
+        // Som — throttle de 3s para não disparar em rajada
+        const now = Date.now();
+        if (now - lastSoundRef.current > 3000) {
+          lastSoundRef.current = now;
+          notifAudio.currentTime = 0;
+          notifAudio.play().catch(() => {});
+        }
 
         // Notificação do browser — aparece mesmo em outra aba ou rota
         if ('Notification' in window && Notification.permission === 'granted') {

@@ -157,7 +157,7 @@ function FieldRow({ label, value, hint }) {
 }
 
 // ─── CONV ROW (sidebar item) ───────────────────────────────────
-function ConvRow({ conv, active, onClick, statusCounts }) {
+function ConvRow({ conv, active, onClick, statusFilter }) {
   const waitColors = {
     aguardando:         { bg: 'rgba(245,158,11,0.18)',  color: '#FBBF24' },
     em_atendimento:     { bg: 'rgba(59,130,246,0.18)',   color: '#93C5FD' },
@@ -167,13 +167,18 @@ function ConvRow({ conv, active, onClick, statusCounts }) {
     automacao:          { bg: 'rgba(168,85,247,0.18)',   color: '#D8B4FE' },
     falha:              { bg: 'rgba(183,12,0,0.18)',     color: '#FF8080' },
   };
-  const statusKey = conv.status || 'aguardando';
-  const wColor = waitColors[statusKey] || waitColors.aguardando;
+  const realStatus = conv.status || 'aguardando';
+  // When viewing the "Aguardando" pill, conversations that are atendimento_aberto
+  // but have an unanswered client message should display as "Aguardando"
+  const displayStatus = (statusFilter === 'aguardando' && realStatus === 'atendimento_aberto' && conv.previewFrom === 'in')
+    ? 'em_atendimento'
+    : realStatus;
+  const wColor = waitColors[displayStatus] || waitColors.aguardando;
   const statusLabels = {
     aguardando:         'Não iniciado',
     em_atendimento:     'Aguardando',
     atendimento_aberto: 'Em aberto',
-    finalizado:         'Oculto',
+    finalizado:         'Finalizado',
     archived:           'Oculto',
     automacao:          'Automação',
     falha:              'Falha',
@@ -207,7 +212,7 @@ function ConvRow({ conv, active, onClick, statusCounts }) {
         </div>
         <div style={{ marginTop: 5, display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
           <span className="lc-row-pill" style={{ background: wColor.bg, color: wColor.color }}>
-            {statusLabels[statusKey] || statusKey}
+            {statusLabels[displayStatus] || displayStatus}
           </span>
           {conv.type === 'internal' && <span className="lc-row-tag" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)' }}>Interno</span>}
         </div>
@@ -341,6 +346,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [tab, setTab]                        = useState('all');
   const [filters, setFilters]                = useState({ department: null, tag: null, status: null });
   const [taggedCustomerIds, setTaggedCustomerIds] = useState(null);
+  const [refreshing, setRefreshing]          = useState(false);
 
   // ── Mensagens ─────────────────────────────────────────────
   const [messages, setMessages]              = useState({});
@@ -402,7 +408,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   // ── CONTAGENS para badges de status ────────────────────────
   const statusCounts = useMemo(() => ({
     nao_iniciado: convs.filter(c => (c.status || 'aguardando') === 'aguardando').length,
-    aguardando:   convs.filter(c => c.status === 'em_atendimento').length,
+    aguardando:   convs.filter(c => c.status === 'em_atendimento' || (c.status === 'atendimento_aberto' && c.previewFrom === 'in')).length,
     aberto:       convs.filter(c => c.status === 'atendimento_aberto').length,
     automacao:    convs.filter(c => c.status === 'automacao').length,
     finalizado:   convs.filter(c => c.status === 'finalizado').length,
@@ -419,6 +425,13 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     { id: 'falha',        icon: 'alert', value: statusCounts.falha,        label: 'Falha' },
     { id: 'oculto',       icon: 'arch',  value: statusCounts.oculto,       label: 'Ocultas' },
   ], [statusCounts]);
+
+  // ── Document title badge ──────────────────────────────────
+  useEffect(() => {
+    const pending = statusCounts.nao_iniciado + statusCounts.falha;
+    document.title = pending > 0 ? `(${pending}) Consult Delivery` : 'Consult Delivery';
+    return () => { document.title = 'Consult Delivery'; };
+  }, [statusCounts.nao_iniciado, statusCounts.falha]);
 
   // ── EFFECTS DE INICIALIZAÇÃO ───────────────────────────────
   useEffect(() => {
@@ -537,7 +550,12 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             return prev;
           }
           const conv    = prev[idx];
-          const updated = { ...conv, preview, time, unread: isActive ? 0 : (conv.unread || 0) + (isInbound ? 1 : 0), ...(isInbound && conv.status === 'finalizado' ? { status: 'aguardando' } : {}) };
+          const statusUpdate = isInbound
+            ? (conv.status === 'finalizado'    ? { status: 'aguardando'         }
+             : conv.status === 'em_atendimento' ? { status: 'atendimento_aberto' }
+             : {})
+            : {};
+          const updated = { ...conv, preview, time, unread: isActive ? 0 : (conv.unread || 0) + (isInbound ? 1 : 0), ...statusUpdate };
           // Only move to top for inbound — outbound sends should not reorder the list
           if (!isInbound) { const next = [...prev]; next[idx] = updated; return next; }
           return [updated, ...prev.filter(c => c.id !== convId)];
@@ -668,11 +686,46 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
   async function loadMsgs(convId) {
     try {
-      const { data } = await supabase.from('messages').select('id, direction, content, body, created_at, sender_name, media_url, media_type, whatsapp_msg_id, quoted_content').eq('conversation_id', convId).order('created_at').limit(100);
+      const { data } = await supabase.from('messages').select('id, direction, content, body, created_at, sender_name, media_url, media_type, whatsapp_msg_id, quoted_content').eq('conversation_id', convId).order('created_at', { ascending: false }).limit(100);
       if (data) {
-        setMessages(m => ({ ...m, [convId]: data.filter(msg => msg.content || msg.body || msg.media_url).map(msg => ({ id: msg.id, from: msg.direction === 'outbound' ? 'out' : 'in', text: msg.content || msg.body || '', time: new Date(msg.created_at || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), mediaType: msg.media_type || null, mediaUrl: msg.media_url || null, agentName: msg.sender_name || null, waMsgId: msg.whatsapp_msg_id || null, replyTo: msg.quoted_content || null })) }));
+        const dbMsgs = data.reverse().filter(msg => msg.content || msg.body || msg.media_url).map(msg => ({ id: msg.id, from: msg.direction === 'outbound' ? 'out' : 'in', text: msg.content || msg.body || '', time: new Date(msg.created_at || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), mediaType: msg.media_type || null, mediaUrl: msg.media_url || null, agentName: msg.sender_name || null, waMsgId: msg.whatsapp_msg_id || null, replyTo: msg.quoted_content || null }));
+        setMessages(m => {
+          const tmpMsgs = (m[convId] || []).filter(ex => ex.id?.startsWith('tmp-'));
+          return { ...m, [convId]: [...dbMsgs, ...tmpMsgs] };
+        });
       }
     } catch { /* ignore */ }
+  }
+
+  // ── REFRESH PENDING CONVS ─────────────────────────────────
+  async function refreshPendingConvs() {
+    if (!selectedInstance || refreshing) return;
+    setRefreshing(true);
+    try {
+      const { data: inst } = await supabase.from('evolution_instances').select('id').eq('instance_name', selectedInstance).single();
+      if (!inst) return;
+      const PENDING_STATUSES = ['aguardando', 'em_atendimento', 'atendimento_aberto', 'automacao'];
+      const { data: rows } = await supabase.from('conversations').select('*').eq('instance_id', inst.id).in('status', PENDING_STATUSES).order('updated_at', { ascending: false }).limit(100);
+      if (!rows?.length) return;
+      const lastMsgResults = await Promise.all(rows.map(r => supabase.from('messages').select('conversation_id, content, body, direction, created_at, media_type').eq('conversation_id', r.id).order('created_at', { ascending: false }).limit(1).maybeSingle()));
+      const lastMsgMap = {};
+      lastMsgResults.forEach(({ data }) => { if (data) lastMsgMap[data.conversation_id] = data; });
+      const mapped = rows.map(c => {
+        const phone = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
+        const name  = c.push_name || c.contact_name || c.group_name || phone || 'Desconhecido';
+        const lm    = lastMsgMap[c.id];
+        const preview = lm ? (lm.media_type === 'image' ? '🖼 Imagem' : lm.media_type === 'video' ? '🎬 Vídeo' : lm.media_type === 'document' ? '📄 Documento' : lm.media_type?.includes('audio') ? '🎵 Áudio' : lm.content || lm.body || '') : '';
+        const previewFrom = lm?.direction === 'inbound' ? 'in' : 'out';
+        return { id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null, type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id, preview, previewFrom, time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '', unread: 0, online: false, messages: [], status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null, status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null };
+      });
+      setConvs(prev => {
+        const updatedIds = new Set(mapped.map(c => c.id));
+        const kept = prev.filter(c => !updatedIds.has(c.id) && !(['aguardando','em_atendimento','atendimento_aberto','automacao'].includes(c.status)));
+        return [...kept, ...mapped];
+      });
+      refreshStatus();
+    } catch { /* ignore */ }
+    setRefreshing(false);
   }
 
   // ── SEND MESSAGE ──────────────────────────────────────────
@@ -693,10 +746,25 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       try {
         // Salva no banco ANTES de chamar a Evolution para que o DEDUP do webhook
         // encontre a linha e não insira duplicata quando o evento fromMe chegar.
-        await supabase.from('messages').insert({ conversation_id: active.id, direction: 'outbound', content: text, sender_name: agentName || null, created_at: now.toISOString(), ...(currentReplyTo ? { quoted_content: currentReplyTo } : {}) });
+        const { error: insertErr } = await supabase.from('messages').insert({ tenant_id: active.tenant_id || null, conversation_id: active.id, direction: 'outbound', content: text, sender_name: agentName || null, created_at: now.toISOString(), ...(currentReplyTo ? { quoted_content: currentReplyTo } : {}) });
+        if (insertErr) console.error('Falha ao salvar mensagem no banco:', insertErr);
         await sendTextMessage(selectedInstance, active.whatsapp_chat_id, textToSend, waQuoted);
-        if (convStatus === 'aguardando') await changeStatus('em_atendimento');
-      } catch (err) { console.error('Falha ao enviar via Evolution:', err); }
+        // Equipe enviou → conversa vai para "Em aberto" (atendimento_aberto)
+        const canUpdateStatus = !['finalizado', 'falha', 'archived'].includes(convStatus);
+        if (canUpdateStatus) {
+          await changeStatus('atendimento_aberto');
+          setConvs(prev => prev.map(c => c.id === active.id ? { ...c, status: 'atendimento_aberto', previewFrom: 'out' } : c));
+        } else {
+          setConvs(prev => prev.map(c => c.id === active.id ? { ...c, previewFrom: 'out' } : c));
+        }
+      } catch (err) {
+        console.error('Falha ao enviar via Evolution:', err);
+        // Marca conversa como Falha no envio
+        await supabase.from('conversations')
+          .update({ status: 'falha', status_v2: 'falha' })
+          .eq('id', active.id);
+        setConvs(prev => prev.map(c => c.id === active.id ? { ...c, status: 'falha' } : c));
+      }
       finally { setSending(false); }
     } else if (isWA) {
       setTyping(true);
@@ -878,7 +946,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     if (!c.id.startsWith('chan-') && statusFilter) {
       const match = {
         nao_iniciado: (c.status || 'aguardando') === 'aguardando',
-        aguardando:   c.status === 'em_atendimento',
+        aguardando:   c.status === 'em_atendimento' || (c.status === 'atendimento_aberto' && c.previewFrom === 'in'),
         aberto:       c.status === 'atendimento_aberto',
         automacao:    c.status === 'automacao',
         finalizado:   c.status === 'finalizado',
@@ -1015,12 +1083,12 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                   ? { nao_iniciado: 'Não iniciados', aguardando: 'Aguardando', aberto: 'Em aberto', automacao: 'Automações', finalizado: 'Finalizadas', falha: 'Falha', oculto: 'Ocultas' }[statusFilter]
                   : 'Todas'}
               </span>
-              <span className="lc-stats-badge">
+              <button className="lc-stats-badge" onClick={refreshPendingConvs} title="Atualizar não iniciados, aguardando e automações" disabled={refreshing}>
                 {filtered.length}
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}>
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7, animation: refreshing ? 'spin 0.7s linear infinite' : 'none' }}>
                   <path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
                 </svg>
-              </span>
+              </button>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <button className="lc-stats-filter-btn" onClick={() => setStatusFilter(null)} title="Limpar filtro">
@@ -1073,9 +1141,10 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               key={c.id}
               conv={c}
               active={c.id === activeId}
+              statusFilter={statusFilter}
               onClick={() => {
                 setActiveId(c.id);
-                if (usingRealData && !messages[c.id]?.length && !c.id.startsWith('chan-')) loadMsgs(c.id);
+                if (usingRealData && !c.id.startsWith('chan-')) loadMsgs(c.id);
               }}
             />
           ))}
@@ -1169,11 +1238,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                   )}
                   <span className="lc-protocol">#{active.id?.slice(-5) || '00000'}</span>
                   {convStatus === 'finalizado' ? (
-                    <button className="lc-action-btn" onClick={async () => { await changeStatus('atendimento_aberto'); await supabase.from('conversations').update({ status_v2: 'in_progress' }).eq('id', activeId); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'atendimento_aberto', status_v2: 'in_progress' } : c)); setStatusTab('aberto'); }} disabled={statusLoading}>
+                    <button className="lc-action-btn" onClick={async () => { const { error } = await changeStatus('atendimento_aberto'); if (!error) { setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'atendimento_aberto', status_v2: 'in_progress' } : c)); setStatusFilter('aberto'); } }} disabled={statusLoading}>
                       <Icon name="refresh" size={13} /> Reabrir
                     </button>
                   ) : (
-                    <button className="lc-action-btn primary" onClick={async () => { await finish(); await supabase.from('conversations').update({ status_v2: 'closed' }).eq('id', activeId); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'finalizado', status_v2: 'closed' } : c)); setResolved(r => ({ ...r, [activeId]: true })); }} disabled={statusLoading}>
+                    <button className="lc-action-btn primary" onClick={async () => { const { error } = await finish(); if (!error) { setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'finalizado', status_v2: 'closed' } : c)); setResolved(r => ({ ...r, [activeId]: true })); setStatusFilter('finalizado'); } }} disabled={statusLoading}>
                       <Icon name="check" size={13} /> {resolved[activeId] ? 'Finalizado' : 'Finalizar'}
                     </button>
                   )}
