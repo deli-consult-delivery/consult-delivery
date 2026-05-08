@@ -774,9 +774,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
     if (!c.id.startsWith('chan-')) {
       const cStatus = c.status || 'aguardando';
-      if (statusTab === 'aberto'     && cStatus === 'finalizado') return false;
-      if (statusTab === 'finalizado' && cStatus !== 'finalizado') return false;
-      if (statusFilter && statusTab === 'aberto' && cStatus !== statusFilter) return false;
+      if (statusFilter && cStatus !== statusFilter) return false;
     }
     if (filters?.department && c.department_id !== filters.department) return false;
     if (filters?.status     && c.status_v2     !== filters.status)     return false;
@@ -828,7 +826,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       style={{
         display: 'grid',
         gridTemplateColumns: 'minmax(320px, 360px) minmax(0, 1fr) 320px',
-        gridTemplateRows: '52px 1fr',
+        gridTemplateRows: '44px 1fr',
         gridTemplateAreas: '"header header header" "list chat inspector"',
         height: '100%',
         background: '#0E0E0E',
@@ -887,7 +885,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         <div className="lc-list-head">
           {/* Seletor de instância Evolution */}
           {instances.length > 0 && (
-            <div style={{ marginBottom: 10 }}>
+            <div style={{ marginBottom: 5 }}>
               <CustomSelect
                 compact
                 value={selectedInstance || ''}
@@ -901,25 +899,15 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           )}
 
           {/* Busca */}
-          <div style={{ position: 'relative', marginBottom: 8 }}>
-            <Icon name="search" size={14} style={{ position: 'absolute', top: 11, left: 12, color: 'rgba(255,255,255,0.4)' }} />
-            <input value={search} onChange={e => setSearch(e.target.value)} className="lc-search" placeholder="Pesquise seus contatos" style={{ paddingLeft: 36 }} />
-          </div>
-
-          {/* Toggle Aberto / Finalizado */}
-          <div style={{ display: 'flex', gap: 3, padding: 3, background: 'rgba(255,255,255,0.04)', borderRadius: 8, marginBottom: 8 }}>
-            {[{ id: 'aberto', label: 'Aberto', count: abertosCount }, { id: 'finalizado', label: 'Finalizado', count: finalizadoCount }].map(t => (
-              <button key={t.id} onClick={() => { setStatusTab(t.id); setStatusFilter(null); }} style={{ flex: 1, padding: '6px 4px', fontSize: 11.5, fontWeight: 700, borderRadius: 6, background: statusTab === t.id ? 'rgba(255,255,255,0.08)' : 'transparent', color: statusTab === t.id ? 'white' : 'rgba(255,255,255,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'all 150ms' }}>
-                {t.label}
-                <span style={{ background: statusTab === t.id ? 'var(--red)' : 'rgba(255,255,255,0.08)', color: 'white', borderRadius: 999, padding: '1px 7px', fontSize: 10, fontWeight: 700 }}>{t.count}</span>
-              </button>
-            ))}
+          <div style={{ position: 'relative', marginBottom: 5 }}>
+            <Icon name="search" size={13} style={{ position: 'absolute', top: 9, left: 10, color: 'rgba(255,255,255,0.4)' }} />
+            <input value={search} onChange={e => setSearch(e.target.value)} className="lc-search" placeholder="Pesquise seus contatos" style={{ paddingLeft: 30 }} />
           </div>
 
           {/* Tabs WhatsApp / Grupos / Interno / Todas */}
-          <div style={{ display: 'flex', gap: 3, padding: 3, background: 'rgba(255,255,255,0.04)', borderRadius: 6, marginBottom: 8 }}>
+          <div style={{ display: 'flex', gap: 2, padding: 2, background: 'rgba(255,255,255,0.04)', borderRadius: 5, marginBottom: 5 }}>
             {[{ id: 'wa', label: 'WA' }, { id: 'groups', label: 'Grupos' }, { id: 'int', label: 'Interno' }, { id: 'all', label: 'Todas' }].map(t => (
-              <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, padding: '5px 2px', fontSize: 10.5, fontWeight: 600, borderRadius: 4, background: tab === t.id ? 'rgba(255,255,255,0.08)' : 'transparent', color: tab === t.id ? 'white' : 'rgba(255,255,255,0.55)' }}>{t.label}</button>
+              <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, padding: '4px 2px', fontSize: 10, fontWeight: 600, borderRadius: 3, background: tab === t.id ? 'rgba(255,255,255,0.08)' : 'transparent', color: tab === t.id ? 'white' : 'rgba(255,255,255,0.55)' }}>{t.label}</button>
             ))}
           </div>
         </div>
