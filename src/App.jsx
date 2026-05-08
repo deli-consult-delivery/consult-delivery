@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Sidebar from './components/Sidebar.jsx';
 import Topbar from './components/Topbar.jsx';
 import { TweaksPanel, TweakSection, TweakColor, TweakRadio, TweakToggle, useTweaks } from './components/TweaksPanel.jsx';
@@ -93,6 +93,60 @@ export default function App() {
   useEffect(() => {
     if (!session) return;
     reloadTenants();
+  }, [session]);
+
+  // ── Notificações globais de chat ─────────────────────────────────────────────
+  const routeRef = useRef(route);
+  useEffect(() => { routeRef.current = route; }, [route]);
+
+  useEffect(() => {
+    if (!session) return;
+
+    // Pede permissão de notificação do browser (só aparece uma vez para o usuário)
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    const notifAudio = new Audio('/assets/soundreality-ding-411634.mp3');
+    notifAudio.volume = 1.0;
+
+    const channel = supabase
+      .channel('app-global-notif')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
+        const msg = payload.new;
+        if (msg.direction !== 'inbound') return;
+
+        // Som — toca sempre que chegar mensagem inbound
+        notifAudio.currentTime = 0;
+        notifAudio.play().catch(() => {});
+
+        // Notificação do browser — aparece mesmo em outra aba ou rota
+        if ('Notification' in window && Notification.permission === 'granted') {
+          const sender  = msg.sender_name || 'Nova mensagem';
+          const rawBody = msg.content || (
+            msg.media_type === 'image'    ? '🖼 Imagem'    :
+            msg.media_type === 'video'    ? '🎬 Vídeo'     :
+            msg.media_type === 'document' ? '📄 Documento' :
+            msg.media_type?.includes('audio') ? '🎵 Áudio' : '...'
+          );
+          const body = rawBody.length > 80 ? rawBody.slice(0, 77) + '…' : rawBody;
+          const notif = new Notification(sender, {
+            body,
+            icon:      '/assets/logo.svg',
+            badge:     '/assets/icon-rocket.svg',
+            tag:       msg.conversation_id,
+            renotify:  true,
+          });
+          notif.onclick = () => {
+            window.focus();
+            setRoute('chat');
+            notif.close();
+          };
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [session]);
 
   useEffect(() => {

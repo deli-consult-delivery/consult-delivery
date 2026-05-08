@@ -47,15 +47,6 @@ const AI_COMMANDS = [
   { cmd: '/handoff',     icon: 'users',       label: 'Passar pra humano',  desc: 'Entrega ao próximo atendente livre' },
 ];
 
-// ─── SOM DE NOTIFICAÇÃO ─────────────────────────────────────────
-function playNotificationSound() {
-  try {
-    const audio = new Audio('/assets/u_03k5gu83c1-livechat-129007.mp3');
-    audio.volume = 1.0;
-    audio.play().catch(() => {});
-  } catch { /* ignore */ }
-}
-
 // ─── CONV AVATAR ───────────────────────────────────────────────
 function ConvAvatar({ conv, size = 36 }) {
   if (!conv) return null;
@@ -551,7 +542,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           if (!isInbound) { const next = [...prev]; next[idx] = updated; return next; }
           return [updated, ...prev.filter(c => c.id !== convId)];
         });
-        if (isInbound && !isActive) playNotificationSound();
+        // som e notificação gerenciados globalmente pelo App.jsx
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, payload => {
         const msg = payload.new;
