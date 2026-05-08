@@ -4,7 +4,7 @@ import AgentAvatar from '../components/AgentAvatar.jsx';
 import CustomSelect from '../components/CustomSelect.jsx';
 import { useConversationStatus, STATUS_EMOJI } from '../lib/conversationStatus.js';
 import { supabase } from '../lib/supabase.js';
-import { sendTextMessage, fetchProfile } from '../lib/evolution.js';
+import { sendTextMessage, sendMediaMessage, sendAudioMessage, fetchProfile } from '../lib/evolution.js';
 import ConversationFiltersBar from '../components/chat/ConversationFiltersBar.jsx';
 import DepartmentSelector from '../components/chat/DepartmentSelector.jsx';
 import ConversationStatusBadge from '../components/chat/ConversationStatusBadge.jsx';
@@ -120,6 +120,7 @@ function StatusIcon({ name, size = 14 }) {
     check: <><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></>,
     alert: <><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></>,
     arch:  <><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></>,
+    bot:   <><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M12 2v9"/><circle cx="12" cy="2" r="1"/><path d="M7 15h.01M17 15h.01M12 15h.01"/></>,
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -167,17 +168,24 @@ function FieldRow({ label, value, hint }) {
 // ─── CONV ROW (sidebar item) ───────────────────────────────────
 function ConvRow({ conv, active, onClick, statusCounts }) {
   const waitColors = {
-    aguardando:         { bg: 'rgba(245,158,11,0.18)', color: '#FBBF24' },
-    em_atendimento:     { bg: 'rgba(59,130,246,0.18)',  color: '#93C5FD' },
-    atendimento_aberto: { bg: 'rgba(16,185,129,0.18)',  color: '#34D399' },
-    finalizado:         { bg: 'rgba(156,163,175,0.14)', color: '#9CA3AF' },
-    automacao:          { bg: 'rgba(168,85,247,0.18)',  color: '#D8B4FE' },
+    aguardando:         { bg: 'rgba(245,158,11,0.18)',  color: '#FBBF24' },
+    em_atendimento:     { bg: 'rgba(59,130,246,0.18)',   color: '#93C5FD' },
+    atendimento_aberto: { bg: 'rgba(16,185,129,0.18)',   color: '#34D399' },
+    finalizado:         { bg: 'rgba(156,163,175,0.14)',  color: '#9CA3AF' },
+    archived:           { bg: 'rgba(156,163,175,0.14)',  color: '#9CA3AF' },
+    automacao:          { bg: 'rgba(168,85,247,0.18)',   color: '#D8B4FE' },
+    falha:              { bg: 'rgba(183,12,0,0.18)',     color: '#FF8080' },
   };
   const statusKey = conv.status || 'aguardando';
   const wColor = waitColors[statusKey] || waitColors.aguardando;
   const statusLabels = {
-    aguardando: 'Aguardando', em_atendimento: 'Em atend.', atendimento_aberto: 'Aberto',
-    finalizado: 'Finalizado', automacao: 'Automação',
+    aguardando:         'Não iniciado',
+    em_atendimento:     'Aguardando',
+    atendimento_aberto: 'Em aberto',
+    finalizado:         'Oculto',
+    archived:           'Oculto',
+    automacao:          'Automação',
+    falha:              'Falha',
   };
   return (
     <div onClick={onClick} className={`lc-row${active ? ' on' : ''}`}>
@@ -391,6 +399,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const photoCacheRef  = useRef({});
   const convsRef       = useRef(convs);
   const persistingRef  = useRef(new Set());
+  const fileInputRef   = useRef(null);
+  const galleryInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
   useEffect(() => { convsRef.current = convs; }, [convs]);
 
@@ -399,19 +410,23 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
   // ── CONTAGENS para badges de status ────────────────────────
   const statusCounts = useMemo(() => ({
-    aguardando:         convs.filter(c => c.status === 'aguardando' || !c.status).length,
-    em_atendimento:     convs.filter(c => c.status === 'em_atendimento').length,
-    atendimento_aberto: convs.filter(c => c.status === 'atendimento_aberto').length,
-    finalizado:         convs.filter(c => c.status === 'finalizado').length,
-    automacao:          convs.filter(c => c.status === 'automacao').length,
+    nao_iniciado: convs.filter(c => (c.status || 'aguardando') === 'aguardando').length,
+    aguardando:   convs.filter(c => c.status === 'em_atendimento').length,
+    aberto:       convs.filter(c => c.status === 'atendimento_aberto').length,
+    automacao:    convs.filter(c => c.status === 'automacao').length,
+    finalizado:   convs.filter(c => c.status === 'finalizado').length,
+    falha:        convs.filter(c => c.status === 'falha').length,
+    oculto:       convs.filter(c => c.status === 'archived').length,
   }), [convs]);
 
   const COUNTS = useMemo(() => [
-    { id: 'aguardando',         icon: 'clock', value: statusCounts.aguardando,         kind: 'amber', label: 'Aguardando' },
-    { id: 'em_atendimento',     icon: 'msg',   value: statusCounts.em_atendimento,     kind: 'gray',  label: 'Em atendimento' },
-    { id: 'atendimento_aberto', icon: 'inbox', value: statusCounts.atendimento_aberto, kind: 'green', label: 'Aberto' },
-    { id: 'finalizado',         icon: 'check', value: statusCounts.finalizado,         kind: 'gray',  label: 'Finalizados' },
-    { id: 'automacao',          icon: 'alert', value: statusCounts.automacao,          kind: 'amber', label: 'Automação' },
+    { id: 'nao_iniciado', icon: 'inbox', value: statusCounts.nao_iniciado, label: 'Não iniciados' },
+    { id: 'aguardando',   icon: 'clock', value: statusCounts.aguardando,   label: 'Aguardando' },
+    { id: 'aberto',       icon: 'msg',   value: statusCounts.aberto,       label: 'Em aberto' },
+    { id: 'automacao',    icon: 'bot',   value: statusCounts.automacao,    label: 'Automações' },
+    { id: 'finalizado',   icon: 'check', value: statusCounts.finalizado,   label: 'Finalizadas' },
+    { id: 'falha',        icon: 'alert', value: statusCounts.falha,        label: 'Falha' },
+    { id: 'oculto',       icon: 'arch',  value: statusCounts.oculto,       label: 'Ocultas' },
   ], [statusCounts]);
 
   // ── EFFECTS DE INICIALIZAÇÃO ───────────────────────────────
@@ -685,8 +700,10 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       const textToSend = agentName ? `*${agentName}:*\n${text}` : text;
       const waQuoted = currentReplyTo?.waMsgId ? { key: { id: currentReplyTo.waMsgId, remoteJid: active.whatsapp_chat_id, fromMe: currentReplyTo.from === 'out' }, message: currentReplyTo.mediaType ? {} : { conversation: currentReplyTo.text || '' } } : null;
       try {
-        await sendTextMessage(selectedInstance, active.whatsapp_chat_id, textToSend, waQuoted);
+        // Salva no banco ANTES de chamar a Evolution para que o DEDUP do webhook
+        // encontre a linha e não insira duplicata quando o evento fromMe chegar.
         await supabase.from('messages').insert({ conversation_id: active.id, direction: 'outbound', content: text, sender_name: agentName || null, created_at: now.toISOString(), ...(currentReplyTo ? { quoted_content: currentReplyTo } : {}) });
+        await sendTextMessage(selectedInstance, active.whatsapp_chat_id, textToSend, waQuoted);
         if (convStatus === 'aguardando') await changeStatus('em_atendimento');
       } catch (err) { console.error('Falha ao enviar via Evolution:', err); }
       finally { setSending(false); }
@@ -716,6 +733,101 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       if (data) setChanMsgs(m => ({ ...m, [chanId]: (m[chanId] || []).map(msg => msg.id === tmpMsg.id ? data : msg) }));
     } catch { /* ignore */ }
   }
+
+  // ── GRAVAÇÃO DE ÁUDIO ─────────────────────────────────────
+  const formatRecTime = (s) => `${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`;
+
+  const startRecording = async () => {
+    if (recState !== 'idle') return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      mediaRecorderRef.current = mr;
+      audioChunksRef.current = [];
+      mr.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(audioChunksRef.current, { type: 'audio/ogg; codecs=opus' });
+        sendAudioBlob(blob);
+      };
+      mr.start(200);
+      setRecState('recording');
+      setRecSeconds(0);
+      recTimerRef.current = setInterval(() => setRecSeconds(s => s + 1), 1000);
+    } catch {
+      alert('Permissão de microfone necessária para gravar áudio.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (recState !== 'recording') return;
+    clearInterval(recTimerRef.current);
+    setRecState('idle');
+    mediaRecorderRef.current?.stop();
+  };
+
+  const cancelRecording = () => {
+    if (recState !== 'recording') return;
+    clearInterval(recTimerRef.current);
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.ondataavailable = null;
+      mediaRecorderRef.current.onstop = null;
+      try { mediaRecorderRef.current.stream?.getTracks().forEach(t => t.stop()); } catch { /* ignore */ }
+      try { mediaRecorderRef.current.stop(); } catch { /* ignore */ }
+    }
+    mediaRecorderRef.current = null;
+    audioChunksRef.current = [];
+    setRecState('idle');
+    setRecSeconds(0);
+  };
+
+  const sendAudioBlob = async (blob) => {
+    if (!active || !HAS_EVO || !selectedInstance || !active.whatsapp_chat_id) return;
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64 = reader.result.split(',')[1];
+      const now = new Date();
+      const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      setMessages(m => ({ ...m, [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text: '🎤 Áudio', time, mediaType: 'audio' }] }));
+      setSending(true);
+      try { await sendAudioMessage(selectedInstance, active.whatsapp_chat_id, base64); }
+      catch (err) { console.error('Falha ao enviar áudio:', err); }
+      finally { setSending(false); }
+    };
+    reader.readAsDataURL(blob);
+  };
+
+  // ── ENVIO DE MÍDIA ────────────────────────────────────────
+  const sendMediaFile = async (file) => {
+    if (!active) return;
+    const isWA = active.type === 'whatsapp' || active.type === 'group';
+    const now = new Date();
+    const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const isImage = file.type.startsWith('image/');
+    const isVideo = file.type.startsWith('video/');
+    const isAudio = file.type.startsWith('audio/');
+    const mediaType = isImage ? 'image' : isVideo ? 'video' : isAudio ? 'audio' : 'document';
+    const label = isImage ? `🖼️ ${file.name}` : isVideo ? `🎬 ${file.name}` : isAudio ? `🎤 ${file.name}` : `📎 ${file.name}`;
+    const previewUrl = isImage ? URL.createObjectURL(file) : null;
+    setMessages(m => ({ ...m, [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text: label, time, mediaType, mediaUrl: previewUrl }] }));
+    if (!HAS_EVO || !selectedInstance || !active.whatsapp_chat_id || !isWA) return;
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64 = reader.result.split(',')[1];
+      setSending(true);
+      try { await sendMediaMessage(selectedInstance, active.whatsapp_chat_id, base64, mediaType, file.type, '', file.name); }
+      catch (err) { console.error('Falha ao enviar mídia:', err); }
+      finally { setSending(false); }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleFileSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    await sendMediaFile(file);
+  };
 
   // ── AI COMMANDS ───────────────────────────────────────────
   const runCommand = (cmd) => {
@@ -763,7 +875,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const suggestion     = active?.deliSuggestion;
   const showGhost      = !draft && suggestion && aiMode !== 'humano';
 
-  const abertosCount    = convs.filter(c => (c.status || 'aguardando') !== 'finalizado').length;
+  const abertosCount    = statusCounts.nao_iniciado + statusCounts.aguardando + statusCounts.aberto;
   const finalizadoCount = statusCounts.finalizado;
   const unreadCount     = convs.reduce((s, c) => s + (c.unread || 0), 0);
 
@@ -772,9 +884,17 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     if (tab === 'groups' && c.type !== 'group')    return false;
     if (tab === 'int'    && !(c.type === 'internal' || c.type === 'agent')) return false;
     if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
-    if (!c.id.startsWith('chan-')) {
-      const cStatus = c.status || 'aguardando';
-      if (statusFilter && cStatus !== statusFilter) return false;
+    if (!c.id.startsWith('chan-') && statusFilter) {
+      const match = {
+        nao_iniciado: (c.status || 'aguardando') === 'aguardando',
+        aguardando:   c.status === 'em_atendimento',
+        aberto:       c.status === 'atendimento_aberto',
+        automacao:    c.status === 'automacao',
+        finalizado:   c.status === 'finalizado',
+        falha:        c.status === 'falha',
+        oculto:       c.status === 'archived',
+      }[statusFilter] ?? false;
+      if (!match) return false;
     }
     if (filters?.department && c.department_id !== filters.department) return false;
     if (filters?.status     && c.status_v2     !== filters.status)     return false;
@@ -841,6 +961,13 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             <span>Plataforma</span>
             <Icon name="chevright" size={12} />
             <span style={{ color: 'white', fontWeight: 600 }}>Chat ao Vivo</span>
+            {instances.length > 0 && (() => {
+              const inst = instances.find(i => i.instance_name === selectedInstance) || instances[0];
+              const connected = inst?.status === 'connected';
+              return (
+                <span title={connected ? 'WhatsApp conectado' : 'WhatsApp desconectado'} style={{ width: 8, height: 8, borderRadius: '50%', background: connected ? '#25D366' : '#6B7280', flexShrink: 0, boxShadow: connected ? '0 0 6px #25D366' : 'none', display: 'inline-block', marginLeft: 2 }} />
+              );
+            })()}
           </div>
           <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.1)' }} />
           <div className="lc-tabs">
@@ -883,25 +1010,49 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       {/* ─── COL 1: Lista de conversas ────────────────────────── */}
       <aside className="lc-list" style={{ gridArea: 'list' }}>
         <div className="lc-list-head">
-          {/* Seletor de instância Evolution */}
-          {instances.length > 0 && (
-            <div style={{ marginBottom: 5 }}>
-              <CustomSelect
-                compact
-                value={selectedInstance || ''}
-                onChange={v => setSelectedInstance(v || null)}
-                options={instances.map(inst => ({
-                  value: inst.instance_name,
-                  label: `${inst.status === 'connected' ? '🟢' : '🔴'} ${inst.instance_name}${inst.phone ? ` · ${inst.phone}` : ''}`,
-                }))}
-              />
-            </div>
-          )}
-
           {/* Busca */}
           <div style={{ position: 'relative', marginBottom: 5 }}>
             <Icon name="search" size={13} style={{ position: 'absolute', top: 9, left: 10, color: 'rgba(255,255,255,0.4)' }} />
             <input value={search} onChange={e => setSearch(e.target.value)} className="lc-search" placeholder="Pesquise seus contatos" style={{ paddingLeft: 30 }} />
+          </div>
+
+          {/* ── Stats bar ─────────────────────────────────────── */}
+          <div className="lc-stats-bar">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span className="lc-stats-label">
+                {statusFilter
+                  ? { nao_iniciado: 'Não iniciados', aguardando: 'Aguardando', aberto: 'Em aberto', automacao: 'Automações', finalizado: 'Finalizadas', falha: 'Falha', oculto: 'Ocultas' }[statusFilter]
+                  : 'Todas'}
+              </span>
+              <span className="lc-stats-badge">
+                {filtered.length}
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}>
+                  <path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <button className="lc-stats-filter-btn" onClick={() => setStatusFilter(null)} title="Limpar filtro">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                </svg>
+                Filtros
+              </button>
+              <button className="lc-stats-more-btn">···</button>
+            </div>
+          </div>
+          <div className="lc-stats-pills">
+            {COUNTS.map(c => (
+              <button
+                key={c.id}
+                className={`lc-stat-pill${statusFilter === c.id ? ' active' : ''}`}
+                onClick={() => setStatusFilter(statusFilter === c.id ? null : c.id)}
+                title={c.label}
+              >
+                <StatusIcon name={c.icon} size={12} />
+                {c.value > 0 && <span className="lc-stat-pill-count">{c.value}</span>}
+              </button>
+            ))}
           </div>
 
           {/* Tabs WhatsApp / Grupos / Interno / Todas */}
@@ -911,31 +1062,6 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             ))}
           </div>
         </div>
-
-        {/* Status pills */}
-        <div className="lc-status-head">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h3 className="lc-status-title">{COUNTS.find(c => c.id === statusFilter)?.label || 'Conversas'}</h3>
-            <span className="lc-status-count">{filtered.length}</span>
-          </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button className="lc-filters-chip" title="Filtros"><span>Filtros</span><Icon name="filter" size={12} /></button>
-          </div>
-        </div>
-
-        {statusTab === 'aberto' && (
-          <div className="lc-status-row">
-            {COUNTS.map(c => (
-              <button key={c.id} className={`lc-status-pill${statusFilter === c.id ? ' on' : ''} k-${c.kind}`} onClick={() => setStatusFilter(statusFilter === c.id ? null : c.id)} title={c.label}>
-                <StatusIcon name={c.icon} size={13} />
-                <span className="lc-status-pill-v">{c.value}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Filtros avançados */}
-        <ConversationFiltersBar tenantId={tenantDbId} filters={filters} onChange={setFilters} />
 
         {/* AI triage banner */}
         {unreadCount > 0 && (
@@ -1028,30 +1154,28 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             <>
               {/* Header do chat */}
               <header className="lc-chat-head">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                  <ConvAvatar conv={active} size={40} />
-                  <div style={{ minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                  <ConvAvatar conv={active} size={36} style={{ flexShrink: 0 }} />
+                  <div style={{ minWidth: 0, overflow: 'hidden' }}>
                     <div className="lc-chat-name">{active.name}</div>
                     <div className="lc-chat-sub">
-                      {active.type === 'whatsapp' && <><span className="lc-wa-mini"><Icon name="whatsapp" size={10} /></span><span>WhatsApp</span></>}
-                      {active.type === 'group'    && <><Icon name="users" size={12} /><span>Grupo</span></>}
-                      {active.whatsapp_chat_id && <><span style={{ color: 'rgba(255,255,255,0.3)' }}>·</span><code style={{ fontSize: 10, background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: 3 }}>{active.whatsapp_chat_id.split('@')[0]}</code></>}
-                      {(active.type === 'whatsapp' || active.type === 'group') && (
-                        <>
-                          <DepartmentSelector conversationId={active.id} tenantId={tenantDbId} currentDepartmentId={active.department_id ?? null} onChanged={dept => setConvs(prev => prev.map(c => c.id === active.id ? { ...c, department_id: dept.id } : c))} />
-                        </>
-                      )}
+                      {active.type === 'whatsapp' && <span className="lc-wa-mini" style={{ flexShrink: 0 }}><Icon name="whatsapp" size={10} /></span>}
+                      {active.type === 'group'    && <Icon name="users" size={12} style={{ flexShrink: 0 }} />}
+                      {active.whatsapp_chat_id && <code style={{ fontSize: 10, background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: 3 }}>{active.whatsapp_chat_id.split('@')[0]}</code>}
                     </div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                  <button className="lc-action-btn ghost" onClick={() => runCommand('/resumir')} title="Resumir">
-                    <Icon name="sparkles" size={13} /> Resumir
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                  <button className="lc-icon-btn-dark" onClick={() => runCommand('/resumir')} title="Resumir conversa">
+                    <Icon name="sparkles" size={15} />
                   </button>
-                  <button className="lc-action-btn ghost" onClick={() => runCommand('/proxima')} title="Próxima ação">
-                    <Icon name="arrowright" size={13} />
+                  <button className="lc-icon-btn-dark" onClick={() => runCommand('/proxima')} title="Próxima ação">
+                    <Icon name="arrowright" size={15} />
                   </button>
-                  <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.1)', margin: '0 4px' }} />
+                  <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.1)', margin: '0 2px' }} />
+                  {(active.type === 'whatsapp' || active.type === 'group') && (
+                    <DepartmentSelector dark conversationId={active.id} tenantId={tenantDbId} currentDepartmentId={active.department_id ?? null} onChanged={dept => setConvs(prev => prev.map(c => c.id === active.id ? { ...c, department_id: dept.id } : c))} />
+                  )}
                   <span className="lc-protocol">#{active.id?.slice(-5) || '00000'}</span>
                   {convStatus === 'finalizado' ? (
                     <button className="lc-action-btn" onClick={async () => { await changeStatus('atendimento_aberto'); await supabase.from('conversations').update({ status_v2: 'in_progress' }).eq('id', activeId); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'atendimento_aberto', status_v2: 'in_progress' } : c)); setStatusTab('aberto'); }} disabled={statusLoading}>
@@ -1205,28 +1329,66 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                   </div>
                 )}
 
-                <div className="lc-composer">
-                  <button className="lc-comp-icon" title="Anexar"><Icon name="plus" size={16} /></button>
-                  <button className="lc-comp-icon" title="Resposta rápida" onClick={() => setShowQR(v => !v)}><Icon name="star" size={15} /></button>
-                  <button className="lc-comp-icon ai" title="Comandos IA (/)" onClick={() => setShowSlash(v => !v)}><Icon name="sparkles" size={15} /></button>
-                  <div className="lc-comp-input-wrap">
-                    <textarea
-                      ref={textareaRef}
-                      value={draft}
-                      onChange={e => onDraftChange(e.target.value)}
-                      onKeyDown={onKeyDown}
-                      className="lc-comp-input"
-                      placeholder={aiMode === 'ia' ? 'IA respondendo automaticamente…' : 'Mensagem… (/ para comandos, @ para agente IA)'}
-                      rows={1}
-                      disabled={aiMode === 'ia' || sending}
-                    />
-                    {showGhost && <div className="lc-comp-ghost">{suggestion}</div>}
+                {/* Inputs de arquivo ocultos */}
+                <input ref={fileInputRef}    type="file" accept="image/*,video/*,application/pdf,.doc,.docx" style={{ display: 'none' }} onChange={handleFileSelect} />
+                <input ref={galleryInputRef} type="file" accept="image/*,video/*"                            style={{ display: 'none' }} onChange={handleFileSelect} />
+                <input ref={cameraInputRef}  type="file" accept="image/*" capture="camera"                  style={{ display: 'none' }} onChange={handleFileSelect} />
+
+                {recState === 'recording' ? (
+                  <div className="lc-composer lc-composer-rec">
+                    <button onClick={cancelRecording} className="lc-comp-icon lc-rec-cancel" title="Cancelar gravação">
+                      <Icon name="x" size={16} />
+                    </button>
+                    <div className="lc-rec-indicator">
+                      <span className="lc-rec-dot" />
+                      <div className="lc-rec-waves">
+                        {[...Array(6)].map((_, i) => <span key={i} className="lc-rec-wave" style={{ animationDelay: `${i * 0.12}s` }} />)}
+                      </div>
+                      <span className="lc-rec-time">{formatRecTime(recSeconds)}</span>
+                    </div>
+                    <button onClick={stopRecording} className="lc-comp-send ready" title="Enviar áudio">
+                      <Icon name="send" size={15} />
+                    </button>
                   </div>
-                  <button className="lc-comp-icon" title="Emoji"><Icon name="smile" size={15} /></button>
-                  <button onClick={send} className={`lc-comp-send${draft.trim() ? ' ready' : ''}`} disabled={!draft.trim() || sending} title="Enviar">
-                    <Icon name="send" size={15} />
-                  </button>
-                </div>
+                ) : (
+                  <div className="lc-composer">
+                    <button className="lc-comp-icon" title="Anexar arquivo" onClick={() => fileInputRef.current?.click()}>
+                      <Icon name="paperclip" size={15} />
+                    </button>
+                    <button className="lc-comp-icon" title="Enviar foto da galeria" onClick={() => galleryInputRef.current?.click()}>
+                      <Icon name="image" size={15} />
+                    </button>
+                    <button className="lc-comp-icon" title="Tirar foto com câmera" onClick={() => cameraInputRef.current?.click()}>
+                      <Icon name="camera" size={15} />
+                    </button>
+                    <span className="lc-comp-sep" />
+                    <button className="lc-comp-icon" title="Resposta rápida" onClick={() => setShowQR(v => !v)}><Icon name="star" size={15} /></button>
+                    <button className="lc-comp-icon ai" title="Comandos IA (/)" onClick={() => setShowSlash(v => !v)}><Icon name="sparkles" size={15} /></button>
+                    <div className="lc-comp-input-wrap">
+                      <textarea
+                        ref={textareaRef}
+                        value={draft}
+                        onChange={e => onDraftChange(e.target.value)}
+                        onKeyDown={onKeyDown}
+                        className="lc-comp-input"
+                        placeholder={aiMode === 'ia' ? 'IA respondendo automaticamente…' : 'Escreva uma mensagem…'}
+                        rows={1}
+                        disabled={aiMode === 'ia' || sending}
+                      />
+                      {showGhost && <div className="lc-comp-ghost">{suggestion}</div>}
+                    </div>
+                    <button className="lc-comp-icon" title="Emoji"><Icon name="smile" size={15} /></button>
+                    {draft.trim() ? (
+                      <button onClick={send} className="lc-comp-send ready" disabled={sending} title="Enviar">
+                        <Icon name="send" size={15} />
+                      </button>
+                    ) : (
+                      <button onClick={startRecording} className="lc-comp-send lc-comp-mic" title="Gravar áudio">
+                        <Icon name="mic" size={15} />
+                      </button>
+                    )}
+                  </div>
+                )}
               </footer>
             </>
           )}

@@ -87,7 +87,7 @@ Deno.serve(async (req) => {
         await handleGroupParticipantsUpdate({ tenantId, data });
         break;
       case 'sendmessage':
-        await handleSendMessage({ inst, tenantId, data });
+        await handleSendMessage({ inst, tenantId, instance, data });
         break;
       case 'chatsupdate':
         await handleChatsUpdate({ inst, data });
@@ -229,7 +229,8 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
     if (!fmConvId) return;
 
     // Dedup 2: plataforma salvou sem whatsapp_msg_id — apenas vincula o ID
-    if (messageText) {
+    // Só aplica dedup para texto (mídia do celular não tem equivalente na plataforma)
+    if (messageText && !isMedia) {
       const rawText = messageText.replace(/^\*[^*]+:\*\n/, '');
       const thirtySecsAgo = new Date(Date.now() - 30000).toISOString();
       const { data: existingByContent } = await supabase.from('messages').select('id')
@@ -246,19 +247,24 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
       }
     }
 
-    // Celular físico — salva como outbound
+    // Celular físico — salva como outbound (inclui tipo de mídia)
     const fmQuoted = await buildQuotedContent();
-    await supabase.from('messages').insert({
+    const { data: fmSavedMsg } = await supabase.from('messages').insert({
       tenant_id:       tenantId,
       conversation_id: fmConvId,
       whatsapp_msg_id: msgId,
       direction:       'outbound',
       sender_name:     null,
       content:         messageText,
+      media_type:      detectedMediaType,
+      media_url:       null,
       created_at:      msgTimestamp,
       ...(fmQuoted ? { quoted_content: fmQuoted } : {}),
-    });
-    console.log('[WEBHOOK][MESSAGES_UPSERT] fromMe: mensagem do celular físico salva', msgId);
+    }).select('id').single();
+    console.log('[WEBHOOK][MESSAGES_UPSERT] fromMe: mensagem do celular físico salva', msgId, 'mediaType=', detectedMediaType);
+    if (isMedia && fmSavedMsg) {
+      fetchMedia({ inst, instance, msgData, isPtt, isAudio, isImage, isVideo, isDocument, savedMsgId: fmSavedMsg.id });
+    }
     return;
   }
 
@@ -508,19 +514,37 @@ async function handleGroupParticipantsUpdate({ tenantId, data }: {
   console.log('[WEBHOOK][GROUP_PARTICIPANTS]', action, participants.length, 'membros em', groupJid);
 }
 
-async function handleSendMessage({ inst, tenantId, data }: {
-  inst: { id: string }; tenantId: string; data: unknown;
+async function handleSendMessage({ inst, tenantId, instance, data }: {
+  inst: { id: string; evolution_url: string; api_key: string }; tenantId: string; instance: string; data: unknown;
 }) {
   const msgData = Array.isArray(data) ? data[0] : data;
   if (!msgData?.key) return;
 
-  const msgId       = msgData.key.id as string;
-  const chatId      = msgData.key.remoteJid as string;
-  const messageText = (msgData.message?.conversation
-    || msgData.message?.extendedTextMessage?.text || '') as string;
+  const msgId  = msgData.key.id as string;
+  const chatId = msgData.key.remoteJid as string;
   const ts = msgData.messageTimestamp
     ? new Date(Number(msgData.messageTimestamp) * 1000).toISOString()
     : new Date().toISOString();
+
+  // Detecta tipo de mídia
+  const isPtt      = !!msgData.message?.pttMessage;
+  const isAudio    = isPtt || !!msgData.message?.audioMessage;
+  const isImage    = !!msgData.message?.imageMessage;
+  const isVideo    = !!msgData.message?.videoMessage;
+  const isDocument = !!msgData.message?.documentMessage;
+  const isMedia    = isAudio || isImage || isVideo || isDocument;
+
+  let detectedMediaType: string | null = null;
+  if (isAudio)         detectedMediaType = 'audio';
+  else if (isImage)    detectedMediaType = 'image';
+  else if (isVideo)    detectedMediaType = 'video';
+  else if (isDocument) detectedMediaType = 'document';
+
+  const messageText: string = isAudio    ? '🎵 Áudio'
+    : isImage    ? (msgData.message?.imageMessage?.caption    || '🖼 Imagem')
+    : isVideo    ? (msgData.message?.videoMessage?.caption    || '🎬 Vídeo')
+    : isDocument ? (msgData.message?.documentMessage?.title   || '📄 Documento')
+    : (msgData.message?.conversation || msgData.message?.extendedTextMessage?.text || '') as string;
 
   // Idempotência 1: dedup por whatsapp_msg_id
   const { data: existingById } = await supabase.from('messages').select('id')
@@ -532,9 +556,7 @@ async function handleSendMessage({ inst, tenantId, data }: {
   if (!conv) return;
 
   // Idempotência 2: mensagem enviada pela plataforma já salva sem whatsapp_msg_id.
-  // A plataforma envia "*Nome:*\nTexto" ao WhatsApp mas salva só "Texto" no banco,
-  // então strip o prefixo de assinatura antes de comparar.
-  if (messageText) {
+  if (messageText && !isMedia) {
     const rawText = messageText.replace(/^\*[^*]+:\*\n/, '');
     const thirtySecsAgo = new Date(Date.now() - 30000).toISOString();
     const { data: existingByContent } = await supabase.from('messages').select('id')
@@ -551,17 +573,22 @@ async function handleSendMessage({ inst, tenantId, data }: {
     }
   }
 
-  // Mensagem enviada pelo celular físico (não pela plataforma) — salva normalmente
-  await supabase.from('messages').insert({
+  // Mensagem enviada pelo celular físico — salva com media_type
+  const { data: smSavedMsg } = await supabase.from('messages').insert({
     tenant_id:       tenantId,
     conversation_id: conv.id,
     whatsapp_msg_id: msgId,
     direction:       'outbound',
     sender_name:     null,
     content:         messageText,
+    media_type:      detectedMediaType,
+    media_url:       null,
     created_at:      ts,
-  });
-  console.log('[WEBHOOK][SEND_MESSAGE] outbound salvo:', msgId);
+  }).select('id').single();
+  console.log('[WEBHOOK][SEND_MESSAGE] outbound salvo:', msgId, 'mediaType=', detectedMediaType);
+  if (isMedia && smSavedMsg && instance) {
+    fetchMedia({ inst, instance, msgData, isPtt, isAudio, isImage, isVideo, isDocument, savedMsgId: smSavedMsg.id });
+  }
 }
 
 async function handleChatsUpdate({ inst, data }: {

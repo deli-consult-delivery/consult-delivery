@@ -1,5 +1,17 @@
 # Wiki Log
 
+## [2026-05-08 session | fix outbound fromMe chat ao vivo + composer mídia
+Touched: none
+
+## [2026-05-07 18:30] session | fix CSS classes ausentes CRMScreen handoff
+Touched: none
+
+## [2026-05-07] session | port CSS handoff para src/index.css
+Touched: none
+
+## [2026-05-07] session | port ChatScreen handoff design com dados reais
+Touched: none
+
 ## [2026-05-07 06:35] session | LARA sub-agentes via openclaw async — E2E completo
 Touched: LARA — Agente Régua
 
@@ -110,4 +122,9 @@ Touched: none
 Touched: Deploy de Agentes OpenClaw, LARA — Agente Régua, index
 
 ## [2026-05-07 03:30] session | LARA integracao EvoNexus tickets API
+Touched: none
+
+## [2026-05-07 19:01] session | port kanban + cora screens to vite esm
+Touched: none
+## [2026-05-08 00:00] session | fix som notificação chat não tocava
 Touched: none
