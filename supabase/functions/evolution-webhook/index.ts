@@ -265,6 +265,13 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
     if (isMedia && fmSavedMsg) {
       fetchMedia({ inst, instance, msgData, isPtt, isAudio, isImage, isVideo, isDocument, savedMsgId: fmSavedMsg.id });
     }
+    // Celular físico (DEDUP 1 e 2 não pegaram) → marca conversa como Automação
+    if (fmSavedMsg) {
+      await supabase.from('conversations')
+        .update({ status: 'automacao', status_v2: 'automacao' })
+        .eq('id', fmConvId)
+        .neq('status', 'finalizado');
+    }
     return;
   }
 
@@ -357,6 +364,12 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
     if (isMedia && savedMsg) {
       fetchMedia({ inst, instance, msgData, isPtt, isAudio, isImage, isVideo, isDocument, savedMsgId: savedMsg.id });
     }
+
+    // Cliente respondeu enquanto equipe aguardava (em_atendimento) → Em aberto
+    await supabase.from('conversations')
+      .update({ status: 'atendimento_aberto', status_v2: 'in_progress' })
+      .eq('id', convId)
+      .eq('status', 'em_atendimento');
   }
 
   // ── Enfileirar invoke se há menção ────────────────────────────────────────
@@ -689,11 +702,13 @@ async function upsertConversation({ tenantId, instanceId, chatId, isGroup, pushN
     const upd: Record<string, string | boolean | null> = { updated_at: new Date().toISOString(), tenant_id: tenantId };
     if (!isGroup && pushName && pushName !== 'Desconhecido') upd.push_name = pushName;
     if (isGroup && !existing.is_group) upd.is_group = true;
-    // Reabrir conversa finalizada quando nova mensagem inbound chega
+    // Reabrir conversa finalizada quando nova mensagem inbound chega (Regra A)
+    // Limpa assigned_to para que qualquer atendente possa assumir (sem dono automático)
     if (existing.status === 'finalizado' || existing.status_v2 === 'closed') {
-      upd.status    = 'aguardando';
-      upd.status_v2 = 'open';
+      upd.status      = 'aguardando';
+      upd.status_v2   = 'open';
       upd.reopened_at = new Date().toISOString();
+      upd.assigned_to = null;
     }
     await supabase.from('conversations').update(upd).eq('id', existing.id);
     return existing.id;

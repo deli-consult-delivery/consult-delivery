@@ -420,6 +420,13 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     { id: 'oculto',       icon: 'arch',  value: statusCounts.oculto,       label: 'Ocultas' },
   ], [statusCounts]);
 
+  // ── Document title badge ──────────────────────────────────
+  useEffect(() => {
+    const pending = statusCounts.nao_iniciado + statusCounts.falha;
+    document.title = pending > 0 ? `(${pending}) Consult Delivery` : 'Consult Delivery';
+    return () => { document.title = 'Consult Delivery'; };
+  }, [statusCounts.nao_iniciado, statusCounts.falha]);
+
   // ── EFFECTS DE INICIALIZAÇÃO ───────────────────────────────
   useEffect(() => {
     loadInstances();
@@ -537,7 +544,12 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             return prev;
           }
           const conv    = prev[idx];
-          const updated = { ...conv, preview, time, unread: isActive ? 0 : (conv.unread || 0) + (isInbound ? 1 : 0), ...(isInbound && conv.status === 'finalizado' ? { status: 'aguardando' } : {}) };
+          const statusUpdate = isInbound
+            ? (conv.status === 'finalizado'    ? { status: 'aguardando'         }
+             : conv.status === 'em_atendimento' ? { status: 'atendimento_aberto' }
+             : {})
+            : {};
+          const updated = { ...conv, preview, time, unread: isActive ? 0 : (conv.unread || 0) + (isInbound ? 1 : 0), ...statusUpdate };
           // Only move to top for inbound — outbound sends should not reorder the list
           if (!isInbound) { const next = [...prev]; next[idx] = updated; return next; }
           return [updated, ...prev.filter(c => c.id !== convId)];
@@ -695,8 +707,20 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         // encontre a linha e não insira duplicata quando o evento fromMe chegar.
         await supabase.from('messages').insert({ conversation_id: active.id, direction: 'outbound', content: text, sender_name: agentName || null, created_at: now.toISOString(), ...(currentReplyTo ? { quoted_content: currentReplyTo } : {}) });
         await sendTextMessage(selectedInstance, active.whatsapp_chat_id, textToSend, waQuoted);
-        if (convStatus === 'aguardando') await changeStatus('em_atendimento');
-      } catch (err) { console.error('Falha ao enviar via Evolution:', err); }
+        // Equipe enviou → conversa entra em "Aguardando cliente" (em_atendimento)
+        const canUpdateStatus = !['em_atendimento', 'finalizado', 'falha', 'archived'].includes(convStatus);
+        if (canUpdateStatus) {
+          await changeStatus('em_atendimento');
+          setConvs(prev => prev.map(c => c.id === active.id ? { ...c, status: 'em_atendimento' } : c));
+        }
+      } catch (err) {
+        console.error('Falha ao enviar via Evolution:', err);
+        // Marca conversa como Falha no envio
+        await supabase.from('conversations')
+          .update({ status: 'falha', status_v2: 'falha' })
+          .eq('id', active.id);
+        setConvs(prev => prev.map(c => c.id === active.id ? { ...c, status: 'falha' } : c));
+      }
       finally { setSending(false); }
     } else if (isWA) {
       setTyping(true);
