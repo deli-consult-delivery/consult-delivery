@@ -50,17 +50,9 @@ const AI_COMMANDS = [
 // ─── SOM DE NOTIFICAÇÃO ─────────────────────────────────────────
 function playNotificationSound() {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const now = ctx.currentTime;
-    const osc1 = ctx.createOscillator();
-    const gain1 = ctx.createGain();
-    osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(1046, now);
-    osc1.frequency.exponentialRampToValueAtTime(523, now + 0.18);
-    gain1.gain.setValueAtTime(0.9, now);
-    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-    osc1.connect(gain1); gain1.connect(ctx.destination);
-    osc1.start(now); osc1.stop(now + 0.35);
+    const audio = new Audio('/assets/universfield-new-notification-050-494248.mp3');
+    audio.volume = 1.0;
+    audio.play().catch(() => {});
   } catch { /* ignore */ }
 }
 
@@ -266,8 +258,8 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage }) {
     <div className={`lc-msg-row ${isOut ? 'out' : 'in'} slide-up`}>
       {!isOut && <ConvAvatar conv={conv} size={28} />}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: isOut ? 'flex-end' : 'flex-start', maxWidth: '72%' }}>
-        {!isOut && m.agentName && (
-          <div style={{ fontSize: 11, color: '#B70C00', fontWeight: 700, marginBottom: 4, marginLeft: 4 }}>
+        {m.agentName && (
+          <div style={{ fontSize: 11, color: isOut ? 'rgba(255,255,255,0.55)' : '#B70C00', fontWeight: 700, marginBottom: 4, marginLeft: isOut ? 0 : 4, marginRight: isOut ? 4 : 0 }}>
             {m.agentName} <span style={{ color: 'rgba(255,255,255,0.4)', fontWeight: 500, marginLeft: 6 }}>· {m.time}</span>
           </div>
         )}
@@ -517,6 +509,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         const preview   = text || (mediaType === 'image' ? '🖼 Imagem' : mediaType === 'video' ? '🎬 Vídeo' : mediaType === 'document' ? '📄 Documento' : mediaType?.includes('audio') ? '🎵 Áudio' : '');
         setMessages(m => {
           const convMsgs = m[convId] || [];
+          if (convMsgs.some(ex => ex.id === msg.id)) return m;
           if (!isInbound) {
             const tmpIdx = convMsgs.findIndex(ex => ex.id?.startsWith('tmp-') && ex.text === text && ex.from === 'out');
             if (tmpIdx !== -1) return { ...m, [convId]: convMsgs.map((ex, i) => i === tmpIdx ? { ...ex, id: msg.id } : ex) };
@@ -539,6 +532,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           }
           const conv    = prev[idx];
           const updated = { ...conv, preview, time, unread: isActive ? 0 : (conv.unread || 0) + (isInbound ? 1 : 0), ...(isInbound && conv.status === 'finalizado' ? { status: 'aguardando' } : {}) };
+          // Only move to top for inbound — outbound sends should not reorder the list
+          if (!isInbound) { const next = [...prev]; next[idx] = updated; return next; }
           return [updated, ...prev.filter(c => c.id !== convId)];
         });
         if (isInbound && !isActive) playNotificationSound();
