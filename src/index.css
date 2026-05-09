@@ -571,6 +571,51 @@ input, textarea { font-family: inherit; }
   padding: 6px 12px;
 }
 
+/* Botão fechar sidebar */
+.side-hide-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 28px;
+  background: transparent;
+  color: rgba(255,255,255,0.25);
+  cursor: pointer;
+  border: none;
+  border-radius: var(--r-md);
+  transition: color 150ms, background 150ms;
+  margin-top: 2px;
+}
+.side-hide-btn:hover { color: rgba(255,255,255,0.6); background: rgba(255,255,255,0.06); }
+.sidebar.expanded .side-hide-btn { justify-content: flex-end; padding: 6px 12px; }
+
+/* Botão flutuante para reabrir sidebar quando oculta */
+.side-reveal-btn {
+  position: fixed;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 48px;
+  background: var(--black-soft, #0E0E0E);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-left: none;
+  border-radius: 0 6px 6px 0;
+  color: rgba(255,255,255,0.4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  transition: color 150ms, background 150ms, width 150ms;
+  padding: 0;
+}
+.side-reveal-btn:hover {
+  width: 22px;
+  color: rgba(255,255,255,0.8);
+  background: rgba(255,255,255,0.06);
+}
+
 /* ─── TASK LIST VIEW ──────────────────────────────────────── */
 .task-tbl { width: 100%; border-collapse: collapse; }
 .task-tbl thead th {

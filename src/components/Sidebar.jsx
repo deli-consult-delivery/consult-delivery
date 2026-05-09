@@ -69,81 +69,113 @@ export default function Sidebar({ route, setRoute, counts, isOpen }) {
   const [expanded, setExpanded] = useState(() => {
     try { return localStorage.getItem('cd-sidebar-expanded') === 'true'; } catch { return false; }
   });
+  const [hidden, setHidden] = useState(() => {
+    try { return localStorage.getItem('cd-sidebar-hidden') === 'true'; } catch { return false; }
+  });
 
   useEffect(() => {
-    const w = expanded ? '220px' : '64px';
+    const w = hidden ? '0px' : expanded ? '220px' : '64px';
     document.documentElement.style.setProperty('--sidebar-w', w);
-    try { localStorage.setItem('cd-sidebar-expanded', String(expanded)); } catch {}
-  }, [expanded, route]);
+    try {
+      localStorage.setItem('cd-sidebar-expanded', String(expanded));
+      localStorage.setItem('cd-sidebar-hidden', String(hidden));
+    } catch {}
+  }, [expanded, hidden]);
+
+  const hide = () => setHidden(true);
+  const show = () => setHidden(false);
 
   return (
-    <aside className={`sidebar dark-scroll${isOpen ? ' open' : ''}${expanded ? ' expanded' : ''}`}>
-      {/* Logo */}
-      <div className="sidebar-logo">
-        <img
-          src="/assets/rocket-logo.png"
-          alt="Consult Delivery"
-          style={{ width: 28, height: 'auto', display: 'block', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))', flexShrink: 0 }}
-        />
-        {expanded && (
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap', overflow: 'hidden' }}>
-            Consult Delivery
-          </span>
-        )}
-      </div>
-
-      {/* Grupos de navegação */}
-      <nav className="sidebar-nav scrollbar-hidden">
-        {NAV_GROUPS.map((group, gi) => (
-          <div key={gi} style={{ width: '100%' }}>
-            {gi > 0 && <div className="side-divider" />}
-            {expanded && <div className="side-section">{group.label}</div>}
-            {group.items.map(item => (
-              <SidebarItem
-                key={item.id}
-                item={item}
-                route={route}
-                setRoute={setRoute}
-                badge={counts[item.id]}
-                expanded={expanded}
-              />
-            ))}
-          </div>
-        ))}
-      </nav>
-
-      {/* Rodapé */}
-      <div className="sidebar-footer">
-        <div className="side-divider" />
-        {NAV_BOTTOM.map(item => (
-          <SidebarItem
-            key={item.id}
-            item={item}
-            route={route}
-            setRoute={setRoute}
-            expanded={expanded}
-          />
-        ))}
-        <div
-          className="side-avatar-footer"
-          title={expanded ? undefined : 'Wandson Silva — CEO'}
+    <>
+      {/* Botão flutuante para reabrir quando sidebar está oculta */}
+      {hidden && (
+        <button
+          onClick={show}
+          title="Abrir menu"
+          className="side-reveal-btn"
         >
-          <UserAvatar name="WS" size={28} src="/assets/wandson.jpg" />
+          <Icon name="arrowright" size={12} />
+        </button>
+      )}
+
+      <aside
+        className={`sidebar dark-scroll${isOpen ? ' open' : ''}${expanded ? ' expanded' : ''}${hidden ? ' hidden' : ''}`}
+        style={hidden ? { display: 'none' } : undefined}
+      >
+        {/* Logo */}
+        <div className="sidebar-logo">
+          <img
+            src="/assets/rocket-logo.png"
+            alt="Consult Delivery"
+            style={{ width: 28, height: 'auto', display: 'block', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))', flexShrink: 0 }}
+          />
           {expanded && (
-            <div style={{ overflow: 'hidden' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap' }}>Wandson Silva</div>
-              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap' }}>CEO · admin</div>
-            </div>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+              Consult Delivery
+            </span>
           )}
         </div>
-        <button
-          className="side-expand-btn"
-          onClick={() => setExpanded(v => !v)}
-          title={expanded ? 'Recolher menu' : 'Expandir menu'}
-        >
-          <Icon name={expanded ? 'chevleft' : 'arrowright'} size={14} />
-        </button>
-      </div>
-    </aside>
+
+        {/* Grupos de navegação */}
+        <nav className="sidebar-nav scrollbar-hidden">
+          {NAV_GROUPS.map((group, gi) => (
+            <div key={gi} style={{ width: '100%' }}>
+              {gi > 0 && <div className="side-divider" />}
+              {expanded && <div className="side-section">{group.label}</div>}
+              {group.items.map(item => (
+                <SidebarItem
+                  key={item.id}
+                  item={item}
+                  route={route}
+                  setRoute={setRoute}
+                  badge={counts[item.id]}
+                  expanded={expanded}
+                />
+              ))}
+            </div>
+          ))}
+        </nav>
+
+        {/* Rodapé */}
+        <div className="sidebar-footer">
+          <div className="side-divider" />
+          {NAV_BOTTOM.map(item => (
+            <SidebarItem
+              key={item.id}
+              item={item}
+              route={route}
+              setRoute={setRoute}
+              expanded={expanded}
+            />
+          ))}
+          <div
+            className="side-avatar-footer"
+            title={expanded ? undefined : 'Wandson Silva — CEO'}
+          >
+            <UserAvatar name="WS" size={28} src="/assets/wandson.jpg" />
+            {expanded && (
+              <div style={{ overflow: 'hidden' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap' }}>Wandson Silva</div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap' }}>CEO · admin</div>
+              </div>
+            )}
+          </div>
+          <button
+            className="side-expand-btn"
+            onClick={() => setExpanded(v => !v)}
+            title={expanded ? 'Recolher menu' : 'Expandir menu'}
+          >
+            <Icon name={expanded ? 'chevleft' : 'arrowright'} size={14} />
+          </button>
+          <button
+            className="side-hide-btn"
+            onClick={hide}
+            title="Fechar menu"
+          >
+            <Icon name="x" size={13} />
+          </button>
+        </div>
+      </aside>
+    </>
   );
 }
