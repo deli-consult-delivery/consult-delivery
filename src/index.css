@@ -2844,6 +2844,42 @@ input, textarea { font-family: inherit; }
 .lc-ai-cta { background: var(--red); border: none; color: white; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
 .lc-ai-cta:hover { background: var(--red-light); }
 .lc-ai-cta.ghost { background: transparent; border: 1px solid var(--lc-border-2); }
+/* Emoji picker */
+.lc-emoji-picker {
+  position: absolute; bottom: calc(100% + 8px); right: 0;
+  width: 300px; background: #131313;
+  border: 1px solid var(--lc-border-2); border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.6); z-index: 200;
+  overflow: hidden;
+}
+.lc-emoji-cats {
+  display: flex; gap: 2px; padding: 6px 8px;
+  border-bottom: 1px solid var(--lc-border); overflow-x: auto;
+}
+.lc-emoji-cat {
+  background: none; border: none; cursor: pointer;
+  font-size: 16px; padding: 3px 5px; border-radius: 5px;
+  transition: background 100ms; flex-shrink: 0;
+}
+.lc-emoji-cat:hover { background: rgba(255,255,255,0.08); }
+.lc-emoji-cat.on { background: rgba(255,255,255,0.1); }
+.lc-emoji-label {
+  padding: 4px 10px 2px; font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  color: rgba(255,255,255,0.35);
+}
+.lc-emoji-grid {
+  display: grid; grid-template-columns: repeat(8, 1fr);
+  gap: 1px; padding: 4px 6px 8px; max-height: 200px; overflow-y: auto;
+}
+.lc-emoji-btn {
+  background: none; border: none; cursor: pointer;
+  font-size: 20px; padding: 3px; border-radius: 5px;
+  transition: background 100ms; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.lc-emoji-btn:hover { background: rgba(255,255,255,0.1); transform: scale(1.2); }
+
 .lc-popover { position: absolute; bottom: 100%; left: 16px; margin-bottom: 8px; width: 360px; max-height: 320px; overflow-y: auto; background: #131313; border: 1px solid var(--lc-border-2); border-radius: 10px; box-shadow: 0 12px 40px rgba(0,0,0,0.6); z-index: 100; }
 .lc-pop-head { padding: 10px 12px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: rgba(255,255,255,0.45); font-weight: 700; border-bottom: 1px solid var(--lc-border); }
 .lc-pop-item { display: flex; align-items: center; gap: 10px; width: 100%; background: transparent; border: none; color: rgba(255,255,255,0.75); padding: 10px 12px; cursor: pointer; text-align: left; transition: background 120ms; }

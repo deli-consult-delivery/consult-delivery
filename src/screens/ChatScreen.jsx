@@ -156,6 +156,44 @@ function FieldRow({ label, value, hint }) {
   );
 }
 
+// ─── EMOJI PICKER ──────────────────────────────────────────────
+const EMOJI_GROUPS = [
+  { label: 'Mais usados', emojis: ['😊','😂','❤️','👍','🙏','😍','😭','😅','🔥','✅','💯','🎉','👏','🤝','😎','💪','🚀','⭐','✨','💬'] },
+  { label: 'Rostos', emojis: ['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😗','😚','😙','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','😐','😑','😶','😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🥵','🥶','🥴','😵','🤯','🤠','🥳','😎','🤓','🧐','😕','😟','🙁','☹️','😮','😯','😲','😳','🥺','😦','😧','😨','😰','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','🥱','😤','😡','😠','🤬'] },
+  { label: 'Gestos', emojis: ['👋','🤚','🖐️','✋','🖖','👌','🤌','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','☝️','👍','👎','✊','👊','🤛','🤜','👏','🙌','🫶','👐','🤲','🙏','✍️','💅','🤳','💪','🦾','🦵','🦶','👂','🦻','👃','🫀','🫁','🧠','🦷','🦴','👀','👁️','👅','👄'] },
+  { label: 'Objetos', emojis: ['💌','💎','🔑','🗝️','🔒','🔓','🔔','🔕','📣','📢','📱','💻','⌨️','🖥️','🖨️','🖱️','📷','📸','📹','🎥','📞','☎️','📠','📺','📻','🎙️','🎚️','🎛️','🧭','⏱️','⏰','📡','🔋','💡','🔦','🕯️','🪔','📝','✏️','🖊️','🖋️','🖌️','📚','📖','📰','🗞️','📋','📁','📂','🗂️','📅','📆','🗒️','🗓️','📊','📈','📉','🗃️','🗳️','🗄️','📦','🛒','💰','💴','💵','💶','💷','💸','💳','🪙','💹','✉️','📧','📨','📩','📤','📥','📦','📫','📪','📬','📭','📮','🗳️'] },
+  { label: 'Símbolos', emojis: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❤️‍🔥','❤️‍🩹','💕','💞','💓','💗','💖','💘','💝','💟','☮️','✝️','☪️','🕉️','✡️','🔯','🛐','⛎','♈','♉','♊','♋','♌','♍','♎','♏','♐','♑','♒','♓','⁉️','❓','❔','❕','❗','‼️','⚠️','🚸','♻️','✅','❎','🆕','🆙','🆒','🆓','🆖','📵','🚫','❌','⭕','🛑','⛔','📛','🔞','💯','🔝','🔛','🔜','🔚'] },
+];
+
+function EmojiPicker({ onSelect, onClose }) {
+  const ref = useRef(null);
+  const [group, setGroup] = useState(0);
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  return (
+    <div ref={ref} className="lc-emoji-picker">
+      <div className="lc-emoji-cats">
+        {EMOJI_GROUPS.map((g, i) => (
+          <button key={i} className={`lc-emoji-cat${group === i ? ' on' : ''}`} onClick={() => setGroup(i)} title={g.label}>
+            {g.emojis[0]}
+          </button>
+        ))}
+      </div>
+      <div className="lc-emoji-label">{EMOJI_GROUPS[group].label}</div>
+      <div className="lc-emoji-grid">
+        {EMOJI_GROUPS[group].emojis.map((em, i) => (
+          <button key={i} className="lc-emoji-btn" onClick={() => onSelect(em)}>{em}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── CONV ROW (sidebar item) ───────────────────────────────────
 function ConvRow({ conv, active, onClick, statusFilter, fav, onFav }) {
   const waitColors = {
@@ -493,6 +531,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [showSlash, setShowSlash]            = useState(false);
   const [showMention, setShowMention]        = useState(false);
   const [showQR, setShowQR]                  = useState(false);
+  const [showEmoji, setShowEmoji]            = useState(false);
   const [aiAction, setAiAction]              = useState(null);
   const [resolved, setResolved]              = useState({});
 
@@ -1141,6 +1180,16 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     }
   };
 
+  const insertEmoji = (em) => {
+    const el = textareaRef.current;
+    if (!el) { setDraft(d => d + em); return; }
+    const start = el.selectionStart;
+    const end   = el.selectionEnd;
+    const next  = draft.slice(0, start) + em + draft.slice(end);
+    setDraft(next);
+    setTimeout(() => { el.focus(); el.setSelectionRange(start + em.length, start + em.length); }, 0);
+  };
+
   const onDraftChange = (v) => {
     setDraft(v);
     if (v === '/' || (v.endsWith('/') && (v.length === 1 || v[v.length-2] === ' '))) setShowSlash(true);
@@ -1742,7 +1791,10 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                       />
                       {showGhost && <div className="lc-comp-ghost">{suggestion}</div>}
                     </div>
-                    <button className="lc-comp-icon" title="Emoji"><Icon name="smile" size={15} /></button>
+                    <div style={{ position: 'relative' }}>
+                      <button className="lc-comp-icon" title="Emoji" onClick={() => setShowEmoji(v => !v)}><Icon name="smile" size={15} /></button>
+                      {showEmoji && <EmojiPicker onSelect={em => { insertEmoji(em); }} onClose={() => setShowEmoji(false)} />}
+                    </div>
                     {draft.trim() ? (
                       <button onClick={send} className="lc-comp-send ready" disabled={sending} title="Enviar">
                         <Icon name="send" size={15} />
