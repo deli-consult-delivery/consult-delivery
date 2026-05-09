@@ -1192,8 +1192,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       className="route-enter livechat"
       style={{
         display: 'grid',
-        gridTemplateColumns: `minmax(240px, 280px) minmax(0, 1fr) ${showInspector ? '272px' : '0px'}`,
-        gridTemplateRows: '44px 1fr',
+        gridTemplateColumns: `minmax(240px, 280px) minmax(0, 1fr) ${showInspector ? '272px' : '16px'}`,
+        gridTemplateRows: '36px 1fr',
         gridTemplateAreas: '"header header header" "list chat inspector"',
         height: '100%',
         background: '#0E0E0E',
@@ -1437,22 +1437,6 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                   <button className="lc-icon-btn-dark" title="Mais"><Icon name="chevdown" size={16} style={{ transform: 'rotate(90deg)' }} /></button>
                 </div>
               </header>
-
-              {/* AI strip */}
-              <div className="lc-ai-strip">
-                <div className="lc-ai-strip-left">
-                  <span className="lc-ai-strip-label"><Icon name="sparkles" size={11} /> Auto-tags IA:</span>
-                  {active.type === 'whatsapp' && <span className="lc-autotag">#whatsapp</span>}
-                  {active.type === 'group'    && <span className="lc-autotag">#grupo</span>}
-                  {convStatus === 'aguardando'     && <span className="lc-autotag" style={{ background: 'rgba(245,158,11,0.18)', color: '#FBBF24' }}>#aguardando</span>}
-                  {convStatus === 'em_atendimento' && <span className="lc-autotag" style={{ background: 'rgba(59,130,246,0.18)', color: '#93C5FD' }}>#em-atendimento</span>}
-                  <button className="lc-autotag-add">+ tag</button>
-                </div>
-                <div className="lc-ai-strip-right">
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)' }}>IA mode:</span>
-                  <span style={{ fontSize: 11, color: 'white', fontWeight: 700 }}>{aiMode}</span>
-                </div>
-              </div>
 
               {/* AI action banner */}
               {aiAction && (
