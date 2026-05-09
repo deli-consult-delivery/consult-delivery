@@ -306,7 +306,7 @@ function linkify(text) {
 }
 
 // ─── MESSAGE BUBBLE ────────────────────────────────────────────
-function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage }) {
+function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onStar }) {
   const isOut = m.from === 'out';
   const isSystem = m.from === 'system';
 
@@ -396,12 +396,32 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage }) {
             <button title="Traduzir"><Icon name="globe" size={11} /></button>
             <button title="Virar tarefa" onClick={() => onCreateTask?.(m)}><Icon name="check" size={11} /></button>
             <button title="Resumir"><Icon name="sparkles" size={11} /></button>
+            <button
+              title={starred ? 'Desmarcar' : 'Marcar mensagem'}
+              onClick={() => onStar?.()}
+              style={{ color: starred ? '#FBBF24' : undefined }}
+            >
+              <Icon name="star" size={11} />
+            </button>
           </div>
         )}
         {isOut && (
           <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 3, marginRight: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+            {starred && (
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="#FBBF24" stroke="#FBBF24" strokeWidth="1.5">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+            )}
             {m.time}
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34D399" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+            <button
+              className="lc-star-out-btn"
+              title={starred ? 'Desmarcar' : 'Marcar mensagem'}
+              onClick={() => onStar?.()}
+              style={{ color: starred ? '#FBBF24' : undefined }}
+            >
+              <Icon name="star" size={11} />
+            </button>
           </div>
         )}
       </div>
@@ -462,6 +482,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
   // ── Mensagens ─────────────────────────────────────────────
   const [messages, setMessages]              = useState({});
+  const [starredMsgs, setStarredMsgs]        = useState(() => {
+    try { return JSON.parse(localStorage.getItem('cd-starred-msgs') || '{}'); } catch { return {}; }
+  });
   const [typing, setTyping]                  = useState(false);
   const [draft, setDraft]                    = useState('');
   const [sending, setSending]                = useState(false);
@@ -982,6 +1005,18 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     audioChunksRef.current = [];
     setRecState('idle');
     setRecSeconds(0);
+  };
+
+  const toggleStar = (msgId) => {
+    if (!activeId || !msgId) return;
+    const key = `${activeId}:${msgId}`;
+    setStarredMsgs(prev => {
+      const next = { ...prev };
+      if (next[key]) delete next[key];
+      else next[key] = true;
+      try { localStorage.setItem('cd-starred-msgs', JSON.stringify(next)); } catch {}
+      return next;
+    });
   };
 
   const discardAudio = () => {
@@ -1512,6 +1547,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                     key={m.id || i}
                     m={m}
                     conv={active}
+                    starred={!!starredMsgs[`${activeId}:${m.id}`]}
+                    onStar={() => toggleStar(m.id)}
                     onReply={msg => setReplyTo(msg)}
                     onViewImage={url => setLightboxUrl(url)}
                     onCreateTask={msg => console.log('criar tarefa:', msg.text)}
