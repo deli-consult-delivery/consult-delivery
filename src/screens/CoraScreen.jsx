@@ -8,8 +8,10 @@ import AgentAvatar from '../components/AgentAvatar.jsx';
 import UserAvatar from '../components/UserAvatar.jsx';
 import { INADIMPLENTES, TENANTS } from '../data.js';
 
+const FALLBACK_INAD = INADIMPLENTES[Object.keys(INADIMPLENTES)[0]];
+
 const CoraScreen = ({ tenant, tenantDbId, userId }) => {
-  const data = INADIMPLENTES[tenant];
+  const data = INADIMPLENTES[tenant] ?? FALLBACK_INAD;
   const [tab, setTab] = uSCo('inad');
   const [openDrawer, setOpenDrawer] = uSCo(false);
   const [liveTick, setLiveTick] = uSCo(0);

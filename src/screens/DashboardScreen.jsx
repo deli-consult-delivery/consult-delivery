@@ -4,9 +4,11 @@ import AgentAvatar from '../components/AgentAvatar.jsx';
 import UserAvatar from '../components/UserAvatar.jsx';
 import { TENANTS, AGENTS, TENANT_DATA, CONVERSATIONS, TASKS, EVENT_FEED, AGENDA, PROTOCOLS } from '../data.js';
 
+const FALLBACK_DATA = TENANT_DATA[Object.keys(TENANT_DATA)[0]];
+
 const DashboardScreen = ({ tenant, tenantDbId, onNavigate }) => {
-  const data = TENANT_DATA[tenant];
-  const tenantMeta = TENANTS.find(t => t.id === tenant);
+  const data = TENANT_DATA[tenant] ?? FALLBACK_DATA;
+  const tenantMeta = TENANTS.find(t => t.id === tenant) ?? TENANTS[0];
   const agents = AGENTS;
   const events = EVENT_FEED || [];
   const agenda = AGENDA || [];
