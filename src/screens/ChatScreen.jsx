@@ -168,14 +168,8 @@ function ConvRow({ conv, active, onClick, statusFilter }) {
     falha:              { bg: 'rgba(183,12,0,0.18)',     color: '#FF8080' },
   };
   const realStatus = conv.status || 'aguardando';
-  // Badge adapts to current pill context:
-  // - "Aguardando" pill: show "Aguardando" badge for atendimento_aberto+previewFrom=in OR em_atendimento
-  // - "Em aberto" pill: show "Em aberto" badge even for em_atendimento conversations
-  const displayStatus =
-    statusFilter === 'aguardando' && (realStatus === 'em_atendimento' || (realStatus === 'atendimento_aberto' && conv.previewFrom === 'in'))
-      ? 'em_atendimento'
-    : statusFilter === 'aberto' && realStatus === 'em_atendimento'
-      ? 'atendimento_aberto'
+  const displayStatus = (statusFilter === 'aguardando' && realStatus === 'atendimento_aberto' && conv.previewFrom === 'in')
+    ? 'em_atendimento'
     : realStatus;
   const wColor = waitColors[displayStatus] || waitColors.aguardando;
   const statusLabels = {
@@ -538,7 +532,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const statusCounts = useMemo(() => ({
     nao_iniciado: convs.filter(c => (c.status || 'aguardando') === 'aguardando').length,
     aguardando:   convs.filter(c => c.status === 'em_atendimento' || (c.status === 'atendimento_aberto' && c.previewFrom === 'in')).length,
-    aberto:       convs.filter(c => c.status === 'atendimento_aberto' || c.status === 'em_atendimento').length,
+    aberto:       convs.filter(c => c.status === 'atendimento_aberto').length,
     automacao:    convs.filter(c => c.status === 'automacao').length,
     finalizado:   convs.filter(c => c.status === 'finalizado').length,
     falha:        convs.filter(c => c.status === 'falha').length,
@@ -680,7 +674,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           }
           const conv    = prev[idx];
           const statusUpdate = isInbound
-            ? (conv.status === 'finalizado' ? { status: 'aguardando' } : {})
+            ? (conv.status === 'finalizado'    ? { status: 'aguardando'         }
+             : conv.status === 'em_atendimento' ? { status: 'atendimento_aberto' }
+             : {})
             : {};
           const updated = { ...conv, preview, time, previewFrom: isInbound ? 'in' : 'out', unread: isActive ? 0 : (conv.unread || 0) + (isInbound ? 1 : 0), ...statusUpdate };
           // Only move to top for inbound — outbound sends should not reorder the list
@@ -825,7 +821,6 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   }
 
   // ── REFRESH ACTIVE CONVS ──────────────────────────────────
-  // Atualiza todos os status exceto finalizado, archived e falha.
   const REFRESH_STATUSES = ['aguardando', 'em_atendimento', 'atendimento_aberto', 'automacao'];
 
   async function refreshPendingConvs() {
@@ -862,7 +857,6 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           mapped.push({ id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null, type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id, preview, previewFrom, time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '', unread: 0, online: false, messages: [], status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null, status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null });
         });
       }
-      // Descarta todas as conversas com status ativo do estado anterior e substitui pelas frescas
       setConvs(prev => [
         ...prev.filter(c => !REFRESH_STATUSES.includes(c.status)),
         ...mapped,
@@ -1163,7 +1157,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       const match = {
         nao_iniciado: (c.status || 'aguardando') === 'aguardando',
         aguardando:   c.status === 'em_atendimento' || (c.status === 'atendimento_aberto' && c.previewFrom === 'in'),
-        aberto:       c.status === 'atendimento_aberto' || c.status === 'em_atendimento',
+        aberto:       c.status === 'atendimento_aberto',
         automacao:    c.status === 'automacao',
         finalizado:   c.status === 'finalizado',
         falha:        c.status === 'falha',
