@@ -2652,6 +2652,38 @@ input, textarea { font-family: inherit; }
 }
 .lc-media-wrap:hover .lc-media-dl { opacity: 1; }
 
+/* Reply preview no compositor */
+.lc-reply-banner {
+  display: flex; align-items: stretch; gap: 0;
+  margin: 4px 2px 6px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.lc-reply-bar {
+  width: 3px; flex-shrink: 0;
+  background: var(--red, #B70C00);
+}
+.lc-reply-content {
+  flex: 1; padding: 6px 10px; min-width: 0;
+}
+.lc-reply-name {
+  font-size: 11px; font-weight: 700; color: var(--red-light, #FF6B6B);
+  margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.lc-reply-text {
+  font-size: 12px; color: rgba(255,255,255,0.6);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.lc-reply-close {
+  background: none; border: none; cursor: pointer;
+  color: rgba(255,255,255,0.4); padding: 0 10px;
+  display: flex; align-items: center; flex-shrink: 0;
+  transition: color 120ms;
+}
+.lc-reply-close:hover { color: rgba(255,255,255,0.8); }
+
 /* Composer */
 .lc-composer-bar { padding: 4px 10px 6px; background: var(--lc-panel); border-top: 1px solid var(--lc-border); flex-shrink: 0; }
 .lc-deli-tip { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 6px 12px; background: linear-gradient(135deg, rgba(183,12,0,0.12), rgba(183,12,0,0.02)); border: 1px solid rgba(183,12,0,0.3); border-radius: 999px; font-size: 11px; color: rgba(255,255,255,0.75); width: fit-content; }

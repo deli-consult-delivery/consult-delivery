@@ -1526,15 +1526,6 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                 </div>
               )}
 
-              {/* Reply banner */}
-              {replyTo && (
-                <div style={{ padding: '6px 16px', background: 'rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>
-                  <Icon name="msg" size={12} />
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Respondendo: {replyTo.text || '🖼 Mídia'}</span>
-                  <button onClick={() => setReplyTo(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', padding: 4 }}>×</button>
-                </div>
-              )}
-
               {/* Mensagens */}
               <div ref={scrollRef} className="lc-msgs dark-scroll">
                 {activeMsgs.length === 0 && (
@@ -1549,7 +1540,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                     conv={active}
                     starred={!!starredMsgs[`${activeId}:${m.id}`]}
                     onStar={() => toggleStar(m.id)}
-                    onReply={msg => setReplyTo(msg)}
+                    onReply={msg => { setReplyTo(msg); setTimeout(() => textareaRef.current?.focus(), 30); }}
                     onViewImage={url => setLightboxUrl(url)}
                     onCreateTask={msg => console.log('criar tarefa:', msg.text)}
                   />
@@ -1625,6 +1616,20 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                 <input ref={fileInputRef}    type="file" accept="image/*,video/*,application/pdf,.doc,.docx" style={{ display: 'none' }} onChange={handleFileSelect} />
                 <input ref={galleryInputRef} type="file" accept="image/*,video/*"                            style={{ display: 'none' }} onChange={handleFileSelect} />
                 <input ref={cameraInputRef}  type="file" accept="image/*" capture="camera"                  style={{ display: 'none' }} onChange={handleFileSelect} />
+
+                {/* Reply preview — acima do compositor */}
+                {replyTo && (
+                  <div className="lc-reply-banner">
+                    <div className="lc-reply-bar" />
+                    <div className="lc-reply-content">
+                      <div className="lc-reply-name">{replyTo.agentName || (replyTo.from === 'out' ? 'Você' : (active?.name || 'Cliente'))}</div>
+                      <div className="lc-reply-text">{replyTo.text || (replyTo.mediaType ? '🖼 Mídia' : '…')}</div>
+                    </div>
+                    <button className="lc-reply-close" onClick={() => setReplyTo(null)} title="Cancelar resposta">
+                      <Icon name="x" size={13} />
+                    </button>
+                  </div>
+                )}
 
                 {pasteImage ? (
                   <div className="lc-paste-preview">
