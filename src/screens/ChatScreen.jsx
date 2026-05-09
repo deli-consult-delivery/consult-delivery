@@ -1216,9 +1216,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         display: 'grid',
         gridTemplateColumns: 'minmax(320px, 360px) minmax(0, 1fr) var(--insp-col, 336px)',
         '--insp-col': showInspector ? '336px' : '16px',
-        gridTemplateRows: '36px calc(100vh - 36px)',
+        gridTemplateRows: '36px 1fr',
         gridTemplateAreas: '"header header header" "list chat inspector"',
-        height: '100vh',
+        height: '100%',
         background: '#0E0E0E',
         overflow: 'hidden',
       }}

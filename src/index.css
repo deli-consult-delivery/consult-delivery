@@ -352,12 +352,7 @@ input, textarea { font-family: inherit; }
 
 .topbar  { grid-area: topbar;  background: var(--white); border-bottom: 1px solid var(--g-200); display: flex; align-items: center; padding: 0 24px; gap: 16px; }
 .main    { grid-area: main;    overflow: auto; position: relative; height: 100%; }
-
-/* ─── CHAT MODE — topbar + sidebar ocultos, livechat tela cheia ── */
-.app-shell--chatmode { --topbar-h: 0px; --sidebar-w: 0px; }
-.app-shell--chatmode .topbar   { display: none; overflow: hidden; }
-.app-shell--chatmode .sidebar  { display: none; }
-.app-shell--chatmode .main     { overflow: hidden; }
+.main:has(.livechat) { overflow: hidden; }
 
 /* ─── COMPACT SIDEBAR ─────────────────────────────────────── */
 .sidebar {
