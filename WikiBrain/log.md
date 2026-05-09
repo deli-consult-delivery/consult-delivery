@@ -1,5 +1,11 @@
 # Wiki Log
 
+## [2026-05-09 00:00] session | merge PR #9 chat-status-system para main
+Touched: none
+
+## [2026-05-08 21:00] session | fix msgs invisíveis no chat ao vivo
+Touched: none
+
 ## [2026-05-08 session | fix outbound fromMe chat ao vivo + composer mídia
 Touched: none
 
