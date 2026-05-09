@@ -293,6 +293,24 @@ function AudioPlayer({ src, isOut }) {
   );
 }
 
+const URL_REGEX = /https?:\/\/[^\s<>"')\]]+|www\.[^\s<>"')\]]+/g;
+function linkify(text) {
+  if (!text) return null;
+  const parts = [];
+  let last = 0;
+  let match;
+  URL_REGEX.lastIndex = 0;
+  while ((match = URL_REGEX.exec(text)) !== null) {
+    if (match.index > last) parts.push(text.slice(last, match.index));
+    const url = match[0];
+    const href = url.startsWith('http') ? url : `https://${url}`;
+    parts.push(<a key={match.index} href={href} target="_blank" rel="noopener noreferrer" style={{ color: '#60A5FA', textDecoration: 'underline', wordBreak: 'break-all' }}>{url}</a>);
+    last = match.index + url.length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
+
 // ─── MESSAGE BUBBLE ────────────────────────────────────────────
 function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage }) {
   const isOut = m.from === 'out';
@@ -347,7 +365,7 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage }) {
         <div className={`lc-bubble ${isOut ? 'out' : 'in'}`}>
           {renderMedia()}
           {m.text && !m.mediaType?.includes('document') && (
-            <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.text}</div>
+            <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{linkify(m.text)}</div>
           )}
         </div>
         {!isOut && (
@@ -431,6 +449,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   // ── AI / Composer ─────────────────────────────────────────
   const [aiMode, setAiMode]                  = useState('humano');
   const [showCopilot, setShowCopilot]        = useState(true);
+  const [showInspector, setShowInspector]    = useState(false);
   const [showSlash, setShowSlash]            = useState(false);
   const [showMention, setShowMention]        = useState(false);
   const [showQR, setShowQR]                  = useState(false);
@@ -1173,7 +1192,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       className="route-enter livechat"
       style={{
         display: 'grid',
-        gridTemplateColumns: 'minmax(320px, 360px) minmax(0, 1fr) 320px',
+        gridTemplateColumns: 'minmax(320px, 360px) minmax(0, 1fr) auto',
         gridTemplateRows: '44px 1fr',
         gridTemplateAreas: '"header header header" "list chat inspector"',
         height: '100%',
@@ -1701,7 +1720,30 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       )}
 
       {/* ─── COL 3: Painel direito (inspector) ───────────────── */}
-      <aside className="lc-inspector dark-scroll" style={{ gridArea: 'inspector' }}>
+      <aside style={{ gridArea: 'inspector', display: 'flex', position: 'relative', minWidth: 0 }}>
+        {/* Botão de toggle — sempre visível na borda esquerda */}
+        <button
+          onClick={() => setShowInspector(v => !v)}
+          title={showInspector ? 'Fechar painel' : 'Abrir painel'}
+          style={{
+            position: 'absolute', left: -12, top: '50%', transform: 'translateY(-50%)',
+            zIndex: 10, width: 20, height: 48, borderRadius: '6px 0 0 6px',
+            background: '#1F1F1F', border: '1px solid rgba(255,255,255,0.08)',
+            borderRight: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'background 150ms, color 150ms',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = '#2a2a2a'; e.currentTarget.style.color = 'white'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = '#1F1F1F'; e.currentTarget.style.color = 'rgba(255,255,255,0.5)'; }}
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            {showInspector
+              ? <polyline points="9 18 15 12 9 6"/>
+              : <polyline points="15 18 9 12 15 6"/>
+            }
+          </svg>
+        </button>
+        <div className="lc-inspector dark-scroll" style={{ flex: 1, overflow: showInspector ? 'auto' : 'hidden', width: showInspector ? '320px' : '0px', transition: 'width 220ms ease', minWidth: 0 }}>
         {active && (
           <>
             <div className="lc-insp-head">
@@ -1792,6 +1834,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             )}
           </>
         )}
+        </div>
       </aside>
     </div>
 
