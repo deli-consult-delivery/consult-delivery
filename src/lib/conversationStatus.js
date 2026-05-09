@@ -73,7 +73,7 @@ export function useConversationStatus(conversationId, tenantDbId, currentUserId)
   }, [conversationId]);
 
   const changeStatus = useCallback(async (newStatus, notes = null) => {
-    if (!conversationId || !tenantDbId) return { error: 'Sem conversa ativa' };
+    if (!conversationId) return { error: 'Sem conversa ativa' };
     setLoading(true);
 
     const payload = {
@@ -90,7 +90,6 @@ export function useConversationStatus(conversationId, tenantDbId, currentUserId)
       payload.finished_by = currentUserId;
     }
     if (newStatus === 'aguardando' && status === 'finalizado') {
-      // reabrindo
       payload.reopened_by = currentUserId;
       payload.assigned_to = null;
     }
@@ -98,11 +97,11 @@ export function useConversationStatus(conversationId, tenantDbId, currentUserId)
       payload.assigned_to = null;
     }
 
+    // Filtra apenas por ID — RLS já garante isolamento multi-tenant
     const { error } = await supabase
       .from('conversations')
       .update(payload)
-      .eq('id', conversationId)
-      .eq('tenant_id', tenantDbId);
+      .eq('id', conversationId);
 
     if (!error) {
       setStatus(newStatus);
@@ -112,7 +111,7 @@ export function useConversationStatus(conversationId, tenantDbId, currentUserId)
 
     setLoading(false);
     return { error };
-  }, [conversationId, tenantDbId, currentUserId, status]);
+  }, [conversationId, currentUserId, status]);
 
   const finish  = useCallback(async () => changeStatus('finalizado'),       [changeStatus]);
   const reopen  = useCallback(async () => changeStatus('aguardando'),        [changeStatus]);

@@ -327,13 +327,41 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage }) {
     const url = m.mediaUrl;
     if (m.mediaType === 'image') {
       return (
-        <div style={{ marginBottom: m.text ? 6 : 0 }}>
+        <div style={{ position: 'relative', display: 'inline-block', marginBottom: m.text ? 6 : 0 }} className="lc-media-wrap">
           <img src={url} alt="imagem" style={{ maxWidth: 260, maxHeight: 200, borderRadius: 8, cursor: 'pointer', display: 'block' }} onClick={() => onViewImage?.(url)} />
+          {url && (
+            <a
+              href={url} download
+              title="Baixar imagem"
+              onClick={e => e.stopPropagation()}
+              className="lc-media-dl"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+            </a>
+          )}
         </div>
       );
     }
     if (m.mediaType === 'video') {
-      return <video src={url} controls style={{ maxWidth: 260, borderRadius: 8 }} />;
+      return (
+        <div style={{ marginBottom: m.text ? 6 : 0 }}>
+          <video src={url} controls style={{ maxWidth: 260, borderRadius: 8, display: 'block' }} />
+          {url && (
+            <a
+              href={url} download
+              title="Baixar vídeo"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 5, fontSize: 11, color: isOut ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.5)', textDecoration: 'none' }}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Baixar vídeo
+            </a>
+          )}
+        </div>
+      );
     }
     if (m.mediaType?.includes('audio')) {
       return <AudioPlayer src={url} isOut={isOut} />;
@@ -1192,10 +1220,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       className="route-enter livechat"
       style={{
         display: 'grid',
-        gridTemplateColumns: `minmax(240px, 280px) minmax(0, 1fr) ${showInspector ? '272px' : '16px'}`,
-        gridTemplateRows: '36px 1fr',
+        gridTemplateColumns: 'minmax(320px, 360px) minmax(0, 1fr) var(--insp-col, 336px)',
+        '--insp-col': showInspector ? '336px' : '16px',
+        gridTemplateRows: '36px calc(100vh - 36px)',
         gridTemplateAreas: '"header header header" "list chat inspector"',
-        height: '100%',
+        height: '100vh',
         background: '#0E0E0E',
         overflow: 'hidden',
       }}
@@ -1704,20 +1733,29 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       )}
 
       {/* ─── COL 3: Painel direito (inspector) ───────────────── */}
-      <aside style={{ gridArea: 'inspector', display: 'flex', minWidth: 0, borderLeft: '1px solid rgba(255,255,255,0.06)' }}>
-        {/* Aba de toggle — sempre visível, sem sobrepor o chat */}
+      <aside
+        style={{
+          gridArea: 'inspector',
+          display: 'flex',
+          overflow: 'hidden',
+          borderLeft: '1px solid rgba(255,255,255,0.06)',
+          background: '#181818',
+        }}
+      >
+        {/* Aba de toggle — sempre visível */}
         <button
           onClick={() => setShowInspector(v => !v)}
           title={showInspector ? 'Fechar painel' : 'Abrir painel'}
           style={{
             width: 16, flexShrink: 0, alignSelf: 'stretch',
-            background: '#181818', border: 'none', borderRight: '1px solid rgba(255,255,255,0.06)',
+            background: 'transparent', border: 'none',
+            borderRight: showInspector ? '1px solid rgba(255,255,255,0.06)' : 'none',
             color: 'rgba(255,255,255,0.35)', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'background 150ms, color 150ms',
+            transition: 'color 150ms',
           }}
-          onMouseEnter={e => { e.currentTarget.style.background = '#252525'; e.currentTarget.style.color = 'white'; }}
-          onMouseLeave={e => { e.currentTarget.style.background = '#181818'; e.currentTarget.style.color = 'rgba(255,255,255,0.35)'; }}
+          onMouseEnter={e => { e.currentTarget.style.color = 'white'; }}
+          onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.35)'; }}
         >
           <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
             {showInspector
@@ -1726,7 +1764,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             }
           </svg>
         </button>
-        <div className="lc-inspector dark-scroll" style={{ flex: 1, overflow: showInspector ? 'auto' : 'hidden', width: showInspector ? '320px' : '0px', transition: 'width 220ms ease', minWidth: 0 }}>
+        <div className="lc-inspector dark-scroll" style={{ width: 320, flexShrink: 0, overflowY: 'auto', transform: showInspector ? 'translateX(0)' : 'translateX(100%)', transition: 'transform 220ms ease' }}>
         {active && (
           <>
             <div className="lc-insp-head">
