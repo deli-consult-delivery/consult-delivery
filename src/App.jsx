@@ -197,7 +197,7 @@ export default function App() {
   const counts = { chat: unread, cora: coraCount };
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${route === 'chat' ? ' app-shell--notopbar' : ''}`}>
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
       <Sidebar
         route={route}
