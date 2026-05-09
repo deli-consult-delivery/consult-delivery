@@ -79,8 +79,14 @@ export default function App() {
   }
 
   useEffect(() => {
+    const timer = setTimeout(() => setAuthLoading(false), 8000);
+
     supabase.auth.getSession().then(({ data: { session } }) => {
+      clearTimeout(timer);
       setSession(session);
+      setAuthLoading(false);
+    }).catch(() => {
+      clearTimeout(timer);
       setAuthLoading(false);
     });
 
@@ -88,7 +94,7 @@ export default function App() {
       setSession(session);
     });
 
-    return () => subscription.unsubscribe();
+    return () => { subscription.unsubscribe(); clearTimeout(timer); };
   }, []);
 
   useEffect(() => {
@@ -179,10 +185,11 @@ export default function App() {
 
   if (authLoading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--white)' }}>
-        <svg width="24" height="24" viewBox="0 0 24 24" style={{ animation: 'spin 0.8s linear infinite' }}>
-          <circle cx="12" cy="12" r="10" fill="none" stroke="var(--red)" strokeWidth="3" strokeDasharray="60" strokeDashoffset="20" />
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, height: '100vh', background: '#0D0D0D' }}>
+        <svg width="48" height="48" viewBox="0 0 24 24" style={{ animation: 'spin 0.8s linear infinite' }}>
+          <circle cx="12" cy="12" r="10" fill="none" stroke="#B70C00" strokeWidth="2.5" strokeDasharray="60" strokeDashoffset="20" />
         </svg>
+        <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', fontFamily: 'sans-serif' }}>Carregando…</span>
       </div>
     );
   }
