@@ -359,7 +359,7 @@ function linkify(text) {
 }
 
 // ─── MESSAGE BUBBLE ────────────────────────────────────────────
-function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage }) {
+function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onStar }) {
   const isOut = m.from === 'out';
   const isSystem = m.from === 'system';
 
@@ -449,12 +449,35 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage }) {
             <button title="Traduzir"><Icon name="globe" size={11} /></button>
             <button title="Virar tarefa" onClick={() => onCreateTask?.(m)}><Icon name="check" size={11} /></button>
             <button title="Resumir"><Icon name="sparkles" size={11} /></button>
+            <button
+              className={`lc-star-msg-btn${starred ? ' starred' : ''}`}
+              title={starred ? 'Remover dos favoritos' : 'Favoritar mensagem'}
+              onClick={() => onStar?.()}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill={starred ? '#FBBF24' : 'none'} stroke={starred ? '#FBBF24' : 'currentColor'} strokeWidth="2">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+            </button>
           </div>
         )}
         {isOut && (
           <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 3, marginRight: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+            {starred && (
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="#FBBF24" stroke="#FBBF24" strokeWidth="1.5">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+            )}
             {m.time}
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34D399" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+            <button
+              className={`lc-star-msg-btn out${starred ? ' starred' : ''}`}
+              title={starred ? 'Remover dos favoritos' : 'Favoritar mensagem'}
+              onClick={() => onStar?.()}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill={starred ? '#FBBF24' : 'none'} stroke={starred ? '#FBBF24' : 'currentColor'} strokeWidth="2">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+            </button>
           </div>
         )}
       </div>
@@ -515,6 +538,10 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [favConvs, setFavConvs]              = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem('cd-fav-convs') || '[]')); } catch { return new Set(); }
   });
+  const [starredMsgs, setStarredMsgs]        = useState(() => {
+    try { return JSON.parse(localStorage.getItem('cd-starred-msgs') || '{}'); } catch { return {}; }
+  });
+  const [showStarredPanel, setShowStarredPanel] = useState(false);
 
   // ── Mensagens ─────────────────────────────────────────────
   const [messages, setMessages]              = useState({});
@@ -1041,6 +1068,32 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     setRecSeconds(0);
   };
 
+  const toggleStarMsg = (msg) => {
+    if (!activeId || !msg?.id) return;
+    const key = `${activeId}:${msg.id}`;
+    setStarredMsgs(prev => {
+      const next = { ...prev };
+      if (next[key]) {
+        delete next[key];
+      } else {
+        next[key] = {
+          convId:    activeId,
+          convName:  active?.name || '—',
+          convPhoto: active?.photoUrl || null,
+          convType:  active?.type || 'whatsapp',
+          msgId:     msg.id,
+          text:      msg.text || null,
+          from:      msg.from,
+          time:      msg.time || '',
+          mediaType: msg.mediaType || null,
+          starredAt: Date.now(),
+        };
+      }
+      try { localStorage.setItem('cd-starred-msgs', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
   const toggleFav = (convId, e) => {
     e?.stopPropagation();
     setFavConvs(prev => {
@@ -1386,7 +1439,12 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                 </svg>
                 Filtros
               </button>
-              <button className="lc-stats-more-btn">···</button>
+              <button
+                className={`lc-stats-more-btn${showStarredPanel ? ' active' : ''}`}
+                title="Mensagens favoritas"
+                onClick={() => setShowStarredPanel(v => !v)}
+                style={{ color: showStarredPanel ? '#FBBF24' : undefined }}
+              >⭐</button>
             </div>
           </div>
           <div className="lc-stats-pills">
@@ -1423,8 +1481,63 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           </div>
         )}
 
+        {/* Painel de mensagens favoritas */}
+        {showStarredPanel && (() => {
+          const entries = Object.values(starredMsgs).sort((a, b) => b.starredAt - a.starredAt);
+          const grouped = entries.reduce((acc, e) => {
+            if (!acc[e.convId]) acc[e.convId] = { convName: e.convName, convPhoto: e.convPhoto, convType: e.convType, msgs: [] };
+            acc[e.convId].msgs.push(e);
+            return acc;
+          }, {});
+          return (
+            <div className="lc-list-body dark-scroll">
+              <div style={{ padding: '10px 12px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="#FBBF24" stroke="#FBBF24" strokeWidth="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)' }}>Mensagens Favoritas</span>
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginLeft: 'auto' }}>{entries.length} msg{entries.length !== 1 ? 's' : ''}</span>
+              </div>
+              {entries.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
+                  <div style={{ fontSize: 28, marginBottom: 8 }}>⭐</div>
+                  Nenhuma mensagem favorita.<br/>Passe o mouse em uma mensagem e clique na estrela.
+                </div>
+              ) : Object.entries(grouped).map(([convId, group]) => (
+                <div key={convId}>
+                  <div style={{ padding: '6px 12px 3px', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    {group.convName}
+                  </div>
+                  {group.msgs.map(entry => (
+                    <div
+                      key={entry.msgId}
+                      className="lc-starred-msg-item"
+                      onClick={() => {
+                        setShowStarredPanel(false);
+                        setActiveId(convId);
+                        if (usingRealData && !convId.startsWith('chan-')) loadMsgs(convId);
+                      }}
+                    >
+                      <div className={`lc-starred-msg-dir${entry.from === 'out' ? ' out' : ''}`}>
+                        {entry.from === 'out' ? '↑' : '↓'}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {entry.text || (entry.mediaType === 'image' ? '🖼 Imagem' : entry.mediaType?.includes('audio') ? '🎵 Áudio' : entry.mediaType === 'video' ? '🎬 Vídeo' : '📄 Documento')}
+                        </div>
+                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>{entry.time}</div>
+                      </div>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="#FBBF24" stroke="#FBBF24" strokeWidth="1.5" style={{ flexShrink: 0 }}>
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                      </svg>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+
         {/* Lista de conversas */}
-        <div className="lc-list-body dark-scroll">
+        {!showStarredPanel && <div className="lc-list-body dark-scroll">
           {tab === 'fav' && favConvs.size === 0 && (
             <div style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
               <div style={{ fontSize: 28, marginBottom: 8 }}>⭐</div>
@@ -1450,7 +1563,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               Sem conversas neste filtro
             </div>
           )}
-        </div>
+        </div>}
       </aside>
 
       {/* ─── COL 2: Área de chat ──────────────────────────────── */}
@@ -1589,6 +1702,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                     key={m.id || i}
                     m={m}
                     conv={active}
+                    starred={!!starredMsgs[`${activeId}:${m.id}`]}
+                    onStar={() => toggleStarMsg(m)}
                     onReply={msg => { setReplyTo(msg); setTimeout(() => textareaRef.current?.focus(), 30); }}
                     onViewImage={url => setLightboxUrl(url)}
                     onCreateTask={msg => console.log('criar tarefa:', msg.text)}

@@ -2627,6 +2627,41 @@ input, textarea { font-family: inherit; }
 .lc-bubble-actions button { background: rgba(255,255,255,0.05); border: 1px solid var(--lc-border); color: rgba(255,255,255,0.5); width: 22px; height: 22px; border-radius: 5px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 120ms; }
 .lc-bubble-actions button:hover { background: rgba(183,12,0,0.18); color: var(--red-light); border-color: rgba(183,12,0,0.4); }
 
+/* Botão estrela em mensagens */
+.lc-star-msg-btn {
+  background: none; border: none; cursor: pointer;
+  color: rgba(255,255,255,0.35);
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0; width: 22px; height: 22px; border-radius: 5px;
+  transition: color 120ms;
+}
+.lc-star-msg-btn:hover { color: #FBBF24; }
+.lc-star-msg-btn.starred { color: #FBBF24; }
+/* versão para msgs de saída — aparece só no hover da row */
+.lc-star-msg-btn.out {
+  opacity: 0; width: 16px; height: 16px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 3px; background: rgba(0,0,0,0.2);
+}
+.lc-msg-row:hover .lc-star-msg-btn.out { opacity: 1; }
+.lc-star-msg-btn.out.starred { opacity: 1; }
+
+/* Painel mensagens favoritas */
+.lc-starred-msg-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; cursor: pointer;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 120ms;
+}
+.lc-starred-msg-item:hover { background: rgba(255,255,255,0.04); }
+.lc-starred-msg-dir {
+  width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700;
+  background: rgba(52,211,153,0.15); color: #34D399;
+}
+.lc-starred-msg-dir.out { background: rgba(183,12,0,0.15); color: #FF8080; }
+
 /* Botão favoritar conversa */
 .lc-fav-btn {
   background: none; border: none; cursor: pointer;
