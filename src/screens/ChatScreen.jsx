@@ -552,6 +552,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     try { return JSON.parse(localStorage.getItem('cd-starred-msgs') || '{}'); } catch { return {}; }
   });
   const [showStarredPanel, setShowStarredPanel] = useState(false);
+  const [mobilePane, setMobilePane]            = useState('list'); // 'list' | 'chat'
 
   // ── Mensagens ─────────────────────────────────────────────
   const [messages, setMessages]              = useState({});
@@ -1365,7 +1366,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   return (
     <>
     <div
-      className="route-enter livechat"
+      className={`route-enter livechat${mobilePane === 'chat' ? ' lc-mobile-chat' : ' lc-mobile-list'}`}
       style={{
         display: 'grid',
         gridTemplateColumns: 'minmax(320px, 360px) minmax(0, 1fr) var(--insp-col, 336px)',
@@ -1577,6 +1578,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               onFav={e => toggleFav(c.id, e)}
               onClick={() => {
                 setActiveId(c.id);
+                setMobilePane('chat');
                 if (usingRealData && !c.id.startsWith('chan-')) loadMsgs(c.id);
               }}
             />
@@ -1598,6 +1600,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             <>
               <header className="lc-chat-head">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                  <button className="lc-back-btn" onClick={() => setMobilePane('list')} title="Voltar">
+                    <Icon name="chevleft" size={18} />
+                  </button>
                   <ConvAvatar conv={active} size={40} />
                   <div style={{ minWidth: 0 }}>
                     <div className="lc-chat-name">{active.name}</div>
@@ -1648,6 +1653,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               {/* Header do chat */}
               <header className="lc-chat-head">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                  <button className="lc-back-btn" onClick={() => setMobilePane('list')} title="Voltar">
+                    <Icon name="chevleft" size={18} />
+                  </button>
                   <ConvAvatar conv={active} size={28} style={{ flexShrink: 0 }} />
                   <div style={{ minWidth: 0, overflow: 'hidden' }}>
                     <div className="lc-chat-name">{active.name}</div>

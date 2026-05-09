@@ -2950,6 +2950,83 @@ input, textarea { font-family: inherit; }
   .lc-tabs-overflow { display: none; }
 }
 
+/* ─── CHAT MOBILE (iPhone) ───────────────────────────────────── */
+@media (max-width: 767px) {
+  /* Tela cheia, coluna única */
+  .livechat {
+    grid-template-columns: 100vw !important;
+    grid-template-rows: auto 1fr !important;
+    grid-template-areas: "header" "list" !important;
+    height: 100dvh !important;
+  }
+
+  /* Header compacto */
+  .lc-fullhead { padding: 0 8px; gap: 6px; height: 44px; }
+  .lc-ask-deli-label, .lc-kbd, .lc-ask-deli .lc-kbd { display: none; }
+  .lc-ask-deli { padding: 4px 8px; min-width: 0; }
+  .lc-tabs-overflow { display: none; }
+  .lc-tab-label { display: none; }
+  .lc-tab { padding: 6px 8px; }
+  .lc-mode-btn-label { display: none; }
+  .lc-mode-btn { padding: 4px 6px; }
+  .lc-head-btn-label { display: none; }
+  .lc-breadcrumb { display: none; }
+
+  /* Lista: ocupa todo o espaço */
+  .lc-list { grid-area: list; display: flex; flex-direction: column; width: 100%; border-right: none; }
+
+  /* Chat e inspector: escondidos por padrão */
+  .lc-chat    { display: none; }
+  .lc-inspector { display: none !important; }
+
+  /* Quando está no modo chat: mostra o chat, esconde a lista */
+  .lc-mobile-chat .livechat,
+  .lc-mobile-chat {
+    grid-template-areas: "header" "chat" !important;
+  }
+  .lc-mobile-chat .lc-list  { display: none; }
+  .lc-mobile-chat .lc-chat  { display: flex; flex-direction: column; grid-area: chat; width: 100%; }
+
+  /* Botão voltar: visível só no mobile */
+  .lc-back-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    color: rgba(255,255,255,0.8);
+    background: transparent;
+    flex-shrink: 0;
+    margin-right: 2px;
+  }
+  .lc-back-btn:active { background: rgba(255,255,255,0.08); }
+
+  /* Chat head mais compacto */
+  .lc-chat-head { padding: 8px 12px; min-height: 52px; }
+
+  /* Mensagens: safe area bottom para iPhone */
+  .lc-msgs { padding-bottom: 8px; }
+
+  /* Composer: safe area para notch do iPhone */
+  .lc-composer-bar { padding-bottom: env(safe-area-inset-bottom, 8px); }
+
+  /* Linha de conversa mais fácil de tocar */
+  .lc-conv-row { min-height: 64px; padding: 10px 14px; }
+  .lc-list-head { padding: 10px 12px 6px; }
+  .lc-search { height: 38px; font-size: 14px; }
+
+  /* Stats bar compacta */
+  .lc-stats-bar { gap: 4px; flex-wrap: wrap; }
+
+  /* Tabs de status menores */
+  .lc-status-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; }
+}
+
+/* Botão voltar: escondido no desktop */
+@media (min-width: 768px) {
+  .lc-back-btn { display: none; }
+}
+
 /* ─── REPORTS SCREEN ─────────────────────────────────────────── */
 .rep-period { display: flex; gap: 0; background: var(--g-50); border-radius: 8px; padding: 3px; border: 1px solid var(--g-200); }
 .rep-period-btn { padding: 6px 12px; background: transparent; border: 0; color: var(--g-600); font-size: 12px; font-weight: 600; cursor: pointer; border-radius: 5px; }
