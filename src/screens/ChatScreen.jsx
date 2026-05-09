@@ -157,7 +157,7 @@ function FieldRow({ label, value, hint }) {
 }
 
 // ─── CONV ROW (sidebar item) ───────────────────────────────────
-function ConvRow({ conv, active, onClick, statusFilter }) {
+function ConvRow({ conv, active, onClick, statusFilter, fav, onFav }) {
   const waitColors = {
     aguardando:         { bg: 'rgba(245,158,11,0.18)',  color: '#FBBF24' },
     em_atendimento:     { bg: 'rgba(59,130,246,0.18)',   color: '#93C5FD' },
@@ -194,7 +194,12 @@ function ConvRow({ conv, active, onClick, statusFilter }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6 }}>
           <div className="lc-row-name truncate">{conv.name}</div>
-          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center' }}>
+            {fav && (
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="#FBBF24" stroke="#FBBF24" strokeWidth="1.5" style={{ flexShrink: 0 }}>
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+            )}
             {conv.time && <span className="lc-row-pill" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.55)' }}>{conv.time}</span>}
           </div>
         </div>
@@ -215,6 +220,16 @@ function ConvRow({ conv, active, onClick, statusFilter }) {
           {conv.type === 'internal' && <span className="lc-row-tag" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)' }}>Interno</span>}
         </div>
       </div>
+      <button
+        className="lc-fav-btn"
+        title={fav ? 'Remover dos favoritos' : 'Favoritar conversa'}
+        onClick={onFav}
+        style={{ color: fav ? '#FBBF24' : undefined }}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill={fav ? '#FBBF24' : 'none'} stroke={fav ? '#FBBF24' : 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </svg>
+      </button>
     </div>
   );
 }
@@ -306,7 +321,7 @@ function linkify(text) {
 }
 
 // ─── MESSAGE BUBBLE ────────────────────────────────────────────
-function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onStar }) {
+function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage }) {
   const isOut = m.from === 'out';
   const isSystem = m.from === 'system';
 
@@ -396,32 +411,12 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onSta
             <button title="Traduzir"><Icon name="globe" size={11} /></button>
             <button title="Virar tarefa" onClick={() => onCreateTask?.(m)}><Icon name="check" size={11} /></button>
             <button title="Resumir"><Icon name="sparkles" size={11} /></button>
-            <button
-              title={starred ? 'Desmarcar' : 'Marcar mensagem'}
-              onClick={() => onStar?.()}
-              style={{ color: starred ? '#FBBF24' : undefined }}
-            >
-              <Icon name="star" size={11} />
-            </button>
           </div>
         )}
         {isOut && (
           <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 3, marginRight: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-            {starred && (
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="#FBBF24" stroke="#FBBF24" strokeWidth="1.5">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-              </svg>
-            )}
             {m.time}
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34D399" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-            <button
-              className="lc-star-out-btn"
-              title={starred ? 'Desmarcar' : 'Marcar mensagem'}
-              onClick={() => onStar?.()}
-              style={{ color: starred ? '#FBBF24' : undefined }}
-            >
-              <Icon name="star" size={11} />
-            </button>
           </div>
         )}
       </div>
@@ -479,12 +474,12 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [filters, setFilters]                = useState({ department: null, tag: null, status: null });
   const [taggedCustomerIds, setTaggedCustomerIds] = useState(null);
   const [refreshing, setRefreshing]          = useState(false);
+  const [favConvs, setFavConvs]              = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('cd-fav-convs') || '[]')); } catch { return new Set(); }
+  });
 
   // ── Mensagens ─────────────────────────────────────────────
   const [messages, setMessages]              = useState({});
-  const [starredMsgs, setStarredMsgs]        = useState(() => {
-    try { return JSON.parse(localStorage.getItem('cd-starred-msgs') || '{}'); } catch { return {}; }
-  });
   const [typing, setTyping]                  = useState(false);
   const [draft, setDraft]                    = useState('');
   const [sending, setSending]                = useState(false);
@@ -1007,14 +1002,12 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     setRecSeconds(0);
   };
 
-  const toggleStar = (msgId) => {
-    if (!activeId || !msgId) return;
-    const key = `${activeId}:${msgId}`;
-    setStarredMsgs(prev => {
-      const next = { ...prev };
-      if (next[key]) delete next[key];
-      else next[key] = true;
-      try { localStorage.setItem('cd-starred-msgs', JSON.stringify(next)); } catch {}
+  const toggleFav = (convId, e) => {
+    e?.stopPropagation();
+    setFavConvs(prev => {
+      const next = new Set(prev);
+      if (next.has(convId)) next.delete(convId); else next.add(convId);
+      try { localStorage.setItem('cd-fav-convs', JSON.stringify([...next])); } catch {}
       return next;
     });
   };
@@ -1184,6 +1177,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const unreadCount     = convs.reduce((s, c) => s + (c.unread || 0), 0);
 
   const filtered = convs.filter(c => {
+    if (tab === 'fav'    && !favConvs.has(c.id))   return false;
     if (tab === 'wa'     && c.type !== 'whatsapp') return false;
     if (tab === 'groups' && c.type !== 'group')    return false;
     if (tab === 'int'    && !(c.type === 'internal' || c.type === 'agent')) return false;
@@ -1362,8 +1356,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
           {/* Tabs WhatsApp / Grupos / Interno / Todas */}
           <div style={{ display: 'flex', gap: 2, padding: 2, background: 'rgba(255,255,255,0.04)', borderRadius: 5, marginBottom: 5 }}>
-            {[{ id: 'wa', label: 'WA' }, { id: 'groups', label: 'Grupos' }, { id: 'int', label: 'Interno' }, { id: 'all', label: 'Todas' }].map(t => (
-              <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, padding: '4px 2px', fontSize: 10, fontWeight: 600, borderRadius: 3, background: tab === t.id ? 'rgba(255,255,255,0.08)' : 'transparent', color: tab === t.id ? 'white' : 'rgba(255,255,255,0.55)' }}>{t.label}</button>
+            {[{ id: 'wa', label: 'WA' }, { id: 'groups', label: 'Grupos' }, { id: 'int', label: 'Interno' }, { id: 'all', label: 'Todas' }, { id: 'fav', label: '★' }].map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)} title={t.id === 'fav' ? 'Favoritas' : undefined} style={{ flex: t.id === 'fav' ? 'none' : 1, padding: '4px 6px', fontSize: 10, fontWeight: 600, borderRadius: 3, background: tab === t.id ? 'rgba(255,255,255,0.08)' : 'transparent', color: tab === t.id ? (t.id === 'fav' ? '#FBBF24' : 'white') : (t.id === 'fav' ? 'rgba(251,191,36,0.5)' : 'rgba(255,255,255,0.55)') }}>{t.label}</button>
             ))}
           </div>
         </div>
@@ -1382,12 +1376,20 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
         {/* Lista de conversas */}
         <div className="lc-list-body dark-scroll">
+          {tab === 'fav' && favConvs.size === 0 && (
+            <div style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>⭐</div>
+              Nenhuma conversa favorita ainda.<br/>Clique na estrela de uma conversa para favoritar.
+            </div>
+          )}
           {filtered.map(c => (
             <ConvRow
               key={c.id}
               conv={c}
               active={c.id === activeId}
               statusFilter={statusFilter}
+              fav={favConvs.has(c.id)}
+              onFav={e => toggleFav(c.id, e)}
               onClick={() => {
                 setActiveId(c.id);
                 if (usingRealData && !c.id.startsWith('chan-')) loadMsgs(c.id);
@@ -1538,8 +1540,6 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                     key={m.id || i}
                     m={m}
                     conv={active}
-                    starred={!!starredMsgs[`${activeId}:${m.id}`]}
-                    onStar={() => toggleStar(m.id)}
                     onReply={msg => { setReplyTo(msg); setTimeout(() => textareaRef.current?.focus(), 30); }}
                     onViewImage={url => setLightboxUrl(url)}
                     onCreateTask={msg => console.log('criar tarefa:', msg.text)}
