@@ -1192,7 +1192,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       className="route-enter livechat"
       style={{
         display: 'grid',
-        gridTemplateColumns: 'minmax(320px, 360px) minmax(0, 1fr) auto',
+        gridTemplateColumns: `minmax(240px, 280px) minmax(0, 1fr) ${showInspector ? '272px' : '0px'}`,
         gridTemplateRows: '44px 1fr',
         gridTemplateAreas: '"header header header" "list chat inspector"',
         height: '100%',
@@ -1402,8 +1402,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             <>
               {/* Header do chat */}
               <header className="lc-chat-head">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                  <ConvAvatar conv={active} size={36} style={{ flexShrink: 0 }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                  <ConvAvatar conv={active} size={28} style={{ flexShrink: 0 }} />
                   <div style={{ minWidth: 0, overflow: 'hidden' }}>
                     <div className="lc-chat-name">{active.name}</div>
                     <div className="lc-chat-sub">
@@ -1720,23 +1720,22 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       )}
 
       {/* ─── COL 3: Painel direito (inspector) ───────────────── */}
-      <aside style={{ gridArea: 'inspector', display: 'flex', position: 'relative', minWidth: 0 }}>
-        {/* Botão de toggle — sempre visível na borda esquerda */}
+      <aside style={{ gridArea: 'inspector', display: 'flex', minWidth: 0, borderLeft: '1px solid rgba(255,255,255,0.06)' }}>
+        {/* Aba de toggle — sempre visível, sem sobrepor o chat */}
         <button
           onClick={() => setShowInspector(v => !v)}
           title={showInspector ? 'Fechar painel' : 'Abrir painel'}
           style={{
-            position: 'absolute', left: -12, top: '50%', transform: 'translateY(-50%)',
-            zIndex: 10, width: 20, height: 48, borderRadius: '6px 0 0 6px',
-            background: '#1F1F1F', border: '1px solid rgba(255,255,255,0.08)',
-            borderRight: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer',
+            width: 16, flexShrink: 0, alignSelf: 'stretch',
+            background: '#181818', border: 'none', borderRight: '1px solid rgba(255,255,255,0.06)',
+            color: 'rgba(255,255,255,0.35)', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'background 150ms, color 150ms',
           }}
-          onMouseEnter={e => { e.currentTarget.style.background = '#2a2a2a'; e.currentTarget.style.color = 'white'; }}
-          onMouseLeave={e => { e.currentTarget.style.background = '#1F1F1F'; e.currentTarget.style.color = 'rgba(255,255,255,0.5)'; }}
+          onMouseEnter={e => { e.currentTarget.style.background = '#252525'; e.currentTarget.style.color = 'white'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = '#181818'; e.currentTarget.style.color = 'rgba(255,255,255,0.35)'; }}
         >
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
             {showInspector
               ? <polyline points="9 18 15 12 9 6"/>
               : <polyline points="15 18 9 12 15 6"/>
