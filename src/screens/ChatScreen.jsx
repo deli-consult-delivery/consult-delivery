@@ -168,8 +168,6 @@ function ConvRow({ conv, active, onClick, statusFilter }) {
     falha:              { bg: 'rgba(183,12,0,0.18)',     color: '#FF8080' },
   };
   const realStatus = conv.status || 'aguardando';
-  // When viewing the "Aguardando" pill, conversations that are atendimento_aberto
-  // but have an unanswered client message should display as "Aguardando"
   const displayStatus = (statusFilter === 'aguardando' && realStatus === 'atendimento_aberto' && conv.previewFrom === 'in')
     ? 'em_atendimento'
     : realStatus;
@@ -221,6 +219,92 @@ function ConvRow({ conv, active, onClick, statusFilter }) {
   );
 }
 
+// ─── AUDIO PLAYER ─────────────────────────────────────────────
+function AudioPlayer({ src, isOut }) {
+  const [playing, setPlaying]       = useState(false);
+  const [currentTime, setCurrent]   = useState(0);
+  const [duration, setDuration]     = useState(0);
+  const audioRef                    = useRef(null);
+
+  const fmt = (s) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
+
+  const toggle = () => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (playing) { el.pause(); setPlaying(false); }
+    else { el.play().catch(() => {}); setPlaying(true); }
+  };
+
+  const accent  = isOut ? 'rgba(255,255,255,0.85)' : '#FF7070';
+  const trackBg = isOut ? 'rgba(255,255,255,0.25)' : 'rgba(183,12,0,0.25)';
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 200, maxWidth: 260 }}>
+      <audio
+        ref={audioRef}
+        src={src}
+        onLoadedMetadata={e => setDuration(e.target.duration || 0)}
+        onTimeUpdate={e => setCurrent(e.target.currentTime)}
+        onEnded={() => { setPlaying(false); setCurrent(0); if (audioRef.current) audioRef.current.currentTime = 0; }}
+        preload="metadata"
+      />
+      {/* Play / Pause */}
+      <button
+        onClick={toggle}
+        style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isOut ? 'rgba(255,255,255,0.18)' : 'rgba(183,12,0,0.22)', color: accent, transition: 'background 150ms' }}
+        title={playing ? 'Pausar' : 'Ouvir'}
+      >
+        {playing
+          ? <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+          : <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        }
+      </button>
+      {/* Seek + timer */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+        <input
+          type="range" min={0} max={duration || 1} step={0.1} value={currentTime}
+          onChange={e => { const t = Number(e.target.value); if (audioRef.current) audioRef.current.currentTime = t; setCurrent(t); }}
+          style={{ width: '100%', height: 3, cursor: 'pointer', accentColor: accent, background: trackBg, borderRadius: 999, appearance: 'auto' }}
+        />
+        <span style={{ fontSize: 10, color: isOut ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.5)', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+          {fmt(playing ? currentTime : (duration || 0))}
+        </span>
+      </div>
+      {/* Download */}
+      {src && (
+        <a
+          href={src} download="audio.ogg"
+          title="Baixar áudio"
+          style={{ flexShrink: 0, width: 26, height: 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: accent, background: isOut ? 'rgba(255,255,255,0.1)' : 'rgba(183,12,0,0.15)', textDecoration: 'none', transition: 'background 150ms' }}
+          onClick={e => e.stopPropagation()}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </a>
+      )}
+    </div>
+  );
+}
+
+const URL_REGEX = /https?:\/\/[^\s<>"')\]]+|www\.[^\s<>"')\]]+/g;
+function linkify(text) {
+  if (!text) return null;
+  const parts = [];
+  let last = 0;
+  let match;
+  URL_REGEX.lastIndex = 0;
+  while ((match = URL_REGEX.exec(text)) !== null) {
+    if (match.index > last) parts.push(text.slice(last, match.index));
+    const url = match[0];
+    const href = url.startsWith('http') ? url : `https://${url}`;
+    parts.push(<a key={match.index} href={href} target="_blank" rel="noopener noreferrer" style={{ color: '#60A5FA', textDecoration: 'underline', wordBreak: 'break-all' }}>{url}</a>);
+    last = match.index + url.length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
+
 // ─── MESSAGE BUBBLE ────────────────────────────────────────────
 function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage }) {
   const isOut = m.from === 'out';
@@ -237,16 +321,44 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage }) {
     const url = m.mediaUrl;
     if (m.mediaType === 'image') {
       return (
-        <div style={{ marginBottom: m.text ? 6 : 0 }}>
+        <div style={{ position: 'relative', display: 'inline-block', marginBottom: m.text ? 6 : 0 }} className="lc-media-wrap">
           <img src={url} alt="imagem" style={{ maxWidth: 260, maxHeight: 200, borderRadius: 8, cursor: 'pointer', display: 'block' }} onClick={() => onViewImage?.(url)} />
+          {url && (
+            <a
+              href={url} download
+              title="Baixar imagem"
+              onClick={e => e.stopPropagation()}
+              className="lc-media-dl"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+            </a>
+          )}
         </div>
       );
     }
     if (m.mediaType === 'video') {
-      return <video src={url} controls style={{ maxWidth: 260, borderRadius: 8 }} />;
+      return (
+        <div style={{ marginBottom: m.text ? 6 : 0 }}>
+          <video src={url} controls style={{ maxWidth: 260, borderRadius: 8, display: 'block' }} />
+          {url && (
+            <a
+              href={url} download
+              title="Baixar vídeo"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 5, fontSize: 11, color: isOut ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.5)', textDecoration: 'none' }}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Baixar vídeo
+            </a>
+          )}
+        </div>
+      );
     }
     if (m.mediaType?.includes('audio')) {
-      return <audio src={url} controls style={{ maxWidth: 260 }} />;
+      return <AudioPlayer src={url} isOut={isOut} />;
     }
     if (m.mediaType === 'document') {
       return (
@@ -275,7 +387,7 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage }) {
         <div className={`lc-bubble ${isOut ? 'out' : 'in'}`}>
           {renderMedia()}
           {m.text && !m.mediaType?.includes('document') && (
-            <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.text}</div>
+            <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{linkify(m.text)}</div>
           )}
         </div>
         {!isOut && (
@@ -359,6 +471,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   // ── AI / Composer ─────────────────────────────────────────
   const [aiMode, setAiMode]                  = useState('humano');
   const [showCopilot, setShowCopilot]        = useState(true);
+  const [showInspector, setShowInspector]    = useState(false);
   const [showSlash, setShowSlash]            = useState(false);
   const [showMention, setShowMention]        = useState(false);
   const [showQR, setShowQR]                  = useState(false);
@@ -372,13 +485,23 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   // ── Respostas rápidas ─────────────────────────────────────
   const [quickReplies, setQuickReplies]      = useState([]);
 
+  // ── Paste de imagem ──────────────────────────────────────
+  const [pasteImage, setPasteImage]          = useState(null); // { file, previewUrl }
+  const [pasteCaption, setPasteCaption]      = useState('');
+  const pasteCaptionRef                       = useRef(null);
+
   // ── Gravação de áudio ─────────────────────────────────────
-  const [recState, setRecState]              = useState('idle');
+  const [recState, setRecState]              = useState('idle'); // 'idle' | 'recording' | 'preview'
   const [recSeconds, setRecSeconds]          = useState(0);
-  const [audioPreview, setAudioPreview]      = useState(null);
+  const [audioPreview, setAudioPreview]      = useState(null); // object URL para o player
+  const [recPlaying, setRecPlaying]          = useState(false);
+  const [recDuration, setRecDuration]        = useState(0);
+  const [recCurrentTime, setRecCurrentTime]  = useState(0);
   const mediaRecorderRef                      = useRef(null);
   const audioChunksRef                        = useRef([]);
   const recTimerRef                           = useRef(null);
+  const audioBlobRef                          = useRef(null);
+  const audioElRef                            = useRef(null);
 
   // ── Painel direito collapse ────────────────────────────────
   const [openPerfil, setOpenPerfil]          = useState(true);
@@ -555,7 +678,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
              : conv.status === 'em_atendimento' ? { status: 'atendimento_aberto' }
              : {})
             : {};
-          const updated = { ...conv, preview, time, unread: isActive ? 0 : (conv.unread || 0) + (isInbound ? 1 : 0), ...statusUpdate };
+          const updated = { ...conv, preview, time, previewFrom: isInbound ? 'in' : 'out', unread: isActive ? 0 : (conv.unread || 0) + (isInbound ? 1 : 0), ...statusUpdate };
           // Only move to top for inbound — outbound sends should not reorder the list
           if (!isInbound) { const next = [...prev]; next[idx] = updated; return next; }
           return [updated, ...prev.filter(c => c.id !== convId)];
@@ -697,35 +820,51 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     } catch { /* ignore */ }
   }
 
-  // ── REFRESH PENDING CONVS ─────────────────────────────────
+  // ── REFRESH ACTIVE CONVS ──────────────────────────────────
+  const REFRESH_STATUSES = ['aguardando', 'em_atendimento', 'atendimento_aberto', 'automacao'];
+
   async function refreshPendingConvs() {
     if (!selectedInstance || refreshing) return;
     setRefreshing(true);
     try {
       const { data: inst } = await supabase.from('evolution_instances').select('id').eq('instance_name', selectedInstance).single();
       if (!inst) return;
-      const PENDING_STATUSES = ['aguardando', 'em_atendimento', 'atendimento_aberto', 'automacao'];
-      const { data: rows } = await supabase.from('conversations').select('*').eq('instance_id', inst.id).in('status', PENDING_STATUSES).order('updated_at', { ascending: false }).limit(100);
-      if (!rows?.length) return;
-      const lastMsgResults = await Promise.all(rows.map(r => supabase.from('messages').select('conversation_id, content, body, direction, created_at, media_type').eq('conversation_id', r.id).order('created_at', { ascending: false }).limit(1).maybeSingle()));
-      const lastMsgMap = {};
-      lastMsgResults.forEach(({ data }) => { if (data) lastMsgMap[data.conversation_id] = data; });
-      const mapped = rows.map(c => {
-        const phone = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
-        const name  = c.push_name || c.contact_name || c.group_name || phone || 'Desconhecido';
-        const lm    = lastMsgMap[c.id];
-        const preview = lm ? (lm.media_type === 'image' ? '🖼 Imagem' : lm.media_type === 'video' ? '🎬 Vídeo' : lm.media_type === 'document' ? '📄 Documento' : lm.media_type?.includes('audio') ? '🎵 Áudio' : lm.content || lm.body || '') : '';
-        const previewFrom = lm?.direction === 'inbound' ? 'in' : 'out';
-        return { id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null, type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id, preview, previewFrom, time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '', unread: 0, online: false, messages: [], status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null, status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null };
-      });
-      setConvs(prev => {
-        const updatedIds = new Set(mapped.map(c => c.id));
-        const kept = prev.filter(c => !updatedIds.has(c.id) && !(['aguardando','em_atendimento','atendimento_aberto','automacao'].includes(c.status)));
-        return [...kept, ...mapped];
-      });
+      const { data: rows } = await supabase
+        .from('conversations').select('*')
+        .eq('instance_id', inst.id)
+        .in('status', REFRESH_STATUSES)
+        .order('updated_at', { ascending: false })
+        .limit(100);
+
+      const mapped = [];
+      if (rows?.length) {
+        const lastMsgResults = await Promise.all(
+          rows.map(r => supabase.from('messages')
+            .select('conversation_id, content, body, direction, created_at, media_type')
+            .eq('conversation_id', r.id)
+            .order('created_at', { ascending: false })
+            .limit(1).maybeSingle()
+          )
+        );
+        const lastMsgMap = {};
+        lastMsgResults.forEach(({ data }) => { if (data) lastMsgMap[data.conversation_id] = data; });
+        rows.forEach(c => {
+          const phone = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
+          const name  = c.push_name || c.contact_name || c.group_name || phone || 'Desconhecido';
+          const lm    = lastMsgMap[c.id];
+          const preview = lm ? (lm.media_type === 'image' ? '🖼 Imagem' : lm.media_type === 'video' ? '🎬 Vídeo' : lm.media_type === 'document' ? '📄 Documento' : lm.media_type?.includes('audio') ? '🎵 Áudio' : lm.content || lm.body || '') : '';
+          const previewFrom = lm?.direction === 'inbound' ? 'in' : 'out';
+          mapped.push({ id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null, type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id, preview, previewFrom, time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '', unread: 0, online: false, messages: [], status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null, status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null });
+        });
+      }
+      setConvs(prev => [
+        ...prev.filter(c => !REFRESH_STATUSES.includes(c.status)),
+        ...mapped,
+      ]);
       refreshStatus();
-    } catch { /* ignore */ }
-    setRefreshing(false);
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   // ── SEND MESSAGE ──────────────────────────────────────────
@@ -807,7 +946,12 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       mr.onstop = () => {
         stream.getTracks().forEach(t => t.stop());
         const blob = new Blob(audioChunksRef.current, { type: 'audio/ogg; codecs=opus' });
-        sendAudioBlob(blob);
+        audioBlobRef.current = blob;
+        const url = URL.createObjectURL(blob);
+        setAudioPreview(url);
+        setRecPlaying(false);
+        setRecCurrentTime(0);
+        setRecState('preview');
       };
       mr.start(200);
       setRecState('recording');
@@ -821,8 +965,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const stopRecording = () => {
     if (recState !== 'recording') return;
     clearInterval(recTimerRef.current);
-    setRecState('idle');
     mediaRecorderRef.current?.stop();
+    // recState será definido para 'preview' dentro de mr.onstop
   };
 
   const cancelRecording = () => {
@@ -840,14 +984,40 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     setRecSeconds(0);
   };
 
+  const discardAudio = () => {
+    if (audioPreview) URL.revokeObjectURL(audioPreview);
+    audioBlobRef.current = null;
+    setAudioPreview(null);
+    setRecPlaying(false);
+    setRecDuration(0);
+    setRecCurrentTime(0);
+    setRecState('idle');
+  };
+
+  const confirmSendAudio = async () => {
+    if (!audioBlobRef.current) return;
+    const blob = audioBlobRef.current;
+    discardAudio();
+    await sendAudioBlob(blob);
+  };
+
+  const togglePlayPreview = () => {
+    const el = audioElRef.current;
+    if (!el) return;
+    if (recPlaying) { el.pause(); setRecPlaying(false); }
+    else { el.play(); setRecPlaying(true); }
+  };
+
   const sendAudioBlob = async (blob) => {
     if (!active || !HAS_EVO || !selectedInstance || !active.whatsapp_chat_id) return;
+    // URL local para o player funcionar imediatamente enquanto o upload acontece
+    const localUrl = URL.createObjectURL(blob);
     const reader = new FileReader();
     reader.onloadend = async () => {
       const base64 = reader.result.split(',')[1];
       const now = new Date();
       const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-      setMessages(m => ({ ...m, [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text: '🎤 Áudio', time, mediaType: 'audio' }] }));
+      setMessages(m => ({ ...m, [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text: '', time, mediaType: 'audio', mediaUrl: localUrl }] }));
       setSending(true);
       try { await sendAudioMessage(selectedInstance, active.whatsapp_chat_id, base64); }
       catch (err) { console.error('Falha ao enviar áudio:', err); }
@@ -886,6 +1056,46 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     if (!file) return;
     e.target.value = '';
     await sendMediaFile(file);
+  };
+
+  const handleComposerPaste = (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) return;
+        setPasteImage({ file, previewUrl: URL.createObjectURL(file) });
+        setPasteCaption('');
+        setTimeout(() => pasteCaptionRef.current?.focus(), 80);
+        return;
+      }
+    }
+    // texto: deixa colar normalmente
+  };
+
+  const sendPasteImage = async () => {
+    if (!pasteImage) return;
+    const { file } = pasteImage;
+    const caption = pasteCaption.trim();
+    const now = new Date();
+    const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const label = caption || `🖼️ ${file.name || 'imagem'}`;
+    setMessages(m => ({ ...m, [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text: label, time, mediaType: 'image', mediaUrl: pasteImage.previewUrl }] }));
+    const { file: f, previewUrl } = pasteImage;
+    setPasteImage(null);
+    setPasteCaption('');
+    if (!HAS_EVO || !selectedInstance || !active?.whatsapp_chat_id || !(active.type === 'whatsapp' || active.type === 'group')) return;
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64 = reader.result.split(',')[1];
+      setSending(true);
+      try { await sendMediaMessage(selectedInstance, active.whatsapp_chat_id, base64, 'image', f.type, caption, f.name || 'imagem.png'); }
+      catch (err) { console.error('Falha ao enviar imagem colada:', err); }
+      finally { setSending(false); URL.revokeObjectURL(previewUrl); }
+    };
+    reader.readAsDataURL(f);
   };
 
   // ── AI COMMANDS ───────────────────────────────────────────
@@ -1004,10 +1214,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       className="route-enter livechat"
       style={{
         display: 'grid',
-        gridTemplateColumns: 'minmax(320px, 360px) minmax(0, 1fr) 320px',
-        gridTemplateRows: '44px 1fr',
+        gridTemplateColumns: 'minmax(320px, 360px) minmax(0, 1fr) var(--insp-col, 336px)',
+        '--insp-col': showInspector ? '336px' : '16px',
+        gridTemplateRows: '36px calc(100vh - 36px)',
         gridTemplateAreas: '"header header header" "list chat inspector"',
-        height: '100%',
+        height: '100vh',
         background: '#0E0E0E',
         overflow: 'hidden',
       }}
@@ -1214,8 +1425,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             <>
               {/* Header do chat */}
               <header className="lc-chat-head">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                  <ConvAvatar conv={active} size={36} style={{ flexShrink: 0 }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                  <ConvAvatar conv={active} size={28} style={{ flexShrink: 0 }} />
                   <div style={{ minWidth: 0, overflow: 'hidden' }}>
                     <div className="lc-chat-name">{active.name}</div>
                     <div className="lc-chat-sub">
@@ -1249,22 +1460,6 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                   <button className="lc-icon-btn-dark" title="Mais"><Icon name="chevdown" size={16} style={{ transform: 'rotate(90deg)' }} /></button>
                 </div>
               </header>
-
-              {/* AI strip */}
-              <div className="lc-ai-strip">
-                <div className="lc-ai-strip-left">
-                  <span className="lc-ai-strip-label"><Icon name="sparkles" size={11} /> Auto-tags IA:</span>
-                  {active.type === 'whatsapp' && <span className="lc-autotag">#whatsapp</span>}
-                  {active.type === 'group'    && <span className="lc-autotag">#grupo</span>}
-                  {convStatus === 'aguardando'     && <span className="lc-autotag" style={{ background: 'rgba(245,158,11,0.18)', color: '#FBBF24' }}>#aguardando</span>}
-                  {convStatus === 'em_atendimento' && <span className="lc-autotag" style={{ background: 'rgba(59,130,246,0.18)', color: '#93C5FD' }}>#em-atendimento</span>}
-                  <button className="lc-autotag-add">+ tag</button>
-                </div>
-                <div className="lc-ai-strip-right">
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)' }}>IA mode:</span>
-                  <span style={{ fontSize: 11, color: 'white', fontWeight: 700 }}>{aiMode}</span>
-                </div>
-              </div>
 
               {/* AI action banner */}
               {aiAction && (
@@ -1394,7 +1589,74 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                 <input ref={galleryInputRef} type="file" accept="image/*,video/*"                            style={{ display: 'none' }} onChange={handleFileSelect} />
                 <input ref={cameraInputRef}  type="file" accept="image/*" capture="camera"                  style={{ display: 'none' }} onChange={handleFileSelect} />
 
-                {recState === 'recording' ? (
+                {pasteImage ? (
+                  <div className="lc-paste-preview">
+                    <button
+                      className="lc-paste-cancel"
+                      title="Cancelar"
+                      onClick={() => { URL.revokeObjectURL(pasteImage.previewUrl); setPasteImage(null); setPasteCaption(''); }}
+                    >
+                      <Icon name="x" size={14} />
+                    </button>
+                    <img src={pasteImage.previewUrl} alt="preview" className="lc-paste-thumb" />
+                    <input
+                      ref={pasteCaptionRef}
+                      className="lc-paste-caption"
+                      placeholder="Adicionar legenda (opcional)…"
+                      value={pasteCaption}
+                      onChange={e => setPasteCaption(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendPasteImage(); } if (e.key === 'Escape') { URL.revokeObjectURL(pasteImage.previewUrl); setPasteImage(null); setPasteCaption(''); } }}
+                    />
+                    <button
+                      className="lc-comp-send ready"
+                      title="Enviar imagem"
+                      onClick={sendPasteImage}
+                      disabled={sending}
+                    >
+                      <Icon name="send" size={15} />
+                    </button>
+                  </div>
+                ) : recState === 'preview' ? (
+                  <div className="lc-composer lc-composer-rec">
+                    {/* hidden audio element para controle de playback */}
+                    <audio
+                      ref={audioElRef}
+                      src={audioPreview}
+                      onLoadedMetadata={e => setRecDuration(Math.round(e.target.duration))}
+                      onTimeUpdate={e => setRecCurrentTime(Math.round(e.target.currentTime))}
+                      onEnded={() => setRecPlaying(false)}
+                      style={{ display: 'none' }}
+                    />
+                    <button onClick={discardAudio} className="lc-comp-icon lc-rec-cancel" title="Descartar áudio">
+                      <Icon name="trash" size={16} />
+                    </button>
+                    <div className="lc-rec-indicator">
+                      <button onClick={togglePlayPreview} className="lc-rec-play-btn" title={recPlaying ? 'Pausar' : 'Ouvir'}>
+                        {recPlaying
+                          ? <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                          : <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        }
+                      </button>
+                      <div className="lc-rec-seek-wrap">
+                        <input
+                          type="range" min={0} max={recDuration || 1} value={recCurrentTime}
+                          className="lc-rec-seek"
+                          onChange={e => {
+                            const t = Number(e.target.value);
+                            if (audioElRef.current) audioElRef.current.currentTime = t;
+                            setRecCurrentTime(t);
+                          }}
+                        />
+                      </div>
+                      <span className="lc-rec-time">
+                        {recPlaying ? formatRecTime(recCurrentTime) : formatRecTime(recDuration)}
+                      </span>
+                    </div>
+                    <button onClick={confirmSendAudio} className="lc-comp-send ready" title="Enviar áudio" disabled={sending}>
+                      <Icon name="send" size={15} />
+                    </button>
+                  </div>
+                ) : recState === 'recording' ? (
                   <div className="lc-composer lc-composer-rec">
                     <button onClick={cancelRecording} className="lc-comp-icon lc-rec-cancel" title="Cancelar gravação">
                       <Icon name="x" size={16} />
@@ -1406,8 +1668,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                       </div>
                       <span className="lc-rec-time">{formatRecTime(recSeconds)}</span>
                     </div>
-                    <button onClick={stopRecording} className="lc-comp-send ready" title="Enviar áudio">
-                      <Icon name="send" size={15} />
+                    <button onClick={stopRecording} className="lc-comp-send ready" title="Parar gravação">
+                      <Icon name="squarestop" size={15} />
                     </button>
                   </div>
                 ) : (
@@ -1430,6 +1692,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                         value={draft}
                         onChange={e => onDraftChange(e.target.value)}
                         onKeyDown={onKeyDown}
+                        onPaste={handleComposerPaste}
                         className="lc-comp-input"
                         placeholder={aiMode === 'ia' ? 'IA respondendo automaticamente…' : 'Escreva uma mensagem…'}
                         rows={1}
@@ -1464,7 +1727,38 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       )}
 
       {/* ─── COL 3: Painel direito (inspector) ───────────────── */}
-      <aside className="lc-inspector dark-scroll" style={{ gridArea: 'inspector' }}>
+      <aside
+        style={{
+          gridArea: 'inspector',
+          display: 'flex',
+          overflow: 'hidden',
+          borderLeft: '1px solid rgba(255,255,255,0.06)',
+          background: '#181818',
+        }}
+      >
+        {/* Aba de toggle — sempre visível */}
+        <button
+          onClick={() => setShowInspector(v => !v)}
+          title={showInspector ? 'Fechar painel' : 'Abrir painel'}
+          style={{
+            width: 16, flexShrink: 0, alignSelf: 'stretch',
+            background: 'transparent', border: 'none',
+            borderRight: showInspector ? '1px solid rgba(255,255,255,0.06)' : 'none',
+            color: 'rgba(255,255,255,0.35)', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'color 150ms',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.color = 'white'; }}
+          onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.35)'; }}
+        >
+          <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            {showInspector
+              ? <polyline points="9 18 15 12 9 6"/>
+              : <polyline points="15 18 9 12 15 6"/>
+            }
+          </svg>
+        </button>
+        <div className="lc-inspector dark-scroll" style={{ width: 320, flexShrink: 0, overflowY: 'auto', transform: showInspector ? 'translateX(0)' : 'translateX(100%)', transition: 'transform 220ms ease' }}>
         {active && (
           <>
             <div className="lc-insp-head">
@@ -1555,6 +1849,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             )}
           </>
         )}
+        </div>
       </aside>
     </div>
 

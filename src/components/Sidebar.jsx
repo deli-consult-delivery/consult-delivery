@@ -71,9 +71,10 @@ export default function Sidebar({ route, setRoute, counts, isOpen }) {
   });
 
   useEffect(() => {
-    document.documentElement.style.setProperty('--sidebar-w', expanded ? '220px' : '64px');
+    const w = route === 'chat' ? '0px' : (expanded ? '220px' : '64px');
+    document.documentElement.style.setProperty('--sidebar-w', w);
     try { localStorage.setItem('cd-sidebar-expanded', String(expanded)); } catch {}
-  }, [expanded]);
+  }, [expanded, route]);
 
   return (
     <aside className={`sidebar dark-scroll${isOpen ? ' open' : ''}${expanded ? ' expanded' : ''}`}>
