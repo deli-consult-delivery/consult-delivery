@@ -2623,9 +2623,12 @@ input, textarea { font-family: inherit; }
 .lc-bubble.in { background: var(--lc-panel-2); color: var(--lc-text); border: 1px solid var(--lc-border); border-bottom-left-radius: 4px; }
 .lc-bubble.out { background: linear-gradient(135deg, var(--red), var(--red-deep)); color: white; border-bottom-right-radius: 4px; }
 .lc-bubble-actions { display: flex; gap: 4px; margin-top: 4px; opacity: 0; transition: opacity 150ms; }
+.lc-bubble-actions.out { justify-content: flex-end; }
 .lc-msg-row:hover .lc-bubble-actions { opacity: 1; }
 .lc-bubble-actions button { background: rgba(255,255,255,0.05); border: 1px solid var(--lc-border); color: rgba(255,255,255,0.5); width: 22px; height: 22px; border-radius: 5px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 120ms; }
 .lc-bubble-actions button:hover { background: rgba(183,12,0,0.18); color: var(--red-light); border-color: rgba(183,12,0,0.4); }
+.lc-bubble-actions button[style*="rgb(239"] { color: rgba(239,68,68,0.7); }
+.lc-bubble-actions button[style*="rgb(239"]:hover { background: rgba(239,68,68,0.15); color: #EF4444; border-color: rgba(239,68,68,0.4); }
 
 /* Botão estrela em mensagens */
 .lc-star-msg-btn {

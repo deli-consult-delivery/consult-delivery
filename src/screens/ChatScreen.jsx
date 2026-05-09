@@ -359,7 +359,7 @@ function linkify(text) {
 }
 
 // ─── MESSAGE BUBBLE ────────────────────────────────────────────
-function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onStar }) {
+function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onStar, onDelete }) {
   const isOut = m.from === 'out';
   const isSystem = m.from === 'system';
 
@@ -449,6 +449,9 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onSta
             <button title="Traduzir"><Icon name="globe" size={11} /></button>
             <button title="Virar tarefa" onClick={() => onCreateTask?.(m)}><Icon name="check" size={11} /></button>
             <button title="Resumir"><Icon name="sparkles" size={11} /></button>
+            <button title="Apagar mensagem" onClick={() => onDelete?.(m)} style={{ color: 'rgba(239,68,68,0.7)' }}>
+              <Icon name="trash" size={11} />
+            </button>
             <button
               className={`lc-star-msg-btn${starred ? ' starred' : ''}`}
               title={starred ? 'Remover dos favoritos' : 'Favoritar mensagem'}
@@ -461,24 +464,31 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onSta
           </div>
         )}
         {isOut && (
-          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 3, marginRight: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-            {starred && (
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="#FBBF24" stroke="#FBBF24" strokeWidth="1.5">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-              </svg>
-            )}
-            {m.time}
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34D399" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-            <button
-              className={`lc-star-msg-btn out${starred ? ' starred' : ''}`}
-              title={starred ? 'Remover dos favoritos' : 'Favoritar mensagem'}
-              onClick={() => onStar?.()}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill={starred ? '#FBBF24' : 'none'} stroke={starred ? '#FBBF24' : 'currentColor'} strokeWidth="2">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-              </svg>
-            </button>
-          </div>
+          <>
+            <div className="lc-bubble-actions out">
+              <button
+                className={`lc-star-msg-btn${starred ? ' starred' : ''}`}
+                title={starred ? 'Remover dos favoritos' : 'Favoritar mensagem'}
+                onClick={() => onStar?.()}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill={starred ? '#FBBF24' : 'none'} stroke={starred ? '#FBBF24' : 'currentColor'} strokeWidth="2">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+              </button>
+              <button title="Apagar mensagem" onClick={() => onDelete?.(m)} style={{ color: 'rgba(239,68,68,0.7)' }}>
+                <Icon name="trash" size={11} />
+              </button>
+            </div>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 3, marginRight: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+              {starred && (
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="#FBBF24" stroke="#FBBF24" strokeWidth="1.5">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+              )}
+              {m.time}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34D399" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+            </div>
+          </>
         )}
       </div>
     </div>
@@ -1094,6 +1104,19 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     });
   };
 
+  const deleteMsg = async (msg) => {
+    if (!activeId || !msg?.id) return;
+    // Remove do estado local imediatamente
+    setMessages(prev => ({
+      ...prev,
+      [activeId]: (prev[activeId] || []).filter(m => m.id !== msg.id),
+    }));
+    // Remove do Supabase se for mensagem real (não temporária)
+    if (!msg.id.startsWith('tmp-')) {
+      await supabase.from('messages').delete().eq('id', msg.id);
+    }
+  };
+
   const toggleFav = (convId, e) => {
     e?.stopPropagation();
     setFavConvs(prev => {
@@ -1704,6 +1727,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                     conv={active}
                     starred={!!starredMsgs[`${activeId}:${m.id}`]}
                     onStar={() => toggleStarMsg(m)}
+                    onDelete={deleteMsg}
                     onReply={msg => { setReplyTo(msg); setTimeout(() => textareaRef.current?.focus(), 30); }}
                     onViewImage={url => setLightboxUrl(url)}
                     onCreateTask={msg => console.log('criar tarefa:', msg.text)}
