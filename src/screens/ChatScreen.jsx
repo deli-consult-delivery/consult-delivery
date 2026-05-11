@@ -365,10 +365,7 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onSta
 
   if (isSystem) {
     return (
-      <div className="lc-system">
-        {m.text}
-        {m.time && <span className="lc-system-time">{m.time}</span>}
-      </div>
+      <div className="lc-system">{m.text}</div>
     );
   }
 
@@ -922,8 +919,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       }));
       const evtMsgs = (evts || []).map(evt => ({
         id: `evt-${evt.id}`, from: 'system',
-        text: eventToText(evt),
-        time: new Date(evt.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        text: fmtEventLabel(evt),
         _ts: evt.ts,
       }));
       const merged = [...dbMsgs, ...evtMsgs].sort((a, b) => new Date(a._ts) - new Date(b._ts));
@@ -1006,8 +1002,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         const canUpdateStatus = !['finalizado', 'falha', 'archived'].includes(convStatus);
         if (canUpdateStatus) {
           await changeStatus('atendimento_aberto');
-          const evtText = `${currentUser?.name || 'Equipe'} assumiu o atendimento`;
-          addSystemMsg(active.id, evtText);
+          addSystemMsg(active.id, 'assumiu o atendimento');
           await insertEvent(active.id, 'assigned');
           setConvs(prev => prev.map(c => c.id === active.id ? { ...c, status: 'atendimento_aberto', previewFrom: 'out' } : c));
         } else {
@@ -1151,33 +1146,56 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   };
 
   // ── HISTÓRICO / EVENTS ────────────────────────────────────
-  function eventToText(evt) {
-    const actor = evt.actor_name || 'Sistema';
-    const meta  = evt.metadata || {};
+  function fmtEventDate(d) {
+    const now   = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const day   = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const diff  = Math.round((today - day) / 86400000);
+    if (diff === 0) return 'hoje';
+    if (diff === 1) return 'ontem';
+    if (diff < 7)   return d.toLocaleDateString('pt-BR', { weekday: 'long' });
+    return d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }).replace('.', '');
+  }
+
+  function eventVerb(evt) {
+    const meta = evt.metadata || {};
     switch (evt.event_type) {
-      case 'created':            return 'Conversa iniciada';
-      case 'assigned':           return `${actor} assumiu o atendimento`;
-      case 'unassigned':         return `${actor} removeu a atribuição`;
-      case 'transferred':        return meta.dept_to
-        ? `${actor} moveu para departamento ${meta.dept_to}`
+      case 'created':             return 'iniciou a conversa';
+      case 'assigned':            return 'assumiu o atendimento';
+      case 'unassigned':          return 'removeu a atribuição';
+      case 'transferred':         return meta.dept_to
+        ? `moveu para o departamento ${meta.dept_to}`
         : meta.dept_from
-        ? `${actor} removeu o departamento ${meta.dept_from}`
-        : `${actor} transferiu a conversa`;
-      case 'tagged':             return `Tag adicionada: ${meta.tag_name || ''}`;
-      case 'untagged':           return `Tag removida: ${meta.tag_name || ''}`;
-      case 'closed':             return `${actor} finalizou o atendimento`;
-      case 'reopened':           return `${actor} reabriu o atendimento`;
-      case 'note_added':         return `Nota interna adicionada por ${actor}`;
-      case 'automation_executed':return `Automação executada${meta.name ? ': ' + meta.name : ''}`;
-      default:                   return evt.event_type;
+        ? `removeu o departamento ${meta.dept_from}`
+        : 'transferiu a conversa';
+      case 'tagged':              return `adicionou tag: ${meta.tag_name || ''}`;
+      case 'untagged':            return `removeu tag: ${meta.tag_name || ''}`;
+      case 'closed':              return 'finalizou o atendimento';
+      case 'reopened':            return 'reabriu o atendimento';
+      case 'note_added':          return 'adicionou uma nota interna';
+      case 'automation_executed': return `executou automação${meta.name ? ': ' + meta.name : ''}`;
+      default:                    return evt.event_type;
     }
   }
 
-  const addSystemMsg = (convId, text) => {
-    const time = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  function fmtEventLabel(evt) {
+    const d       = new Date(evt.ts);
+    const dateStr = fmtEventDate(d);
+    const timeStr = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const actor   = evt.actor_name || '';
+    const verb    = eventVerb(evt);
+    return `${dateStr} ${timeStr} — ${actor ? actor + ' ' : ''}${verb}`;
+  }
+
+  const addSystemMsg = (convId, verbText) => {
+    const d       = new Date();
+    const dateStr = fmtEventDate(d);
+    const timeStr = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const actor   = currentUser?.name || 'Equipe';
+    const text    = `${dateStr} ${timeStr} — ${actor} ${verbText}`;
     setMessages(prev => ({
       ...prev,
-      [convId]: [...(prev[convId] || []), { id: `sys-${Date.now()}`, from: 'system', text, time }],
+      [convId]: [...(prev[convId] || []), { id: `sys-${Date.now()}`, from: 'system', text }],
     }));
   };
 
@@ -1746,20 +1764,20 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                     <DepartmentSelector dark conversationId={active.id} tenantId={tenantDbId} currentDepartmentId={active.department_id ?? null} onChanged={async dept => {
                       const oldDept = departments.find(d => d.id === active.department_id);
                       setConvs(prev => prev.map(c => c.id === active.id ? { ...c, department_id: dept.id } : c));
-                      const txt = dept.id
-                        ? `${currentUser?.name || 'Equipe'} moveu para departamento ${dept.name}`
-                        : `${currentUser?.name || 'Equipe'} removeu o departamento${oldDept ? ' ' + oldDept.name : ''}`;
-                      addSystemMsg(active.id, txt);
+                      const verb = dept.id
+                        ? `moveu para o departamento ${dept.name}`
+                        : `removeu o departamento${oldDept ? ' ' + oldDept.name : ''}`;
+                      addSystemMsg(active.id, verb);
                       await insertEvent(active.id, 'transferred', { dept_from: oldDept?.name || null, dept_to: dept.name || null });
                     }} />
                   )}
                   <span className="lc-protocol">#{active.id?.slice(-5) || '00000'}</span>
                   {convStatus === 'finalizado' ? (
-                    <button className="lc-action-btn" onClick={async () => { const { error } = await changeStatus('atendimento_aberto'); if (!error) { const txt = `${currentUser?.name || 'Equipe'} reabriu o atendimento`; addSystemMsg(activeId, txt); await insertEvent(activeId, 'reopened'); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'atendimento_aberto', status_v2: 'in_progress' } : c)); setStatusFilter('aberto'); } }} disabled={statusLoading}>
+                    <button className="lc-action-btn" onClick={async () => { const { error } = await changeStatus('atendimento_aberto'); if (!error) { addSystemMsg(activeId, 'reabriu o atendimento'); await insertEvent(activeId, 'reopened'); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'atendimento_aberto', status_v2: 'in_progress' } : c)); setStatusFilter('aberto'); } }} disabled={statusLoading}>
                       <Icon name="refresh" size={13} /> Reabrir
                     </button>
                   ) : (
-                    <button className="lc-action-btn primary" onClick={async () => { const { error } = await finish(); if (!error) { const txt = `${currentUser?.name || 'Equipe'} finalizou o atendimento`; addSystemMsg(activeId, txt); await insertEvent(activeId, 'closed'); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'finalizado', status_v2: 'closed' } : c)); setResolved(r => ({ ...r, [activeId]: true })); setStatusFilter('finalizado'); } }} disabled={statusLoading}>
+                    <button className="lc-action-btn primary" onClick={async () => { const { error } = await finish(); if (!error) { addSystemMsg(activeId, 'finalizou o atendimento'); await insertEvent(activeId, 'closed'); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'finalizado', status_v2: 'closed' } : c)); setResolved(r => ({ ...r, [activeId]: true })); setStatusFilter('finalizado'); } }} disabled={statusLoading}>
                       <Icon name="check" size={13} /> {resolved[activeId] ? 'Finalizado' : 'Finalizar'}
                     </button>
                   )}

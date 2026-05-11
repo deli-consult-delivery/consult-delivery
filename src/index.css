@@ -2613,8 +2613,7 @@ input, textarea { font-family: inherit; }
 
 /* Messages */
 .lc-msgs { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 14px; display: flex; flex-direction: column; gap: 6px; }
-.lc-system { align-self: center; font-size: 11px; color: rgba(255,255,255,0.45); background: rgba(255,255,255,0.04); border: 1px solid var(--lc-border); padding: 4px 12px; border-radius: 999px; font-weight: 500; display: flex; align-items: center; gap: 6px; max-width: 90%; }
-.lc-system-time { font-size: 10px; color: rgba(255,255,255,0.25); flex-shrink: 0; }
+.lc-system { align-self: center; font-size: 11px; color: rgba(255,255,255,0.45); background: rgba(255,255,255,0.04); border: 1px solid var(--lc-border); padding: 4px 14px; border-radius: 999px; font-weight: 500; max-width: 90%; text-align: center; }
 .lc-day-sep { align-self: center; position: relative; margin: 8px 0; }
 .lc-day-sep span { font-size: 11px; color: rgba(255,255,255,0.5); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; background: var(--lc-bg); padding: 4px 16px; border: 1px solid var(--lc-border); border-radius: 999px; }
 .lc-msg-row { display: flex; gap: 10px; align-items: flex-end; }
