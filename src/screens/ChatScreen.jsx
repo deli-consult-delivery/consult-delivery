@@ -358,6 +358,33 @@ function linkify(text) {
   return parts;
 }
 
+// ─── QUOTED MESSAGE HELPERS ────────────────────────────────────
+function extractQuotedText(q) {
+  if (!q) return null;
+  // Platform format (own reply state)
+  if (typeof q.text === 'string') return q.text;
+  // Evolution API formats
+  const msg = q.message;
+  if (!msg) return null;
+  if (msg.conversation) return msg.conversation;
+  if (msg.extendedTextMessage?.text) return msg.extendedTextMessage.text;
+  if (msg.imageMessage) return msg.imageMessage.caption || '🖼 Imagem';
+  if (msg.videoMessage) return msg.videoMessage.caption || '🎬 Vídeo';
+  if (msg.audioMessage) return '🎵 Áudio';
+  if (msg.documentMessage) return `📄 ${msg.documentMessage.fileName || 'Documento'}`;
+  if (msg.stickerMessage) return '🔖 Sticker';
+  return '📎 Mídia';
+}
+function extractQuotedSender(q, convName) {
+  if (!q) return null;
+  // Platform format
+  if (q.agentName) return q.agentName;
+  if (q.from === 'out') return 'Você';
+  // Evolution API format
+  if (q.key?.fromMe) return 'Você';
+  return q.pushName || convName || 'Cliente';
+}
+
 // ─── MESSAGE BUBBLE ────────────────────────────────────────────
 function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onStar, onDelete }) {
   const isOut = m.from === 'out';
@@ -433,8 +460,13 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onSta
           </div>
         )}
         {m.replyTo && (
-          <div style={{ marginBottom: 4, padding: '5px 10px', borderLeft: '3px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.05)', borderRadius: '0 6px 6px 0', fontSize: 11, color: 'rgba(255,255,255,0.6)', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {m.replyTo.text || '🖼 Mídia'}
+          <div style={{ marginBottom: 4, padding: '5px 10px', borderLeft: '3px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.05)', borderRadius: '0 6px 6px 0', fontSize: 11, maxWidth: 260, overflow: 'hidden' }}>
+            <div style={{ color: 'rgba(255,255,255,0.75)', fontWeight: 600, marginBottom: 1, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+              {extractQuotedSender(m.replyTo, conv?.name)}
+            </div>
+            <div style={{ color: 'rgba(255,255,255,0.55)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+              {extractQuotedText(m.replyTo) || '📎 Mídia'}
+            </div>
           </div>
         )}
         <div className={`lc-bubble ${isOut ? 'out' : 'in'}`}>
