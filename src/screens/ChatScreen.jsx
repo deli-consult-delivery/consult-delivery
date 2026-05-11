@@ -365,7 +365,10 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onSta
 
   if (isSystem) {
     return (
-      <div className="lc-system">{m.text}</div>
+      <div className="lc-system">
+        {m.text}
+        {m.time && <span className="lc-system-time">{m.time}</span>}
+      </div>
     );
   }
 
@@ -904,14 +907,30 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
   async function loadMsgs(convId) {
     try {
-      const { data } = await supabase.from('messages').select('id, direction, content, body, created_at, sender_name, media_url, media_type, whatsapp_msg_id, quoted_content').eq('conversation_id', convId).order('created_at', { ascending: false }).limit(100);
-      if (data) {
-        const dbMsgs = data.reverse().filter(msg => msg.content || msg.body || msg.media_url).map(msg => ({ id: msg.id, from: msg.direction === 'outbound' ? 'out' : 'in', text: msg.content || msg.body || '', time: new Date(msg.created_at || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), mediaType: msg.media_type || null, mediaUrl: msg.media_url || null, agentName: msg.sender_name || null, waMsgId: msg.whatsapp_msg_id || null, replyTo: msg.quoted_content || null }));
-        setMessages(m => {
-          const tmpMsgs = (m[convId] || []).filter(ex => ex.id?.startsWith('tmp-'));
-          return { ...m, [convId]: [...dbMsgs, ...tmpMsgs] };
-        });
-      }
+      const [{ data }, { data: evts }] = await Promise.all([
+        supabase.from('messages').select('id, direction, content, body, created_at, sender_name, media_url, media_type, whatsapp_msg_id, quoted_content').eq('conversation_id', convId).order('created_at', { ascending: false }).limit(100),
+        supabase.from('conversation_events').select('id, event_type, actor_name, metadata, ts').eq('conversation_id', convId).order('ts', { ascending: true }),
+      ]);
+      const dbMsgs = (data || []).reverse().filter(msg => msg.content || msg.body || msg.media_url).map(msg => ({
+        id: msg.id, from: msg.direction === 'outbound' ? 'out' : 'in',
+        text: msg.content || msg.body || '',
+        time: new Date(msg.created_at || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        _ts: msg.created_at || new Date(0).toISOString(),
+        mediaType: msg.media_type || null, mediaUrl: msg.media_url || null,
+        agentName: msg.sender_name || null, waMsgId: msg.whatsapp_msg_id || null,
+        replyTo: msg.quoted_content || null,
+      }));
+      const evtMsgs = (evts || []).map(evt => ({
+        id: `evt-${evt.id}`, from: 'system',
+        text: eventToText(evt),
+        time: new Date(evt.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        _ts: evt.ts,
+      }));
+      const merged = [...dbMsgs, ...evtMsgs].sort((a, b) => new Date(a._ts) - new Date(b._ts));
+      setMessages(m => {
+        const tmpMsgs = (m[convId] || []).filter(ex => ex.id?.startsWith('tmp-') || ex.id?.startsWith('sys-'));
+        return { ...m, [convId]: [...merged, ...tmpMsgs] };
+      });
     } catch { /* ignore */ }
   }
 
@@ -987,6 +1006,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         const canUpdateStatus = !['finalizado', 'falha', 'archived'].includes(convStatus);
         if (canUpdateStatus) {
           await changeStatus('atendimento_aberto');
+          const evtText = `${currentUser?.name || 'Equipe'} assumiu o atendimento`;
+          addSystemMsg(active.id, evtText);
+          await insertEvent(active.id, 'assigned');
           setConvs(prev => prev.map(c => c.id === active.id ? { ...c, status: 'atendimento_aberto', previewFrom: 'out' } : c));
         } else {
           setConvs(prev => prev.map(c => c.id === active.id ? { ...c, previewFrom: 'out' } : c));
@@ -1126,6 +1148,52 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       try { localStorage.setItem('cd-fav-convs', JSON.stringify([...next])); } catch {}
       return next;
     });
+  };
+
+  // ── HISTÓRICO / EVENTS ────────────────────────────────────
+  function eventToText(evt) {
+    const actor = evt.actor_name || 'Sistema';
+    const meta  = evt.metadata || {};
+    switch (evt.event_type) {
+      case 'created':            return 'Conversa iniciada';
+      case 'assigned':           return `${actor} assumiu o atendimento`;
+      case 'unassigned':         return `${actor} removeu a atribuição`;
+      case 'transferred':        return meta.dept_to
+        ? `${actor} moveu para departamento ${meta.dept_to}`
+        : meta.dept_from
+        ? `${actor} removeu o departamento ${meta.dept_from}`
+        : `${actor} transferiu a conversa`;
+      case 'tagged':             return `Tag adicionada: ${meta.tag_name || ''}`;
+      case 'untagged':           return `Tag removida: ${meta.tag_name || ''}`;
+      case 'closed':             return `${actor} finalizou o atendimento`;
+      case 'reopened':           return `${actor} reabriu o atendimento`;
+      case 'note_added':         return `Nota interna adicionada por ${actor}`;
+      case 'automation_executed':return `Automação executada${meta.name ? ': ' + meta.name : ''}`;
+      default:                   return evt.event_type;
+    }
+  }
+
+  const addSystemMsg = (convId, text) => {
+    const time = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    setMessages(prev => ({
+      ...prev,
+      [convId]: [...(prev[convId] || []), { id: `sys-${Date.now()}`, from: 'system', text, time }],
+    }));
+  };
+
+  const insertEvent = async (convId, eventType, meta = {}) => {
+    if (!convId || !tenantDbId) return;
+    try {
+      await supabase.from('conversation_events').insert({
+        tenant_id:       tenantDbId,
+        conversation_id: convId,
+        event_type:      eventType,
+        actor_id:        currentUser?.id  || null,
+        actor_name:      currentUser?.name || 'Sistema',
+        actor_type:      'user',
+        metadata:        meta,
+      });
+    } catch { /* silencioso */ }
   };
 
   const discardAudio = () => {
@@ -1675,15 +1743,23 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                   </button>
                   <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.1)', margin: '0 2px' }} />
                   {(active.type === 'whatsapp' || active.type === 'group') && (
-                    <DepartmentSelector dark conversationId={active.id} tenantId={tenantDbId} currentDepartmentId={active.department_id ?? null} onChanged={dept => setConvs(prev => prev.map(c => c.id === active.id ? { ...c, department_id: dept.id } : c))} />
+                    <DepartmentSelector dark conversationId={active.id} tenantId={tenantDbId} currentDepartmentId={active.department_id ?? null} onChanged={async dept => {
+                      const oldDept = departments.find(d => d.id === active.department_id);
+                      setConvs(prev => prev.map(c => c.id === active.id ? { ...c, department_id: dept.id } : c));
+                      const txt = dept.id
+                        ? `${currentUser?.name || 'Equipe'} moveu para departamento ${dept.name}`
+                        : `${currentUser?.name || 'Equipe'} removeu o departamento${oldDept ? ' ' + oldDept.name : ''}`;
+                      addSystemMsg(active.id, txt);
+                      await insertEvent(active.id, 'transferred', { dept_from: oldDept?.name || null, dept_to: dept.name || null });
+                    }} />
                   )}
                   <span className="lc-protocol">#{active.id?.slice(-5) || '00000'}</span>
                   {convStatus === 'finalizado' ? (
-                    <button className="lc-action-btn" onClick={async () => { const { error } = await changeStatus('atendimento_aberto'); if (!error) { setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'atendimento_aberto', status_v2: 'in_progress' } : c)); setStatusFilter('aberto'); } }} disabled={statusLoading}>
+                    <button className="lc-action-btn" onClick={async () => { const { error } = await changeStatus('atendimento_aberto'); if (!error) { const txt = `${currentUser?.name || 'Equipe'} reabriu o atendimento`; addSystemMsg(activeId, txt); await insertEvent(activeId, 'reopened'); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'atendimento_aberto', status_v2: 'in_progress' } : c)); setStatusFilter('aberto'); } }} disabled={statusLoading}>
                       <Icon name="refresh" size={13} /> Reabrir
                     </button>
                   ) : (
-                    <button className="lc-action-btn primary" onClick={async () => { const { error } = await finish(); if (!error) { setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'finalizado', status_v2: 'closed' } : c)); setResolved(r => ({ ...r, [activeId]: true })); setStatusFilter('finalizado'); } }} disabled={statusLoading}>
+                    <button className="lc-action-btn primary" onClick={async () => { const { error } = await finish(); if (!error) { const txt = `${currentUser?.name || 'Equipe'} finalizou o atendimento`; addSystemMsg(activeId, txt); await insertEvent(activeId, 'closed'); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'finalizado', status_v2: 'closed' } : c)); setResolved(r => ({ ...r, [activeId]: true })); setStatusFilter('finalizado'); } }} disabled={statusLoading}>
                       <Icon name="check" size={13} /> {resolved[activeId] ? 'Finalizado' : 'Finalizar'}
                     </button>
                   )}
