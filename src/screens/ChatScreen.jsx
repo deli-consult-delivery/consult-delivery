@@ -949,7 +949,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         agentName: msg.sender_name || null, waMsgId: msg.whatsapp_msg_id || null,
         replyTo: msg.quoted_content || null,
       }));
-      const evtMsgs = (evts || []).map(evt => ({
+      const SHOW_EVENT_TYPES = new Set(['created', 'assigned', 'closed', 'reopened']);
+      const evtMsgs = (evts || []).filter(evt => SHOW_EVENT_TYPES.has(evt.event_type)).map(evt => ({
         id: `evt-${evt.id}`, from: 'system',
         text: fmtEventLabel(evt),
         _ts: evt.ts,
@@ -1796,10 +1797,6 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                     <DepartmentSelector dark conversationId={active.id} tenantId={tenantDbId} currentDepartmentId={active.department_id ?? null} onChanged={async dept => {
                       const oldDept = departments.find(d => d.id === active.department_id);
                       setConvs(prev => prev.map(c => c.id === active.id ? { ...c, department_id: dept.id } : c));
-                      const verb = dept.id
-                        ? `moveu para o departamento ${dept.name}`
-                        : `removeu o departamento${oldDept ? ' ' + oldDept.name : ''}`;
-                      addSystemMsg(active.id, verb);
                       await insertEvent(active.id, 'transferred', { dept_from: oldDept?.name || null, dept_to: dept.name || null });
                     }} />
                   )}
@@ -1854,19 +1851,34 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                     Nenhuma mensagem ainda
                   </div>
                 )}
-                {activeMsgs.map((m, i) => (
-                  <MsgBubble
-                    key={m.id || i}
-                    m={m}
-                    conv={active}
-                    starred={!!starredMsgs[`${activeId}:${m.id}`]}
-                    onStar={() => toggleStarMsg(m)}
-                    onDelete={deleteMsg}
-                    onReply={msg => { setReplyTo(msg); setTimeout(() => textareaRef.current?.focus(), 30); }}
-                    onViewImage={url => setLightboxUrl(url)}
-                    onCreateTask={msg => console.log('criar tarefa:', msg.text)}
-                  />
-                ))}
+                {activeMsgs.reduce((acc, m, i) => {
+                  const ts = m._ts || m.time;
+                  const msgDate = ts ? new Date(ts) : null;
+                  const prevTs = i > 0 ? (activeMsgs[i - 1]._ts || activeMsgs[i - 1].time) : null;
+                  const prevDate = prevTs ? new Date(prevTs) : null;
+                  const isDifferentDay = msgDate && (!prevDate || msgDate.toDateString() !== prevDate.toDateString());
+                  if (isDifferentDay) {
+                    acc.push(
+                      <div key={`sep-${i}`} className="lc-day-sep">
+                        <span>{fmtEventDate(msgDate)}</span>
+                      </div>
+                    );
+                  }
+                  acc.push(
+                    <MsgBubble
+                      key={m.id || i}
+                      m={m}
+                      conv={active}
+                      starred={!!starredMsgs[`${activeId}:${m.id}`]}
+                      onStar={() => toggleStarMsg(m)}
+                      onDelete={deleteMsg}
+                      onReply={msg => { setReplyTo(msg); setTimeout(() => textareaRef.current?.focus(), 30); }}
+                      onViewImage={url => setLightboxUrl(url)}
+                      onCreateTask={msg => console.log('criar tarefa:', msg.text)}
+                    />
+                  );
+                  return acc;
+                }, [])}
                 {typing && (
                   <div className="lc-msg-row in fade-in">
                     <ConvAvatar conv={active} size={28} />
