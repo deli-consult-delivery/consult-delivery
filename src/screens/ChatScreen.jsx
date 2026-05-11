@@ -279,7 +279,10 @@ function AudioPlayer({ src, isOut }) {
   const [duration, setDuration]     = useState(0);
   const audioRef                    = useRef(null);
 
-  const fmt = (s) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
+  const fmt = (s) => {
+    if (!isFinite(s) || isNaN(s) || s < 0) return '--:--';
+    return `${Math.floor(s / 60).toString().padStart(2, '0')}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
+  };
 
   const toggle = () => {
     const el = audioRef.current;
@@ -780,8 +783,12 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           const convMsgs = m[convId] || [];
           if (convMsgs.some(ex => ex.id === msg.id)) return m;
           if (!isInbound) {
-            const tmpIdx = convMsgs.findIndex(ex => ex.id?.startsWith('tmp-') && ex.text === text && ex.from === 'out');
-            if (tmpIdx !== -1) return { ...m, [convId]: convMsgs.map((ex, i) => i === tmpIdx ? { ...ex, id: msg.id } : ex) };
+            const tmpIdx = convMsgs.findIndex(ex =>
+              ex.id?.startsWith('tmp-') &&
+              ex.from === 'out' &&
+              (ex.text === text || (mediaType && ex.mediaType === mediaType && !ex.text))
+            );
+            if (tmpIdx !== -1) return { ...m, [convId]: convMsgs.map((ex, i) => i === tmpIdx ? { ...ex, id: msg.id, text: ex.text || text } : ex) };
           }
           return { ...m, [convId]: [...convMsgs, { id: msg.id, from: isInbound ? 'in' : 'out', text, time, mediaType, mediaUrl: msg.media_url || null, agentName: msg.sender_name || null, waMsgId: msg.whatsapp_msg_id || null, replyTo: msg.quoted_content || null }] };
         });
