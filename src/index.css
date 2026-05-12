@@ -352,7 +352,7 @@ input, textarea { font-family: inherit; }
 
 .topbar  { grid-area: topbar;  background: var(--white); border-bottom: 1px solid var(--g-200); display: flex; align-items: center; padding: 0 24px; gap: 16px; }
 .main    { grid-area: main;    overflow: auto; position: relative; height: 100%; }
-.main:has(.livechat) { overflow: hidden; }
+.main:has(.livechat) { overflow: hidden; scrollbar-gutter: auto; }
 
 /* ─── SEM TOPBAR (ex: chat ao vivo) ─────────────────────────── */
 .app-shell--notopbar { --topbar-h: 0px; }
