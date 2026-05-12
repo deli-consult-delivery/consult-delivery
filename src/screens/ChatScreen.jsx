@@ -786,11 +786,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             const tmpIdx = convMsgs.findIndex(ex =>
               ex.id?.startsWith('tmp-') &&
               ex.from === 'out' &&
-              (ex.text === text || (mediaType && ex.mediaType === mediaType && !ex.text))
+              (mediaType ? ex.mediaType === mediaType : ex.text === text)
             );
-            if (tmpIdx !== -1) return { ...m, [convId]: convMsgs.map((ex, i) => i === tmpIdx ? { ...ex, id: msg.id, text: ex.text || text } : ex) };
+            if (tmpIdx !== -1) return { ...m, [convId]: convMsgs.map((ex, i) => i === tmpIdx ? { ...ex, id: msg.id, _ts: msg.created_at || ex._ts } : ex) };
           }
-          return { ...m, [convId]: [...convMsgs, { id: msg.id, from: isInbound ? 'in' : 'out', text, time, mediaType, mediaUrl: msg.media_url || null, agentName: msg.sender_name || null, waMsgId: msg.whatsapp_msg_id || null, replyTo: msg.quoted_content || null }] };
+          return { ...m, [convId]: [...convMsgs, { id: msg.id, from: isInbound ? 'in' : 'out', text, time, _ts: msg.created_at || new Date().toISOString(), mediaType, mediaUrl: msg.media_url || null, agentName: msg.sender_name || null, waMsgId: msg.whatsapp_msg_id || null, replyTo: msg.quoted_content || null }] };
         });
         setConvs(prev => {
           const idx = prev.findIndex(c => c.id === convId);
@@ -1026,7 +1026,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     const now  = new Date();
     const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     const currentReplyTo = replyTo;
-    setMessages(m => ({ ...m, [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text, time, agentName, replyTo: currentReplyTo }] }));
+    setMessages(m => ({ ...m, [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text, time, _ts: now.toISOString(), agentName, replyTo: currentReplyTo }] }));
     setDraft(''); setReplyTo(null);
     if (HAS_EVO && selectedInstance && active.whatsapp_chat_id) {
       setSending(true);
@@ -1235,7 +1235,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     const text    = `${dateStr} ${timeStr} — ${actor} ${verbText}`;
     setMessages(prev => ({
       ...prev,
-      [convId]: [...(prev[convId] || []), { id: `sys-${Date.now()}`, from: 'system', text }],
+      [convId]: [...(prev[convId] || []), { id: `sys-${Date.now()}`, from: 'system', text, _ts: new Date().toISOString() }],
     }));
   };
 
@@ -1287,7 +1287,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       const base64 = reader.result.split(',')[1];
       const now = new Date();
       const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-      setMessages(m => ({ ...m, [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text: '', time, mediaType: 'audio', mediaUrl: localUrl }] }));
+      const nowAudio = new Date();
+      setMessages(m => ({ ...m, [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text: '', time, _ts: nowAudio.toISOString(), mediaType: 'audio', mediaUrl: localUrl }] }));
       setSending(true);
       try { await sendAudioMessage(selectedInstance, active.whatsapp_chat_id, base64); }
       catch (err) { console.error('Falha ao enviar áudio:', err); }
@@ -1308,7 +1309,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     const mediaType = isImage ? 'image' : isVideo ? 'video' : isAudio ? 'audio' : 'document';
     const label = isImage ? `🖼️ ${file.name}` : isVideo ? `🎬 ${file.name}` : isAudio ? `🎤 ${file.name}` : `📎 ${file.name}`;
     const previewUrl = isImage ? URL.createObjectURL(file) : null;
-    setMessages(m => ({ ...m, [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text: label, time, mediaType, mediaUrl: previewUrl }] }));
+    setMessages(m => ({ ...m, [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text: label, time, _ts: now.toISOString(), mediaType, mediaUrl: previewUrl }] }));
     if (!HAS_EVO || !selectedInstance || !active.whatsapp_chat_id || !isWA) return;
     const reader = new FileReader();
     reader.onloadend = async () => {
@@ -1325,6 +1326,12 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
+    if (file.type.startsWith('image/')) {
+      setPasteImage({ file, previewUrl: URL.createObjectURL(file) });
+      setPasteCaption('');
+      setTimeout(() => pasteCaptionRef.current?.focus(), 80);
+      return;
+    }
     await sendMediaFile(file);
   };
 
@@ -1352,7 +1359,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     const now = new Date();
     const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     const label = caption || `🖼️ ${file.name || 'imagem'}`;
-    setMessages(m => ({ ...m, [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text: label, time, mediaType: 'image', mediaUrl: pasteImage.previewUrl }] }));
+    setMessages(m => ({ ...m, [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text: label, time, _ts: now.toISOString(), mediaType: 'image', mediaUrl: pasteImage.previewUrl }] }));
     const { file: f, previewUrl } = pasteImage;
     setPasteImage(null);
     setPasteCaption('');
@@ -1859,15 +1866,17 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                   </div>
                 )}
                 {activeMsgs.reduce((acc, m, i) => {
-                  const ts = m._ts || m.time;
-                  const msgDate = ts ? new Date(ts) : null;
-                  const prevTs = i > 0 ? (activeMsgs[i - 1]._ts || activeMsgs[i - 1].time) : null;
-                  const prevDate = prevTs ? new Date(prevTs) : null;
-                  const isDifferentDay = msgDate && (!prevDate || msgDate.toDateString() !== prevDate.toDateString());
+                  const rawTs = m._ts;
+                  const msgDate = rawTs ? new Date(rawTs) : null;
+                  const validMsgDate = msgDate && !isNaN(msgDate.getTime()) ? msgDate : null;
+                  const prevRawTs = i > 0 ? activeMsgs[i - 1]._ts : null;
+                  const prevDate = prevRawTs ? new Date(prevRawTs) : null;
+                  const validPrevDate = prevDate && !isNaN(prevDate.getTime()) ? prevDate : null;
+                  const isDifferentDay = validMsgDate && (!validPrevDate || validMsgDate.toDateString() !== validPrevDate.toDateString());
                   if (isDifferentDay) {
                     acc.push(
                       <div key={`sep-${i}`} className="lc-day-sep">
-                        <span>{fmtEventDate(msgDate)}</span>
+                        <span>{fmtEventDate(validMsgDate)}</span>
                       </div>
                     );
                   }
