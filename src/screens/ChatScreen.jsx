@@ -1441,6 +1441,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     if (tab === 'groups' && c.type !== 'group')    return false;
     if (tab === 'int'    && !(c.type === 'internal' || c.type === 'agent')) return false;
     if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
+    // Sem filtro ativo: oculta finalizadas e arquivadas por padrão
+    if (!statusFilter && !c.id.startsWith('chan-') && (c.status === 'finalizado' || c.status === 'archived')) return false;
     if (!c.id.startsWith('chan-') && statusFilter) {
       const match = {
         nao_iniciado: (c.status || 'aguardando') === 'aguardando',
