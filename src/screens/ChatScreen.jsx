@@ -389,7 +389,7 @@ function extractQuotedSender(q, convName) {
 }
 
 // ─── MESSAGE BUBBLE ────────────────────────────────────────────
-function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onStar, onDelete }) {
+function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onStar, onDelete, onResumirMsg, onTraduzirMsg }) {
   const isOut = m.from === 'out';
   const isSystem = m.from === 'system';
 
@@ -481,9 +481,9 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onSta
         {!isOut && (
           <div className="lc-bubble-actions">
             <button title="Responder" onClick={() => onReply?.(m)}><Icon name="msg" size={11} /></button>
-            <button title="Traduzir"><Icon name="globe" size={11} /></button>
+            <button title="Traduzir" onClick={() => onTraduzirMsg?.(m)}><Icon name="globe" size={11} /></button>
             <button title="Virar tarefa" onClick={() => onCreateTask?.(m)}><Icon name="check" size={11} /></button>
-            <button title="Resumir"><Icon name="sparkles" size={11} /></button>
+            <button title="Resumir conversa" onClick={() => onResumirMsg?.(m)}><Icon name="sparkles" size={11} /></button>
             <button title="Apagar mensagem" onClick={() => onDelete?.(m)} style={{ color: 'rgba(239,68,68,0.7)' }}>
               <Icon name="trash" size={11} />
             </button>
@@ -1920,6 +1920,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                       onReply={msg => { setReplyTo(msg); setTimeout(() => textareaRef.current?.focus(), 30); }}
                       onViewImage={url => setLightboxUrl(url)}
                       onCreateTask={msg => console.log('criar tarefa:', msg.text)}
+                      onResumirMsg={() => runCommand('/resumir')}
+                      onTraduzirMsg={() => runCommand('/traduzir')}
                     />
                   );
                   return acc;
