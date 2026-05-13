@@ -918,7 +918,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     try {
       const { data: inst } = await supabase.from('evolution_instances').select('id').eq('instance_name', instanceName).single();
       if (!inst) { setConvs([]); setUsingRealData(false); return; }
-      const { data: rows } = await supabase.from('conversations').select('*').eq('instance_id', inst.id).order('updated_at', { ascending: false }).limit(50);
+      const ACTIVE_STATUSES = ['aguardando', 'em_atendimento', 'atendimento_aberto', 'automacao', 'falha'];
+      const { data: rows } = await supabase.from('conversations').select('*').eq('instance_id', inst.id).in('status', ACTIVE_STATUSES).order('updated_at', { ascending: false }).limit(200);
       if (rows?.length) {
         const seen = new Set();
         const uniqueRows = rows.filter(r => { if (seen.has(r.whatsapp_chat_id)) return false; seen.add(r.whatsapp_chat_id); return true; });
@@ -972,6 +973,36 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
   // ── REFRESH ACTIVE CONVS ──────────────────────────────────
   const REFRESH_STATUSES = ['aguardando', 'em_atendimento', 'atendimento_aberto', 'automacao'];
+
+  // Carrega conversas finalizadas/ocultas sob demanda quando filtro é selecionado
+  useEffect(() => {
+    if (!statusFilter || !selectedInstance || !tenantDbId) return;
+    const lazyStatuses = { finalizado: ['finalizado'], oculto: ['archived'] };
+    const statuses = lazyStatuses[statusFilter];
+    if (!statuses) return;
+    const alreadyLoaded = convs.some(c => statuses.includes(c.status));
+    if (alreadyLoaded) return;
+    (async () => {
+      try {
+        const { data: inst } = await supabase.from('evolution_instances').select('id').eq('instance_name', selectedInstance).single();
+        if (!inst) return;
+        const { data: rows } = await supabase.from('conversations').select('*').eq('instance_id', inst.id).in('status', statuses).order('updated_at', { ascending: false }).limit(100);
+        if (!rows?.length) return;
+        const lastMsgResults = await Promise.all(rows.map(r => supabase.from('messages').select('conversation_id, content, body, direction, created_at, media_type').eq('conversation_id', r.id).order('created_at', { ascending: false }).limit(1).maybeSingle()));
+        const lastMsgMap = {};
+        lastMsgResults.forEach(({ data }) => { if (data) lastMsgMap[data.conversation_id] = data; });
+        const mapped = rows.map(c => {
+          const phone = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
+          const name  = c.push_name || c.contact_name || c.group_name || phone || 'Desconhecido';
+          const lm    = lastMsgMap[c.id];
+          const preview = lm ? (lm.media_type === 'image' ? '🖼 Imagem' : lm.media_type === 'video' ? '🎬 Vídeo' : lm.media_type === 'document' ? '📄 Documento' : lm.media_type?.includes('audio') ? '🎵 Áudio' : lm.content || lm.body || '') : '';
+          const previewFrom = lm?.direction === 'inbound' ? 'in' : 'out';
+          return { id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null, type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id, preview, previewFrom, time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '', unread: 0, online: false, messages: [], status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null, status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null };
+        });
+        setConvs(prev => [...prev.filter(c => !statuses.includes(c.status)), ...mapped]);
+      } catch { /* silencioso */ }
+    })();
+  }, [statusFilter, selectedInstance, tenantDbId]);
 
   async function refreshPendingConvs() {
     if (!selectedInstance || refreshing) return;
