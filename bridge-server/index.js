@@ -20,6 +20,8 @@ const NEXUS_BASE_URL         = process.env.NEXUS_BASE_URL;
 const NEXUS_API_KEY          = process.env.NEXUS_API_KEY;
 const NEXUS_TICKET_BASE      = process.env.NEXUS_TICKET_BASE || 'http://187.127.25.24:8080';
 const NEXUS_TICKET_TOKEN     = process.env.NEXUS_TICKET_TOKEN;
+const TRIGGER_SECRET_KEY     = process.env.TRIGGER_SECRET_KEY;
+const TRIGGER_API_URL        = 'https://api.trigger.dev';
 // EvoNexus webhook trigger IDs (visibilidade no painel, fire-and-forget)
 const NEXUS_TRIGGER_IDS = { pesquisa: 3, regua: 2, midia: 1 };
 // In-memory job store para polling de status (request_id → estado)
@@ -416,6 +418,117 @@ async function postCallback(payload) {
   } catch (err) { console.error('[bridge] erro callback:', err.message); }
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// AGENTS — POST /agents/:slug/run  |  GET /agents/:slug/runs/:id
+// Trigger.dev Management API (paths validados contra @trigger.dev/core SDK)
+// ════════════════════════════════════════════════════════════════════════════
+
+// ── Middleware: verificar acesso ao agente via user_agent_access + fallback admin
+async function requireAgentAccess(req, res, next) {
+  const { slug } = req.params;
+  const userId   = req.user?.id;
+
+  if (!SUPABASE_SERVICE_KEY) return next(); // dev sem validação
+
+  const headers = {
+    apikey: SUPABASE_SERVICE_KEY,
+    Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+  };
+
+  try {
+    // 1. Checagem primária: user_agent_access.can_invoke
+    const r1 = await fetch(
+      `${SUPABASE_URL}/rest/v1/user_agent_access?user_id=eq.${userId}&agent_name=eq.${encodeURIComponent(slug)}&can_invoke=eq.true&select=user_id&limit=1`,
+      { headers }
+    );
+    if (r1.ok && (await r1.json()).length > 0) return next();
+
+    // 2. Fallback: admin/owner do tenant tem acesso a todos os agentes
+    const tenantId = req.body?.tenant_id;
+    if (tenantId) {
+      const r2 = await fetch(
+        `${SUPABASE_URL}/rest/v1/tenant_members?user_id=eq.${userId}&tenant_id=eq.${tenantId}&role=in.(admin,owner)&select=user_id&limit=1`,
+        { headers }
+      );
+      if (r2.ok && (await r2.json()).length > 0) return next();
+    }
+
+    return res.status(403).json({ error: `sem permissão para invocar o agente '${slug}'` });
+  } catch (err) {
+    console.error('[bridge/requireAgentAccess]', err.message);
+    return res.status(500).json({ error: 'erro ao verificar acesso ao agente' });
+  }
+}
+
+// POST /agents/:slug/run
+// Dispara uma task Trigger.dev para o agente. Retorna { run_id }.
+// Frontend subscreve agent_runs via Supabase Realtime para receber o resultado.
+app.post('/agents/:slug/run', requireJwt, requireAgentAccess, async (req, res) => {
+  const { slug }                = req.params;
+  const { tenant_id, payload = {} } = req.body;
+
+  if (!TRIGGER_SECRET_KEY)
+    return res.status(503).json({ error: 'TRIGGER_SECRET_KEY não configurado no servidor' });
+
+  try {
+    const r = await fetch(`${TRIGGER_API_URL}/api/v1/tasks/${encodeURIComponent(slug)}/trigger`, {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        Authorization:   `Bearer ${TRIGGER_SECRET_KEY}`,
+      },
+      body: JSON.stringify({
+        payload: { ...payload, tenant_id, triggered_by: req.user.id },
+      }),
+    });
+
+    if (!r.ok) {
+      const detail = await r.text();
+      console.error(`[bridge/agents/run] trigger falhou ${r.status}:`, detail);
+      return res.status(r.status).json({ error: 'falha ao disparar task', detail });
+    }
+
+    const data = await r.json();
+    console.log(`[bridge/agents/run] ${slug} run_id=${data.id} tenant=${tenant_id}`);
+    return res.json({ run_id: data.id, status: data.status });
+  } catch (err) {
+    console.error('[bridge/agents/run]', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /agents/:slug/runs/:id
+// Consulta status e output de um run. Pode ser usado como fallback ao Realtime.
+app.get('/agents/:slug/runs/:id', requireJwt, async (req, res) => {
+  const { id } = req.params;
+
+  if (!TRIGGER_SECRET_KEY)
+    return res.status(503).json({ error: 'TRIGGER_SECRET_KEY não configurado no servidor' });
+
+  try {
+    const r = await fetch(`${TRIGGER_API_URL}/api/v3/runs/${encodeURIComponent(id)}`, {
+      headers: { Authorization: `Bearer ${TRIGGER_SECRET_KEY}` },
+    });
+
+    if (!r.ok) {
+      const detail = await r.text();
+      return res.status(r.status).json({ error: 'falha ao consultar run', detail });
+    }
+
+    const data = await r.json();
+    return res.json({
+      run_id:      data.id,
+      status:      data.status,
+      output:      data.output     ?? null,
+      created_at:  data.createdAt  ?? null,
+      finished_at: data.finishedAt ?? null,
+    });
+  } catch (err) {
+    console.error('[bridge/agents/runs/id]', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[bridge] ouvindo em 0.0.0.0:${PORT}`);
   console.log(`[bridge] SUPABASE_URL:          ${SUPABASE_URL           ? '✓' : '✗'}`);
@@ -424,4 +537,5 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`[bridge] INTERNAL_BRIDGE_TOKEN: ${INTERNAL_BRIDGE_TOKEN  ? '✓' : '✗ nexus-dispatch aberto'}`);
   console.log(`[bridge] NEXUS_BASE_URL:        ${NEXUS_BASE_URL         ? '✓' : '✗ mock mode'}`);
   console.log(`[bridge] BRIDGE_SECRET:         ${BRIDGE_SECRET          ? '✓' : '✗'}`);
+  console.log(`[bridge] TRIGGER_SECRET_KEY:    ${TRIGGER_SECRET_KEY     ? '✓' : '✗ /agents/:slug/run desativado'}`);
 });
