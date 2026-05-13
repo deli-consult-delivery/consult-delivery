@@ -4,7 +4,7 @@ import AgentAvatar from '../components/AgentAvatar.jsx';
 import CustomSelect from '../components/CustomSelect.jsx';
 import { useConversationStatus, STATUS_EMOJI } from '../lib/conversationStatus.js';
 import { supabase } from '../lib/supabase.js';
-import { sendTextMessage, sendMediaMessage, sendAudioMessage, fetchProfile } from '../lib/evolution.js';
+import { sendTextMessage, sendMediaMessage, sendAudioMessage, fetchProfile, fetchGroups, fetchContacts } from '../lib/evolution.js';
 import ConversationFiltersBar from '../components/chat/ConversationFiltersBar.jsx';
 import DepartmentSelector from '../components/chat/DepartmentSelector.jsx';
 import ConversationStatusBadge from '../components/chat/ConversationStatusBadge.jsx';
@@ -806,7 +806,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
   useEffect(() => {
     if (selectedInstance) {
-      loadRealtimeConvs(selectedInstance).then(() => loadWAGroups());
+      loadRealtimeConvs(selectedInstance)
+        .then(() => loadWAGroups())
+        .then(() => enrichConvsWithWAData(selectedInstance));
     } else {
       setConvs(prev => prev.filter(c => c.id.startsWith('wag-') || c.id.startsWith('chan-')));
       setUsingRealData(false);
@@ -961,6 +963,43 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       const { data } = await supabase.from('channel_messages').select('id, sender_id, sender_name, text, is_pinned, created_at').eq('channel_id', chanId).order('created_at');
       if (data) setChanMsgs(m => ({ ...m, [chanId]: data }));
     } catch { /* ignore */ }
+  }
+
+  async function enrichConvsWithWAData(instanceName) {
+    try {
+      const [groupsRaw, contactsRaw] = await Promise.allSettled([
+        fetchGroups(instanceName, false),
+        fetchContacts(instanceName),
+      ]);
+      const nameMap = {};
+      const photoMap = {};
+      if (groupsRaw.status === 'fulfilled' && Array.isArray(groupsRaw.value)) {
+        groupsRaw.value.forEach(g => {
+          if (g.id) { nameMap[g.id] = g.subject || null; photoMap[g.id] = g.pictureUrl || null; }
+        });
+      }
+      if (contactsRaw.status === 'fulfilled' && Array.isArray(contactsRaw.value)) {
+        contactsRaw.value.forEach(c => {
+          if (c.id) { nameMap[c.id] = c.name || c.pushName || null; photoMap[c.id] = c.profilePictureUrl || null; }
+        });
+      }
+      if (!Object.keys(nameMap).length && !Object.keys(photoMap).length) return;
+      setConvs(prev => prev.map(conv => {
+        const jid = conv.whatsapp_chat_id;
+        if (!jid) return conv;
+        const newName  = nameMap[jid]  || null;
+        const newPhoto = photoMap[jid] || null;
+        if (!newName && !newPhoto) return conv;
+        const finalName = (newName && !conv.waNameFetched) ? newName : conv.name;
+        return {
+          ...conv,
+          name: finalName,
+          avatar: finalName.slice(0, 2).toUpperCase(),
+          photoUrl: newPhoto || conv.photoUrl || null,
+          waNameFetched: newName ? true : conv.waNameFetched,
+        };
+      }));
+    } catch { /* silencioso */ }
   }
 
   async function loadRealtimeConvs(instanceName) {
