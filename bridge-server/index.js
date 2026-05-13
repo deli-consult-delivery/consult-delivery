@@ -23,7 +23,8 @@ const NEXUS_TICKET_BASE      = process.env.NEXUS_TICKET_BASE || 'http://187.127.
 const NEXUS_TICKET_TOKEN     = process.env.NEXUS_TICKET_TOKEN;
 const TRIGGER_SECRET_KEY     = process.env.TRIGGER_SECRET_KEY;
 const TRIGGER_API_URL        = 'https://api.trigger.dev';
-const ANTHROPIC_API_KEY      = process.env.ANTHROPIC_API_KEY;
+const OLLAMA_API_KEY         = process.env.OLLAMA_API_KEY;
+const OLLAMA_MODEL           = process.env.OLLAMA_MODEL || 'llama3.2';
 // EvoNexus webhook trigger IDs (visibilidade no painel, fire-and-forget)
 const NEXUS_TRIGGER_IDS = { pesquisa: 3, regua: 2, midia: 1 };
 // In-memory job store para polling de status (request_id → estado)
@@ -537,7 +538,7 @@ app.get('/agents/:slug/runs/:id', requireJwt, async (req, res) => {
 app.post('/chat/ai', requireJwt, async (req, res) => {
   const { command, messages = [], conversation_id, tenant_id } = req.body;
   if (!command) return res.status(400).json({ error: 'command required' });
-  if (!ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY não configurado' });
+  if (!OLLAMA_API_KEY) return res.status(503).json({ error: 'OLLAMA_API_KEY não configurado' });
 
   const SYSTEM_PROMPTS = {
     '/resumir': `Você é DELI, COO digital da Consult Delivery. Resuma esta conversa de atendimento.
@@ -565,17 +566,31 @@ Responda SOMENTE com JSON válido no formato:
   ).join('\n');
 
   try {
-    const Anthropic = require('@anthropic-ai/sdk');
-    const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
-
-    const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 400,
-      system: prompt,
-      messages: [{ role: 'user', content: `Conversa:\n\n${transcript || '(sem mensagens ainda)'}` }],
+    const r = await fetch('https://ollama.com/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OLLAMA_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        stream: false,
+        format: 'json',
+        messages: [
+          { role: 'system', content: prompt },
+          { role: 'user', content: `Conversa:\n\n${transcript || '(sem mensagens ainda)'}` },
+        ],
+      }),
+      signal: AbortSignal.timeout(30_000),
     });
 
-    const text = response.content[0]?.text || '';
+    if (!r.ok) {
+      const detail = await r.text();
+      return res.status(r.status).json({ error: `Ollama error ${r.status}`, detail });
+    }
+
+    const data = await r.json();
+    const text = data.message?.content || '';
     let parsed;
     try {
       const cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
@@ -584,7 +599,7 @@ Responda SOMENTE com JSON válido no formato:
       parsed = { title: 'DELI', bullets: [text] };
     }
 
-    console.log(`[bridge/chat/ai] ${command} conv=${conversation_id} user=${req.user?.id}`);
+    console.log(`[bridge/chat/ai] ${command} model=${OLLAMA_MODEL} conv=${conversation_id}`);
     res.json({ ok: true, ...parsed });
   } catch (err) {
     console.error('[bridge/chat/ai]', err.message);
@@ -601,4 +616,5 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`[bridge] NEXUS_BASE_URL:        ${NEXUS_BASE_URL         ? '✓' : '✗ mock mode'}`);
   console.log(`[bridge] BRIDGE_SECRET:         ${BRIDGE_SECRET          ? '✓' : '✗'}`);
   console.log(`[bridge] TRIGGER_SECRET_KEY:    ${TRIGGER_SECRET_KEY     ? '✓' : '✗ /agents/:slug/run desativado'}`);
+  console.log(`[bridge] OLLAMA_API_KEY:        ${OLLAMA_API_KEY         ? '✓' : '✗ /chat/ai desativado'} model=${OLLAMA_MODEL}`);
 });
