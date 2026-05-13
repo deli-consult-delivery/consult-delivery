@@ -1,14 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
-  throw new Error(
-    "SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY são obrigatórios para tasks Trigger.dev"
-  );
-}
-
-export const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
-  auth: { persistSession: false },
-});
+// Env vars são injetadas pelo Trigger.dev cloud em runtime, não no import.
+// Não validar no topo do módulo — o worker explode no import se as vars não estiverem presentes localmente.
+export const supabase = createClient(
+  process.env.SUPABASE_URL ?? "",
+  process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
+  { auth: { persistSession: false } }
+);
