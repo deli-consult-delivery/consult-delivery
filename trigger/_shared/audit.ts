@@ -27,7 +27,7 @@ export async function logAgentRun({
     const { error } = await getSupabase().from("agent_runs").upsert(
       {
         trigger_dev_run_id: runId,
-        agent_slug: agentSlug,
+        agent_id: agentSlug,
         input,
         output,
         tenant_id: tenantId ?? null,
