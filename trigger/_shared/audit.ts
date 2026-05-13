@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import { getSupabase } from "./supabase";
 
 interface AgentRunLog {
   runId: string;
@@ -24,7 +24,7 @@ export async function logAgentRun({
   status = "success",
 }: AgentRunLog): Promise<void> {
   try {
-    const { error } = await supabase.from("agent_runs").upsert(
+    const { error } = await getSupabase().from("agent_runs").upsert(
       {
         trigger_dev_run_id: runId,
         agent_slug: agentSlug,
