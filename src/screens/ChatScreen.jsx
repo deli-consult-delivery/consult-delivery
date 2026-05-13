@@ -390,7 +390,7 @@ function extractQuotedSender(q, convName) {
 
 // ─── FORWARD MODAL ─────────────────────────────────────────────
 function ForwardModal({ msg, convs, currentConvId, onClose, onForward }) {
-  const [search, setSearch] = React.useState('');
+  const [search, setSearch] = useState('');
   const targets = convs.filter(c =>
     c.id !== currentConvId &&
     (c.type === 'whatsapp' || c.type === 'group') &&
