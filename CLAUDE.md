@@ -1,8 +1,13 @@
 DOCUMENTO MESTRE - PLATAFORMA CONSULT DELIVERY v2.0
 ====================================================
 Data de aprovação: 23/04/2026
-Última revisão: 06/05/2026
-Status: APROVADO - em execução
+Última revisão: 13/05/2026
+Status: APROVADO - em execução (reestruturação Fase 0 concluída)
+
+⚠️  DOC AUTORITATIVO: RESTRUCTURE.md (raiz do repo)
+Em caso de divergência entre este CLAUDE.md e o RESTRUCTURE.md,
+o RESTRUCTURE.md vence. Releia-o antes de assumir qualquer decisão
+de stack, arquitetura ou fluxo de agente.
 
 ====================================================
 1. VISÃO GERAL
@@ -27,17 +32,22 @@ Módulos planejados:
 2. ARQUITETURA APROVADA
 ====================================================
 
-Frontend: React 18 + Vite
+Frontend: React 18 + Vite + TailwindCSS
 Banco de dados: Supabase (auth + realtime + RLS multi-tenant)
-Agentes IA: VPS 45.39.210.183 via OpenClaw (porta 18789)
-IA: Claude API (claude-sonnet-4-6)
+Orquestrador IA: Trigger.dev cloud (proj_slexhoelcjwgbopmbzzr) ← NOVO
+Runtime de agente: @anthropic-ai/sdk + web_search_20250305 ← NOVO
+Validação: Zod ← NOVO
+Bridge Server: Node.js/Express VPS porta 3001 (expandido)
 WhatsApp: Evolution API
-Automações: n8n
 Payment: Asaas
 Secrets: Infisical self-hosted (172.18.0.3:8080)
 Deploy: GitHub Actions → GitHub Pages
 Domínio: app.consultdelivery.com.br
 GitHub: github.com/deli-consult-delivery/consult-delivery
+
+OpenClaw: EM APOSENTADORIA — sai na Fase 4 após migrar todos os agentes
+n8n: NÃO USADO — decisão definitiva
+EvoNexus: NÃO USADO — descartado em 07/05/2026
 
 Bots Telegram ativos:
 - @DeliConsultBot — agente analista-ifood (consultoria de lojas)
@@ -46,7 +56,9 @@ Bots Telegram ativos:
 3. STACK DEFINITIVA
 ====================================================
 
-React 18 + Vite + Supabase + VPS + Claude API + Evolution API + n8n + Infisical + GitHub + GitHub Pages
+React 18 + Vite + TailwindCSS + Supabase + Trigger.dev + @anthropic-ai/sdk + Zod + Bridge Server + Evolution API + Asaas + Infisical + GitHub Pages
+
+FORA DA STACK (não usar): n8n, EvoNexus, OpenClaw (aposentando Fase 4)
 
 ====================================================
 4. INFRAESTRUTURA EXISTENTE
@@ -55,25 +67,15 @@ React 18 + Vite + Supabase + VPS + Claude API + Evolution API + n8n + Infisical 
 VPS: 45.39.210.183 - Ubuntu 24.04 LTS
 Docker v29.4 + Compose v5.1.2
 Node.js v22.22.2
-OpenClaw 2026.5.2 rodando porta 18789 (systemd persistente)
-Bridge Server Node.js/Express porta 3001 (systemd persistente)
-Infisical com secrets: ANTHROPIC_API_KEY, HEYGEN_API_KEY
+Bridge Server Node.js/Express porta 3001 (systemd persistente) — expandido Fase 0
+Trigger.dev cloud: proj_slexhoelcjwgbopmbzzr (conectado, hello-world validado)
+Infisical com secrets: ANTHROPIC_API_KEY, TRIGGER_SECRET_KEY, HEYGEN_API_KEY
 GitHub: github.com/deli-consult-delivery/consult-delivery
 
-Integrações validadas: Anthropic, Evolution, n8n, Google Drive, Asaas
+Integrações validadas: Anthropic (SDK), Trigger.dev, Evolution, Google Drive, Asaas
 
-Agentes OpenClaw ativos:
-- main (default, genérico)
-- analista-ifood (Co-piloto Delivery — análise de lojas iFood)
-- lara (CRM food service + régua de disparo — ✅ ATIVA NO OPENCLAW desde 06/05/2026)
-
-Agentes planejados (a ativar no OpenClaw):
-- deli (COO digital — Milestone v1 Fase 1E)
-- cora (cobrança — Milestone v2)
-- sofia (SDR — Milestone v2)
-- breno (atendimento — futuro)
-- max (consultor técnico — futuro)
-- vera (BI — futuro)
+OpenClaw 2026.5.2: AINDA ATIVO na porta 18789 — aposentando na Fase 4
+⚠️  Não criar novos agentes no OpenClaw. Novos agentes vão em trigger/
 
 ====================================================
 5. AGENTES — IDENTIDADES
@@ -128,11 +130,10 @@ Onboarding self-service, planos/billing, white-label, marketplace de agentes
 7. EQUIPE
 ====================================================
 
-Wandson Silva - CEO, aprova decisões, visão estratégica (role: admin + deli_owner)
-Yasmin        - dev frontend (role: dev)
+Wandson Silva - CEO, único dev (Yasmin saiu em 05/2026), aprova decisões
 Wélida        - marketing e CRM (role: marketing)
 Eduardo       - atendimento, consultoria e suporte (role: atendimento)
-DELI          - COO digital, agente IA no OpenClaw (role: deli_owner via sistema)
+DELI          - COO digital, agente IA (Fase 2 — Trigger.dev)
 
 Emails: @consultdelivery.com.br
 
@@ -807,6 +808,95 @@ Arquivos existentes:
 - docs/fluxos/arquitetura.md    — stack completa (Frontend, VPS, agentes, integrações)
 - docs/fluxos/analise-ifood.md  — fluxo do módulo Análise iFood
 - docs/rascunhos/               — exports Excalidraw (PNG/SVG)
+
+====================================================
+18. STACK PÓS-REESTRUTURAÇÃO (Fase 0 — 13/05/2026)
+====================================================
+
+Decisão tomada em 12/05/2026. Autoritativo: RESTRUCTURE.md
+
+ORQUESTRADOR DE AGENTES: Trigger.dev cloud
+- Tasks TypeScript em trigger/
+- Retry, scheduling, composição nativas
+- Dashboard de runs em cloud.trigger.dev
+- Projeto: proj_slexhoelcjwgbopmbzzr
+
+RUNTIME DE AGENTE: @anthropic-ai/sdk
+- import Anthropic from "@anthropic-ai/sdk"
+- Ferramenta web_search_20250305 habilitada
+- Modelo padrão: claude-sonnet-4-6
+- Wrapper em trigger/_shared/claude.ts
+
+VALIDAÇÃO DE OUTPUT: Zod
+- Todo input/output de task tem schema Zod
+- Nomenclatura: PascalCase + Input/Output (ex: DeliConversaInput)
+
+PADRÃO DE TASK (seguir sempre):
+  export const minhaTask = task({
+    id: "agente-acao",
+    retry: { maxAttempts: 3 },
+    run: async (payload) => {
+      const input = InputSchema.parse(payload);
+      // lógica...
+      await logAgentRun({ runId: ctx.run.id, ... });
+      return OutputSchema.parse(result);
+    }
+  });
+
+OPENCLAW: em aposentadoria
+- Ainda roda na VPS porta 18789 para agentes legados
+- NÃO criar novos agentes no OpenClaw
+- Migração completa na Fase 4
+
+N8N: não usado (decisão definitiva)
+EVONEXUS: descartado (decisão definitiva)
+
+Arquivos-chave criados na Fase 0:
+- trigger.config.ts                          — config Trigger.dev
+- trigger/_shared/claude.ts                  — wrapper SDK Anthropic
+- trigger/_shared/supabase.ts                — lazy singleton Supabase
+- trigger/_shared/schemas.ts                 — Zod schemas comuns
+- trigger/_shared/audit.ts                   — logAgentRun()
+- trigger/_examples/hello-world.ts           — task de sanidade
+- docs/architecture/agent-communication.md   — fluxo Frontend↔Bridge↔Trigger
+- bridge-server/README.md                    — doc endpoints Bridge
+
+====================================================
+19. ANTI-PADRÕES — O QUE NÃO FAZER
+====================================================
+
+Lições aprendidas. Violar qualquer uma é defeito grave, não estilo.
+
+1. Não declarar "feito" sem rodar de verdade.
+   → Output bruto sempre: SQL executado, JSON retornado, screenshot do run.
+
+2. Não confiar em memória para nomes de pacotes/APIs.
+   → Validar em node_modules ou documentação oficial antes de afirmar.
+
+3. Não criar features sem critério de aceite.
+   → Foi assim que o chat ficou sem áudio/preview/reply.
+
+4. Não usar throw no topo de módulo em tasks Trigger.dev.
+   → O worker importa todos os arquivos. Throw no import derruba o worker.
+   → Env vars em lazy getter (getSupabase()) ou dentro da função run().
+
+5. Não adicionar agente sem mapear gargalo real.
+   → Cada agente cobre uma dor mensurável com critério de aceite.
+
+6. Não pular validação intermediária entre fases.
+   → Cada fase tem critério de aceite — não há "pulo".
+
+7. Não misturar n8n / OpenClaw novo / EvoNexus no novo stack.
+   → Decisão final, sem volta.
+
+8. Não fazer commit direto em main.
+   → Sempre branch feature/fase-X/nome, PR, merge.
+
+9. Não rodar migrations sem validar o SQL antes.
+   → Migrations são irreversíveis em produção. Mostrar SQL, aprovar, rodar.
+
+10. Não confiar no resultado do Claude sem testar manualmente.
+    → Critério mínimo: 1 teste manual + log/output real antes de "feito".
 
 ================================================================================
 
