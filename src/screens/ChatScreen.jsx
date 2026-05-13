@@ -817,7 +817,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
   // Realtime global de mensagens
   useEffect(() => {
-    if (!usingRealData) return;
+    if (!selectedInstance) return;
     const channel = supabase
       .channel('global-messages-realtime')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
@@ -881,7 +881,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [usingRealData]);
+  }, [selectedInstance]);
 
   // Canal interno — carrega mensagens ao selecionar
   useEffect(() => {
@@ -1031,31 +1031,35 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   }
 
   async function loadRealtimeConvs(instanceName) {
+    // Ativa realtime independente de ter conversas — mensagens novas devem aparecer mesmo com 0 ativas
+    setUsingRealData(true);
     try {
       const { data: inst } = await supabase.from('evolution_instances').select('id').eq('instance_name', instanceName).single();
-      if (!inst) { setConvs([]); setUsingRealData(false); return; }
+      if (!inst) return;
       const ACTIVE_STATUSES = ['aguardando', 'em_atendimento', 'atendimento_aberto', 'automacao', 'falha'];
       const { data: rows } = await supabase.from('conversations').select('*').eq('instance_id', inst.id).in('status', ACTIVE_STATUSES).order('updated_at', { ascending: false }).limit(200);
-      if (rows?.length) {
-        const seen = new Set();
-        const uniqueRows = rows.filter(r => { if (seen.has(r.whatsapp_chat_id)) return false; seen.add(r.whatsapp_chat_id); return true; });
-        const lastMsgResults = await Promise.all(uniqueRows.map(r => supabase.from('messages').select('conversation_id, content, body, direction, created_at, media_type').eq('conversation_id', r.id).order('created_at', { ascending: false }).limit(1).maybeSingle()));
-        const lastMsgMap = {};
-        lastMsgResults.forEach(({ data }) => { if (data) lastMsgMap[data.conversation_id] = data; });
-        const mapped = uniqueRows.map(c => {
-          const phone = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
-          const name  = c.push_name || c.contact_name || c.group_name || phone || 'Desconhecido';
-          const lm    = lastMsgMap[c.id];
-          const preview = lm ? (lm.media_type === 'image' ? '🖼 Imagem' : lm.media_type === 'video' ? '🎬 Vídeo' : lm.media_type === 'document' ? '📄 Documento' : lm.media_type?.includes('audio') ? '🎵 Áudio' : lm.content || lm.body || '') : '';
-          const previewFrom = lm?.direction === 'inbound' ? 'in' : 'out';
-          return { id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null, type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id, preview, previewFrom, time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '', unread: 0, online: false, messages: [], status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null, status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null };
-        });
-        setConvs(mapped); setActiveId(mapped[0]?.id); setUsingRealData(true);
-        if (mapped[0]) loadMsgs(mapped[0].id);
-        return;
-      }
+      if (!rows?.length) return;
+      const seen = new Set();
+      const uniqueRows = rows.filter(r => { if (seen.has(r.whatsapp_chat_id)) return false; seen.add(r.whatsapp_chat_id); return true; });
+      const lastMsgResults = await Promise.all(uniqueRows.map(r => supabase.from('messages').select('conversation_id, content, body, direction, created_at, media_type').eq('conversation_id', r.id).order('created_at', { ascending: false }).limit(1).maybeSingle()));
+      const lastMsgMap = {};
+      lastMsgResults.forEach(({ data }) => { if (data) lastMsgMap[data.conversation_id] = data; });
+      const mapped = uniqueRows.map(c => {
+        const phone = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
+        const name  = c.push_name || c.contact_name || c.group_name || phone || 'Desconhecido';
+        const lm    = lastMsgMap[c.id];
+        const preview = lm ? (lm.media_type === 'image' ? '🖼 Imagem' : lm.media_type === 'video' ? '🎬 Vídeo' : lm.media_type === 'document' ? '📄 Documento' : lm.media_type?.includes('audio') ? '🎵 Áudio' : lm.content || lm.body || '') : '';
+        const previewFrom = lm?.direction === 'inbound' ? 'in' : 'out';
+        return { id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null, type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id, preview, previewFrom, time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '', unread: 0, online: false, messages: [], status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null, status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null };
+      });
+      setConvs(prev => {
+        const existingIds = new Set(prev.map(c => c.id));
+        const toAdd = mapped.filter(c => !existingIds.has(c.id));
+        return toAdd.length ? [...toAdd, ...prev] : prev;
+      });
+      setActiveId(prev => prev || mapped[0]?.id);
+      if (!activeIdRef.current && mapped[0]) loadMsgs(mapped[0].id);
     } catch { /* ignore */ }
-    setConvs([]); setUsingRealData(false);
   }
 
   async function loadMsgs(convId) {
