@@ -388,8 +388,50 @@ function extractQuotedSender(q, convName) {
   return q.pushName || convName || 'Cliente';
 }
 
+// ─── FORWARD MODAL ─────────────────────────────────────────────
+function ForwardModal({ msg, convs, currentConvId, onClose, onForward }) {
+  const [search, setSearch] = React.useState('');
+  const targets = convs.filter(c =>
+    c.id !== currentConvId &&
+    (c.type === 'whatsapp' || c.type === 'group') &&
+    c.whatsapp_chat_id &&
+    (!search || c.name.toLowerCase().includes(search.toLowerCase()))
+  );
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
+      <div style={{ background: '#1F1F1F', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, width: 360, maxHeight: 520, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+        <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ color: 'white', fontWeight: 700, fontSize: 14 }}>Encaminhar para…</span>
+          <button onClick={onClose} style={{ color: 'rgba(255,255,255,0.5)', fontSize: 18, lineHeight: 1 }}>×</button>
+        </div>
+        <div style={{ padding: '10px 14px 6px' }}>
+          <input
+            autoFocus value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar conversa…"
+            style={{ width: '100%', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '7px 12px', color: 'white', fontSize: 13, outline: 'none' }}
+          />
+        </div>
+        <div style={{ overflowY: 'auto', flex: 1 }}>
+          {targets.length === 0 && (
+            <div style={{ textAlign: 'center', padding: 24, color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>Nenhuma conversa encontrada</div>
+          )}
+          {targets.map(c => (
+            <button key={c.id} onClick={() => onForward(c)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', background: 'none', borderBottom: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer', textAlign: 'left' }}>
+              <ConvAvatar conv={c} size={32} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: 'white', fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+                <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>{c.preview || '—'}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── MESSAGE BUBBLE ────────────────────────────────────────────
-function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onStar, onDelete, onResumirMsg, onTraduzirMsg }) {
+function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onStar, onDelete, onResumirMsg, onTraduzirMsg, onForward }) {
   const isOut = m.from === 'out';
   const isSystem = m.from === 'system';
 
@@ -481,6 +523,9 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onSta
         {!isOut && (
           <div className="lc-bubble-actions">
             <button title="Responder" onClick={() => onReply?.(m)}><Icon name="msg" size={11} /></button>
+            <button title="Encaminhar" onClick={() => onForward?.(m)}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg>
+            </button>
             <button title="Traduzir" onClick={() => onTraduzirMsg?.(m)}><Icon name="globe" size={11} /></button>
             <button title="Virar tarefa" onClick={() => onCreateTask?.(m)}><Icon name="check" size={11} /></button>
             <button title="Resumir conversa" onClick={() => onResumirMsg?.(m)}><Icon name="sparkles" size={11} /></button>
@@ -501,6 +546,9 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onSta
         {isOut && (
           <>
             <div className="lc-bubble-actions out">
+              <button title="Encaminhar" onClick={() => onForward?.(m)}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg>
+              </button>
               <button
                 className={`lc-star-msg-btn${starred ? ' starred' : ''}`}
                 title={starred ? 'Remover dos favoritos' : 'Favoritar mensagem'}
@@ -596,6 +644,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [sending, setSending]                = useState(false);
   const [replyTo, setReplyTo]                = useState(null);
   const [lightboxUrl, setLightboxUrl]        = useState(null);
+  const [forwardMsg, setForwardMsg]          = useState(null);
 
   // ── AI / Composer ─────────────────────────────────────────
   const [aiMode, setAiMode]                  = useState('humano');
@@ -1285,6 +1334,40 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     } catch { /* silencioso */ }
   };
 
+  const handleForward = async (targetConv) => {
+    const msg = forwardMsg;
+    setForwardMsg(null);
+    if (!msg || !selectedInstance || !targetConv?.whatsapp_chat_id) return;
+    try {
+      if (msg.mediaType?.includes('audio')) {
+        if (msg.mediaUrl) {
+          const res = await fetch(msg.mediaUrl);
+          const blob = await res.blob();
+          const reader = new FileReader();
+          reader.onloadend = async () => {
+            const base64 = reader.result.split(',')[1];
+            await sendAudioMessage(selectedInstance, targetConv.whatsapp_chat_id, base64);
+          };
+          reader.readAsDataURL(blob);
+        }
+      } else if (msg.mediaType && msg.mediaUrl) {
+        const res = await fetch(msg.mediaUrl);
+        const blob = await res.blob();
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          const base64 = reader.result.split(',')[1];
+          const mime = blob.type || 'application/octet-stream';
+          await sendMediaMessage(selectedInstance, targetConv.whatsapp_chat_id, base64, msg.mediaType, mime, msg.text || '', '');
+        };
+        reader.readAsDataURL(blob);
+      } else if (msg.text) {
+        await sendTextMessage(selectedInstance, targetConv.whatsapp_chat_id, `↪️ ${msg.text}`);
+      }
+    } catch (err) {
+      console.error('Falha ao encaminhar:', err);
+    }
+  };
+
   const discardAudio = () => {
     if (audioPreview) URL.revokeObjectURL(audioPreview);
     audioBlobRef.current = null;
@@ -1953,6 +2036,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                       onCreateTask={msg => console.log('criar tarefa:', msg.text)}
                       onResumirMsg={() => runCommand('/resumir')}
                       onTraduzirMsg={() => runCommand('/traduzir')}
+                      onForward={msg => setForwardMsg(msg)}
                     />
                   );
                   return acc;
@@ -2310,6 +2394,16 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       </aside>
     </div>
 
+    {/* Modal de encaminhar mensagem */}
+    {forwardMsg && (
+      <ForwardModal
+        msg={forwardMsg}
+        convs={convs}
+        currentConvId={activeId}
+        onClose={() => setForwardMsg(null)}
+        onForward={handleForward}
+      />
+    )}
     {/* Lightbox de imagem */}
     {lightboxUrl && <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
     </>
