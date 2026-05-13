@@ -942,8 +942,32 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       if (!tenantDbId) return;
       const { data } = await supabase.from('whatsapp_groups').select('id, group_name, evolution_jid, loja_id').eq('tenant_id', tenantDbId).order('created_at', { ascending: false });
       if (!data?.length) return;
-      const groupConvs = data.map(g => ({ id: 'wag-' + g.id, name: g.group_name || g.evolution_jid, avatar: (g.group_name || 'G').slice(0, 2).toUpperCase(), type: 'group', whatsapp_chat_id: g.evolution_jid, waGroupId: g.id, preview: 'Grupo WhatsApp', time: '', unread: 0, online: false, messages: [], status: 'finalizado' }));
-      setConvs(prev => [...prev.filter(c => !c.id.startsWith('wag-')), ...groupConvs]);
+      // Buscar conversation UUID real para cada grupo pelo JID
+      const jids = data.map(g => g.evolution_jid).filter(Boolean);
+      const { data: convRows } = jids.length
+        ? await supabase.from('conversations').select('id, whatsapp_chat_id, status, updated_at, push_photo_url').in('whatsapp_chat_id', jids).order('updated_at', { ascending: false })
+        : { data: [] };
+      const jidToConv = {};
+      (convRows || []).forEach(c => { if (!jidToConv[c.whatsapp_chat_id]) jidToConv[c.whatsapp_chat_id] = c; });
+      const groupConvs = data.map(g => {
+        const conv = jidToConv[g.evolution_jid];
+        const name = g.group_name || g.evolution_jid;
+        return {
+          id: conv?.id || ('wag-' + g.id),
+          name, avatar: name.slice(0, 2).toUpperCase(),
+          type: 'group', whatsapp_chat_id: g.evolution_jid, waGroupId: g.id,
+          photoUrl: conv?.push_photo_url || null,
+          preview: 'Grupo WhatsApp',
+          time: conv?.updated_at ? new Date(conv.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
+          unread: 0, online: false, messages: [],
+          status: conv?.status || 'finalizado',
+        };
+      });
+      setConvs(prev => {
+        const existingIds = new Set(prev.map(c => c.id));
+        const toAdd = groupConvs.filter(g => !existingIds.has(g.id));
+        return [...prev.filter(c => !c.id.startsWith('wag-')), ...toAdd];
+      });
     } catch { /* ignore */ }
   }
 
@@ -973,14 +997,18 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       ]);
       const nameMap = {};
       const photoMap = {};
-      if (groupsRaw.status === 'fulfilled' && Array.isArray(groupsRaw.value)) {
-        groupsRaw.value.forEach(g => {
-          if (g.id) { nameMap[g.id] = g.subject || null; photoMap[g.id] = g.pictureUrl || null; }
+      // Evolution API pode retornar array direto ou { groups: [...] }
+      const normalizeArr = v => Array.isArray(v) ? v : (Array.isArray(v?.groups) ? v.groups : []);
+      if (groupsRaw.status === 'fulfilled') {
+        normalizeArr(groupsRaw.value).forEach(g => {
+          const jid = g.id || g.jid || g.remoteJid;
+          if (jid) { nameMap[jid] = g.subject || g.name || null; photoMap[jid] = g.pictureUrl || g.profilePictureUrl || null; }
         });
       }
-      if (contactsRaw.status === 'fulfilled' && Array.isArray(contactsRaw.value)) {
-        contactsRaw.value.forEach(c => {
-          if (c.id) { nameMap[c.id] = c.name || c.pushName || null; photoMap[c.id] = c.profilePictureUrl || null; }
+      if (contactsRaw.status === 'fulfilled') {
+        normalizeArr(contactsRaw.value).forEach(c => {
+          const jid = c.id || c.jid || c.remoteJid;
+          if (jid) { nameMap[jid] = c.name || c.pushName || null; photoMap[jid] = c.profilePictureUrl || c.imgUrl || null; }
         });
       }
       if (!Object.keys(nameMap).length && !Object.keys(photoMap).length) return;
