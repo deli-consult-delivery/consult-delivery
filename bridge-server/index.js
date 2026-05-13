@@ -23,6 +23,7 @@ const NEXUS_TICKET_BASE      = process.env.NEXUS_TICKET_BASE || 'http://187.127.
 const NEXUS_TICKET_TOKEN     = process.env.NEXUS_TICKET_TOKEN;
 const TRIGGER_SECRET_KEY     = process.env.TRIGGER_SECRET_KEY;
 const TRIGGER_API_URL        = 'https://api.trigger.dev';
+const ANTHROPIC_API_KEY      = process.env.ANTHROPIC_API_KEY;
 // EvoNexus webhook trigger IDs (visibilidade no painel, fire-and-forget)
 const NEXUS_TRIGGER_IDS = { pesquisa: 3, regua: 2, midia: 1 };
 // In-memory job store para polling de status (request_id → estado)
@@ -527,6 +528,67 @@ app.get('/agents/:slug/runs/:id', requireJwt, async (req, res) => {
   } catch (err) {
     console.error('[bridge/agents/runs/id]', err.message);
     return res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// POST /chat/ai — Copiloto DELI no chat ao vivo (síncrono, < 5s)
+// ════════════════════════════════════════════════════════════════════════════
+app.post('/chat/ai', requireJwt, async (req, res) => {
+  const { command, messages = [], conversation_id, tenant_id } = req.body;
+  if (!command) return res.status(400).json({ error: 'command required' });
+  if (!ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY não configurado' });
+
+  const SYSTEM_PROMPTS = {
+    '/resumir': `Você é DELI, COO digital da Consult Delivery. Resuma esta conversa de atendimento.
+Responda SOMENTE com JSON válido no formato:
+{"title":"Resumo da conversa","bullets":["ponto 1","ponto 2","ponto 3"],"status":"em andamento"}
+Máximo 5 bullets. Seja direto e acionável. status pode ser: "em andamento", "resolvido", "pendente".`,
+    '/proxima': `Você é DELI, COO digital da Consult Delivery. Sugira as próximas ações para o atendente.
+Responda SOMENTE com JSON válido no formato:
+{"title":"Próximas ações sugeridas","bullets":["ação 1","ação 2","ação 3"],"urgencia":"media"}
+Máximo 3 ações específicas e acionáveis. urgencia: "alta", "media" ou "baixa".`,
+    '/traduzir': `Você é DELI. Traduza a última mensagem do cliente para português.
+Responda SOMENTE com JSON válido no formato:
+{"title":"Tradução","bullets":["Tradução: [texto]","Idioma detectado: [idioma]"]}`,
+    '/tom': `Você é DELI. Analise o tom da conversa e sugira ajuste para o atendente.
+Responda SOMENTE com JSON válido no formato:
+{"title":"Ajuste de tom","bullets":["Tom atual: [descrição]","Sugestão: [ajuste específico]","Exemplo: [frase sugerida]"]}`,
+    '/cobranca': `Você é DELI acionando CORA para análise de cobrança nesta conversa.
+Responda SOMENTE com JSON válido no formato:
+{"title":"CORA · Análise de cobrança","bullets":["Situação: [resumo]","Valor identificado: [valor ou N/A]","Ação recomendada: [próximo passo]"]}`,
+  };
+
+  const prompt = SYSTEM_PROMPTS[command] || SYSTEM_PROMPTS['/resumir'];
+  const transcript = messages.slice(-30).map(m =>
+    `[${m.direction === 'inbound' ? 'Cliente' : 'Atendente'}${m.sender_name ? ` (${m.sender_name})` : ''}]: ${m.content || m.body || '(mídia)'}`
+  ).join('\n');
+
+  try {
+    const Anthropic = require('@anthropic-ai/sdk');
+    const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 400,
+      system: prompt,
+      messages: [{ role: 'user', content: `Conversa:\n\n${transcript || '(sem mensagens ainda)'}` }],
+    });
+
+    const text = response.content[0]?.text || '';
+    let parsed;
+    try {
+      const cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+      parsed = JSON.parse(cleaned);
+    } catch {
+      parsed = { title: 'DELI', bullets: [text] };
+    }
+
+    console.log(`[bridge/chat/ai] ${command} conv=${conversation_id} user=${req.user?.id}`);
+    res.json({ ok: true, ...parsed });
+  } catch (err) {
+    console.error('[bridge/chat/ai]', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 

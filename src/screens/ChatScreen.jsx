@@ -1376,15 +1376,42 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   };
 
   // ── AI COMMANDS ───────────────────────────────────────────
-  const runCommand = (cmd) => {
+  const runCommand = async (cmd) => {
     setShowSlash(false);
     setDraft('');
-    if (cmd === '/resumir') {
-      setAiAction({ type: 'summary', title: 'Resumo da conversa', body: ['Conversa em andamento.', 'DELI analisando contexto e histórico…', 'Próximo passo: confirmar ação necessária.'] });
-    } else if (cmd === '/proxima') {
-      setAiAction({ type: 'next', title: 'Próxima ação sugerida', body: ['Verificar status da última interação.', 'Acionar departamento responsável se necessário.', 'Registrar andamento no CRM.'] });
-    } else if (cmd === '/tom') {
-      setAiAction({ type: 'tone', title: 'Ajuste de tom', body: [] });
+
+    const BRIDGE_URL = import.meta.env.VITE_BRIDGE_URL || '';
+    const AI_CMDS = ['/resumir', '/proxima', '/traduzir', '/tom', '/cobranca'];
+
+    if (AI_CMDS.includes(cmd)) {
+      setAiAction({ type: 'loading', title: 'DELI pensando…', body: ['Analisando a conversa…'] });
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const jwt = session?.access_token;
+        const r = await fetch(`${BRIDGE_URL}/chat/ai`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
+          body: JSON.stringify({
+            command: cmd,
+            messages: activeMsgs.slice(-30),
+            conversation_id: active?.id,
+            tenant_id: active?.tenant_id,
+          }),
+        });
+        const data = await r.json();
+        if (data.ok) {
+          setAiAction({ type: cmd.replace('/', ''), title: data.title, body: data.bullets || [] });
+        } else {
+          setAiAction({ type: 'error', title: 'Erro DELI', body: [data.error || 'Tente novamente.'] });
+        }
+      } catch (err) {
+        setAiAction({ type: 'error', title: 'Erro de conexão', body: [err.message] });
+      }
+      return;
+    }
+
+    if (cmd === '/tarefa') {
+      setAiAction({ type: 'cmd', title: 'Criar tarefa', body: ['Use o painel de tarefas ao lado.'] });
     } else {
       setAiAction({ type: 'cmd', title: cmd, body: ['Comando executado pela DELI…'] });
     }
