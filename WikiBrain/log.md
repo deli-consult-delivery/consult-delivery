@@ -1,5 +1,8 @@
 # Wiki Log
 
+## [2026-05-14 23:59] session | Fases 6-7 + milestone v1 completo — CORA, BRENO, sidebar final
+Touched: none
+
 ## [2026-05-14 22:00] session | Fase 6 — CORA · Cobrança Inteligente com dados reais
 Touched: none
 
