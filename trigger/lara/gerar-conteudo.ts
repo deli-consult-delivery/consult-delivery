@@ -1,7 +1,9 @@
 import { task } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
 import { runClaudeWithWebSearch } from "../_shared/claude";
+import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
+import { notifyDeli } from "../_shared/notify-deli";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -15,6 +17,7 @@ const TipoConteudo = z.enum([
 
 const InputSchema = z.object({
   tenant_id: z.string().uuid(),
+  loja_id: z.string().uuid().optional(),
   loja_nome: z.string(),
   tipo: TipoConteudo,
   objetivo: z.string().describe("Ex: reativar clientes inativos, promover novo produto, black friday"),
@@ -130,6 +133,34 @@ Retorne o JSON conforme solicitado.`;
       useWebSearch: false,
     });
 
+    const sb = getSupabase();
+
+    // Salvar cada variação como agent_draft para aprovação da Wélida
+    if (resultado.ok && resultado.variacoes?.length > 0) {
+      const drafts = resultado.variacoes.map((v, i) => ({
+        tenant_id: input.tenant_id,
+        agent_name: "lara",
+        channel: "painel",
+        loja_id: input.loja_id ?? null,
+        subject: v.titulo,
+        body: `${v.conteudo}\n\n${v.cta}`,
+        autonomy_level: "amarelo",
+        metadata: {
+          tipo: input.tipo,
+          objetivo: input.objetivo,
+          variacao_index: i,
+          cta: v.cta,
+          observacoes: v.observacoes ?? null,
+          dicas_uso: resultado.dicas_uso,
+          run_id: ctx.run.id,
+        },
+      }));
+
+      await sb.from("agent_drafts").insert(drafts).catch((err: Error) =>
+        console.warn("[lara/gerar-conteudo] agent_drafts insert:", err.message)
+      );
+    }
+
     await logAgentRun({
       runId: ctx.run.id,
       agentSlug: "lara",
@@ -138,6 +169,15 @@ Retorne o JSON conforme solicitado.`;
       tenantId: input.tenant_id,
       triggeredBy: input.triggered_by,
       durationMs: Date.now() - startedAt,
+    });
+
+    const tipoStr = tipoLabel[input.tipo] ?? input.tipo;
+    await notifyDeli({
+      tenantId: input.tenant_id,
+      content: `✍️ **LARA** gerou conteúdo para **${resultado.loja_nome}** (${tipoStr}) — ${resultado.variacoes.length} variação(ões) aguardando aprovação da Wélida.\n\nObjetivo: ${input.objetivo}`,
+      sourceAgent: "lara",
+      sourceTask: "lara-gerar-conteudo",
+      runId: ctx.run.id,
     });
 
     return resultado;

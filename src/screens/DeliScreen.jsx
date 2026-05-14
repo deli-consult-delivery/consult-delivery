@@ -23,8 +23,25 @@ function DeliAvatar() {
   );
 }
 
+function LaraAvatar() {
+  return (
+    <div style={{
+      width: 32, height: 32, borderRadius: '50%',
+      background: '#7C3AED', color: '#fff',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: 13, fontWeight: 800, flexShrink: 0,
+    }}>L</div>
+  );
+}
+
 function DeliMessage({ msg }) {
-  const isUser = msg.role === 'user';
+  const isUser      = msg.role === 'user';
+  const isLaraReport = !isUser && msg.metadata?.source_agent === 'lara';
+
+  const avatar = isLaraReport ? <LaraAvatar /> : <DeliAvatar />;
+  const bg     = isUser ? 'var(--red, #B70C00)' : isLaraReport ? '#2D1B69' : 'var(--g-800)';
+  const border = isLaraReport ? '1px solid #7C3AED44' : 'none';
+
   return (
     <div style={{
       display: 'flex',
@@ -33,10 +50,11 @@ function DeliMessage({ msg }) {
       gap: 8,
       alignItems: 'flex-end',
     }}>
-      {!isUser && <DeliAvatar />}
+      {!isUser && avatar}
       <div style={{
-        maxWidth: '72%',
-        background: isUser ? 'var(--red, #B70C00)' : 'var(--g-800)',
+        maxWidth: '78%',
+        background: bg,
+        border,
         color: '#fff',
         borderRadius: isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
         padding: '10px 14px',
@@ -45,6 +63,11 @@ function DeliMessage({ msg }) {
         whiteSpace: 'pre-wrap',
         wordBreak: 'break-word',
       }}>
+        {isLaraReport && (
+          <div style={{ fontSize: 10, fontWeight: 700, color: '#A78BFA', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>
+            LARA · relatório
+          </div>
+        )}
         <div style={{ opacity: isUser ? 1 : 0.95 }}>{msg.content}</div>
         <div style={{
           fontSize: 10, opacity: 0.55,
@@ -104,9 +127,9 @@ export default function DeliScreen({ tenantDbId, userId }) {
     async function load() {
       const { data } = await supabase
         .from('deli_messages')
-        .select('id, role, content, created_at')
+        .select('id, role, content, created_at, metadata')
         .eq('tenant_id', tenantDbId)
-        .eq('user_id', userId)
+        .or(`user_id.eq.${userId},user_id.is.null`)
         .order('created_at', { ascending: true })
         .limit(100);
 
@@ -138,7 +161,10 @@ export default function DeliScreen({ tenantDbId, userId }) {
         filter: `tenant_id=eq.${tenantDbId}`,
       }, payload => {
         const msg = payload.new;
-        if (msg.user_id !== userId) return;
+        // accept DELI replies (user_id === userId) and LARA reports (user_id === null)
+        const isOwn   = msg.user_id === userId;
+        const isAgent = msg.user_id === null && msg.role === 'assistant';
+        if (!isOwn && !isAgent) return;
         if (msg.role !== 'assistant') return;
 
         setMessages(prev => {

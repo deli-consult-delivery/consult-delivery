@@ -4,10 +4,11 @@ import { supabase } from '../lib/supabase.js';
 const BRIDGE_BASE = import.meta.env.VITE_BRIDGE_URL || 'http://187.127.25.24:3001';
 
 const TABS = [
-  { id: 'pesquisar', label: 'Pesquisar loja' },
-  { id: 'conteudo',  label: 'Gerar conteúdo' },
-  { id: 'tendencia', label: 'Tendências' },
-  { id: 'historico', label: 'Histórico' },
+  { id: 'pesquisar',  label: 'Pesquisar loja' },
+  { id: 'conteudo',   label: 'Gerar conteúdo' },
+  { id: 'tendencia',  label: 'Tendências' },
+  { id: 'rascunhos',  label: 'Rascunhos' },
+  { id: 'historico',  label: 'Histórico' },
 ];
 
 const TIPO_OPTIONS = [
@@ -301,6 +302,7 @@ export default function LaraScreen({ tenantDbId, userId }) {
   const [resCont, setResCont]       = useState(null);
   const [resTend, setResTend]       = useState(null);
   const [histRuns, setHistRuns]     = useState([]);
+  const [drafts, setDrafts]         = useState([]);
 
   // loading per tab
   const [loading, setLoading]       = useState({ pesquisar: false, conteudo: false, tendencia: false });
@@ -329,6 +331,15 @@ export default function LaraScreen({ tenantDbId, userId }) {
       .order('created_at', { ascending: false }).limit(30)
       .then(({ data }) => setHistRuns(data || []));
   }, [tenantDbId, laraAgentId]);
+
+  // load rascunhos
+  useEffect(() => {
+    if (!tenantDbId) return;
+    supabase.from('agent_drafts')
+      .select('*').eq('tenant_id', tenantDbId).eq('agent_name', 'lara')
+      .order('created_at', { ascending: false }).limit(50)
+      .then(({ data }) => setDrafts(data || []));
+  }, [tenantDbId]);
 
   // realtime: new runs
   useEffect(() => {
@@ -359,6 +370,21 @@ export default function LaraScreen({ tenantDbId, userId }) {
       .subscribe();
     return () => supabase.removeChannel(ch);
   }, [tenantDbId, laraAgentId]);
+
+  // realtime: new drafts
+  useEffect(() => {
+    if (!tenantDbId) return;
+    const ch = supabase.channel('lara-drafts')
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'agent_drafts',
+        filter: `tenant_id=eq.${tenantDbId}`,
+      }, ({ new: draft }) => {
+        if (draft.agent_name !== 'lara') return;
+        setDrafts(prev => [draft, ...prev]);
+      })
+      .subscribe();
+    return () => supabase.removeChannel(ch);
+  }, [tenantDbId]);
 
   async function runTask(taskId, payload, tabId) {
     const { data: { session } } = await supabase.auth.getSession();
@@ -406,6 +432,7 @@ export default function LaraScreen({ tenantDbId, userId }) {
     if (!cLojaNome.trim() || !cObjetivo.trim()) return;
     setResCont(null);
     runTask('lara-gerar-conteudo', {
+      loja_id:   fLojaId   || undefined,
       loja_nome: cLojaNome,
       tipo:      cTipo,
       objetivo:  cObjetivo,
@@ -413,6 +440,15 @@ export default function LaraScreen({ tenantDbId, userId }) {
       tom:       cTom      || undefined,
       cupom:     cCupom    || undefined,
     }, 'conteudo');
+  }
+
+  async function updateDraftStatus(draftId, status) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    await supabase.from('agent_drafts')
+      .update({ status, approved_by: session.user.id, approved_at: new Date().toISOString() })
+      .eq('id', draftId);
+    setDrafts(prev => prev.map(d => d.id === draftId ? { ...d, status } : d));
   }
 
   function submitTendencia() {
@@ -461,7 +497,12 @@ export default function LaraScreen({ tenantDbId, userId }) {
             marginBottom: -1,
           }}>
             {t.label}
-            {t.id !== 'historico' && loading[t.id] && (
+            {t.id === 'rascunhos' && drafts.filter(d => d.status === 'pending').length > 0 && (
+              <span style={{ marginLeft: 5, background: '#f59e0b', color: '#fff', borderRadius: 10, fontSize: 10, padding: '1px 6px', fontWeight: 700 }}>
+                {drafts.filter(d => d.status === 'pending').length}
+              </span>
+            )}
+            {t.id !== 'historico' && t.id !== 'rascunhos' && loading[t.id] && (
               <svg width="10" height="10" viewBox="0 0 24 24" style={{ marginLeft: 6, animation: 'spin 0.8s linear infinite', display: 'inline' }}>
                 <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="3" strokeDasharray="60" strokeDashoffset="20" />
               </svg>
@@ -560,6 +601,73 @@ export default function LaraScreen({ tenantDbId, userId }) {
               LARA pesquisa iFood, Google Trends e notícias recentes do setor. Pode levar 1-2 min.
             </div>
             <ResultTendencia data={resTend} />
+          </div>
+        )}
+
+        {/* ── Rascunhos ── */}
+        {tab === 'rascunhos' && (
+          <div>
+            {drafts.length === 0 ? (
+              <div style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13, padding: '40px 0' }}>
+                Nenhum rascunho ainda. Gere conteúdo na aba "Gerar conteúdo" — cada variação vira um rascunho aqui.
+              </div>
+            ) : (
+              drafts.map(d => {
+                const isPending  = d.status === 'pending';
+                const isApproved = d.status === 'approved';
+                const isRejected = d.status === 'rejected';
+                const tipoMeta   = d.metadata?.tipo ?? '';
+                const objetivo   = d.metadata?.objetivo ?? '';
+                return (
+                  <div key={d.id} style={{
+                    padding: 14, background: 'var(--surface2)', borderRadius: 10,
+                    border: `1px solid ${isPending ? 'var(--border)' : isApproved ? '#22c55e44' : '#ef444444'}`,
+                    marginBottom: 10,
+                    opacity: isRejected ? 0.5 : 1,
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 700 }}>{d.subject}</div>
+                        {tipoMeta && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{tipoMeta.replace(/_/g, ' ')} · {objetivo}</div>}
+                        <div style={{ fontSize: 11, color: 'var(--text3)' }}>{new Date(d.created_at).toLocaleString('pt-BR')}</div>
+                      </div>
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10,
+                        background: isPending ? '#f59e0b22' : isApproved ? '#22c55e22' : '#ef444422',
+                        color:      isPending ? '#f59e0b'   : isApproved ? '#22c55e'   : '#ef4444',
+                      }}>
+                        {isPending ? 'pendente' : isApproved ? 'aprovado' : 'rejeitado'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 13, whiteSpace: 'pre-wrap', lineHeight: 1.6, color: 'var(--text1)', marginBottom: isPending ? 10 : 0 }}>
+                      {d.body}
+                    </div>
+                    {isPending && (
+                      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                        <button onClick={() => updateDraftStatus(d.id, 'approved')} style={{
+                          flex: 1, padding: '7px 0', borderRadius: 8, border: 'none',
+                          background: '#22c55e', color: '#fff', fontWeight: 600, fontSize: 12, cursor: 'pointer',
+                        }}>
+                          ✓ Aprovar
+                        </button>
+                        <CopyBtn text={d.body} />
+                        <button onClick={() => updateDraftStatus(d.id, 'rejected')} style={{
+                          padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border)',
+                          background: 'transparent', color: 'var(--text2)', fontSize: 12, cursor: 'pointer',
+                        }}>
+                          Rejeitar
+                        </button>
+                      </div>
+                    )}
+                    {isApproved && (
+                      <div style={{ marginTop: 6, display: 'flex', gap: 8 }}>
+                        <CopyBtn text={d.body} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
           </div>
         )}
 

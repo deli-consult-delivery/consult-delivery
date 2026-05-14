@@ -3,6 +3,7 @@ import { z } from "zod";
 import { runClaudeWithWebSearch } from "../_shared/claude";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
+import { notifyDeli } from "../_shared/notify-deli";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -136,6 +137,14 @@ Retorne o JSON estruturado conforme solicitado.`;
       tenantId: input.tenant_id,
       triggeredBy: input.triggered_by,
       durationMs: Date.now() - startedAt,
+    });
+
+    await notifyDeli({
+      tenantId: input.tenant_id,
+      content: `🔍 **LARA** pesquisou **${resultado.loja_nome}** — ${resultado.oportunidades?.length ?? 0} oportunidade(s) identificada(s).\n\n${resultado.resumo_executivo.slice(0, 300)}${resultado.resumo_executivo.length > 300 ? "..." : ""}`,
+      sourceAgent: "lara",
+      sourceTask: "lara-pesquisar-loja",
+      runId: ctx.run.id,
     });
 
     return resultado;

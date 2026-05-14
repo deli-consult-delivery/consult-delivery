@@ -2,6 +2,7 @@ import { task } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
 import { runClaudeWithWebSearch } from "../_shared/claude";
 import { logAgentRun } from "../_shared/audit";
+import { notifyDeli } from "../_shared/notify-deli";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -105,6 +106,15 @@ Retorne tendências acionáveis e específicas, não genéricas.`;
       tenantId: input.tenant_id,
       triggeredBy: input.triggered_by,
       durationMs: Date.now() - startedAt,
+    });
+
+    const locLabel = resultado.cidade ?? "Brasil";
+    await notifyDeli({
+      tenantId: input.tenant_id,
+      content: `📊 **LARA** analisou tendências de **${resultado.segmento}** (${locLabel}) — ${resultado.tendencias.length} tendência(s), ${resultado.alertas.length} alerta(s).\n\n${resultado.resumo.slice(0, 280)}${resultado.resumo.length > 280 ? "..." : ""}`,
+      sourceAgent: "lara",
+      sourceTask: "lara-analisar-tendencia",
+      runId: ctx.run.id,
     });
 
     return resultado;
