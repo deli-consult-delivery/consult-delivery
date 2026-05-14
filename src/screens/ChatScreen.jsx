@@ -195,7 +195,7 @@ function EmojiPicker({ onSelect, onClose }) {
 }
 
 // ─── CONV ROW (sidebar item) ───────────────────────────────────
-function ConvRow({ conv, active, onClick, statusFilter, fav, onFav }) {
+function ConvRow({ conv, active, onClick, statusFilter, fav, onFav, selectMode, selected, onSelect }) {
   const waitColors = {
     aguardando:         { bg: 'rgba(245,158,11,0.18)',  color: '#FBBF24' },
     em_atendimento:     { bg: 'rgba(59,130,246,0.18)',   color: '#93C5FD' },
@@ -220,10 +220,18 @@ function ConvRow({ conv, active, onClick, statusFilter, fav, onFav }) {
     falha:              'Falha',
   };
   return (
-    <div onClick={onClick} className={`lc-row${active ? ' on' : ''}`}>
+    <div onClick={selectMode ? onSelect : onClick} className={`lc-row${active && !selectMode ? ' on' : ''}${selected ? ' on' : ''}`} style={selected ? { background: 'rgba(183,12,0,0.12)' } : undefined}>
       <div style={{ position: 'relative', flexShrink: 0 }}>
-        <ConvAvatar conv={conv} size={42} />
-        {conv.unread > 0 && (
+        {selectMode ? (
+          <div style={{ width: 42, height: 42, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${selected ? '#B70C00' : 'rgba(255,255,255,0.3)'}`, background: selected ? '#B70C00' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .15s' }}>
+              {selected && <svg width="11" height="9" viewBox="0 0 11 9" fill="none"><polyline points="1,4.5 4,7.5 10,1.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+            </div>
+          </div>
+        ) : (
+          <ConvAvatar conv={conv} size={42} />
+        )}
+        {!selectMode && conv.unread > 0 && (
           <span style={{ position: 'absolute', top: -2, right: -2, width: 16, height: 16, background: 'var(--red)', borderRadius: '50%', border: '2px solid #181818', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: 'white' }}>
             {conv.unread > 9 ? '9+' : conv.unread}
           </span>
@@ -258,16 +266,18 @@ function ConvRow({ conv, active, onClick, statusFilter, fav, onFav }) {
           {conv.type === 'internal' && <span className="lc-row-tag" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)' }}>Interno</span>}
         </div>
       </div>
-      <button
-        className="lc-fav-btn"
-        title={fav ? 'Remover dos favoritos' : 'Favoritar conversa'}
-        onClick={onFav}
-        style={{ color: fav ? '#FBBF24' : undefined }}
-      >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill={fav ? '#FBBF24' : 'none'} stroke={fav ? '#FBBF24' : 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-        </svg>
-      </button>
+      {!selectMode && (
+        <button
+          className="lc-fav-btn"
+          title={fav ? 'Remover dos favoritos' : 'Favoritar conversa'}
+          onClick={onFav}
+          style={{ color: fav ? '#FBBF24' : undefined }}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill={fav ? '#FBBF24' : 'none'} stroke={fav ? '#FBBF24' : 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+          </svg>
+        </button>
+      )}
     </div>
   );
 }
@@ -636,6 +646,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   });
   const [showStarredPanel, setShowStarredPanel] = useState(false);
   const [mobilePane, setMobilePane]            = useState('list'); // 'list' | 'chat'
+  const [selectMode, setSelectMode]            = useState(false);
+  const [selectedConvIds, setSelectedConvIds]  = useState(new Set());
+  const [bulkLoading, setBulkLoading]          = useState(false);
 
   // ── Mensagens ─────────────────────────────────────────────
   const [messages, setMessages]              = useState({});
@@ -928,6 +941,24 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       ]);
       setCurrentUser({ id: user.id, email: user.email, name: member?.display_name || profile?.full_name || user.email?.split('@')[0] || 'Equipe' });
     } catch { /* ignore */ }
+  }
+
+  async function handleBulkFinalize() {
+    if (!selectedConvIds.size || bulkLoading) return;
+    setBulkLoading(true);
+    const ids = [...selectedConvIds];
+    const payload = {
+      status:    'finalizado',
+      status_v2: 'closed',
+      finished_by: currentUser?.id || null,
+    };
+    try {
+      await supabase.from('conversations').update(payload).in('id', ids);
+      setConvs(prev => prev.map(c => selectedConvIds.has(c.id) ? { ...c, status: 'finalizado' } : c));
+    } catch { /* ignore */ }
+    setSelectedConvIds(new Set());
+    setSelectMode(false);
+    setBulkLoading(false);
   }
 
   async function loadQuickReplies() {
@@ -1907,6 +1938,46 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           );
         })()}
 
+        {/* Barra de seleção em massa */}
+        {selectMode ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(183,12,0,0.1)', borderBottom: '1px solid rgba(183,12,0,0.25)' }}>
+            <button
+              onClick={() => {
+                if (selectedConvIds.size === filtered.length) setSelectedConvIds(new Set());
+                else setSelectedConvIds(new Set(filtered.map(c => c.id)));
+              }}
+              style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', flexShrink: 0 }}
+            >
+              {selectedConvIds.size === filtered.length ? 'Desmarcar' : 'Todos'}
+            </button>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', flex: 1 }}>
+              {selectedConvIds.size} selecionado{selectedConvIds.size !== 1 ? 's' : ''}
+            </span>
+            <button
+              onClick={handleBulkFinalize}
+              disabled={selectedConvIds.size === 0 || bulkLoading}
+              style={{ fontSize: 11, fontWeight: 700, color: 'white', background: selectedConvIds.size > 0 ? '#B70C00' : 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: selectedConvIds.size > 0 ? 'pointer' : 'default', opacity: bulkLoading ? 0.6 : 1, flexShrink: 0 }}
+            >
+              {bulkLoading ? 'Aguarde…' : 'Finalizar'}
+            </button>
+            <button
+              onClick={() => { setSelectMode(false); setSelectedConvIds(new Set()); }}
+              style={{ fontSize: 16, color: 'rgba(255,255,255,0.5)', background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1, padding: 2 }}
+            >×</button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 12px 0' }}>
+            <button
+              onClick={() => setSelectMode(true)}
+              style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, padding: '2px 0' }}
+              title="Selecionar conversas para ações em massa"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+              Selecionar
+            </button>
+          </div>
+        )}
+
         {/* Lista de conversas */}
         {!showStarredPanel && <div className="lc-list-body dark-scroll">
           {tab === 'fav' && favConvs.size === 0 && (
@@ -1923,6 +1994,13 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               statusFilter={statusFilter}
               fav={favConvs.has(c.id)}
               onFav={e => toggleFav(c.id, e)}
+              selectMode={selectMode}
+              selected={selectedConvIds.has(c.id)}
+              onSelect={() => setSelectedConvIds(prev => {
+                const next = new Set(prev);
+                next.has(c.id) ? next.delete(c.id) : next.add(c.id);
+                return next;
+              })}
               onClick={() => {
                 setActiveId(c.id);
                 setMobilePane('chat');
