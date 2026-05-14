@@ -1035,6 +1035,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
   // ── Refs ──────────────────────────────────────────────────
   const scrollRef      = useRef(null);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
   const textareaRef    = useRef(null);
   const chanScrollRef  = useRef(null);
   const activeIdRef    = useRef(activeId);
@@ -1234,9 +1235,17 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     }
   }, [activeId]);
 
-  // Auto-scroll
+  // Auto-scroll — só rola se já estiver perto do fundo; caso contrário mostra botão
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    const el = scrollRef.current;
+    if (!el) return;
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distFromBottom < 120) {
+      el.scrollTop = el.scrollHeight;
+      setShowScrollBtn(false);
+    } else {
+      setShowScrollBtn(true);
+    }
   }, [messages, activeId, typing]);
   useEffect(() => {
     if (chanScrollRef.current) chanScrollRef.current.scrollTop = chanScrollRef.current.scrollHeight;
@@ -2481,7 +2490,15 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               )}
 
               {/* Mensagens */}
-              <div ref={scrollRef} className="lc-msgs dark-scroll">
+              <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+              <div ref={scrollRef} className="lc-msgs dark-scroll"
+                onScroll={() => {
+                  const el = scrollRef.current;
+                  if (!el) return;
+                  const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+                  setShowScrollBtn(dist > 120);
+                }}
+              >
                 {activeMsgs.length === 0 && (
                   <div style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.35)', fontSize: 13 }}>
                     Nenhuma mensagem ainda
@@ -2530,6 +2547,29 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* Botão ir para mensagem mais recente */}
+              {showScrollBtn && (
+                <button
+                  onClick={() => {
+                    const el = scrollRef.current;
+                    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+                    setShowScrollBtn(false);
+                  }}
+                  style={{
+                    position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)',
+                    background: '#B70C00', color: 'white', border: 'none', borderRadius: 20,
+                    padding: '6px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.5)', zIndex: 10,
+                    animation: 'fadeIn .15s ease',
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9" transform="rotate(180,12,12)"/></svg>
+                  Mensagem mais recente
+                </button>
+              )}
               </div>
 
               {/* Composer */}
