@@ -33,6 +33,7 @@ const NAV_GROUPS = [
       { id: 'cora',          icon: 'dollar',   label: 'CORA · Cobrança', pulse: true },
       { id: 'lara',          icon: 'sparkles', label: 'LARA · Marketing', pulse: true },
       { id: 'max',           icon: 'bot',      label: 'MAX · Suporte',   pulse: true },
+      { id: 'nova',          icon: 'sparkles', label: 'NOVA · Automação', pulse: true },
     ],
   },
   {
