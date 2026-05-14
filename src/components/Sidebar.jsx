@@ -7,6 +7,7 @@ const NAV_GROUPS = [
     label: 'Início',
     items: [
       { id: 'dashboard',     icon: 'home',     label: 'Dashboard'      },
+      { id: 'deli',          icon: 'bot',      label: 'DELI',  pulse: true },
       { id: 'analise-ifood', icon: 'chart',    label: 'Análise iFood'  },
     ],
   },
