@@ -284,6 +284,7 @@ input, textarea { font-family: inherit; }
 }
 @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
 @keyframes blink-rec { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+@keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
 .rec-dot { animation: blink-rec 1s infinite ease-in-out; }
 
 .pulse-red   { animation: pulse-red 1.6s infinite; }

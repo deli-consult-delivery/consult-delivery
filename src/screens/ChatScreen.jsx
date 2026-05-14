@@ -398,6 +398,161 @@ function extractQuotedSender(q, convName) {
   return q.pushName || convName || 'Cliente';
 }
 
+// ─── AI SIDE PANEL ─────────────────────────────────────────────
+const AI_QUICK = [
+  { icon: '📋', label: 'Resumir conversa',    cmd: '/resumir' },
+  { icon: '🌐', label: 'Traduzir mensagens',  cmd: '/traduzir' },
+  { icon: '🎯', label: 'Sugerir próxima ação', cmd: '/proxima' },
+  { icon: '💰', label: 'Analisar cobrança',   cmd: '/cobranca' },
+  { icon: '🎭', label: 'Analisar tom',         cmd: '/tom' },
+];
+
+function AiSidePanel({ onClose, onRunCmd, convName, msgs }) {
+  const [input, setInput]     = useState('');
+  const [loading, setLoading] = useState(false);
+  const [history, setHistory] = useState([]);
+  const bottomRef = useRef(null);
+  const inputRef  = useRef(null);
+  const BRIDGE_URL = import.meta.env.VITE_BRIDGE_URL || '';
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [history]);
+
+  async function send(text) {
+    if (!text.trim() || loading) return;
+    const userMsg = text.trim();
+    setInput('');
+    setHistory(h => [...h, { role: 'user', text: userMsg }]);
+    setLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const jwt = session?.access_token;
+      const r = await fetch(`${BRIDGE_URL}/chat/ai`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
+        body: JSON.stringify({ command: '/livre', prompt: userMsg, messages: (msgs || []).slice(-20) }),
+      });
+      const data = await r.json();
+      const reply = data.ok
+        ? (data.body || (data.bullets || []).join('\n') || data.title || 'Pronto.')
+        : (data.error || 'Ocorreu um erro. Tente novamente.');
+      setHistory(h => [...h, { role: 'ai', text: reply }]);
+    } catch (err) {
+      setHistory(h => [...h, { role: 'ai', text: `Erro de conexão: ${err.message}` }]);
+    }
+    setLoading(false);
+  }
+
+  function handleQuick(item) {
+    setHistory(h => [...h, { role: 'user', text: item.label }]);
+    onRunCmd(item.cmd, (title, body) => {
+      setHistory(h => [...h, { role: 'ai', text: [title, ...(body || [])].filter(Boolean).join('\n\n') }]);
+    });
+  }
+
+  const isEmpty = history.length === 0;
+
+  return (
+    <div style={{
+      position: 'absolute', top: 0, right: 0, bottom: 0, width: 340,
+      background: '#141414', borderLeft: '1px solid rgba(255,255,255,0.08)',
+      display: 'flex', flexDirection: 'column', zIndex: 40,
+      animation: 'slideInRight .2s ease',
+    }}>
+      {/* Header */}
+      <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'linear-gradient(135deg,#B70C00,#FF4D3D)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>🚀</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'white' }}>DELI — IA Copiloto</div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Consult Delivery</div>
+        </div>
+        <button onClick={onClose} style={{ color: 'rgba(255,255,255,0.4)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 4 }}>×</button>
+      </div>
+
+      {/* Body */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 14px 8px' }} className="dark-scroll">
+        {isEmpty && (
+          <>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', lineHeight: 1.55, marginBottom: 20 }}>
+              Olá! Sou a DELI, sua IA copiloto da Consult Delivery.<br/>
+              {convName ? <>Estou analisando a conversa com <strong style={{ color: 'white' }}>{convName}</strong>.</> : 'Como posso ajudar?'}
+            </div>
+
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 8 }}>Ações rápidas</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {AI_QUICK.map(item => (
+                <button
+                  key={item.cmd}
+                  onClick={() => handleQuick(item)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '9px 12px', cursor: 'pointer', color: 'white', fontSize: 12, textAlign: 'left', transition: 'background .15s' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(183,12,0,0.15)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                >
+                  <span style={{ fontSize: 16 }}>{item.icon}</span>
+                  <span>{item.label}</span>
+                  <svg style={{ marginLeft: 'auto', opacity: .4 }} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {history.map((m, i) => (
+          <div key={i} style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', alignItems: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+            {m.role === 'ai' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'linear-gradient(135deg,#B70C00,#FF4D3D)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>🚀</div>
+                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontWeight: 600 }}>DELI</span>
+              </div>
+            )}
+            <div style={{
+              maxWidth: '88%', padding: '8px 12px', borderRadius: m.role === 'user' ? '12px 12px 2px 12px' : '2px 12px 12px 12px',
+              background: m.role === 'user' ? 'rgba(183,12,0,0.25)' : 'rgba(255,255,255,0.07)',
+              border: `1px solid ${m.role === 'user' ? 'rgba(183,12,0,0.4)' : 'rgba(255,255,255,0.08)'}`,
+              fontSize: 12, color: 'rgba(255,255,255,0.88)', lineHeight: 1.6, whiteSpace: 'pre-wrap',
+            }}>{m.text}</div>
+          </div>
+        ))}
+
+        {loading && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
+            <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'linear-gradient(135deg,#B70C00,#FF4D3D)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>🚀</div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {[0,1,2].map(i => <span key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: '#B70C00', opacity: .7, animation: `bounce .8s ${i*.15}s ease-in-out infinite` }} />)}
+            </div>
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Input */}
+      <div style={{ padding: '10px 12px 12px', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+        <div style={{ display: 'flex', gap: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: '8px 10px', alignItems: 'flex-end' }}>
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input); } }}
+            placeholder="Pergunte qualquer coisa à DELI…"
+            rows={1}
+            style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: 'white', fontSize: 12, resize: 'none', fontFamily: 'inherit', lineHeight: 1.5, maxHeight: 80, overflowY: 'auto' }}
+          />
+          <button
+            onClick={() => send(input)}
+            disabled={!input.trim() || loading}
+            style={{ width: 28, height: 28, borderRadius: 8, background: input.trim() ? '#B70C00' : 'rgba(255,255,255,0.08)', border: 'none', cursor: input.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background .15s' }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </div>
+        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginTop: 6, textAlign: 'center' }}>
+          Enter para enviar · Shift+Enter nova linha
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── FORWARD MODAL ─────────────────────────────────────────────
 function ForwardModal({ msg, convs, currentConvId, onClose, onForward }) {
   const [search, setSearch] = useState('');
@@ -649,6 +804,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [selectMode, setSelectMode]            = useState(false);
   const [selectedConvIds, setSelectedConvIds]  = useState(new Set());
   const [bulkLoading, setBulkLoading]          = useState(false);
+  const [showAiPanel, setShowAiPanel]          = useState(false);
 
   // ── Mensagens ─────────────────────────────────────────────
   const [messages, setMessages]              = useState({});
@@ -1788,7 +1944,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button className="lc-ask-deli" onClick={() => runCommand('/resumir')}>
+          <button className="lc-ask-deli" onClick={() => setShowAiPanel(v => !v)}>
             <AgentAvatar id="deli" size={18} />
             <span className="lc-ask-deli-label">Faça uma pergunta</span>
             <kbd className="lc-kbd">⌘K</kbd>
@@ -2018,7 +2174,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
       {/* ─── COL 2: Área de chat ──────────────────────────────── */}
       {active ? (
-        <section className="lc-chat" style={{ gridArea: 'chat' }}>
+        <section className="lc-chat" style={{ gridArea: 'chat', position: 'relative' }}>
 
           {isChannel ? (
             /* ── Canal interno ──────────────────────────────── */
@@ -2404,6 +2560,30 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                 )}
               </footer>
             </>
+          )}
+
+          {/* ─── AI Side Panel ──────────────────────────────── */}
+          {showAiPanel && (
+            <AiSidePanel
+              convName={active?.name}
+              msgs={activeMsgs}
+              onClose={() => setShowAiPanel(false)}
+              onRunCmd={async (cmd, cb) => {
+                const BRIDGE_URL = import.meta.env.VITE_BRIDGE_URL || '';
+                try {
+                  const { data: { session } } = await supabase.auth.getSession();
+                  const jwt = session?.access_token;
+                  const r = await fetch(`${BRIDGE_URL}/chat/ai`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
+                    body: JSON.stringify({ command: cmd, messages: activeMsgs.slice(-30), conversation_id: active?.id, tenant_id: active?.tenant_id }),
+                  });
+                  const data = await r.json();
+                  if (data.ok) cb(data.title, data.bullets || []);
+                  else cb('Erro', [data.error || 'Tente novamente.']);
+                } catch (err) { cb('Erro de conexão', [err.message]); }
+              }}
+            />
           )}
         </section>
       ) : (
