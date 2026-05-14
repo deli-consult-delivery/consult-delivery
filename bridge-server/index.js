@@ -426,7 +426,16 @@ async function postCallback(payload) {
 // Trigger.dev Management API (paths validados contra @trigger.dev/core SDK)
 // ════════════════════════════════════════════════════════════════════════════
 
-// ── Middleware: verificar acesso ao agente via user_agent_access + fallback admin
+// Roles que podem invocar agentes cujo slug começa com o prefixo
+const ROLE_AGENT_PREFIXES = {
+  'marketing':   ['lara-'],
+  'atendimento': ['deli-'],
+  'financeiro':  ['cora-'],
+  'admin':       [''],   // admin pode tudo (prefixo vazio = match qualquer)
+  'owner':       [''],
+};
+
+// ── Middleware: verificar acesso ao agente via user_agent_access + fallback por role
 async function requireAgentAccess(req, res, next) {
   const { slug } = req.params;
   const userId   = req.user?.id;
@@ -438,22 +447,31 @@ async function requireAgentAccess(req, res, next) {
     Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
   };
 
+  const tenantId = req.body?.tenant_id;
+
   try {
-    // 1. Checagem primária: user_agent_access.can_invoke
+    // 1. Checagem primária: user_agent_access.can_invoke explícito
     const r1 = await fetch(
       `${SUPABASE_URL}/rest/v1/user_agent_access?user_id=eq.${userId}&agent_name=eq.${encodeURIComponent(slug)}&can_invoke=eq.true&select=user_id&limit=1`,
       { headers }
     );
     if (r1.ok && (await r1.json()).length > 0) return next();
 
-    // 2. Fallback: admin/owner do tenant tem acesso a todos os agentes
-    const tenantId = req.body?.tenant_id;
+    // 2. Fallback: verificar role do usuário no tenant e checar prefixo do slug
     if (tenantId) {
       const r2 = await fetch(
-        `${SUPABASE_URL}/rest/v1/tenant_members?user_id=eq.${userId}&tenant_id=eq.${tenantId}&role=in.(admin,owner)&select=user_id&limit=1`,
+        `${SUPABASE_URL}/rest/v1/tenant_members?user_id=eq.${userId}&tenant_id=eq.${tenantId}&select=role&limit=1`,
         { headers }
       );
-      if (r2.ok && (await r2.json()).length > 0) return next();
+      if (r2.ok) {
+        const rows = await r2.json();
+        if (rows.length > 0) {
+          const role = rows[0].role;
+          const allowedPrefixes = ROLE_AGENT_PREFIXES[role] || [];
+          const allowed = allowedPrefixes.some(prefix => prefix === '' || slug.startsWith(prefix));
+          if (allowed) return next();
+        }
+      }
     }
 
     return res.status(403).json({ error: `sem permissão para invocar o agente '${slug}'` });
