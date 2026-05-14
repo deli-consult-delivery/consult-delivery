@@ -1,5 +1,23 @@
 # Wiki Log
 
+## [2026-05-14 00:00] session | Fase 2 — DELI chat + analise-ifood Trigger.dev
+Touched: none
+
+## [2026-05-13 03:00] session | departamentos — tela de gerenciamento
+Touched: none
+
+## [2026-05-13 02:30] session | bots — resposta automática fora do horário
+Touched: none
+
+## [2026-05-13 01:30] session | copiloto DELI + bulk finalizar + fix chat ao vivo
+Touched: none
+
+## [2026-05-11 00:00] session | fix pré-visualização mensagem citada WhatsApp
+Touched: none
+
+## [2026-05-11 00:00] session | histórico de ações no chat ao vivo
+Touched: none
+
 ## [2026-05-09 00:00] session | merge PR #9 chat-status-system para main
 Touched: none
 
@@ -134,3 +152,7 @@ Touched: none
 Touched: none
 ## [2026-05-08 00:00] session | fix som notificação chat não tocava
 Touched: none
+## [2026-05-09 12:45] session | Ollama Cloud + Kimi K2.6 no OpenClaw
+Touched: none
+## [2026-05-13 00:23] session | Fase 0 Fundação Técnica completa
+Touched: none (infra session — Trigger.dev, Bridge Server, 7 migrations, PR #11 aberto)
