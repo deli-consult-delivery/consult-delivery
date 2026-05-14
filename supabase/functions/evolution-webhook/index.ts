@@ -372,6 +372,14 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
       .eq('status', 'em_atendimento');
   }
 
+  // ── Bot: resposta automática fora do horário (somente PV, não grupos) ───────
+
+  if (!isGroup && convId) {
+    checkAndSendBotResponse({ inst, tenantId, instance, chatId, convId }).catch(err => {
+      console.warn('[BOT] checkAndSendBotResponse falhou (não crítico):', err.message);
+    });
+  }
+
   // ── Enfileirar invoke se há menção ────────────────────────────────────────
 
   if (isMentionToBot && mentionedAgent && mentionedAgent !== 'deli') {
@@ -803,4 +811,88 @@ async function enqueueAgentInvoke({ mentionedAgent, tenantId, groupId, messageTe
 
   if (!res.ok) console.warn('[WEBHOOK] enqueueAgentInvoke status:', res.status);
   else         console.log('[WEBHOOK] agente enfileirado:', mentionedAgent);
+}
+
+// Verifica se mensagem chegou fora do horário e envia resposta automática
+async function checkAndSendBotResponse({ inst, tenantId, instance, chatId, convId }: {
+  inst: { evolution_url: string; api_key: string };
+  tenantId: string; instance: string; chatId: string; convId: string;
+}) {
+  const { data: config } = await supabase
+    .from('bot_configs')
+    .select('is_active, schedule, message, respond_only_first, timezone')
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
+
+  if (!config?.is_active) return;
+
+  // Determina hora local do tenant
+  const tz  = (config.timezone as string) || 'America/Sao_Paulo';
+  const now  = new Date();
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(now);
+
+  const weekday = parts.find(p => p.type === 'weekday')?.value || '';
+  const hour    = parseInt(parts.find(p => p.type === 'hour')?.value   || '0');
+  const minute  = parseInt(parts.find(p => p.type === 'minute')?.value || '0');
+
+  const dayMap: Record<string, string> = {
+    Mon: 'mon', Tue: 'tue', Wed: 'wed', Thu: 'thu', Fri: 'fri', Sat: 'sat', Sun: 'sun',
+  };
+  const dayKey = dayMap[weekday] || '';
+  const currentMinutes = hour * 60 + minute;
+
+  const sched = (config.schedule as Record<string, { on: boolean; start: string; end: string }>) || {};
+  const dayCfg = sched[dayKey];
+
+  let isInsideHours = false;
+  if (dayCfg?.on) {
+    const [sh, sm] = (dayCfg.start || '09:00').split(':').map(Number);
+    const [eh, em] = (dayCfg.end   || '18:00').split(':').map(Number);
+    isInsideHours = currentMinutes >= (sh * 60 + sm) && currentMinutes < (eh * 60 + em);
+  }
+
+  if (isInsideHours) return; // dentro do horário → não responde
+
+  // Se respond_only_first, verifica se já enviamos bot hoje
+  if (config.respond_only_first) {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const { data: existingBotMsg } = await supabase
+      .from('messages')
+      .select('id')
+      .eq('conversation_id', convId)
+      .eq('direction', 'outbound')
+      .eq('sender_name', 'Bot')
+      .gte('created_at', todayStart.toISOString())
+      .maybeSingle();
+    if (existingBotMsg) return;
+  }
+
+  const botMessage = (config.message as string) || 'Estamos fora do horário de atendimento. Retornaremos em breve!';
+
+  // Envia via Evolution API
+  const r = await fetch(`${inst.evolution_url}/message/sendText/${instance}`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', apikey: inst.api_key },
+    body:    JSON.stringify({ number: chatId, text: botMessage }),
+  });
+
+  if (!r.ok) {
+    console.warn('[BOT] falha ao enviar resposta automática:', r.status, await r.text());
+    return;
+  }
+
+  // Registra no banco como mensagem outbound do bot
+  await supabase.from('messages').insert({
+    tenant_id:       tenantId,
+    conversation_id: convId,
+    direction:       'outbound',
+    sender_name:     'Bot',
+    content:         botMessage,
+    created_at:      new Date().toISOString(),
+  });
+
+  console.log('[BOT] resposta automática enviada para', chatId, '| fora do horário (', weekday, hour + ':' + String(minute).padStart(2, '0'), ')');
 }

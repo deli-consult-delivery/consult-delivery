@@ -398,6 +398,170 @@ function extractQuotedSender(q, convName) {
   return q.pushName || convName || 'Cliente';
 }
 
+// ─── BOTS SCREEN ───────────────────────────────────────────────
+const DAYS_CFG = [
+  { key: 'mon', label: 'Segunda' },
+  { key: 'tue', label: 'Terça'   },
+  { key: 'wed', label: 'Quarta'  },
+  { key: 'thu', label: 'Quinta'  },
+  { key: 'fri', label: 'Sexta'   },
+  { key: 'sat', label: 'Sábado'  },
+  { key: 'sun', label: 'Domingo' },
+];
+
+const DEFAULT_SCHEDULE = {
+  mon: { on: true,  start: '09:00', end: '18:00' },
+  tue: { on: true,  start: '09:00', end: '18:00' },
+  wed: { on: true,  start: '09:00', end: '18:00' },
+  thu: { on: true,  start: '09:00', end: '18:00' },
+  fri: { on: true,  start: '09:00', end: '18:00' },
+  sat: { on: false, start: '09:00', end: '13:00' },
+  sun: { on: false, start: '09:00', end: '13:00' },
+};
+
+function Toggle({ value, onChange, size = 'md' }) {
+  const w = size === 'sm' ? 32 : 44;
+  const h = size === 'sm' ? 18 : 24;
+  const dot = size === 'sm' ? 14 : 18;
+  const pad = size === 'sm' ? 2 : 3;
+  return (
+    <button
+      onClick={() => onChange(!value)}
+      style={{ width: w, height: h, borderRadius: h / 2, background: value ? '#B70C00' : 'rgba(255,255,255,0.12)', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background .18s', flexShrink: 0 }}
+    >
+      <span style={{ position: 'absolute', top: pad, left: value ? w - dot - pad : pad, width: dot, height: dot, borderRadius: '50%', background: 'white', transition: 'left .18s', display: 'block' }} />
+    </button>
+  );
+}
+
+function BotsScreen({ tenantDbId }) {
+  const [isActive, setIsActive]               = useState(false);
+  const [schedule, setSchedule]               = useState(DEFAULT_SCHEDULE);
+  const [message, setMessage]                 = useState('Olá! No momento estamos fora do horário de atendimento. Em breve um consultor irá te atender. 🚀');
+  const [respondOnlyFirst, setRespondOnlyFirst] = useState(true);
+  const [saving, setSaving]                   = useState(false);
+  const [savedOk, setSavedOk]                 = useState(false);
+  const [loading, setLoading]                 = useState(true);
+
+  useEffect(() => {
+    if (!tenantDbId) return;
+    supabase.from('bot_configs').select('*').eq('tenant_id', tenantDbId).maybeSingle()
+      .then(({ data }) => {
+        setLoading(false);
+        if (!data) return;
+        setIsActive(data.is_active ?? false);
+        setSchedule(data.schedule ?? DEFAULT_SCHEDULE);
+        setMessage(data.message ?? '');
+        setRespondOnlyFirst(data.respond_only_first ?? true);
+      });
+  }, [tenantDbId]);
+
+  function setDay(key, field, value) {
+    setSchedule(prev => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
+  }
+
+  async function save() {
+    if (!tenantDbId || saving) return;
+    setSaving(true);
+    try {
+      await supabase.from('bot_configs').upsert({
+        tenant_id:          tenantDbId,
+        is_active:          isActive,
+        schedule,
+        message,
+        respond_only_first: respondOnlyFirst,
+        updated_at:         new Date().toISOString(),
+      }, { onConflict: 'tenant_id' });
+      setSavedOk(true);
+      setTimeout(() => setSavedOk(false), 2500);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const card = { background: '#1A1A1A', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '16px 20px', marginBottom: 14 };
+
+  if (loading) return <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Carregando…</div>;
+
+  return (
+    <div style={{ maxWidth: 640 }}>
+      <div style={{ marginBottom: 28 }}>
+        <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>Bots de Atendimento</h2>
+        <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginTop: 4 }}>Resposta automática fora do horário de atendimento via WhatsApp.</p>
+      </div>
+
+      {/* Ativo/inativo */}
+      <div style={{ ...card, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <div style={{ color: 'white', fontWeight: 600, fontSize: 13 }}>Resposta automática</div>
+          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginTop: 3 }}>Quando ativo, responde automaticamente mensagens recebidas fora do horário</div>
+        </div>
+        <Toggle value={isActive} onChange={setIsActive} />
+      </div>
+
+      {/* Horários */}
+      <div style={card}>
+        <div style={{ color: 'white', fontWeight: 600, fontSize: 13, marginBottom: 14 }}>Horário de atendimento</div>
+        {DAYS_CFG.map(d => (
+          <div key={d.key} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <Toggle value={!!schedule[d.key]?.on} onChange={v => setDay(d.key, 'on', v)} size="sm" />
+            <span style={{ width: 68, color: schedule[d.key]?.on ? 'white' : 'rgba(255,255,255,0.3)', fontSize: 12, fontWeight: 500 }}>{d.label}</span>
+            {schedule[d.key]?.on ? (
+              <>
+                <input
+                  type="time"
+                  value={schedule[d.key]?.start || '09:00'}
+                  onChange={e => setDay(d.key, 'start', e.target.value)}
+                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'white', padding: '3px 8px', fontSize: 12, colorScheme: 'dark' }}
+                />
+                <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>até</span>
+                <input
+                  type="time"
+                  value={schedule[d.key]?.end || '18:00'}
+                  onChange={e => setDay(d.key, 'end', e.target.value)}
+                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'white', padding: '3px 8px', fontSize: 12, colorScheme: 'dark' }}
+                />
+              </>
+            ) : (
+              <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>Fechado</span>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Mensagem */}
+      <div style={card}>
+        <div style={{ color: 'white', fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Mensagem automática</div>
+        <textarea
+          value={message}
+          onChange={e => setMessage(e.target.value)}
+          rows={4}
+          style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: 'white', padding: '10px 12px', fontSize: 13, resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }}
+          placeholder="Mensagem enviada ao cliente fora do horário de atendimento…"
+        />
+        <div style={{ marginTop: 6, fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>{message.length} caracteres</div>
+      </div>
+
+      {/* Opção: responder só uma vez */}
+      <div style={{ ...card, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <div style={{ color: 'white', fontWeight: 600, fontSize: 13 }}>Responder apenas uma vez por conversa/dia</div>
+          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginTop: 3 }}>Evita spam — envia apenas na primeira mensagem fora do horário</div>
+        </div>
+        <Toggle value={respondOnlyFirst} onChange={setRespondOnlyFirst} />
+      </div>
+
+      <button
+        onClick={save}
+        disabled={saving}
+        style={{ background: savedOk ? '#25D366' : '#B70C00', color: 'white', border: 'none', borderRadius: 8, padding: '10px 28px', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.75 : 1, transition: 'background .2s' }}
+      >
+        {savedOk ? '✓ Salvo!' : saving ? 'Salvando…' : 'Salvar configurações'}
+      </button>
+    </div>
+  );
+}
+
 // ─── AI SIDE PANEL ─────────────────────────────────────────────
 const AI_QUICK = [
   { icon: '📋', label: 'Resumir conversa',    cmd: '/resumir' },
@@ -1889,7 +2053,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         </header>
         <div style={{ flex: 1, overflow: 'auto', padding: 32, color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>
           {headerTab === 'dept'  && <div>Departamentos — em breve</div>}
-          {headerTab === 'bots'  && <div>Bots — em breve</div>}
+          {headerTab === 'bots'  && <BotsScreen tenantDbId={tenantDbId} />}
           {headerTab === 'proto' && <div>Protocolos — em breve</div>}
           {headerTab === 'viz'   && <div>Visualização — em breve</div>}
         </div>
