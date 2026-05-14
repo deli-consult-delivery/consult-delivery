@@ -398,6 +398,230 @@ function extractQuotedSender(q, convName) {
   return q.pushName || convName || 'Cliente';
 }
 
+// ─── DEPARTMENTS SCREEN ────────────────────────────────────────
+
+const DEPT_COLORS = [
+  '#B70C00','#EF4444','#F97316','#EAB308','#22C55E',
+  '#14B8A6','#3B82F6','#8B5CF6','#EC4899','#6B7280',
+];
+
+function DepartmentsScreen({ tenantDbId, members }) {
+  const [depts, setDepts]             = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [modal, setModal]             = useState(null);
+  const [deptMembers, setDeptMembers] = useState({});
+  const [expanded, setExpanded]       = useState(null);
+
+  async function loadDepts() {
+    if (!tenantDbId) return;
+    const { data } = await supabase
+      .from('departments')
+      .select('id, name, color, is_active, created_at')
+      .eq('tenant_id', tenantDbId)
+      .order('name');
+    setDepts(data ?? []);
+    setLoading(false);
+  }
+
+  async function loadDeptMembers(deptId) {
+    const { data } = await supabase
+      .from('department_members')
+      .select('user_id')
+      .eq('department_id', deptId);
+    setDeptMembers(prev => ({ ...prev, [deptId]: (data ?? []).map(r => r.user_id) }));
+  }
+
+  useEffect(() => { loadDepts(); }, [tenantDbId]);
+
+  async function toggleActive(dept) {
+    await supabase.from('departments').update({ is_active: !dept.is_active }).eq('id', dept.id);
+    setDepts(prev => prev.map(d => d.id === dept.id ? { ...d, is_active: !d.is_active } : d));
+  }
+
+  async function deleteDept(dept) {
+    if (!window.confirm(`Deletar "${dept.name}"? As conversas atribuídas perderão o departamento.`)) return;
+    await supabase.from('departments').delete().eq('id', dept.id);
+    setDepts(prev => prev.filter(d => d.id !== dept.id));
+  }
+
+  async function toggleMember(deptId, userId) {
+    const current = deptMembers[deptId] ?? [];
+    if (current.includes(userId)) {
+      await supabase.from('department_members').delete().eq('department_id', deptId).eq('user_id', userId);
+      setDeptMembers(prev => ({ ...prev, [deptId]: current.filter(id => id !== userId) }));
+    } else {
+      await supabase.from('department_members').insert({ department_id: deptId, user_id: userId });
+      setDeptMembers(prev => ({ ...prev, [deptId]: [...current, userId] }));
+    }
+  }
+
+  function openExpand(deptId) {
+    if (expanded === deptId) { setExpanded(null); return; }
+    setExpanded(deptId);
+    if (!deptMembers[deptId]) loadDeptMembers(deptId);
+  }
+
+  const card = { background: '#1A1A1A', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, marginBottom: 10, overflow: 'hidden' };
+
+  if (loading) return <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Carregando…</div>;
+
+  return (
+    <div style={{ maxWidth: 700 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div>
+          <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>Departamentos</h2>
+          <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginTop: 4 }}>Organize conversas e defina quem atende cada fila.</p>
+        </div>
+        <button
+          onClick={() => setModal({ mode: 'create' })}
+          style={{ background: '#B70C00', color: 'white', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+        >+ Novo departamento</button>
+      </div>
+
+      {depts.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '48px 24px', color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>🏢</div>
+          Nenhum departamento criado ainda.<br/>Crie o primeiro para organizar seus atendimentos.
+        </div>
+      )}
+
+      {depts.map(dept => (
+        <div key={dept.id} style={card}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px' }}>
+            <span style={{ width: 12, height: 12, borderRadius: '50%', background: dept.color, flexShrink: 0 }} />
+            <span style={{ flex: 1, color: dept.is_active ? 'white' : 'rgba(255,255,255,0.35)', fontWeight: 600, fontSize: 14 }}>{dept.name}</span>
+            {!dept.is_active && (
+              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: 99 }}>inativo</span>
+            )}
+            <button onClick={() => openExpand(dept.id)} style={{ background: expanded === dept.id ? 'rgba(255,255,255,0.08)' : 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 11, padding: '4px 10px', borderRadius: 6 }}>
+              👥 Membros {expanded === dept.id ? '▲' : '▼'}
+            </button>
+            <button onClick={() => setModal({ mode: 'edit', dept })} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 11, padding: '4px 8px', borderRadius: 6 }}>Editar</button>
+            <button onClick={() => toggleActive(dept)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.35)', cursor: 'pointer', fontSize: 11, padding: '4px 8px', borderRadius: 6 }}>{dept.is_active ? 'Desativar' : 'Ativar'}</button>
+            <button onClick={() => deleteDept(dept)} style={{ background: 'none', border: 'none', color: 'rgba(183,12,0,0.7)', cursor: 'pointer', fontSize: 11, padding: '4px 8px', borderRadius: 6 }}>Deletar</button>
+          </div>
+
+          {expanded === dept.id && (
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '12px 18px 16px' }}>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 10 }}>
+                Membros — clique para adicionar/remover
+              </div>
+              {(members ?? []).length === 0 && (
+                <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>Nenhum membro encontrado.</div>
+              )}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {(members ?? []).map(m => {
+                  const inDept = (deptMembers[dept.id] ?? []).includes(m.id);
+                  const label  = m.full_name || m.email || '?';
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => toggleMember(dept.id, m.id)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        padding: '5px 10px', borderRadius: 20,
+                        border: `1px solid ${inDept ? dept.color + '88' : 'rgba(255,255,255,0.1)'}`,
+                        background: inDept ? dept.color + '22' : 'rgba(255,255,255,0.04)',
+                        color: inDept ? 'white' : 'rgba(255,255,255,0.45)',
+                        cursor: 'pointer', fontSize: 12, transition: 'all .15s',
+                      }}
+                    >
+                      <span style={{ width: 20, height: 20, borderRadius: '50%', background: inDept ? dept.color : 'rgba(255,255,255,0.12)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
+                        {label[0].toUpperCase()}
+                      </span>
+                      {label}
+                      {inDept && <span style={{ opacity: 0.6, fontSize: 10 }}>✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {modal && (
+        <DeptModal
+          mode={modal.mode}
+          dept={modal.dept}
+          tenantDbId={tenantDbId}
+          onSave={() => { setModal(null); loadDepts(); }}
+          onClose={() => setModal(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function DeptModal({ mode, dept, tenantDbId, onSave, onClose }) {
+  const [name, setName]     = useState(dept?.name ?? '');
+  const [color, setColor]   = useState(dept?.color ?? '#3B82F6');
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState('');
+
+  async function save() {
+    if (!name.trim()) { setError('Nome obrigatório'); return; }
+    setSaving(true); setError('');
+    try {
+      if (mode === 'create') {
+        const { error: err } = await supabase.from('departments').insert({ tenant_id: tenantDbId, name: name.trim(), color });
+        if (err) { setError(err.message.includes('unique') ? 'Já existe um departamento com esse nome.' : err.message); setSaving(false); return; }
+      } else {
+        await supabase.from('departments').update({ name: name.trim(), color }).eq('id', dept.id);
+      }
+      onSave();
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
+      <div style={{ background: '#1F1F1F', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, width: 380, padding: 24 }} onClick={e => e.stopPropagation()}>
+        <div style={{ color: 'white', fontWeight: 700, fontSize: 16, marginBottom: 20 }}>
+          {mode === 'create' ? 'Novo departamento' : 'Editar departamento'}
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', display: 'block', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase' }}>Nome</label>
+          <input
+            value={name}
+            onChange={e => setName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && save()}
+            placeholder="ex: Suporte, Vendas, Financeiro…"
+            autoFocus
+            style={{ width: '100%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: 'white', padding: '9px 12px', fontSize: 13, boxSizing: 'border-box', outline: 'none' }}
+          />
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', display: 'block', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase' }}>Cor</label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {DEPT_COLORS.map(c => (
+              <button key={c} onClick={() => setColor(c)} style={{ width: 28, height: 28, borderRadius: '50%', background: c, border: `3px solid ${color === c ? 'white' : 'transparent'}`, cursor: 'pointer', padding: 0, transition: 'border-color .12s' }} />
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Prévia:</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 99, fontSize: 12, fontWeight: 500, background: color + '22', color, border: `1px solid ${color}44` }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: color }} />
+            {name || 'Nome do departamento'}
+          </span>
+        </div>
+
+        {error && <div style={{ color: '#EF4444', fontSize: 12, marginBottom: 12 }}>{error}</div>}
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.65)', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+          <button onClick={save} disabled={saving} style={{ background: '#B70C00', color: 'white', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
+            {saving ? 'Salvando…' : mode === 'create' ? 'Criar' : 'Salvar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── BOTS SCREEN ───────────────────────────────────────────────
 const DAYS_CFG = [
   { key: 'mon', label: 'Segunda' },
@@ -2071,7 +2295,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           </div>
         </header>
         <div style={{ flex: 1, overflow: 'auto', padding: 32, color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>
-          {headerTab === 'dept'  && <div>Departamentos — em breve</div>}
+          {headerTab === 'dept'  && <DepartmentsScreen tenantDbId={tenantDbId} members={members} />}
           {headerTab === 'bots'  && <BotsScreen tenantDbId={tenantDbId} />}
           {headerTab === 'proto' && <div>Protocolos — em breve</div>}
           {headerTab === 'viz'   && <div>Visualização — em breve</div>}
