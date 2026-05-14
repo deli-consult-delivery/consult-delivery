@@ -1258,7 +1258,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [openIfood, setOpenIfood]            = useState(false);
 
   // ── Refs ──────────────────────────────────────────────────
-  const scrollRef      = useRef(null);
+  const scrollRef          = useRef(null);
+  const lastScrolledConv   = useRef(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const textareaRef    = useRef(null);
   const chanScrollRef  = useRef(null);
@@ -1489,12 +1490,25 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     }
   }, [activeId]);
 
-  // Auto-scroll — só rola se já estiver perto do fundo; caso contrário mostra botão
+  // Auto-scroll
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    if (distFromBottom < 120) {
+    const activeMsgsList = messages[activeId] || [];
+
+    // Conversa nova sendo aberta: espera mensagens carregarem, depois vai pro fundo
+    if (activeId !== lastScrolledConv.current) {
+      if (activeMsgsList.length > 0) {
+        el.scrollTop = el.scrollHeight;
+        setShowScrollBtn(false);
+        lastScrolledConv.current = activeId;
+      }
+      return;
+    }
+
+    // Mesma conversa, nova mensagem chegou: scroll inteligente
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (dist < 120) {
       el.scrollTop = el.scrollHeight;
       setShowScrollBtn(false);
     } else {
