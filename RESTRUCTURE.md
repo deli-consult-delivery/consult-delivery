@@ -466,11 +466,16 @@ CREATE TABLE agent_memories (
 
 ---
 
-### Fase 6+ — CORA, BRENO, SOFIA, VERA (futuro V2/V3)
+### Fase 6+ — CORA, BRENO, SOFIA, VERA (V2/V3)
 
-**CORA · Cobrança** — schema já existe, integra com Asaas. Prioridade: depois de NOVA.
-**BRENO · Atendimento** — Eduardo já cobre manualmente, prioridade baixa.
-**SOFIA · SDR/Prospecção** — V2 piloto.
+**CORA · Cobrança** — ✅ CONCLUÍDA (Feature V2-1, 14/05/2026). Ver `docs/agentes/cora.md`.
+- 4 tasks Trigger.dev: `cora-analisar-devedor`, `cora-gerar-mensagem`, `cora-escalonar`, `cora-criar-cobranca`
+- Integração completa com Asaas (sandbox): criação de cobranças PIX/BOLETO/CC, webhook de status
+- 3 migrations novas: `cobrancas` (V2), `cobranca_eventos` (audit trail), `cora_acoes` V2 columns
+- UI: ModoToggle, aba "Asaas V2", CobrancaV2Drawer com histórico de eventos
+
+**BRENO · Atendimento** — Eduardo já cobre manualmente, prioridade baixa.  
+**SOFIA · SDR/Prospecção** — V2 piloto.  
 **VERA · BI & Relatórios** — V3.
 
 ---
@@ -500,6 +505,11 @@ consult-delivery/
 │   │   ├── pesquisar-loja.ts
 │   │   ├── gerar-conteudo.ts
 │   │   └── analisar-tendencia.ts
+│   ├── cora/                  # ✅ V2-1 (14/05/2026)
+│   │   ├── analisar-devedor.ts
+│   │   ├── gerar-mensagem.ts
+│   │   ├── escalonar.ts
+│   │   └── criar-cobranca.ts  # integração Asaas
 │   └── _examples/
 │       └── hello-world.ts     # task de teste, nunca remover
 ```

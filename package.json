@@ -19,6 +19,7 @@
   "devDependencies": {
     "@trigger.dev/build": "4.4.6",
     "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.9.3",
     "vite": "^5.4.8"
   }
 }

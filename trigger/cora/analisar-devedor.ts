@@ -4,8 +4,6 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 
-const anthropic = new Anthropic();
-
 const InputSchema = z.object({
   tenant_id: z.string().uuid(),
   cobranca_id: z.string().uuid(),
@@ -34,6 +32,18 @@ export const coraAnalisarDevedor = task({
     const start = Date.now();
     const input = InputSchema.parse(payload);
     const sb = getSupabase();
+
+    // Instanciado dentro do run() para evitar throw no topo de módulo (anti-padrão #4)
+    const anthropic = new Anthropic();
+
+    // Lê modo do tenant em tenant_agent_config
+    const { data: agentCfg } = await sb
+      .from("tenant_agent_config")
+      .select("mode")
+      .eq("tenant_id", input.tenant_id)
+      .eq("agent_id", "cora")
+      .maybeSingle();
+    const modo = (agentCfg?.mode as "humano" | "hibrido" | "ia") ?? "hibrido";
 
     const { data: cob, error } = await sb
       .from("cora_cobrancas")
@@ -122,11 +132,12 @@ Regras:
       .eq("id", input.cobranca_id)
       .eq("tenant_id", input.tenant_id);
 
-    // Registra ação
+    // Registra ação (V1 + campos V2)
     await sb.from("cora_acoes").insert({
       cobranca_id: input.cobranca_id,
       tenant_id: input.tenant_id,
       tipo: "analise_ia",
+      acao: "analise_ia",
       agente: "cora",
       cora_analise: analise,
       conteudo: analise.proxima_acao,
@@ -136,9 +147,10 @@ Regras:
       tenant_id: input.tenant_id,
       agent_id: "cora",
       trigger_dev_run_id: ctx.run.id,
-      status: "completed",
-      input: { cobranca_id: input.cobranca_id },
+      status: "success",
+      input: { cobranca_id: input.cobranca_id, modo },
       output: { ok: true, analise },
+      duration_ms: Date.now() - start,
     });
 
     await logAgentRun({
