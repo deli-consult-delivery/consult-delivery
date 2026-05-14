@@ -562,6 +562,10 @@ Responda SOMENTE com JSON válido no formato:
 Responda SOMENTE com JSON válido no formato:
 {"title":"DELI","body":"[sua resposta completa aqui]","bullets":[]}
 Seja direto, prático e em português.`,
+    '/resposta': `Você é DELI, COO digital da Consult Delivery. Com base nessa conversa de atendimento via WhatsApp, escreva a próxima resposta que o atendente deve enviar ao cliente.
+Regras: resposta curta (máx 3 frases), tom amigável e profissional, em português brasileiro, sem floreios, sem "prezado(a)".
+Responda SOMENTE com JSON válido no formato:
+{"text":"[mensagem para o cliente aqui]"}`,
   };
 
   // Normaliza mensagens: aceita formato DB (direction/content) e formato UI (from/text)
@@ -617,6 +621,11 @@ Seja direto, prático e em português.`,
     if (command === '/livre' && parsed.body && (!parsed.bullets || !parsed.bullets.length)) {
       parsed.bullets = [parsed.body];
       delete parsed.body;
+    }
+
+    // Para /resposta, garante que text está presente
+    if (command === '/resposta' && !parsed.text) {
+      parsed.text = parsed.bullets?.[0] || parsed.body || '';
     }
 
     console.log(`[bridge/chat/ai] ${command} model=${OLLAMA_MODEL} conv=${conversation_id}`);

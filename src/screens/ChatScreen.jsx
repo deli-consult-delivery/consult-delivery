@@ -1262,15 +1262,21 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const textareaRef    = useRef(null);
   const chanScrollRef  = useRef(null);
-  const activeIdRef    = useRef(activeId);
-  const photoCacheRef  = useRef({});
-  const convsRef       = useRef(convs);
-  const persistingRef  = useRef(new Set());
+  const activeIdRef            = useRef(activeId);
+  const photoCacheRef          = useRef({});
+  const convsRef               = useRef(convs);
+  const persistingRef          = useRef(new Set());
+  const aiModeRef              = useRef('humano');
+  const selectedInstanceRef    = useRef(null);
+  const iaPendingRef           = useRef(new Set());
+  const hibridoPendingRef      = useRef(new Set());
   const fileInputRef   = useRef(null);
   const galleryInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
   useEffect(() => { convsRef.current = convs; }, [convs]);
+  useEffect(() => { aiModeRef.current = aiMode; }, [aiMode]);
+  useEffect(() => { selectedInstanceRef.current = selectedInstance; }, [selectedInstance]);
 
   // ── Status de atendimento ─────────────────────────────────
   const { status: convStatus, loading: statusLoading, refresh: refreshStatus, changeStatus, finish } = useConversationStatus(activeId, tenantDbId, currentUser?.id);
@@ -1437,6 +1443,19 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           return [updated, ...prev.filter(c => c.id !== convId)];
         });
         // som e notificação gerenciados globalmente pelo App.jsx
+
+        // ── AI mode: auto-suggestion (Híbrido) / auto-send (IA) ──
+        if (isInbound && msg.sender_name !== 'Bot') {
+          const mode = aiModeRef.current;
+          if (mode === 'hibrido' && convId === activeIdRef.current) {
+            setTimeout(() => triggerHibridoSuggestion(convId), 900);
+          } else if (mode === 'ia' && !convId?.startsWith('chan-')) {
+            setTimeout(() => {
+              const conv = convsRef.current.find(c => c.id === convId);
+              if (conv?.whatsapp_chat_id) triggerIaAutoReply(convId, conv.whatsapp_chat_id);
+            }, 1000);
+          }
+        }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, payload => {
         const msg = payload.new;
@@ -2154,6 +2173,61 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     reader.readAsDataURL(f);
   };
 
+  // ── AI MODE — auto-suggestion (Híbrido) / auto-send (IA) ───
+  async function triggerHibridoSuggestion(convId) {
+    if (hibridoPendingRef.current.has(convId)) return;
+    hibridoPendingRef.current.add(convId);
+    try {
+      const BRIDGE_URL = import.meta.env.VITE_BRIDGE_URL || '';
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+      const { data: recentMsgs } = await supabase.from('messages')
+        .select('direction, content, sender_name')
+        .eq('conversation_id', convId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      const msgs = (recentMsgs ?? []).reverse();
+      const r = await fetch(`${BRIDGE_URL}/chat/ai`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ command: '/resposta', messages: msgs, conversation_id: convId }),
+      });
+      const data = await r.json();
+      if (data.ok && data.text) {
+        setConvs(prev => prev.map(c => c.id === convId ? { ...c, deliSuggestion: data.text } : c));
+      }
+    } catch { /* silent */ } finally {
+      hibridoPendingRef.current.delete(convId);
+    }
+  }
+
+  async function triggerIaAutoReply(convId, chatId) {
+    if (!chatId || iaPendingRef.current.has(convId)) return;
+    iaPendingRef.current.add(convId);
+    try {
+      const BRIDGE_URL = import.meta.env.VITE_BRIDGE_URL || '';
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+      const { data: recentMsgs } = await supabase.from('messages')
+        .select('direction, content, sender_name')
+        .eq('conversation_id', convId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      const msgs = (recentMsgs ?? []).reverse();
+      const r = await fetch(`${BRIDGE_URL}/chat/ai`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ command: '/resposta', messages: msgs, conversation_id: convId }),
+      });
+      const data = await r.json();
+      if (data.ok && data.text && selectedInstanceRef.current) {
+        await sendTextMessage(selectedInstanceRef.current, chatId, data.text);
+      }
+    } catch { /* silent */ } finally {
+      iaPendingRef.current.delete(convId);
+    }
+  }
+
   // ── AI COMMANDS ───────────────────────────────────────────
   const runCommand = async (cmd) => {
     setShowSlash(false);
@@ -2215,8 +2289,18 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   };
 
   const onKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey && !showSlash && !showMention) { e.preventDefault(); send(); }
-    else if (e.key === 'Escape') { setShowSlash(false); setShowMention(false); setShowQR(false); }
+    if (e.key === 'Tab' && showGhost) {
+      e.preventDefault();
+      setDraft(suggestion);
+      setConvs(prev => prev.map(c => c.id === activeId ? { ...c, deliSuggestion: null } : c));
+    } else if (e.key === 'Enter' && !e.shiftKey && !showSlash && !showMention) {
+      e.preventDefault();
+      send();
+      setConvs(prev => prev.map(c => c.id === activeId ? { ...c, deliSuggestion: null } : c));
+    } else if (e.key === 'Escape') {
+      setShowSlash(false); setShowMention(false); setShowQR(false);
+      if (showGhost) setConvs(prev => prev.map(c => c.id === activeId ? { ...c, deliSuggestion: null } : c));
+    }
   };
 
   const insertMention = (agentId) => {
@@ -2359,7 +2443,10 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.1)' }} />
           <div className="lc-mode-switch">
             {['humano', 'hibrido', 'ia'].map(m => (
-              <button key={m} className={`lc-mode-btn${aiMode === m ? ' on' : ''}`} onClick={() => setAiMode(m)} title={m === 'humano' ? 'Humano' : m === 'hibrido' ? 'Híbrido' : 'IA total'}>
+              <button key={m} className={`lc-mode-btn${aiMode === m ? ' on' : ''}`} onClick={() => {
+                if (m === 'ia' && !window.confirm('DELI vai responder automaticamente todas as mensagens de PV neste modo. Confirmar?')) return;
+                setAiMode(m);
+              }} title={m === 'humano' ? 'Humano' : m === 'hibrido' ? 'Híbrido' : 'IA total'}>
                 {m === 'humano'  && <Icon name="users"    size={11} />}
                 {m === 'hibrido' && <Icon name="sparkles" size={11} />}
                 {m === 'ia'      && <Icon name="bot"      size={11} />}
@@ -2795,6 +2882,21 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                 </button>
               )}
               </div>
+
+              {/* Modo banner */}
+              {aiMode !== 'humano' && active && !isChannel && (
+                <div style={{ background: aiMode === 'ia' ? 'rgba(183,12,0,0.13)' : 'rgba(139,92,246,0.1)', borderTop: '1px solid rgba(255,255,255,0.05)', padding: '6px 16px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+                  <span style={{ fontSize: 13 }}>{aiMode === 'ia' ? '🤖' : '✨'}</span>
+                  <span style={{ color: aiMode === 'ia' ? '#FF8080' : '#C4B5FD', fontWeight: 600, flex: 1 }}>
+                    {aiMode === 'ia'
+                      ? 'Modo IA — DELI está respondendo automaticamente'
+                      : 'Modo Híbrido — DELI vai sugerir resposta quando cliente escrever (Tab para aceitar)'}
+                  </span>
+                  <button onClick={() => setAiMode('humano')} style={{ color: 'rgba(255,255,255,0.35)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, padding: '2px 6px' }}>
+                    Voltar ao Humano
+                  </button>
+                </div>
+              )}
 
               {/* Composer */}
               <footer className="lc-composer-bar" style={{ position: 'relative' }}>
