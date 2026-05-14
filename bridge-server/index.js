@@ -536,7 +536,7 @@ app.get('/agents/:slug/runs/:id', requireJwt, async (req, res) => {
 // POST /chat/ai — Copiloto DELI no chat ao vivo (síncrono, < 5s)
 // ════════════════════════════════════════════════════════════════════════════
 app.post('/chat/ai', requireJwt, async (req, res) => {
-  const { command, messages = [], conversation_id, tenant_id } = req.body;
+  const { command, prompt: freePrompt, messages = [], conversation_id, tenant_id } = req.body;
   if (!command) return res.status(400).json({ error: 'command required' });
   if (!OLLAMA_API_KEY) return res.status(503).json({ error: 'OLLAMA_API_KEY não configurado' });
 
@@ -558,12 +558,26 @@ Responda SOMENTE com JSON válido no formato:
     '/cobranca': `Você é DELI acionando CORA para análise de cobrança nesta conversa.
 Responda SOMENTE com JSON válido no formato:
 {"title":"CORA · Análise de cobrança","bullets":["Situação: [resumo]","Valor identificado: [valor ou N/A]","Ação recomendada: [próximo passo]"]}`,
+    '/livre': `Você é DELI, COO digital da Consult Delivery. Responda à pergunta do atendente com base na conversa fornecida.
+Responda SOMENTE com JSON válido no formato:
+{"title":"DELI","body":"[sua resposta completa aqui]","bullets":[]}
+Seja direto, prático e em português.`,
   };
 
-  const prompt = SYSTEM_PROMPTS[command] || SYSTEM_PROMPTS['/resumir'];
-  const transcript = messages.slice(-30).map(m =>
-    `[${m.direction === 'inbound' ? 'Cliente' : 'Atendente'}${m.sender_name ? ` (${m.sender_name})` : ''}]: ${m.content || m.body || '(mídia)'}`
-  ).join('\n');
+  // Normaliza mensagens: aceita formato DB (direction/content) e formato UI (from/text)
+  const transcript = messages.slice(-30).map(m => {
+    const isInbound = m.direction === 'inbound' || m.from === 'in';
+    const role = isInbound ? 'Cliente' : 'Atendente';
+    const sender = m.sender_name || m.agentName || '';
+    const text = m.content || m.body || m.text || '';
+    const media = m.media_type || m.mediaType || '';
+    return `[${role}${sender ? ` (${sender})` : ''}]: ${text || (media ? `(${media})` : '(mídia)')}`;
+  }).join('\n');
+
+  const systemPrompt = SYSTEM_PROMPTS[command] || SYSTEM_PROMPTS['/resumir'];
+  const userContent = command === '/livre' && freePrompt
+    ? `Conversa:\n\n${transcript || '(sem mensagens ainda)'}\n\nPergunta do atendente: ${freePrompt}`
+    : `Conversa:\n\n${transcript || '(sem mensagens ainda)'}`;
 
   try {
     const r = await fetch('https://ollama.com/api/chat', {
@@ -577,8 +591,8 @@ Responda SOMENTE com JSON válido no formato:
         stream: false,
         format: 'json',
         messages: [
-          { role: 'system', content: prompt },
-          { role: 'user', content: `Conversa:\n\n${transcript || '(sem mensagens ainda)'}` },
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userContent },
         ],
       }),
       signal: AbortSignal.timeout(30_000),
@@ -597,6 +611,12 @@ Responda SOMENTE com JSON válido no formato:
       parsed = JSON.parse(cleaned);
     } catch {
       parsed = { title: 'DELI', bullets: [text] };
+    }
+
+    // Para /livre, retorna body como texto único se bullets estiver vazio
+    if (command === '/livre' && parsed.body && (!parsed.bullets || !parsed.bullets.length)) {
+      parsed.bullets = [parsed.body];
+      delete parsed.body;
     }
 
     console.log(`[bridge/chat/ai] ${command} model=${OLLAMA_MODEL} conv=${conversation_id}`);
