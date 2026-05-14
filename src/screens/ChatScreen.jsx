@@ -608,9 +608,12 @@ function AiSidePanel({ onClose, onRunCmd, convName, msgs }) {
   }
 
   function handleQuick(item) {
+    if (loading) return;
     setHistory(h => [...h, { role: 'user', text: item.label }]);
+    setLoading(true);
     onRunCmd(item.cmd, (title, body) => {
       setHistory(h => [...h, { role: 'ai', text: [title, ...(body || [])].filter(Boolean).join('\n\n') }]);
+      setLoading(false);
     });
   }
 
@@ -628,7 +631,14 @@ function AiSidePanel({ onClose, onRunCmd, convName, msgs }) {
         <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'linear-gradient(135deg,#B70C00,#FF4D3D)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>🚀</div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: 'white' }}>DELI — IA Copiloto</div>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Consult Delivery</div>
+          <div style={{ fontSize: 11, color: loading ? '#FF4D3D' : 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', gap: 5, transition: 'color .2s' }}>
+            {loading ? (
+              <>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#FF4D3D', display: 'inline-block', animation: 'bounce .7s 0s ease-in-out infinite' }} />
+                Gerando resposta…
+              </>
+            ) : 'Consult Delivery'}
+          </div>
         </div>
         <button onClick={onClose} style={{ color: 'rgba(255,255,255,0.4)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 4 }}>×</button>
       </div>
