@@ -6,13 +6,12 @@ const NAV_GROUPS = [
   {
     label: 'Início',
     items: [
-      { id: 'dashboard',     icon: 'home',     label: 'Dashboard'      },
-      { id: 'deli',          icon: 'bot',      label: 'DELI',  pulse: true },
-      { id: 'analise-ifood', icon: 'chart',    label: 'Análise iFood'  },
+      { id: 'dashboard', icon: 'home', label: 'Dashboard' },
+      { id: 'deli',      icon: 'bot',  label: 'DELI', pulse: true },
     ],
   },
   {
-    label: 'Comunicação',
+    label: 'Operação',
     items: [
       { id: 'chat',   icon: 'chat',     label: 'Chat Ao Vivo'    },
       { id: 'grupos', icon: 'whatsapp', label: 'Grupos WhatsApp' },
@@ -21,24 +20,31 @@ const NAV_GROUPS = [
   {
     label: 'Trabalho',
     items: [
-      { id: 'tasks',           icon: 'check', label: 'Tarefas'          },
-      { id: 'tarefas-cliente', icon: 'paper', label: 'Tarefas Cliente'  },
-      { id: 'crm',             icon: 'users', label: 'Clientes / CRM'   },
+      { id: 'tasks',           icon: 'check', label: 'Tarefas'         },
+      { id: 'tarefas-cliente', icon: 'paper', label: 'Tarefas Cliente' },
+      { id: 'crm',             icon: 'users', label: 'Clientes / CRM'  },
     ],
   },
   {
-    label: 'Financeiro & IA',
+    label: 'Agentes IA',
     items: [
-      { id: 'cora',    icon: 'dollar', label: 'CORA',       pulse: true },
-      { id: 'reports', icon: 'chart',  label: 'Relatórios'              },
-      { id: 'agents',  icon: 'bot',    label: 'Agentes IA'              },
+      { id: 'agents',        icon: 'bot',      label: 'Painel Agentes'  },
+      { id: 'analise-ifood', icon: 'chart',    label: 'Análise iFood'   },
+      { id: 'cora',          icon: 'dollar',   label: 'CORA · Cobrança', pulse: true },
+      { id: 'lara',          icon: 'sparkles', label: 'LARA · Marketing', pulse: true },
+      { id: 'max',           icon: 'bot',      label: 'MAX · Suporte',   pulse: true },
     ],
   },
   {
     label: 'Marketing',
     items: [
-      { id: 'campanhas', icon: 'megaphone', label: 'Campanhas'        },
-      { id: 'lara',      icon: 'bot',       label: 'Régua de Disparo', pulse: true },
+      { id: 'campanhas', icon: 'megaphone', label: 'Campanhas' },
+    ],
+  },
+  {
+    label: 'Dados',
+    items: [
+      { id: 'reports', icon: 'chart', label: 'Relatórios' },
     ],
   },
 ];

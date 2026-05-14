@@ -429,7 +429,7 @@ async function postCallback(payload) {
 // Roles que podem invocar agentes cujo slug começa com o prefixo
 const ROLE_AGENT_PREFIXES = {
   'marketing':   ['lara-'],
-  'atendimento': ['lara-'],
+  'atendimento': ['lara-', 'max-'],
   'financeiro':  ['cora-'],
   'admin':       [''],   // admin pode tudo (prefixo vazio = match qualquer)
   'owner':       [''],
