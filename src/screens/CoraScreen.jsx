@@ -1,409 +1,526 @@
-// ═══════════════════════════════════════════════════════════════
-// CORA SCREEN — Cobrança with split drawer (transcript + AI analysis)
-// ═══════════════════════════════════════════════════════════════
-
-import { useState as uSCo, useEffect as uECo } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Icon from '../components/Icon.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
 import UserAvatar from '../components/UserAvatar.jsx';
-import { INADIMPLENTES, TENANTS } from '../data.js';
+import { supabase } from '../lib/supabase.js';
 
-const FALLBACK_INAD = INADIMPLENTES[Object.keys(INADIMPLENTES)[0]];
+const BRIDGE = import.meta.env.VITE_BRIDGE_URL || 'http://localhost:3001';
 
-const CoraScreen = ({ tenant, tenantDbId, userId }) => {
-  const data = INADIMPLENTES[tenant] ?? FALLBACK_INAD;
-  const [tab, setTab] = uSCo('inad');
-  const [openDrawer, setOpenDrawer] = uSCo(false);
-  const [liveTick, setLiveTick] = uSCo(0);
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function fmtBRL(v) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
+}
 
-  // Animate live feed
-  uECo(() => {
-    const id = setInterval(() => setLiveTick(t => t + 1), 3000);
-    return () => clearInterval(id);
-  }, []);
+function diasAtraso(dataVencimento) {
+  if (!dataVencimento) return 0;
+  return Math.max(0, Math.floor((Date.now() - new Date(dataVencimento).getTime()) / 86400000));
+}
 
-  const STATUS = {
-    trying:      { label: 'CORA tentando',  cls: 'badge-yellow', pulse: 'pulse-amber' },
-    negotiating: { label: 'Negociando',     cls: 'badge-blue',   pulse: '' },
-    paid:        { label: 'Pago',           cls: 'badge-green',  pulse: '' },
-    critical:    { label: 'Crítico',        cls: 'badge-red',    pulse: 'pulse-red' },
+function StatusBadge({ status }) {
+  const map = {
+    aberto:      { label: 'Em aberto',   cls: 'badge-yellow', dot: 'pulse-amber' },
+    negociando:  { label: 'Negociando',  cls: 'badge-blue',   dot: '' },
+    pago:        { label: 'Pago',        cls: 'badge-green',  dot: '' },
+    cancelado:   { label: 'Cancelado',   cls: 'badge-gray',   dot: '' },
+    escalonado:  { label: 'Escalonado',  cls: 'badge-red',    dot: 'pulse-red' },
+  };
+  const m = map[status] || map.aberto;
+  return (
+    <span className={`badge ${m.cls}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      {m.dot && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} className={m.dot} />}
+      {m.label}
+    </span>
+  );
+}
+
+function NivelRiscoBadge({ nivel }) {
+  const map = {
+    baixo:   { color: '#16a34a', label: 'Risco Baixo' },
+    medio:   { color: '#D97706', label: 'Risco Médio' },
+    alto:    { color: '#dc2626', label: 'Risco Alto' },
+    critico: { color: '#7f1d1d', label: 'Crítico' },
+  };
+  const m = map[nivel] || map.medio;
+  return (
+    <span style={{
+      background: `${m.color}22`, color: m.color, border: `1px solid ${m.color}44`,
+      borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 600,
+    }}>{m.label}</span>
+  );
+}
+
+function Spinner() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" style={{ animation: 'spin 0.8s linear infinite', flexShrink: 0 }}>
+      <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2.5" strokeDasharray="60" strokeDashoffset="20" />
+    </svg>
+  );
+}
+
+// ── Nova Cobrança Modal ───────────────────────────────────────────────────────
+function NovaCobrancaModal({ tenantDbId, onClose, onCreated }) {
+  const [form, setForm] = useState({
+    customer_name: '',
+    customer_whatsapp: '',
+    valor_original: '',
+    data_vencimento: '',
+    notas: '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const submit = async () => {
+    if (!form.customer_name || !form.valor_original || !form.data_vencimento) {
+      setError('Nome, valor e vencimento são obrigatórios.');
+      return;
+    }
+    setSaving(true);
+    const valor = parseFloat(form.valor_original.replace(',', '.'));
+    const { error: e } = await supabase.from('cora_cobrancas').insert({
+      tenant_id: tenantDbId,
+      customer_name: form.customer_name,
+      customer_whatsapp: form.customer_whatsapp,
+      valor_original: valor,
+      valor_atual: valor,
+      data_vencimento: form.data_vencimento,
+      notas: form.notas,
+      status: 'aberto',
+    });
+    if (e) { setError(e.message); setSaving(false); return; }
+    onCreated();
+    onClose();
   };
 
   return (
-    <div className="route-enter" style={{ padding: 32, maxWidth: 1400, margin: '0 auto', position:'relative' }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={onClose}>
+      <div style={{ background: 'var(--surface, #1a1a1a)', borderRadius: 12, padding: 24, width: 440, maxWidth: '95vw' }}
+        onClick={e => e.stopPropagation()}>
+        <h3 style={{ margin: '0 0 20px', fontSize: 16, fontWeight: 700 }}>Nova Cobrança</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {[
+            { label: 'Nome do cliente *', key: 'customer_name', placeholder: 'Ex: João Silva' },
+            { label: 'WhatsApp', key: 'customer_whatsapp', placeholder: '55119XXXXXXXX' },
+            { label: 'Valor (R$) *', key: 'valor_original', placeholder: '350,00' },
+            { label: 'Data de vencimento *', key: 'data_vencimento', type: 'date' },
+          ].map(f => (
+            <div key={f.key}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.6)', display: 'block', marginBottom: 6 }}>{f.label}</label>
+              <input type={f.type || 'text'} placeholder={f.placeholder}
+                style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 7, color: 'rgba(255,255,255,0.85)', fontSize: 13, fontFamily: 'inherit' }}
+                value={form[f.key]} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))} />
+            </div>
+          ))}
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.6)', display: 'block', marginBottom: 6 }}>Notas internas</label>
+            <textarea style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 7, color: 'rgba(255,255,255,0.85)', fontSize: 13, fontFamily: 'inherit', minHeight: 60, resize: 'vertical' }}
+              value={form.notas} onChange={e => setForm(p => ({ ...p, notas: e.target.value }))} />
+          </div>
+          {error && <p style={{ color: '#f87171', fontSize: 12, margin: 0 }}>{error}</p>}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
+            <button onClick={onClose} style={{ padding: '8px 18px', background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 7, color: 'rgba(255,255,255,0.6)', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+            <button onClick={submit} disabled={saving} style={{ padding: '8px 18px', background: 'var(--red, #B70C00)', border: 'none', borderRadius: 7, color: '#fff', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+              {saving ? <Spinner /> : null} Cadastrar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Drawer: detalhe da cobrança ───────────────────────────────────────────────
+function CobrancaDrawer({ cobranca, tenantDbId, userId, onClose, onRefresh }) {
+  const [acoes, setAcoes] = useState([]);
+  const [loadingAcoes, setLoadingAcoes] = useState(true);
+  const [loadingAnalise, setLoadingAnalise] = useState(false);
+  const [loadingMensagem, setLoadingMensagem] = useState(false);
+  const [loadingEscalonar, setLoadingEscalonar] = useState(false);
+  const [mensagemGerada, setMensagemGerada] = useState(null);
+  const [error, setError] = useState('');
+  const pendingRef = useRef(null);
+  const [analise, setAnalise] = useState(cobranca.cora_analise || null);
+  const dias = diasAtraso(cobranca.data_vencimento);
+
+  const loadAcoes = useCallback(async () => {
+    const { data } = await supabase
+      .from('cora_acoes')
+      .select('*')
+      .eq('cobranca_id', cobranca.id)
+      .order('created_at', { ascending: false });
+    setAcoes(data || []);
+    setLoadingAcoes(false);
+  }, [cobranca.id]);
+
+  useEffect(() => { loadAcoes(); }, [loadAcoes]);
+
+  useEffect(() => {
+    if (!tenantDbId) return;
+    const channel = supabase
+      .channel(`cora-drawer-${cobranca.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'agent_runs',
+        filter: `tenant_id=eq.${tenantDbId}`,
+      }, (payload) => {
+        const run = payload.new;
+        if (run.agent_id !== 'cora') return;
+        if (!pendingRef.current || run.trigger_dev_run_id !== pendingRef.current) return;
+        if (run.status === 'completed') {
+          if (run.output?.analise) {
+            setAnalise(run.output.analise);
+            setLoadingAnalise(false);
+          }
+          if (run.output?.mensagem) {
+            setMensagemGerada(run.output);
+            setLoadingMensagem(false);
+          }
+          if (run.output?.escalonado) {
+            setLoadingEscalonar(false);
+            onRefresh?.();
+          }
+          pendingRef.current = null;
+          loadAcoes();
+        }
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [tenantDbId, cobranca.id]);
+
+  const callAgent = async (slug, extra = {}) => {
+    const token = (await supabase.auth.getSession()).data.session?.access_token;
+    const res = await fetch(`${BRIDGE}/agents/${slug}/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ cobranca_id: cobranca.id, tenant_id: tenantDbId, user_id: userId, triggered_by: userId, ...extra }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Erro ao chamar ${slug}`);
+    pendingRef.current = data.trigger_run_id || data.run_id;
+  };
+
+  const analisar = async () => {
+    setError(''); setLoadingAnalise(true);
+    try { await callAgent('cora-analisar-devedor'); } catch (e) { setError(e.message); setLoadingAnalise(false); }
+  };
+  const gerarMensagem = async () => {
+    setError(''); setLoadingMensagem(true);
+    try { await callAgent('cora-gerar-mensagem', { tom: analise?.tom_recomendado || 'amigavel' }); } catch (e) { setError(e.message); setLoadingMensagem(false); }
+  };
+  const escalonar = async () => {
+    setError(''); setLoadingEscalonar(true);
+    try { await callAgent('cora-escalonar'); } catch (e) { setError(e.message); setLoadingEscalonar(false); }
+  };
+  const marcarPago = async () => {
+    await supabase.from('cora_cobrancas').update({ status: 'pago', updated_at: new Date().toISOString() }).eq('id', cobranca.id);
+    await supabase.from('cora_acoes').insert({ cobranca_id: cobranca.id, tenant_id: tenantDbId, tipo: 'pagamento_confirmado', agente: 'humano' });
+    onRefresh?.();
+    onClose();
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', justifyContent: 'flex-end' }}
+      onClick={onClose}>
+      <div style={{ width: 560, maxWidth: '96vw', background: 'var(--surface, #1a1a1a)', height: '100vh', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}
+        onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', padding: 4 }}><Icon name="chevleft" size={18} /></button>
+          <UserAvatar name={cobranca.customer_name.slice(0, 2).toUpperCase()} size={36} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>{cobranca.customer_name}</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>{cobranca.customer_whatsapp || 'Sem WhatsApp'}</div>
+          </div>
+          <StatusBadge status={cobranca.status} />
+        </div>
+
+        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 20, flex: 1 }}>
+          {/* KPIs rápidos */}
+          <div style={{ display: 'flex', gap: 12 }}>
+            {[
+              { label: 'Valor', value: fmtBRL(cobranca.valor_atual), color: '#dc2626' },
+              { label: 'Atraso', value: `${dias} dia${dias !== 1 ? 's' : ''}`, color: dias > 20 ? '#dc2626' : dias > 7 ? '#D97706' : 'rgba(255,255,255,0.7)' },
+              { label: 'Vencimento', value: new Date(cobranca.data_vencimento).toLocaleDateString('pt-BR'), color: 'rgba(255,255,255,0.7)' },
+            ].map(k => (
+              <div key={k.label} style={{ flex: 1, padding: '12px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 8 }}>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{k.label}</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: k.color, marginTop: 4 }}>{k.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Análise IA */}
+          {analise ? (
+            <div style={{ padding: 14, background: 'rgba(255,255,255,0.03)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>Análise CORA</span>
+                <NivelRiscoBadge nivel={analise.nivel_risco} />
+              </div>
+              <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>Probabilidade de pagamento</div>
+                  <div style={{ height: 6, background: 'rgba(255,255,255,0.1)', borderRadius: 3, marginTop: 6, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${analise.probabilidade_pagamento}%`, background: '#16a34a', borderRadius: 3 }} />
+                  </div>
+                  <div style={{ fontSize: 11, color: '#16a34a', marginTop: 3 }}>{analise.probabilidade_pagamento}%</div>
+                </div>
+              </div>
+              <p style={{ margin: '0 0 8px', fontSize: 12, color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>{analise.estrategia_recomendada}</p>
+              <div style={{ padding: '8px 12px', background: 'rgba(183,12,0,0.12)', borderRadius: 7, fontSize: 12, color: 'rgba(255,255,255,0.85)', fontWeight: 500 }}>
+                ▶ {analise.proxima_acao}
+              </div>
+            </div>
+          ) : (
+            <div style={{ padding: 14, background: 'rgba(255,255,255,0.03)', borderRadius: 10, border: '1px dashed rgba(255,255,255,0.12)', textAlign: 'center' }}>
+              <p style={{ margin: '0 0 10px', fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>Análise IA não realizada ainda.</p>
+              <button onClick={analisar} disabled={loadingAnalise} style={{ padding: '7px 16px', background: 'var(--red, #B70C00)', border: 'none', borderRadius: 7, color: '#fff', fontSize: 13, fontWeight: 600, cursor: loadingAnalise ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                {loadingAnalise ? <Spinner /> : <Icon name="sparkles" size={13} />} Analisar com CORA
+              </button>
+            </div>
+          )}
+
+          {analise && (
+            <button onClick={analisar} disabled={loadingAnalise} style={{ padding: '7px 14px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 7, color: 'rgba(255,255,255,0.6)', fontSize: 12, cursor: loadingAnalise ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, alignSelf: 'flex-start' }}>
+              {loadingAnalise ? <Spinner /> : <Icon name="sparkles" size={12} />} Re-analisar
+            </button>
+          )}
+
+          {/* Ações */}
+          {error && <p style={{ color: '#f87171', fontSize: 12, margin: 0 }}>{error}</p>}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button onClick={gerarMensagem} disabled={loadingMensagem} style={{ flex: 1, padding: '9px 14px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 7, color: 'rgba(255,255,255,0.8)', fontSize: 13, cursor: loadingMensagem ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              {loadingMensagem ? <Spinner /> : '💬'} Gerar Mensagem
+            </button>
+            <button onClick={marcarPago} style={{ flex: 1, padding: '9px 14px', background: 'rgba(22,163,74,0.15)', border: '1px solid rgba(22,163,74,0.3)', borderRadius: 7, color: '#16a34a', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              ✓ Marcar como Pago
+            </button>
+            {cobranca.status !== 'escalonado' && (
+              <button onClick={escalonar} disabled={loadingEscalonar} style={{ flex: 1, padding: '9px 14px', background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.25)', borderRadius: 7, color: '#dc2626', fontSize: 13, cursor: loadingEscalonar ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                {loadingEscalonar ? <Spinner /> : '🚨'} Escalonar
+              </button>
+            )}
+          </div>
+
+          {/* Mensagem gerada */}
+          {mensagemGerada && (
+            <div style={{ padding: 14, background: 'rgba(255,255,255,0.03)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>Mensagem gerada — aguarda aprovação</span>
+              </div>
+              <p style={{ margin: '0 0 10px', fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{mensagemGerada.mensagem}</p>
+              {mensagemGerada.dica_envio && (
+                <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>💡 {mensagemGerada.dica_envio}</p>
+              )}
+            </div>
+          )}
+
+          {/* Histórico */}
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.5)', marginBottom: 10 }}>Histórico de Ações</div>
+            {loadingAcoes ? (
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>Carregando…</div>
+            ) : acoes.length === 0 ? (
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>Nenhuma ação ainda.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {acoes.map(a => (
+                  <div key={a.id} style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, borderLeft: '3px solid rgba(255,255,255,0.1)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>{a.tipo.replace(/_/g, ' ')}</span>
+                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{new Date(a.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    {a.conteudo && <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.55)', lineHeight: 1.4 }}>{a.conteudo.slice(0, 120)}{a.conteudo.length > 120 ? '…' : ''}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Screen ───────────────────────────────────────────────────────────────
+export default function CoraScreen({ tenant, tenantDbId, userId }) {
+  const [tab, setTab] = useState('inad');
+  const [cobrancas, setCobrancas] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedId, setSelectedId] = useState(null);
+  const [showNovaModal, setShowNovaModal] = useState(false);
+
+  const loadCobrancas = useCallback(async () => {
+    if (!tenantDbId) return;
+    setLoading(true);
+    const { data } = await supabase
+      .from('cora_cobrancas')
+      .select('*')
+      .eq('tenant_id', tenantDbId)
+      .order('data_vencimento', { ascending: true });
+    setCobrancas(data || []);
+    setLoading(false);
+  }, [tenantDbId]);
+
+  useEffect(() => { loadCobrancas(); }, [loadCobrancas]);
+
+  // Realtime updates
+  useEffect(() => {
+    if (!tenantDbId) return;
+    const ch = supabase.channel('cora-cobrancas-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cora_cobrancas', filter: `tenant_id=eq.${tenantDbId}` }, () => loadCobrancas())
+      .subscribe();
+    return () => supabase.removeChannel(ch);
+  }, [tenantDbId, loadCobrancas]);
+
+  const emAberto = cobrancas.filter(c => c.status === 'aberto' || c.status === 'negociando');
+  const pagos = cobrancas.filter(c => c.status === 'pago');
+  const escalonados = cobrancas.filter(c => c.status === 'escalonado');
+
+  const totalAberto = emAberto.reduce((s, c) => s + Number(c.valor_atual), 0);
+  const totalPago = pagos.reduce((s, c) => s + Number(c.valor_original), 0);
+  const taxaRec = cobrancas.length > 0 ? Math.round((pagos.length / cobrancas.length) * 100) : 0;
+
+  const tabCobrancas = tab === 'inad' ? emAberto : tab === 'escalonados' ? escalonados : pagos;
+  const selected = cobrancas.find(c => c.id === selectedId);
+
+  return (
+    <div className="route-enter" style={{ padding: 32, maxWidth: 1400, margin: '0 auto' }}>
       {/* Header */}
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', marginBottom: 24 }}>
-        <div style={{ display:'flex', alignItems:'center', gap: 14 }}>
-          <AgentAvatar id="cora" size={56}/>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <AgentAvatar id="cora" size={56} />
           <div>
             <h1 className="page-h1">CORA — Cobrança Inteligente</h1>
             <p className="page-sub">
-              <span style={{ display:'inline-flex', alignItems:'center', gap: 6 }}>
-                <span style={{ width: 7, height: 7, background:'var(--success)', borderRadius:'50%' }} className="pulse-green"/>
-                <strong style={{ color:'var(--success)' }}>Ativa agora</strong> · Trabalhando em 3 conversas em paralelo
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ width: 7, height: 7, background: 'var(--success)', borderRadius: '50%' }} className="pulse-green" />
+                <strong style={{ color: 'var(--success)' }}>Ativa</strong> · {emAberto.length} cobrança{emAberto.length !== 1 ? 's' : ''} em aberto
               </span>
             </p>
           </div>
         </div>
-        <div style={{ display:'flex', gap: 8 }}>
-          <button className="btn-secondary"><Icon name="gear" size={14}/> Configurar CORA</button>
-          <button className="btn-primary"><Icon name="plus" size={14}/> Nova régua</button>
-        </div>
+        <button className="btn-primary" onClick={() => setShowNovaModal(true)}>
+          <Icon name="plus" size={14} /> Nova cobrança
+        </button>
       </div>
 
       {/* KPIs */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
         <div className="kpi">
           <div className="kpi-label">Total a receber</div>
-          <div className="kpi-value accent" style={{ marginTop: 8 }}>{data.kpis.total}</div>
-          <div className="kpi-delta down" style={{ marginTop: 10 }}><Icon name="info" size={11}/>Em aberto</div>
+          <div className="kpi-value accent" style={{ marginTop: 8 }}>{fmtBRL(totalAberto)}</div>
+          <div className="kpi-delta down" style={{ marginTop: 10 }}><Icon name="info" size={11} /> Em aberto</div>
         </div>
         <div className="kpi">
-          <div className="kpi-label">Recebido este mês</div>
-          <div className="kpi-value" style={{ marginTop: 8, color:'var(--success)' }}>{data.kpis.recebido}</div>
-          <div className="kpi-delta up" style={{ marginTop: 10 }}><Icon name="arrowup" size={11}/>CORA recuperou</div>
+          <div className="kpi-label">Recebido no total</div>
+          <div className="kpi-value" style={{ marginTop: 8, color: 'var(--success)' }}>{fmtBRL(totalPago)}</div>
+          <div className="kpi-delta up" style={{ marginTop: 10 }}><Icon name="arrowup" size={11} /> CORA recuperou</div>
         </div>
         <div className="kpi">
           <div className="kpi-label">Taxa de recuperação</div>
-          <div className="kpi-value" style={{ marginTop: 8 }}>{data.kpis.taxa}</div>
-          <div className="kpi-delta up" style={{ marginTop: 10 }}><Icon name="arrowup" size={11}/>+4% vs mês passado</div>
+          <div className="kpi-value" style={{ marginTop: 8 }}>{taxaRec}%</div>
+          <div className="kpi-delta up" style={{ marginTop: 10 }}><Icon name="info" size={11} /> {pagos.length} pago{pagos.length !== 1 ? 's' : ''}</div>
         </div>
         <div className="kpi">
-          <div className="kpi-label">Réguas ativas</div>
-          <div className="kpi-value" style={{ marginTop: 8 }}>{data.kpis.reguas}</div>
-          <div className="kpi-delta neutral" style={{ marginTop: 10 }}><Icon name="info" size={11}/>Todas funcionando</div>
+          <div className="kpi-label">Escalonados</div>
+          <div className="kpi-value" style={{ marginTop: 8, color: escalonados.length > 0 ? 'var(--red)' : 'var(--g-900)' }}>{escalonados.length}</div>
+          <div className="kpi-delta neutral" style={{ marginTop: 10 }}><Icon name="info" size={11} /> Precisam de atenção</div>
         </div>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns: '1fr 320px', gap: 24 }}>
-        {/* Main */}
-        <div>
-          {/* Tabs */}
-          <div style={{ display:'flex', gap: 2, marginBottom: 16, borderBottom: '1px solid var(--g-200)' }}>
-            {[
-              { id:'inad',    label:'Inadimplentes', count: data.rows.length },
-              { id:'reguas',  label:'Réguas de cobrança', count: data.kpis.reguas },
-              { id:'hist',    label:'Histórico' },
-              { id:'config',  label:'Config' },
-            ].map(t => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                style={{
-                  padding: '12px 16px', fontSize: 13,
-                  fontWeight: tab === t.id ? 700 : 500,
-                  color: tab === t.id ? 'var(--red)' : 'var(--g-600)',
-                  borderBottom: tab === t.id ? '2px solid var(--red)' : '2px solid transparent',
-                  marginBottom: -1,
-                  transition: 'all 150ms',
-                }}
-              >
-                {t.label}{t.count != null ? <span style={{ marginLeft: 6, color:'var(--g-500)', fontSize: 12 }}>{t.count}</span> : null}
-              </button>
-            ))}
-          </div>
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 2, marginBottom: 16, borderBottom: '1px solid var(--g-200)' }}>
+        {[
+          { id: 'inad', label: 'Em aberto', count: emAberto.length },
+          { id: 'escalonados', label: 'Escalonados', count: escalonados.length },
+          { id: 'pagos', label: 'Pagos', count: pagos.length },
+        ].map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            padding: '12px 16px', fontSize: 13, fontWeight: tab === t.id ? 700 : 500,
+            color: tab === t.id ? 'var(--red)' : 'var(--g-600)',
+            borderBottom: tab === t.id ? '2px solid var(--red)' : '2px solid transparent',
+            marginBottom: -1, transition: 'all 150ms', background: 'none', border: 'none', cursor: 'pointer',
+          }}>
+            {t.label}
+            {t.count != null && <span style={{ marginLeft: 6, color: 'var(--g-500)', fontSize: 12 }}>{t.count}</span>}
+          </button>
+        ))}
+      </div>
 
-          {tab === 'inad' && (
-            <div className="card" style={{ overflow:'hidden' }}>
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>Cliente</th>
-                    <th>Valor</th>
-                    <th>Atraso</th>
-                    <th>Última ação</th>
-                    <th>Status</th>
-                    <th style={{ textAlign:'right' }}>Ações</th>
+      {/* Tabela */}
+      <div className="card" style={{ overflow: 'hidden' }}>
+        {loading ? (
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--g-500)' }}>Carregando cobranças…</div>
+        ) : tabCobrancas.length === 0 ? (
+          <div style={{ padding: 60, textAlign: 'center', color: 'var(--g-500)' }}>
+            {tab === 'inad' ? '🎉 Nenhuma cobrança em aberto!' : tab === 'escalonados' ? '✅ Sem escalonamentos pendentes.' : '💰 Nenhum pagamento registrado ainda.'}
+          </div>
+        ) : (
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Cliente</th>
+                <th>Valor</th>
+                <th>Atraso</th>
+                <th>Vencimento</th>
+                <th>Status</th>
+                <th style={{ textAlign: 'right' }}>Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tabCobrancas.map(c => {
+                const dias = diasAtraso(c.data_vencimento);
+                return (
+                  <tr key={c.id} onClick={() => setSelectedId(c.id)} style={{ cursor: 'pointer' }}>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <UserAvatar name={c.customer_name.slice(0, 2).toUpperCase()} size={32} />
+                        <div>
+                          <div style={{ fontWeight: 600 }}>{c.customer_name}</div>
+                          {c.cora_analise?.nivel_risco && (
+                            <NivelRiscoBadge nivel={c.cora_analise.nivel_risco} />
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td style={{ fontWeight: 700, color: c.status === 'escalonado' ? 'var(--red)' : 'var(--g-900)', fontVariantNumeric: 'tabular-nums' }}>
+                      {fmtBRL(c.valor_atual)}
+                    </td>
+                    <td>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: dias > 30 ? 'var(--red)' : dias > 10 ? 'var(--warn)' : 'var(--g-700)' }}>
+                        {dias} {dias === 1 ? 'dia' : 'dias'}
+                      </span>
+                    </td>
+                    <td style={{ fontSize: 12, color: 'var(--g-600)' }}>
+                      {new Date(c.data_vencimento).toLocaleDateString('pt-BR')}
+                    </td>
+                    <td><StatusBadge status={c.status} /></td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button className="btn-ghost" style={{ fontSize: 12 }}
+                        onClick={(e) => { e.stopPropagation(); setSelectedId(c.id); }}>
+                        <Icon name="eye" size={12} /> Ver
+                      </button>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {data.rows.map(r => {
-                    const s = STATUS[r.status];
-                    return (
-                      <tr key={r.id} onClick={() => setOpenDrawer(r.id)}>
-                        <td>
-                          <div style={{ display:'flex', alignItems:'center', gap: 10 }}>
-                            <UserAvatar name={r.avatar} size={32}/>
-                            <span style={{ fontWeight: 600 }}>{r.name}</span>
-                          </div>
-                        </td>
-                        <td style={{ fontWeight: 700, color: r.status === 'critical' ? 'var(--red)' : 'var(--g-900)', fontVariantNumeric:'tabular-nums' }}>{r.value}</td>
-                        <td>
-                          <span style={{
-                            fontSize: 12,
-                            fontWeight: 600,
-                            color: r.days > 30 ? 'var(--red)' : r.days > 10 ? 'var(--warn)' : 'var(--g-700)',
-                          }}>
-                            {r.days} {r.days === 1 ? 'dia' : 'dias'}
-                          </span>
-                        </td>
-                        <td style={{ fontSize: 12, color:'var(--g-600)' }}>{r.last}</td>
-                        <td>
-                          <span className={`badge ${s.cls}`} style={{ position:'relative' }}>
-                            {r.status === 'trying' && <span style={{ width: 6, height: 6, background:'var(--warn)', borderRadius:'50%', display:'inline-block' }} className="pulse-amber"/>}
-                            {s.label}
-                          </span>
-                        </td>
-                        <td style={{ textAlign:'right' }}>
-                          <button
-                            className="btn-ghost"
-                            style={{ fontSize: 12 }}
-                            onClick={(e) => { e.stopPropagation(); setOpenDrawer(r.id); }}
-                          >
-                            <Icon name="eye" size={12}/> Ver conversa
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {data.rows.length === 0 && (
-                    <tr><td colSpan={6} style={{ textAlign:'center', padding: 40, color:'var(--g-500)' }}>
-                      🎉 Sem inadimplentes por aqui!
-                    </td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {tab !== 'inad' && (
-            <div className="card" style={{ padding: 60, textAlign:'center' }}>
-              <AgentAvatar id="cora" size={64}/>
-              <div style={{ marginTop: 16, fontSize: 15, fontWeight: 600, color:'var(--g-900)' }}>Em desenvolvimento</div>
-              <div style={{ fontSize: 13, color:'var(--g-500)', marginTop: 6 }}>Esta aba estará disponível no próximo release do MVP.</div>
-            </div>
-          )}
-        </div>
-
-        {/* Right — CORA ao vivo */}
-        <div>
-          <div className="card" style={{ padding: 20, background: 'linear-gradient(to bottom, #0D0D0D, #1A1A1A)', border:'none', color:'white' }}>
-            <div style={{ display:'flex', alignItems:'center', gap: 10, marginBottom: 14 }}>
-              <span className="live-dot"/>
-              <span style={{ fontSize: 11, textTransform:'uppercase', letterSpacing: 1, fontWeight: 700, color:'rgba(255,255,255,0.6)' }}>CORA em ação agora</span>
-            </div>
-            <div style={{ display:'flex', flexDirection:'column', gap: 12 }}>
-              {data.liveActions.map((a, i) => (
-                <div key={`${liveTick}-${i}`} style={{
-                  padding: 12,
-                  background:'rgba(255,255,255,0.04)',
-                  border:'1px solid rgba(255,255,255,0.08)',
-                  borderRadius: 8,
-                }} className="slide-right">
-                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: 6 }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color:'white' }}>{a.client}</span>
-                    <span style={{ fontSize: 10, color:'rgba(255,255,255,0.5)' }}>{a.time}</span>
-                  </div>
-                  <div style={{ fontSize: 11, color:'rgba(255,255,255,0.7)', lineHeight: 1.45 }}>{a.action}</div>
-                </div>
-              ))}
-              {data.liveActions.length === 0 && (
-                <div style={{ padding: 20, textAlign:'center', color:'rgba(255,255,255,0.5)', fontSize: 12 }}>
-                  Nada acontecendo agora.
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* CORA insights */}
-          <div className="card" style={{ padding: 20, marginTop: 16 }}>
-            <div style={{ display:'flex', alignItems:'center', gap: 8, marginBottom: 12 }}>
-              <Icon name="sparkles" size={14} style={{ color:'var(--success)' }}/>
-              <span className="label">Insights da CORA</span>
-            </div>
-            <div style={{ display:'flex', flexDirection:'column', gap: 12 }}>
-              <Insight text="Clientes de R$ 300-500 pagam 3x mais rápido que os maiores." />
-              <Insight text="Tom amigável converte melhor que lembrete formal." />
-              <Insight text="Melhor horário pra 1ª cobrança: 10h-11h." />
-            </div>
-          </div>
-        </div>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
 
-      {/* DRAWER */}
-      {openDrawer && data.transcript && (
-        <CoraDrawer
-          transcript={data.transcript}
-          row={data.rows.find(r => r.id === openDrawer)}
-          onClose={() => setOpenDrawer(false)}
+      {/* Modals */}
+      {showNovaModal && (
+        <NovaCobrancaModal tenantDbId={tenantDbId} onClose={() => setShowNovaModal(false)} onCreated={loadCobrancas} />
+      )}
+      {selected && (
+        <CobrancaDrawer
+          cobranca={selected}
+          tenantDbId={tenantDbId}
+          userId={userId}
+          onClose={() => setSelectedId(null)}
+          onRefresh={loadCobrancas}
         />
       )}
     </div>
   );
-};
-
-const Insight = ({ text }) => (
-  <div style={{ display:'flex', gap: 8, alignItems:'flex-start' }}>
-    <div style={{ width: 6, height: 6, background:'var(--red)', borderRadius: '50%', marginTop: 7, flexShrink: 0 }}/>
-    <div style={{ fontSize: 12, color:'var(--g-700)', lineHeight: 1.5 }}>{text}</div>
-  </div>
-);
-
-// ─── DRAWER: Split transcript + AI analysis ───────────────────
-const CoraDrawer = ({ transcript, row, onClose }) => {
-  const t = transcript; // most rows don't have full transcript; use default
-
-  return (
-    <div
-      style={{
-        position:'fixed', inset: 0,
-        background:'rgba(13,13,13,0.4)',
-        zIndex: 200,
-        display:'flex', justifyContent:'flex-end',
-        animation: 'fadeIn 200ms ease',
-      }}
-      onClick={onClose}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        className="slide-right"
-        style={{
-          width: 900, maxWidth: '95vw', background:'white', height:'100vh',
-          display:'grid', gridTemplateColumns: '1fr 340px',
-          boxShadow: '-20px 0 40px rgba(0,0,0,0.2)',
-        }}
-      >
-        {/* Transcript side */}
-        <div style={{ display:'flex', flexDirection:'column', minWidth: 0, background:'#F0F2F5' }}>
-          <div style={{ padding: '16px 20px', background:'#075E54', color:'white', display:'flex', alignItems:'center', gap: 12 }}>
-            <button className="btn-icon" style={{ color:'white' }} onClick={onClose}><Icon name="chevleft" size={18}/></button>
-            <UserAvatar name={(row || {}).avatar || t.client.split(' ').map(w=>w[0]).join('').slice(0,2)} size={40}/>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 14 }}>{(row || {}).name || t.client}</div>
-              <div style={{ fontSize: 11, opacity: 0.8 }}>Conversando com CORA · via WhatsApp</div>
-            </div>
-            <AgentAvatar id="cora" size={32}/>
-          </div>
-
-          <div className="scroll" style={{
-            flex: 1, overflowY:'auto', padding: 20,
-            backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40'><circle cx='20' cy='20' r='1' fill='%23d4d4d4' opacity='0.3'/></svg>")`,
-          }}>
-            <div style={{ textAlign:'center', margin:'8px 0 16px' }}>
-              <span style={{ background:'#E1F3FB', color:'#0C3C64', fontSize: 11, padding: '4px 10px', borderRadius: 6, fontWeight: 500 }}>
-                CORA iniciou a conversa — {t.days} dias de atraso
-              </span>
-            </div>
-            <div style={{ display:'flex', flexDirection:'column', gap: 6 }}>
-              {t.messages.map((m, i) => (
-                <div key={i} style={{
-                  display:'flex',
-                  justifyContent: m.from === 'bot' ? 'flex-end' : 'flex-start',
-                }} className="slide-up">
-                  <div style={{
-                    maxWidth:'75%',
-                    padding: '8px 12px 6px',
-                    background: m.from === 'bot' ? '#DCF8C6' : 'white',
-                    borderRadius: 8,
-                    boxShadow: '0 1px 1px rgba(0,0,0,0.05)',
-                    fontSize: 13,
-                    lineHeight: 1.4,
-                    color:'var(--g-900)',
-                    position:'relative',
-                  }}>
-                    {m.from === 'bot' && (
-                      <div style={{ fontSize: 10, fontWeight: 700, color:'var(--success)', marginBottom: 2, display:'flex', alignItems:'center', gap: 4 }}>
-                        <Icon name="sparkles" size={10}/> CORA
-                      </div>
-                    )}
-                    {m.text}
-                    <div style={{ fontSize: 10, color:'var(--g-500)', marginTop: 4, textAlign:'right' }}>{m.time}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ padding: 12, background:'#F0F2F5', display:'flex', alignItems:'center', gap: 8 }}>
-            <div style={{ flex: 1, padding: '8px 12px', background:'white', borderRadius: 20, fontSize: 12, color:'var(--g-400)' }}>
-              CORA está monitorando esta conversa…
-            </div>
-            <button className="btn-icon" style={{ background:'#075E54', color:'white' }}><Icon name="send" size={14}/></button>
-          </div>
-        </div>
-
-        {/* AI analysis side */}
-        <div style={{ borderLeft: '1px solid var(--g-200)', background:'white', padding: 24, overflowY:'auto' }} className="scroll">
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom: 20 }}>
-            <div>
-              <div className="label" style={{ color:'var(--success)' }}>Análise CORA</div>
-              <div style={{ fontSize: 18, fontWeight: 700, color:'var(--g-900)', marginTop: 4 }}>Tempo real</div>
-            </div>
-            <button className="btn-icon" onClick={onClose}><Icon name="x" size={16}/></button>
-          </div>
-
-          {/* Meter: sentiment */}
-          <Meter label="Sentimento do cliente" value={t.sentiment} color="var(--success)" invertedDescriptor={['Hostil','Neutro','Positivo']}/>
-          <div style={{ height: 20 }}/>
-          <Meter label="Probabilidade de pagamento" value={t.payProb} color="var(--red)" invertedDescriptor={['Baixa','Média','Alta']}/>
-
-          {/* Next action */}
-          <div style={{ marginTop: 24, padding: 16, background:'linear-gradient(135deg, rgba(16,185,129,0.08), rgba(16,185,129,0.01))', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 8 }}>
-            <div style={{ display:'flex', alignItems:'center', gap: 6, marginBottom: 8 }}>
-              <Icon name="sparkles" size={12} style={{ color:'var(--success)' }}/>
-              <span style={{ fontSize: 10, fontWeight: 700, textTransform:'uppercase', letterSpacing: 0.5, color:'var(--success)' }}>Próxima ação sugerida</span>
-            </div>
-            <div style={{ fontSize: 13, color:'var(--g-900)', fontWeight: 600, lineHeight: 1.4 }}>{t.nextAction}</div>
-            <button className="btn-primary" style={{ marginTop: 12, width:'100%', justifyContent:'center', padding: '8px 12px', fontSize: 12 }}>
-              Executar agora <Icon name="arrowright" size={12}/>
-            </button>
-          </div>
-
-          {/* Timeline of CORA actions */}
-          <div style={{ marginTop: 24 }}>
-            <div className="label" style={{ marginBottom: 10 }}>Régua executada</div>
-            <div style={{ display:'flex', flexDirection:'column', gap: 0, position:'relative' }}>
-              {[
-                { day: 'D+3', text: 'Lembrete amigável', done: true },
-                { day: 'D+7', text: 'Oferta de parcelamento', done: true },
-                { day: 'D+12', text: 'Conversa ativa (agora)', done: true, current: true },
-                { day: 'D+20', text: 'Última oferta + cortesia', done: false },
-                { day: 'D+30', text: 'Escalar para Wandson', done: false },
-              ].map((s, i, a) => (
-                <div key={i} style={{ display:'flex', gap: 12, position:'relative', paddingBottom: i < a.length - 1 ? 14 : 0 }}>
-                  <div style={{
-                    width: 14, height: 14, borderRadius:'50%',
-                    background: s.current ? 'var(--red)' : s.done ? 'var(--success)' : 'var(--g-200)',
-                    border: '2px solid white',
-                    boxShadow: s.current ? '0 0 0 3px rgba(183,12,0,0.25)' : '0 0 0 1px var(--g-300)',
-                    flexShrink: 0, zIndex: 1,
-                    marginTop: 2,
-                  }} className={s.current ? 'pulse-red' : ''}/>
-                  {i < a.length - 1 && (
-                    <div style={{ position:'absolute', left: 6, top: 16, width: 2, height: '100%', background: s.done ? 'var(--success)' : 'var(--g-200)' }}/>
-                  )}
-                  <div>
-                    <div style={{ fontSize: 11, color:'var(--g-500)', fontWeight: 600 }}>{s.day}</div>
-                    <div style={{ fontSize: 13, color: s.current ? 'var(--red)' : 'var(--g-900)', fontWeight: s.current ? 700 : 500 }}>{s.text}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const Meter = ({ label, value, color, invertedDescriptor }) => {
-  const desc = value > 66 ? invertedDescriptor[2] : value > 33 ? invertedDescriptor[1] : invertedDescriptor[0];
-  return (
-    <div>
-      <div style={{ display:'flex', justifyContent:'space-between', marginBottom: 6 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color:'var(--g-700)' }}>{label}</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color }}>{value}% · {desc}</span>
-      </div>
-      <div style={{ height: 8, background:'var(--g-100)', borderRadius: 4, overflow:'hidden' }}>
-        <div style={{
-          height:'100%', width: `${value}%`,
-          background: color,
-          borderRadius: 4,
-          transition:'width 600ms var(--ease-out)',
-        }}/>
-      </div>
-    </div>
-  );
-};
-
-export default CoraScreen;
+}

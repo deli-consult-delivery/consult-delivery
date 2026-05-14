@@ -404,7 +404,7 @@ async function postCallback(payload) {
 const ROLE_AGENT_PREFIXES = {
   'marketing':   ['lara-', 'nova-'],
   'atendimento': ['lara-', 'max-'],
-  'financeiro':  ['cora-'],
+  'financeiro':  ['cora-', 'nova-'],
   'admin':       [''],   // admin pode tudo (prefixo vazio = match qualquer)
   'owner':       [''],
 };
