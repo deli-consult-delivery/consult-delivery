@@ -20,6 +20,7 @@ import GruposScreen from './screens/GruposScreen.jsx';
 import DeliScreen from './screens/DeliScreen.jsx';
 import MaxScreen from './screens/MaxScreen.jsx';
 import NovaScreen from './screens/NovaScreen.jsx';
+import BrenoScreen from './screens/BrenoScreen.jsx';
 import { CONVERSATIONS, INADIMPLENTES, TENANTS } from './data.js';
 import { supabase } from './lib/supabase.js';
 import { listTenants } from './lib/api.js';
@@ -242,7 +243,8 @@ export default function App() {
         {route === 'grupos'    && <GruposScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'deli'     && <DeliScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'max'      && <MaxScreen  tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'nova'     && <NovaScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
+        {route === 'nova'     && <NovaScreen  tenantDbId={tenantDbId} userId={session?.user?.id} />}
+        {route === 'breno'    && <BrenoScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'settings'  && <SettingsScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} onTenantChange={async (newSlug) => {
           if (newSlug) {
             setTenant(newSlug);

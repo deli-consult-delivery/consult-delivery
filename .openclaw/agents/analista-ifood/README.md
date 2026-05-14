@@ -90,6 +90,6 @@ Mudanças vão direto no main (projeto privado). Quando refinar prompts ou regra
 
 ## Links úteis
 
-- VPS: `45.39.210.183`
+- VPS: `187.127.25.24`
 - OpenClaw docs: https://docs.openclaw.ai
 - Bot Telegram: `@DeliConsultBot`

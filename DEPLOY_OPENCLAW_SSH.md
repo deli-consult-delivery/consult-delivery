@@ -1,6 +1,6 @@
 # 🚀 Deploy da LARA no OpenClaw — Roteiro SSH
 
-> Roteiro pra subir a LARA no OpenClaw na VPS 45.39.210.183:18789.
+> Roteiro pra subir a LARA no OpenClaw na VPS 187.127.25.24:18789.
 > Versão: 1.0 — 06/05/2026
 >
 > ⚠️ **LEIA O AVISO ANTES DE EXECUTAR** ⚠️
@@ -22,7 +22,7 @@ pula direto pra **Fase 2** seguindo o mesmo padrão.
 
 ## 🔐 Pré-requisitos
 
-- Acesso SSH à VPS: `ssh root@45.39.210.183` (ou usuário equivalente)
+- Acesso SSH à VPS: `ssh root@187.127.25.24` (ou usuário equivalente)
 - Senha/chave SSH atualizada (lembrar: senha VPS está pendente de rotação)
 - Os arquivos do agente já no seu repo local:
   - `.openclaw/agents/lara/system_prompt.md`
@@ -39,7 +39,7 @@ Se você quer que o Claude Code faça via SSH automaticamente, cola este prompt:
 Tarefa: fazer deploy da LARA no OpenClaw da VPS via SSH.
 
 CONTEXTO:
-- VPS: 45.39.210.183 (Ubuntu 24.04 LTS)
+- VPS: 187.127.25.24 (Ubuntu 24.04 LTS)
 - OpenClaw 2026.5.2 rodando porta 18789 (systemd persistente)
 - Agente já existente como referência: analista-ifood
 - Arquivos da LARA já estão no repo em .openclaw/agents/lara/
@@ -54,7 +54,7 @@ REGRAS:
 FASE 1 — DESCOBERTA (executar tudo, mostrar saída bruta):
 
 1. Conectar SSH:
-   ssh root@45.39.210.183
+   ssh root@187.127.25.24
 
 2. Identificar onde está o OpenClaw:
    systemctl status openclaw
@@ -102,7 +102,7 @@ Se a Fase 1 mostrar que agentes vivem em algum diretório (ex: `/opt/openclaw/ag
 
 ```bash
 # 1. SSH na VPS
-ssh root@45.39.210.183
+ssh root@187.127.25.24
 
 # 2. Backup do estado atual
 sudo tar -czf /root/backup-openclaw-$(date +%Y%m%d-%H%M).tgz /opt/openclaw/agents/
@@ -113,12 +113,12 @@ sudo mkdir -p /opt/openclaw/agents/lara
 # 4. Voltar pra máquina LOCAL e copiar os arquivos
 exit
 cd C:\Users\Consult Delivery\consult-delivery
-scp .openclaw/agents/lara/system_prompt.md          root@45.39.210.183:/opt/openclaw/agents/lara/
-scp .openclaw/agents/lara/base_regras.yaml          root@45.39.210.183:/opt/openclaw/agents/lara/
-scp .openclaw/agents/lara/nexus_subagents_spec.md   root@45.39.210.183:/opt/openclaw/agents/lara/
+scp .openclaw/agents/lara/system_prompt.md          root@187.127.25.24:/opt/openclaw/agents/lara/
+scp .openclaw/agents/lara/base_regras.yaml          root@187.127.25.24:/opt/openclaw/agents/lara/
+scp .openclaw/agents/lara/nexus_subagents_spec.md   root@187.127.25.24:/opt/openclaw/agents/lara/
 
 # 5. Voltar pra VPS e validar
-ssh root@45.39.210.183
+ssh root@187.127.25.24
 ls -la /opt/openclaw/agents/lara/
 diff /opt/openclaw/agents/analista-ifood/ /opt/openclaw/agents/lara/  # comparar estrutura
 
@@ -150,7 +150,7 @@ Se a Fase 1 mostrou um endpoint tipo `POST /agents`:
 
 ```bash
 # 1. SSH na VPS (curl pode ir de fora também)
-ssh root@45.39.210.183
+ssh root@187.127.25.24
 
 # 2. Criar payload com o conteúdo dos arquivos
 SYSTEM_PROMPT=$(cat /tmp/lara-system-prompt.md)  # você sobe o arquivo antes via scp

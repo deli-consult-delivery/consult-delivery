@@ -10,8 +10,8 @@
       "Bash(npx supabase *)",
       "PowerShell(Set-Location \"c:\\\\Users\\\\Consult Delivery\\\\consult-delivery\"; [System.IO.File]::WriteAllText\\(\\(Resolve-Path \".env.local\"\\).Path, \"VITE_SUPABASE_URL=https://czyanilrverorwenikqw.supabase.co`nVITE_SUPABASE_ANON_KEY=sb_publishable_MduR9lddqVcBHLkdw13-_g_2NgRaFlK`n\", [System.Text.UTF8Encoding]::new\\($false\\)\\); Write-Output \"Done\")",
       "Read(//c/Users/Consult Delivery/.openclaw/**)",
-      "Bash(ssh -i \"C:\\\\Users\\\\Consult Delivery\\\\.ssh\\\\vps_openclaw\" -o StrictHostKeyChecking=no root@45.39.210.183 \"openclaw agents bind --help 2>&1; echo '---EXIT:'$?\")",
-      "Bash(ssh -i \"C:\\\\Users\\\\Consult Delivery\\\\.ssh\\\\vps_openclaw\" -o StrictHostKeyChecking=no root@45.39.210.183 \"openclaw channels list 2>&1; echo '---'; openclaw agents list --json 2>&1\")",
+      "Bash(ssh -i \"C:\\\\Users\\\\Consult Delivery\\\\.ssh\\\\vps_openclaw\" -o StrictHostKeyChecking=no root@187.127.25.24 \"openclaw agents bind --help 2>&1; echo '---EXIT:'$?\")",
+      "Bash(ssh -i \"C:\\\\Users\\\\Consult Delivery\\\\.ssh\\\\vps_openclaw\" -o StrictHostKeyChecking=no root@187.127.25.24 \"openclaw channels list 2>&1; echo '---'; openclaw agents list --json 2>&1\")",
       "Bash(ssh -i *)",
       "mcp__supabase__execute_sql",
       "mcp__supabase__deploy_edge_function",
@@ -55,7 +55,11 @@
       "mcp__supabase__get_logs",
       "Bash(curl -s --connect-timeout *)",
       "Bash(npx web-push *)",
-      "Bash(xargs sed *)"
+      "Bash(xargs sed *)",
+      "Bash(npx trigger.dev@latest deploy)",
+      "Skill(gsd-discuss-phase)",
+      "Skill(gsd-discuss-phase:*)",
+      "Bash(npx trigger.dev@latest deploy --skip-typecheck)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Consult Delivery\\.openclaw",

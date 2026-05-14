@@ -2,7 +2,7 @@ import { useState } from 'react';
 import AgentAvatar from '../../components/AgentAvatar.jsx';
 import Icon from '../../components/Icon.jsx';
 
-const BRIDGE_URL = import.meta.env.VITE_BRIDGE_URL || 'http://45.39.210.183:3001';
+const BRIDGE_URL = import.meta.env.VITE_BRIDGE_URL || 'http://187.127.25.24:3001';
 const BRIDGE_SECRET = import.meta.env.VITE_BRIDGE_SECRET || '';
 
 const CHANNEL_OPTIONS = [

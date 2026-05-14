@@ -82,7 +82,7 @@ Sem: sistema de triggers, política de autonomia, drafts, auditoria.
 | Banco/Auth/Realtime/Storage | Supabase (PostgreSQL 15) | ✅ Em uso |
 | Edge Functions | Supabase Functions (Deno) | ✅ Em uso |
 | Bridge Server | Node.js/Express porta 3001 na VPS | ✅ Em uso |
-| Agentes IA | OpenClaw 2026.5.2 na VPS 45.39.210.183:18789 | ✅ Em uso |
+| Agentes IA | OpenClaw 2026.5.2 na VPS 187.127.25.24:18789 | ✅ Em uso |
 | LLM | Claude API (claude-sonnet-4-6) | ✅ Em uso |
 | WhatsApp | Evolution API | ✅ Em uso |
 | Automações | n8n | ✅ Em uso |

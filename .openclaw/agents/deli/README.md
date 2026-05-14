@@ -49,4 +49,4 @@ DELI escuta: whatsapp_messages, loja_metricas, client_timeline, agent_drafts
 Ver `DEPLOY.md` para instruções completas de SCP e registro no OpenClaw.
 
 Modelo: `anthropic/claude-sonnet-4-6`
-Porta OpenClaw: 18789 (VPS 45.39.210.183)
+Porta OpenClaw: 18789 (VPS 187.127.25.24)

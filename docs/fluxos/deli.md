@@ -9,7 +9,7 @@ propõe ações com semáforo. **Nunca responde clientes diretamente.**
 
 ```mermaid
 graph TB
-    subgraph VPS["VPS 45.39.210.183"]
+    subgraph VPS["VPS 187.127.25.24"]
         BS["Bridge Server\nNode.js :3001"]
         OC["OpenClaw :18789\nAgente DELI"]
         BS -->|startRealtime| RT["Módulo Realtime\nrealtime.js"]

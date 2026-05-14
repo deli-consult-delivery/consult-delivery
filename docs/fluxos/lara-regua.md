@@ -1,7 +1,7 @@
 # Fluxo — LARA Agente Régua de Disparo
 
 > Documento de arquitetura da LARA (especialista em CRM food service e régua de disparo).
-> Localização do agente: OpenClaw 2026.5.2 — VPS 45.39.210.183:18789
+> Localização do agente: OpenClaw 2026.5.2 — VPS 187.127.25.24:18789
 > Versão: 1.0 — 06/05/2026
 
 ---

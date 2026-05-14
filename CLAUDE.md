@@ -64,7 +64,7 @@ FORA DA STACK (não usar): n8n, EvoNexus, OpenClaw (aposentando Fase 4)
 4. INFRAESTRUTURA EXISTENTE
 ====================================================
 
-VPS: 45.39.210.183 - Ubuntu 24.04 LTS
+VPS: 187.127.25.24 - Ubuntu 24.04 LTS
 Docker v29.4 + Compose v5.1.2
 Node.js v22.22.2
 Bridge Server Node.js/Express porta 3001 (systemd persistente) — expandido Fase 0

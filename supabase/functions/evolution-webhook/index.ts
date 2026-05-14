@@ -12,7 +12,7 @@ const supabase = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
 );
 
-const BRIDGE_URL    = Deno.env.get('BRIDGE_SERVER_URL') || 'http://45.39.210.183:3001';
+const BRIDGE_URL    = Deno.env.get('BRIDGE_SERVER_URL') || 'http://187.127.25.24:3001';
 const BRIDGE_SECRET = Deno.env.get('BRIDGE_SECRET')    || '';
 
 const MENTION_REGEX = /@(analista|copiloto|co-piloto|deli|cora|lara|sofia|breno|max|vera)\b/i;

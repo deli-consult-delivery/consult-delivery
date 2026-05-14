@@ -6,40 +6,35 @@ const NAV_GROUPS = [
   {
     label: 'Início',
     items: [
-      { id: 'dashboard', icon: 'home', label: 'Dashboard' },
-      { id: 'deli',      icon: 'bot',  label: 'DELI', pulse: true },
+      { id: 'dashboard', icon: 'home',     label: 'Dashboard' },
+      { id: 'deli',      icon: 'bot',      label: 'DELI', pulse: true },
     ],
   },
   {
     label: 'Operação',
     items: [
-      { id: 'chat',   icon: 'chat',     label: 'Chat Ao Vivo'    },
-      { id: 'grupos', icon: 'whatsapp', label: 'Grupos WhatsApp' },
-    ],
-  },
-  {
-    label: 'Trabalho',
-    items: [
-      { id: 'tasks',           icon: 'check', label: 'Tarefas'         },
-      { id: 'tarefas-cliente', icon: 'paper', label: 'Tarefas Cliente' },
-      { id: 'crm',             icon: 'users', label: 'Clientes / CRM'  },
+      { id: 'chat',   icon: 'chat',  label: 'Chat Ao Vivo' },
+      { id: 'crm',    icon: 'users', label: 'Clientes'     },
+      { id: 'tasks',  icon: 'check', label: 'Tarefas'      },
     ],
   },
   {
     label: 'Agentes IA',
     items: [
-      { id: 'agents',        icon: 'bot',      label: 'Painel Agentes'  },
-      { id: 'analise-ifood', icon: 'chart',    label: 'Análise iFood'   },
-      { id: 'cora',          icon: 'dollar',   label: 'CORA · Cobrança', pulse: true },
+      { id: 'agents',        icon: 'bot',      label: 'Painel Agentes'    },
+      { id: 'analise-ifood', icon: 'chart',    label: 'Análise iFood'     },
+      { id: 'cora',          icon: 'dollar',   label: 'CORA · Cobrança',  pulse: true },
       { id: 'lara',          icon: 'sparkles', label: 'LARA · Marketing', pulse: true },
-      { id: 'max',           icon: 'bot',      label: 'MAX · Suporte',   pulse: true },
+      { id: 'max',           icon: 'bot',      label: 'MAX · Suporte',    pulse: true },
       { id: 'nova',          icon: 'sparkles', label: 'NOVA · Automação', pulse: true },
+      { id: 'breno',         icon: 'chat',     label: 'BRENO · Atend.',   pulse: true },
     ],
   },
   {
     label: 'Marketing',
     items: [
-      { id: 'campanhas', icon: 'megaphone', label: 'Campanhas' },
+      { id: 'campanhas',       icon: 'megaphone', label: 'Campanhas' },
+      { id: 'drafts-pendentes', icon: 'paper',    label: 'Disparos'  },
     ],
   },
   {
@@ -50,8 +45,9 @@ const NAV_GROUPS = [
   },
 ];
 
-const NAV_BOTTOM = [
-  { id: 'settings', icon: 'gear', label: 'Configurações' },
+const NAV_ADMIN = [
+  { id: 'grupos',   icon: 'whatsapp', label: 'Grupos WhatsApp' },
+  { id: 'settings', icon: 'gear',     label: 'Configurações'   },
 ];
 
 function SidebarItem({ item, route, setRoute, badge, expanded }) {
@@ -95,13 +91,8 @@ export default function Sidebar({ route, setRoute, counts, isOpen }) {
 
   return (
     <>
-      {/* Botão flutuante para reabrir quando sidebar está oculta */}
       {hidden && (
-        <button
-          onClick={show}
-          title="Abrir menu"
-          className="side-reveal-btn"
-        >
+        <button onClick={show} title="Abrir menu" className="side-reveal-btn">
           <Icon name="arrowright" size={12} />
         </button>
       )}
@@ -112,11 +103,8 @@ export default function Sidebar({ route, setRoute, counts, isOpen }) {
       >
         {/* Logo */}
         <div className="sidebar-logo">
-          <img
-            src="/assets/rocket-logo.png"
-            alt="Consult Delivery"
-            style={{ width: 28, height: 'auto', display: 'block', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))', flexShrink: 0 }}
-          />
+          <img src="/assets/rocket-logo.png" alt="Consult Delivery"
+            style={{ width: 28, height: 'auto', display: 'block', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))', flexShrink: 0 }} />
           {expanded && (
             <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap', overflow: 'hidden' }}>
               Consult Delivery
@@ -131,35 +119,20 @@ export default function Sidebar({ route, setRoute, counts, isOpen }) {
               {gi > 0 && <div className="side-divider" />}
               {expanded && <div className="side-section">{group.label}</div>}
               {group.items.map(item => (
-                <SidebarItem
-                  key={item.id}
-                  item={item}
-                  route={route}
-                  setRoute={setRoute}
-                  badge={counts[item.id]}
-                  expanded={expanded}
-                />
+                <SidebarItem key={item.id} item={item} route={route} setRoute={setRoute} badge={counts[item.id]} expanded={expanded} />
               ))}
             </div>
           ))}
         </nav>
 
-        {/* Rodapé */}
+        {/* Rodapé — Admin */}
         <div className="sidebar-footer">
           <div className="side-divider" />
-          {NAV_BOTTOM.map(item => (
-            <SidebarItem
-              key={item.id}
-              item={item}
-              route={route}
-              setRoute={setRoute}
-              expanded={expanded}
-            />
+          {expanded && <div className="side-section">Admin</div>}
+          {NAV_ADMIN.map(item => (
+            <SidebarItem key={item.id} item={item} route={route} setRoute={setRoute} expanded={expanded} />
           ))}
-          <div
-            className="side-avatar-footer"
-            title={expanded ? undefined : 'Wandson Silva — CEO'}
-          >
+          <div className="side-avatar-footer" title={expanded ? undefined : 'Wandson Silva — CEO'}>
             <UserAvatar name="WS" size={28} src="/assets/wandson.jpg" />
             {expanded && (
               <div style={{ overflow: 'hidden' }}>
@@ -168,18 +141,10 @@ export default function Sidebar({ route, setRoute, counts, isOpen }) {
               </div>
             )}
           </div>
-          <button
-            className="side-expand-btn"
-            onClick={() => setExpanded(v => !v)}
-            title={expanded ? 'Recolher menu' : 'Expandir menu'}
-          >
+          <button className="side-expand-btn" onClick={() => setExpanded(v => !v)} title={expanded ? 'Recolher menu' : 'Expandir menu'}>
             <Icon name={expanded ? 'chevleft' : 'arrowright'} size={14} />
           </button>
-          <button
-            className="side-hide-btn"
-            onClick={hide}
-            title="Fechar menu"
-          >
+          <button className="side-hide-btn" onClick={hide} title="Fechar menu">
             <Icon name="x" size={13} />
           </button>
         </div>

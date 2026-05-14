@@ -78,7 +78,7 @@ Estes princípios se aplicam a TODA tarefa, TODA fase, TODO agente. Violar qualq
 | WhatsApp | Evolution API | Já configurado, funciona |
 | Cobrança | Asaas | Já integrado |
 | Secrets | Infisical | Já em uso |
-| VPS | 45.39.210.183 (Ubuntu 24, 8GB/6vCPU) | Suficiente pra V1/V2 |
+| VPS | 187.127.25.24 (Ubuntu 24, 8GB/6vCPU) | Suficiente pra V1/V2 |
 | Domínio | app.consultdelivery.com.br | Mantém |
 
 ### 3.2 O que ENTRA

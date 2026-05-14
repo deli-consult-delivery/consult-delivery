@@ -60,7 +60,7 @@ Frontend (React)         Bridge Server (VPS:3001)    Trigger.dev Cloud      Supa
 ### Request
 
 ```http
-POST https://45.39.210.183:3001/agents/{slug}/run
+POST https://187.127.25.24:3001/agents/{slug}/run
 Authorization: Bearer {supabase_jwt}
 Content-Type: application/json
 
@@ -101,7 +101,7 @@ Usar apenas quando Realtime não estiver disponível.
 ### Request
 
 ```http
-GET https://45.39.210.183:3001/agents/{slug}/runs/{run_id}
+GET https://187.127.25.24:3001/agents/{slug}/runs/{run_id}
 Authorization: Bearer {supabase_jwt}
 ```
 
@@ -174,7 +174,7 @@ function useAgentRun(runId: string | null) {
 
 ```typescript
 // 1. Disparar (frontend)
-const resp = await fetch("https://45.39.210.183:3001/agents/hello-world/run", {
+const resp = await fetch("https://187.127.25.24:3001/agents/hello-world/run", {
   method: "POST",
   headers: {
     "Content-Type": "application/json",

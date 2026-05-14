@@ -39,7 +39,7 @@
   "uncommitted_files": ["bridge-server/index.js"],
   "next_action": "Verificar Trigger 3 no EvoNexus, testar polling completo, depois E2E pela tela LARA.",
   "infrastructure_state": {
-    "bridge_server": "active VPS 45.39.210.183:3001 (systemd)",
+    "bridge_server": "active VPS 187.127.25.24:3001 (systemd)",
     "openclaw": "active VPS porta 18789 (systemd)",
     "lara_agent": "ativa no OpenClaw, system_prompt.md + TOOLS.md atualizados",
     "evonexus": "https://ia.consultdelivery.com.br HTTPS Let's Encrypt, token nC5Re2w...",

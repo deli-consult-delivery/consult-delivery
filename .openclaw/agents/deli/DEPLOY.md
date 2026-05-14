@@ -3,7 +3,7 @@
 ⚠️ **Sempre confirmar com Wandson antes de executar qualquer SSH ou SCP na VPS.**
 
 Pré-requisitos:
-- ✅ OpenClaw 2026.5.2 rodando em 45.39.210.183:18789
+- ✅ OpenClaw 2026.5.2 rodando em 187.127.25.24:18789
 - ✅ Agente `analista-ifood` já registrado (referência de estrutura)
 - ✅ Esses arquivos prontos: AGENTS.md, SOUL.md, USER.md, system_prompt.md, README.md
 
@@ -12,7 +12,7 @@ Pré-requisitos:
 ## Passo 1 — Conectar na VPS
 
 ```powershell
-ssh -i "C:\Users\Consult Delivery\.ssh\vps_openclaw" root@45.39.210.183
+ssh -i "C:\Users\Consult Delivery\.ssh\vps_openclaw" root@187.127.25.24
 ```
 
 ## Passo 2 — Criar estrutura de diretórios na VPS
@@ -35,7 +35,7 @@ cd "C:\Users\Consult Delivery\consult-delivery-deli\.openclaw\agents\deli"
 # Transferir todos os arquivos do agente
 scp -i "C:\Users\Consult Delivery\.ssh\vps_openclaw" `
     AGENTS.md SOUL.md USER.md system_prompt.md README.md `
-    root@45.39.210.183:/root/.openclaw/agents/deli/workspace/
+    root@187.127.25.24:/root/.openclaw/agents/deli/workspace/
 ```
 
 ## Passo 4 — Verificar transferência (na VPS)

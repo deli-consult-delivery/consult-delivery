@@ -4,7 +4,7 @@ Guia passo a passo pra deployar o agente analista-ifood no OpenClaw rodando na V
 
 ## Pré-requisitos
 
-- ✅ OpenClaw já instalado e rodando na VPS (45.39.210.183)
+- ✅ OpenClaw já instalado e rodando na VPS (187.127.25.24)
 - ✅ Bot Telegram `@DeliConsultBot` conectado
 - ✅ Pairing aprovado pra usuários autorizados
 - ✅ Esses arquivos prontos no Windows: `AGENTS.md`, `SOUL.md`, `USER.md`, `system_prompt.md`, `base_regras.yaml`, `transcricoes/`
@@ -16,7 +16,7 @@ Vamos criar um **agente separado** chamado `analista-ifood` no OpenClaw, deixand
 ## Passo 1 — Conectar na VPS
 
 ```powershell
-ssh -i "C:\Users\Consult Delivery\.ssh\vps_openclaw" root@45.39.210.183
+ssh -i "C:\Users\Consult Delivery\.ssh\vps_openclaw" root@187.127.25.24
 ```
 
 ## Passo 2 — Criar workspace do agente na VPS
@@ -42,12 +42,12 @@ cd "C:\Users\Consult Delivery\consult-delivery\.openclaw\agents\analista-ifood"
 # Transferir todos os arquivos via SCP
 scp -i "C:\Users\Consult Delivery\.ssh\vps_openclaw" `
     AGENTS.md SOUL.md USER.md system_prompt.md base_regras.yaml `
-    root@45.39.210.183:/root/.openclaw/agents/analista-ifood/workspace/
+    root@187.127.25.24:/root/.openclaw/agents/analista-ifood/workspace/
 
 # Transferir pasta de transcrições
 scp -i "C:\Users\Consult Delivery\.ssh\vps_openclaw" -r `
     transcricoes `
-    root@45.39.210.183:/root/.openclaw/agents/analista-ifood/workspace/
+    root@187.127.25.24:/root/.openclaw/agents/analista-ifood/workspace/
 ```
 
 ## Passo 4 — Verificar transferência (na VPS)

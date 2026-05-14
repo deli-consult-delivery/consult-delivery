@@ -33,7 +33,7 @@ flowchart TD
         end
     end
 
-    subgraph "VPS 45.39.210.183"
+    subgraph "VPS 187.127.25.24"
         direction TB
         OC["OpenClaw 2026.5.2\nporta 18789"]
         BS["Bridge Server\nNode.js porta 3001"]

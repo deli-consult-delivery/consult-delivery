@@ -101,7 +101,7 @@ Frontend                  Bridge                    Trigger.dev            Supab
 
 ## Deploy na VPS
 
-O bridge-server roda via systemd na VPS `45.39.210.183`. Para atualizar:
+O bridge-server roda via systemd na VPS `187.127.25.24`. Para atualizar:
 
 ```bash
 cd /root/bridge-server

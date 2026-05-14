@@ -1,5 +1,20 @@
 # Wiki Log
 
+## [2026-05-14 22:00] session | Fase 6 — CORA · Cobrança Inteligente com dados reais
+Touched: none
+
+## [2026-05-14 20:00] session | Fase 5 — NOVA · Automação IA implementado
+Touched: none
+
+## [2026-05-14 18:00] session | Fase 4 — MAX · Suporte a Sistemas implementado
+Touched: none
+
+## [2026-05-14 14:00] session | módulo Leads no CRM + importação Datacrazy
+Touched: none
+
+## [2026-05-14 12:00] session | Fase 3 — LARA migração Trigger.dev + LaraScreen redesign
+Touched: none
+
 ## [2026-05-14 00:00] session | Fase 2 — DELI chat + analise-ifood Trigger.dev
 Touched: none
 

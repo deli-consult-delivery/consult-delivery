@@ -16,7 +16,7 @@ CONTEXTO:
 - Briefing oficial: `docs/handoff/lara/briefing.md` (passei junto)
 - Decisões já tomadas: LARA orquestradora + 3 sub-agentes Nexus, comunicação async, 
   loja piloto a definir, pesquisa começa manual.
-- Agente vive no OpenClaw (VPS 45.39.210.183:18789).
+- Agente vive no OpenClaw (VPS 187.127.25.24:18789).
 - Drafts vão pra agent_drafts, nada vai pro cliente sem aprovação humana.
 
 ANTES DE COMEÇAR — CHECAGENS OBRIGATÓRIAS:
