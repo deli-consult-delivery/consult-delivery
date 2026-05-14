@@ -1426,7 +1426,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               const name  = conv.push_name || conv.contact_name || conv.group_name || phone || 'Desconhecido';
               setConvs(p => {
                 if (p.find(c => c.whatsapp_chat_id === conv.whatsapp_chat_id)) return p;
-                return [{ id: conv.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: conv.push_photo_url || null, type: conv.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: conv.whatsapp_chat_id, preview, previewFrom: 'in', time, unread: 1, online: false, messages: [], status: conv.status }, ...p];
+                return [{ id: conv.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: conv.push_photo_url || null, type: conv.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: conv.whatsapp_chat_id, preview, previewFrom: 'in', time, _sortTs: msg.created_at || new Date().toISOString(), unread: 1, online: false, messages: [], status: conv.status }, ...p];
               });
             });
             return prev;
@@ -1437,7 +1437,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
              : conv.status === 'em_atendimento' ? { status: 'atendimento_aberto' }
              : {})
             : {};
-          const updated = { ...conv, preview, time, previewFrom: isInbound ? 'in' : 'out', unread: isActive ? 0 : (conv.unread || 0) + (isInbound ? 1 : 0), ...statusUpdate };
+          const updated = { ...conv, preview, time, _sortTs: msg.created_at || new Date().toISOString(), previewFrom: isInbound ? 'in' : 'out', unread: isActive ? 0 : (conv.unread || 0) + (isInbound ? 1 : 0), ...statusUpdate };
           // Only move to top for inbound — outbound sends should not reorder the list
           if (!isInbound) { const next = [...prev]; next[idx] = updated; return next; }
           return [updated, ...prev.filter(c => c.id !== convId)];
@@ -1572,6 +1572,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           photoUrl: conv?.push_photo_url || null,
           preview: 'Grupo WhatsApp',
           time: conv?.updated_at ? new Date(conv.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
+          _sortTs: conv?.updated_at || '',
           unread: 0, online: false, messages: [],
           status: conv?.status || 'finalizado',
         };
@@ -1663,7 +1664,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         const lm    = lastMsgMap[c.id];
         const preview = lm ? (lm.media_type === 'image' ? '🖼 Imagem' : lm.media_type === 'video' ? '🎬 Vídeo' : lm.media_type === 'document' ? '📄 Documento' : lm.media_type?.includes('audio') ? '🎵 Áudio' : lm.content || lm.body || '') : '';
         const previewFrom = lm?.direction === 'inbound' ? 'in' : 'out';
-        return { id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null, type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id, preview, previewFrom, time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '', unread: 0, online: false, messages: [], status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null, status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null };
+        return { id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null, type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id, preview, previewFrom, time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '', _sortTs: c.updated_at || '', unread: 0, online: false, messages: [], status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null, status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null };
       });
       setConvs(prev => {
         const existingIds = new Set(prev.map(c => c.id));
@@ -1730,7 +1731,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           const lm    = lastMsgMap[c.id];
           const preview = lm ? (lm.media_type === 'image' ? '🖼 Imagem' : lm.media_type === 'video' ? '🎬 Vídeo' : lm.media_type === 'document' ? '📄 Documento' : lm.media_type?.includes('audio') ? '🎵 Áudio' : lm.content || lm.body || '') : '';
           const previewFrom = lm?.direction === 'inbound' ? 'in' : 'out';
-          return { id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null, type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id, preview, previewFrom, time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '', unread: 0, online: false, messages: [], status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null, status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null };
+          return { id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null, type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id, preview, previewFrom, time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '', _sortTs: c.updated_at || '', unread: 0, online: false, messages: [], status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null, status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null };
         });
         setConvs(prev => [...prev.filter(c => !statuses.includes(c.status)), ...mapped]);
       } catch { /* silencioso */ }
@@ -1768,7 +1769,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           const lm    = lastMsgMap[c.id];
           const preview = lm ? (lm.media_type === 'image' ? '🖼 Imagem' : lm.media_type === 'video' ? '🎬 Vídeo' : lm.media_type === 'document' ? '📄 Documento' : lm.media_type?.includes('audio') ? '🎵 Áudio' : lm.content || lm.body || '') : '';
           const previewFrom = lm?.direction === 'inbound' ? 'in' : 'out';
-          mapped.push({ id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null, type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id, preview, previewFrom, time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '', unread: 0, online: false, messages: [], status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null, status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null });
+          mapped.push({ id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null, type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id, preview, previewFrom, time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '', _sortTs: c.updated_at || '', unread: 0, online: false, messages: [], status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null, status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null });
         });
       }
       setConvs(prev => [
@@ -2349,7 +2350,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     if (filters?.status     && c.status_v2     !== filters.status)     return false;
     if (filters?.tag && taggedCustomerIds !== null && !taggedCustomerIds.has(c.customer_id)) return false;
     return true;
-  });
+  }).sort((a, b) => (b._sortTs || '').localeCompare(a._sortTs || ''));
 
   // ── SUB-ABA (tabs que não são inbox) ──────────────────────
   if (headerTab !== 'inbox') {
