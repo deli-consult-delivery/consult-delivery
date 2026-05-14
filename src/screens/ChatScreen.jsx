@@ -1355,20 +1355,31 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     if (!phone) return;
     const cached = photoCacheRef.current[phone];
     if (cached === false) return;
-    function applyName(waName) {
-      if (!waName) return;
+    function applyProfile(waName, photoUrl) {
       setConvs(prev => prev.map(c => {
-        if (c.id !== activeId || c.waNameFetched) return c;
-        return { ...c, name: waName, avatar: waName.slice(0, 2).toUpperCase(), waNameFetched: true };
+        if (c.id !== activeId) return c;
+        const name = waName || c.name;
+        return {
+          ...c,
+          name,
+          avatar: name.slice(0, 2).toUpperCase(),
+          photoUrl: photoUrl || c.photoUrl || null,
+          waNameFetched: waName ? true : c.waNameFetched,
+        };
       }));
     }
-    if (cached !== undefined) { applyName(cached.waName); return; }
+    if (cached !== undefined) { applyProfile(cached.waName, cached.photoUrl); return; }
     fetchProfile(selectedInstance, phone).then(data => {
-      const photoUrl = data?.picture || data?.profilePictureUrl || null;
-      const waName   = data?.name || data?.pushName || null;
+      const photoUrl = data?.picture || data?.profilePictureUrl || data?.photo || null;
+      const waName   = data?.name || data?.pushName || data?.verifiedName || null;
       photoCacheRef.current[phone] = { photoUrl, waName };
-      applyName(waName);
-      if (waName) supabase.from('conversations').update({ push_name: waName }).eq('id', activeId).then(() => {}).catch(() => {});
+      applyProfile(waName, photoUrl);
+      const dbUpdate = {};
+      if (waName)   dbUpdate.push_name      = waName;
+      if (photoUrl) dbUpdate.push_photo_url = photoUrl;
+      if (Object.keys(dbUpdate).length) {
+        supabase.from('conversations').update(dbUpdate).eq('id', activeId).catch(() => {});
+      }
     }).catch(() => { photoCacheRef.current[phone] = false; });
   }, [activeId, selectedInstance]);
 
@@ -1622,7 +1633,10 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       if (contactsRaw.status === 'fulfilled') {
         normalizeArr(contactsRaw.value).forEach(c => {
           const jid = c.id || c.jid || c.remoteJid;
-          if (jid) { nameMap[jid] = c.name || c.pushName || null; photoMap[jid] = c.profilePictureUrl || c.imgUrl || null; }
+          if (jid) {
+            nameMap[jid]  = c.pushName || c.name || c.verifiedName || null;
+            photoMap[jid] = c.profilePictureUrl || c.imgUrl || c.picture || c.photo || null;
+          }
         });
       }
       if (!Object.keys(nameMap).length && !Object.keys(photoMap).length) return;
