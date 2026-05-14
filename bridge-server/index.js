@@ -125,87 +125,17 @@ async function supabaseInsert(table, row) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// 1. POST /invoke/lara — frontend → LARA (SSE)
+// 1. POST /invoke/lara — DEPRECIADO (OpenClaw aposentado — Fase 4)
 // ════════════════════════════════════════════════════════════════════════════
-app.post('/invoke/lara', requireJwt, async (req, res) => {
-  const { tenant_id, loja_id, message, session_id } = req.body;
-  if (!message) return res.status(400).json({ error: 'message required' });
-
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
-
-  const sse = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-
-  sse('stage', { stage: 'verifying', label: 'Conectando com a LARA...' });
-
-  try {
-    sse('stage', { stage: 'thinking', label: 'LARA processando...' });
-    const text = await runOpenclawAgent('lara', message, session_id);
-    sse('message', { role: 'assistant', text });
-    sse('done', { session_id: session_id || null });
-  } catch (err) {
-    console.error('[bridge/lara] erro:', err.message);
-    sse('error', { message: err.message });
-  } finally {
-    res.end();
-  }
+app.post('/invoke/lara', (_req, res) => {
+  res.status(410).json({ error: 'endpoint depreciado — use /agents/lara-*/run (Trigger.dev)' });
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// 2. POST /api/nexus-dispatch/:agent — LARA → sub-agente (async via openclaw)
+// 2. POST /api/nexus-dispatch/:agent — DEPRECIADO (OpenClaw aposentado — Fase 4)
 // ════════════════════════════════════════════════════════════════════════════
-app.post('/api/nexus-dispatch/:agent', requireInternalToken, async (req, res) => {
-  const { agent } = req.params;
-  if (!['pesquisa', 'regua', 'midia'].includes(agent))
-    return res.status(400).json({ error: 'agent inválido' });
-
-  const { request_id = crypto.randomUUID(), tenant_id, loja_id, payload } = req.body;
-  const prompt = payload?.prompt || JSON.stringify({ request_id, tenant_id, loja_id, ...payload });
-
-  // Registra job em memória
-  nexusJobs.set(request_id, { status: 'queued', agent, loja_id, queued_at: new Date().toISOString() });
-
-  // Dispara webhook EvoNexus para visibilidade no painel (fire-and-forget)
-  if (NEXUS_TICKET_TOKEN) {
-    fetch(`${NEXUS_TICKET_BASE}/api/triggers/webhook/${NEXUS_TRIGGER_IDS[agent]}`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${NEXUS_TICKET_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, request_id, loja_id }),
-    }).catch(e => console.warn('[nexus-dispatch] evonexus webhook:', e.message));
-  }
-
-  // Responde imediatamente (execução ocorre em background)
-  res.json({ ok: true, request_id, estimated_duration_seconds: 120, queued_at: new Date().toISOString() });
-
-  // Background: executa via openclaw LARA em sessão isolada
-  const sessionId = crypto.randomUUID();
-  const agentPrompts = {
-    pesquisa: `NEXUS-PESQUISA\nrequest_id: ${request_id}\nloja_id: ${loja_id || 'não informado'}\n\n${prompt}\n\nExecute a pesquisa e retorne um JSON estruturado com o resultado.`,
-    regua:    `NEXUS-RÉGUA\nrequest_id: ${request_id}\nloja_id: ${loja_id || 'não informado'}\n\n${prompt}\n\nCrie a régua de disparo e retorne um JSON estruturado.`,
-    midia:    `NEXUS-MÍDIA\nrequest_id: ${request_id}\nloja_id: ${loja_id || 'não informado'}\n\n${prompt}\n\nCrie sugestões de mídia e retorne um JSON estruturado.`,
-  };
-
-  nexusJobs.get(request_id).status = 'running';
-  console.log(`[nexus-dispatch] iniciando ${agent} session=${sessionId} request_id=${request_id}`);
-
-  runOpenclawAgent('lara', agentPrompts[agent], sessionId)
-    .then(text => {
-      nexusJobs.set(request_id, { status: 'done', agent, loja_id, result: text, done_at: new Date().toISOString() });
-      console.log(`[nexus-dispatch] ${agent} concluído request_id=${request_id}`);
-      if (SUPABASE_SERVICE_KEY) {
-        fetch(`${SUPABASE_URL}/rest/v1/nexus_requests?request_id=eq.${request_id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` },
-          body: JSON.stringify({ status: 'done', response_payload: { text }, responded_at: new Date().toISOString() }),
-        }).catch(() => {});
-      }
-    })
-    .catch(err => {
-      nexusJobs.set(request_id, { status: 'error', agent, loja_id, error: err.message, done_at: new Date().toISOString() });
-      console.error(`[nexus-dispatch] ${agent} erro request_id=${request_id}:`, err.message);
-    });
+app.post('/api/nexus-dispatch/:agent', (_req, res) => {
+  res.status(410).json({ error: 'endpoint depreciado — OpenClaw aposentado na Fase 4' });
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -278,19 +208,63 @@ app.post('/api/nexus-callback', (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// ANALISE (analista-ifood — mantido intacto)
+// ANALISE — agora usa Trigger.dev (OpenClaw aposentado — Fase 4)
 // ════════════════════════════════════════════════════════════════════════════
 app.post('/analise', async (req, res) => {
   const incomingSecret = req.headers['x-bridge-secret'];
   if (BRIDGE_SECRET && incomingSecret !== BRIDGE_SECRET)
     return res.status(401).json({ error: 'unauthorized' });
 
-  const { job_id, cliente_nome, drive_link, periodo, correcoes } = req.body;
+  const { job_id, tenant_id, cliente_nome, drive_link, periodo, correcoes } = req.body;
   if (!job_id || !drive_link) return res.status(400).json({ error: 'job_id e drive_link são obrigatórios' });
 
-  res.status(202).json({ ok: true, job_id });
-  processAnalise({ job_id, cliente_nome, drive_link, periodo, correcoes: correcoes || [] })
-    .catch(err => console.error(`[bridge] erro job ${job_id}:`, err.message));
+  // Origem WhatsApp (job_id não-UUID ou drive_link vazio): não há row real em analises
+  if (!tenant_id || !drive_link.includes('drive.google.com')) {
+    console.log(`[bridge/analise] origem WhatsApp sem drive_link real, ignorado (job_id=${job_id})`);
+    return res.status(202).json({ ok: true, job_id });
+  }
+
+  if (!TRIGGER_SECRET_KEY)
+    return res.status(503).json({ error: 'TRIGGER_SECRET_KEY não configurado no servidor' });
+
+  try {
+    // 1. Buscar analise_id (UUID PK) pelo job_id
+    const r1 = await fetch(
+      `${SUPABASE_URL}/rest/v1/analises?job_id=eq.${job_id}&select=id&limit=1`,
+      { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }
+    );
+    const rows = await r1.json();
+    if (!rows?.length) return res.status(404).json({ error: `analise job_id=${job_id} não encontrada` });
+    const analise_id = rows[0].id;
+
+    // 2. Disparar task Trigger.dev analise-ifood-run
+    const tr = await fetch(`${TRIGGER_API_URL}/api/v1/tasks/analise-ifood-run/trigger`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TRIGGER_SECRET_KEY}` },
+      body: JSON.stringify({
+        payload: {
+          tenant_id,
+          analise_id,
+          cliente_nome: cliente_nome || '',
+          drive_link,
+          periodo: periodo || 'semanal',
+          correcoes: correcoes || [],
+        },
+      }),
+    });
+
+    if (!tr.ok) {
+      const err = await tr.json().catch(() => ({ message: tr.statusText }));
+      throw new Error(err.message || `Trigger.dev ${tr.status}`);
+    }
+
+    const trData = await tr.json();
+    console.log(`[bridge/analise] Trigger.dev analise-ifood-run job_id=${job_id} run_id=${trData.id}`);
+    res.status(202).json({ ok: true, job_id, trigger_run_id: trData.id });
+  } catch (err) {
+    console.error('[bridge/analise]', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── buscarDadosLoja ───────────────────────────────────────────────────────────
