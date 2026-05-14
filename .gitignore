@@ -33,3 +33,8 @@ backup_*.sql
 # === OpenClaw config local ===
 # Configs com tokens
 .openclaw/openclaw.json
+
+# Pastas pessoais e extrações (não pertencem ao repo)
+WikiBrain/
+Plataforma Consult Delivery-handoff*/
+_handoff_extracted/

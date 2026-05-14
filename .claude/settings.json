@@ -59,7 +59,9 @@
       "Bash(npx trigger.dev@latest deploy)",
       "Skill(gsd-discuss-phase)",
       "Skill(gsd-discuss-phase:*)",
-      "Bash(npx trigger.dev@latest deploy --skip-typecheck)"
+      "Bash(npx trigger.dev@latest deploy --skip-typecheck)",
+      "Bash(node -e \"const d=require\\('./package.json'\\); console.log\\(JSON.stringify\\(d.scripts, null, 2\\)\\)\")",
+      "Bash(node -e ' *)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Consult Delivery\\.openclaw",
