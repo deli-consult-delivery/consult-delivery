@@ -272,7 +272,8 @@ function RunCard({ run }) {
 
 export default function LaraScreen({ tenantDbId, userId }) {
   const [tab, setTab]               = useState('pesquisar');
-  const [laraAgentId, setLaraAgentId] = useState(null);
+  // agents.id for LARA is the literal string 'lara' (text PK)
+  const laraAgentId                 = 'lara';
   const [lojas, setLojas]           = useState([]);
 
   // pesquisar form
@@ -307,11 +308,9 @@ export default function LaraScreen({ tenantDbId, userId }) {
   const pendingRunIdRef = useRef(null);
   const pendingTabRef   = useRef(null);
 
-  // load agent id + lojas
+  // load lojas
   useEffect(() => {
     if (!tenantDbId) return;
-    supabase.from('agents').select('id').eq('slug', 'lara').single()
-      .then(({ data }) => setLaraAgentId(data?.id));
     supabase.from('lojas').select('id, nome').eq('tenant_id', tenantDbId).order('nome')
       .then(({ data }) => { if (data?.length) setLojas(data); });
   }, [tenantDbId]);
