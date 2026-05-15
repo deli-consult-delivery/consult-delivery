@@ -3049,8 +3049,23 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                   if (!el) return;
                   const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
                   setShowScrollBtn(dist > 120);
+                  if (el.scrollTop < 80 && msgHasMore[activeId] && !loadingOlderRef.current) {
+                    loadOlderMsgs(activeId);
+                  }
                 }}
               >
+                {loadingOlderMsgs && (
+                  <div style={{ textAlign: 'center', padding: '8px 0 4px', color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>
+                    Carregando mensagens anteriores…
+                  </div>
+                )}
+                {!loadingOlderMsgs && msgHasMore[activeId] && activeMsgs.length > 0 && (
+                  <div style={{ textAlign: 'center', padding: '6px 0 2px' }}>
+                    <button onClick={() => loadOlderMsgs(activeId)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.35)', fontSize: 12, cursor: 'pointer' }}>
+                      ↑ Ver mensagens anteriores
+                    </button>
+                  </div>
+                )}
                 {activeMsgs.length === 0 && (
                   <div style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.35)', fontSize: 13 }}>
                     Nenhuma mensagem ainda
