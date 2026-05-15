@@ -3,6 +3,7 @@ import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
+import { notify } from "../_shared/notify";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -249,6 +250,19 @@ ${anomaliasTexto}`;
       } catch {
         logger.warn("deli-revisao-matinal: deli_agenda não disponível, ignorando");
       }
+
+      await notify({
+        tenantId:        input.tenant_id,
+        kind:            "deli_alert",
+        agent:           "deli",
+        title:           "DELI — Revisão matinal disponível",
+        body:            alertas.length > 0
+          ? `${alertas.length} alerta(s) para hoje`
+          : "Dia tranquilo por enquanto 🟢",
+        link:            "/deli",
+        recipientUserId: null,
+        metadata:        { run_id: ctx.run.id },
+      });
 
       const output = OutputSchema.parse({
         ok:              true,
