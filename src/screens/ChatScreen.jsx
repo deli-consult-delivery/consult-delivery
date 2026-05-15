@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import Icon from '../components/Icon.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
 import CustomSelect from '../components/CustomSelect.jsx';
@@ -1065,10 +1066,53 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onSta
       return <AudioPlayer src={url} isOut={isOut} />;
     }
     if (m.mediaType === 'document') {
+      // Detecta se o documento é na verdade uma imagem (enviada como arquivo)
+      const isImageDoc = url?.startsWith('data:image/');
+      const handleDocClick = () => {
+        if (!url) return;
+        if (url.startsWith('data:')) {
+          // Browsers bloqueiam data: URLs com target=_blank — converte para Blob URL
+          const [header, b64] = url.split(',');
+          const mime = header.match(/:(.*?);/)?.[1] || 'application/octet-stream';
+          const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+          const blob = new Blob([bytes], { type: mime });
+          const blobUrl = URL.createObjectURL(blob);
+          if (mime.startsWith('image/') || mime === 'application/pdf') {
+            window.open(blobUrl, '_blank');
+          } else {
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = m.text || 'arquivo';
+            a.click();
+          }
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+        } else {
+          window.open(url, '_blank');
+        }
+      };
+      if (isImageDoc) {
+        return (
+          <div style={{ position: 'relative', display: 'inline-block', marginBottom: m.text ? 6 : 0 }} className="lc-media-wrap">
+            <img src={url} alt={m.text || 'imagem'} style={{ maxWidth: 260, maxHeight: 200, borderRadius: 8, cursor: 'pointer', display: 'block' }} onClick={() => onViewImage?.(url)} />
+            <a onClick={e => { e.stopPropagation(); handleDocClick(); }} title="Baixar" className="lc-media-dl" style={{ cursor: 'pointer' }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+            </a>
+          </div>
+        );
+      }
       return (
-        <a href={url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'white', textDecoration: 'none', padding: '8px 10px', background: 'rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 12 }}>
-          <span>📄</span> {m.text || 'Documento'}
-        </a>
+        <div onClick={handleDocClick} style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'white', cursor: url ? 'pointer' : 'default', padding: '8px 10px', background: 'rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 12 }}>
+          <span>📄</span>
+          <span style={{ flex: 1 }}>{m.text || 'Documento'}</span>
+          {!url && <span style={{ fontSize: 10, opacity: 0.45 }}>carregando…</span>}
+          {url && (
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.6, flexShrink: 0 }}>
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+          )}
+        </div>
       );
     }
     return null;
@@ -1257,6 +1301,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [chanShowEmoji, setChanShowEmoji]    = useState(false);
   const chanTextareaRef                      = useRef(null);
   const chanFileInputRef                     = useRef(null);
+  const chanEmojiButtonRef                   = useRef(null);
 
   // ── Respostas rápidas ─────────────────────────────────────
   const [quickReplies, setQuickReplies]      = useState([]);
@@ -2152,7 +2197,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   async function sendChanAudio(blob) {
     if (!blob || !active?.chanId) return;
     const path = `channels/${active.chanId}/${Date.now()}.ogg`;
-    const { data: up } = await supabase.storage.from('public').upload(path, blob, { upsert: true, contentType: 'audio/ogg' });
+    const { data: up, error: upErr } = await supabase.storage.from('public').upload(path, blob, { upsert: true, contentType: 'audio/ogg' });
+    if (upErr) { console.error('sendChanAudio upload:', upErr); return; }
     if (!up?.path) return;
     const { data: { publicUrl } } = supabase.storage.from('public').getPublicUrl(up.path);
     const { data } = await supabase.from('channel_messages').insert({
@@ -3221,12 +3267,27 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                     {/* Toolbar inferior estilo ClickUp */}
                     <div style={{ display: 'flex', alignItems: 'center', padding: '4px 8px 8px', gap: 2, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                       {/* Emoji */}
-                      <div style={{ position: 'relative' }}>
-                        <button className="lc-comp-icon" title="Emoji" onClick={() => setChanShowEmoji(v => !v)} style={{ padding: '5px 7px' }}>
+                      <>
+                        <button ref={chanEmojiButtonRef} className="lc-comp-icon" title="Emoji" onClick={() => setChanShowEmoji(v => !v)} style={{ padding: '5px 7px' }}>
                           <Icon name="smile" size={15} />
                         </button>
-                        {chanShowEmoji && <EmojiPicker onSelect={em => { insertChanEmoji(em); setChanShowEmoji(false); }} onClose={() => setChanShowEmoji(false)} />}
-                      </div>
+                        {chanShowEmoji && ReactDOM.createPortal(
+                          (() => {
+                            const rect = chanEmojiButtonRef.current?.getBoundingClientRect();
+                            const bottom = rect ? window.innerHeight - rect.top + 8 : 80;
+                            const right  = rect ? window.innerWidth  - rect.right  : 16;
+                            return (
+                              <div style={{ position: 'fixed', bottom, right, zIndex: 9999 }}>
+                                <EmojiPicker
+                                  onSelect={em => { insertChanEmoji(em); setChanShowEmoji(false); }}
+                                  onClose={() => setChanShowEmoji(false)}
+                                />
+                              </div>
+                            );
+                          })(),
+                          document.body
+                        )}
+                      </>
                       {/* Arquivo */}
                       <button className="lc-comp-icon" title="Anexar arquivo" onClick={() => chanFileInputRef.current?.click()} style={{ padding: '5px 7px' }}>
                         <Icon name="paperclip" size={15} />
