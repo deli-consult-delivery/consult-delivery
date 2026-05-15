@@ -525,6 +525,44 @@ app.post('/agents/:slug/run', requireJwt, requireAgentAccess, async (req, res) =
   }
 });
 
+// POST /internal/agents/:slug/run  (chamado por Edge Functions — sem JWT de usuário)
+// Autentica via x-bridge-secret. Dispara task Trigger.dev diretamente.
+app.post('/internal/agents/:slug/run', async (req, res) => {
+  const incomingSecret = req.headers['x-bridge-secret'];
+  if (BRIDGE_SECRET && incomingSecret !== BRIDGE_SECRET)
+    return res.status(401).json({ error: 'unauthorized' });
+
+  const { slug }  = req.params;
+  const payload   = req.body;
+
+  if (!TRIGGER_SECRET_KEY)
+    return res.status(503).json({ error: 'TRIGGER_SECRET_KEY não configurado no servidor' });
+
+  try {
+    const r = await fetch(`${TRIGGER_API_URL}/api/v1/tasks/${encodeURIComponent(slug)}/trigger`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization:  `Bearer ${TRIGGER_SECRET_KEY}`,
+      },
+      body: JSON.stringify({ payload }),
+    });
+
+    if (!r.ok) {
+      const detail = await r.text();
+      console.error(`[bridge/internal/agents/run] trigger falhou ${r.status}:`, detail);
+      return res.status(r.status).json({ error: 'falha ao disparar task', detail });
+    }
+
+    const data = await r.json();
+    console.log(`[bridge/internal/agents/run] ${slug} run_id=${data.id}`);
+    return res.json({ run_id: data.id, status: data.status });
+  } catch (err) {
+    console.error('[bridge/internal/agents/run]', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /agents/:slug/runs/:id
 // Consulta status e output de um run. Pode ser usado como fallback ao Realtime.
 app.get('/agents/:slug/runs/:id', requireJwt, async (req, res) => {

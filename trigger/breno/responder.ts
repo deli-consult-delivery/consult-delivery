@@ -4,11 +4,10 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 
-const anthropic = new Anthropic();
-
 const InputSchema = z.object({
   tenant_id: z.string().uuid(),
   conversation_id: z.string().uuid(),
+  message_id: z.string().uuid(),
   message: z.string().min(1),
   sender_name: z.string().optional(),
   context_messages: z.array(z.object({
@@ -25,17 +24,62 @@ const OutputSchema = z.object({
   draft_id: z.string().uuid().optional(),
   precisa_humano: z.boolean(),
   motivo_humano: z.string().optional(),
+  action_taken: z.enum(["sent", "suggested", "skipped"]),
+  mode: z.string(),
 });
 
 export const brenoResponder = task({
   id: "breno-responder",
-  retry: { maxAttempts: 2 },
+  retry: { maxAttempts: 3, minTimeoutInMs: 1000 },
   run: async (payload: unknown, { ctx }) => {
     const start = Date.now();
     const input = InputSchema.parse(payload);
+    const anthropic = new Anthropic();
     const sb = getSupabase();
 
-    // Busca contexto da loja do cliente
+    const { data: configRow } = await sb
+      .from("tenant_agent_config")
+      .select("mode")
+      .eq("tenant_id", input.tenant_id)
+      .eq("agent", "breno")
+      .maybeSingle();
+
+    const mode = configRow?.mode ?? "humano";
+
+    if (mode === "humano") {
+      await logAgentRun({
+        runId: ctx.run.id,
+        agentSlug: "breno-responder",
+        input: { conversation_id: input.conversation_id, message_id: input.message_id },
+        output: { action_taken: "skipped", mode },
+        tenantId: input.tenant_id,
+        triggeredBy: input.triggered_by,
+        durationMs: Date.now() - start,
+        status: "success",
+      });
+
+      await sb.from("breno_interactions").insert({
+        tenant_id: input.tenant_id,
+        conversation_id: input.conversation_id,
+        inbound_message_id: input.message_id,
+        outbound_message_id: null,
+        mode,
+        breno_response: "",
+        action_taken: "skipped",
+        agent_run_id: null,
+        requires_review: false,
+      });
+
+      return OutputSchema.parse({
+        ok: true,
+        resposta: "",
+        tom: "",
+        precisa_humano: false,
+        action_taken: "skipped",
+        mode,
+      });
+    }
+
     const { data: conv } = await sb
       .from("conversations")
       .select("id, contact_name, phone_number")
@@ -90,56 +134,68 @@ Regras:
       parsed = JSON.parse(m ? m[0] : rawText);
     } catch {
       parsed = {
-        resposta: "Olá! Obrigado pelo contato. Nossa equipe está verificando e responde em instantes! 😊",
+        resposta: "Olá! Obrigado pelo contato. Nossa equipe está verificando e responde em instantes!",
         tom: "amigavel",
         precisa_humano: true,
         motivo_humano: "Erro no processamento automático",
       };
     }
 
-    // Cria draft para aprovação
-    const { data: draft } = await sb.from("agent_drafts").insert({
-      tenant_id: input.tenant_id,
-      agent_id: "breno",
-      draft_type: "resposta_cliente",
-      content: parsed.resposta,
-      metadata: {
-        conversation_id: input.conversation_id,
-        sender_name: conv?.contact_name || input.sender_name,
-        tom: parsed.tom,
-        precisa_humano: parsed.precisa_humano,
-        motivo_humano: parsed.motivo_humano,
-        mensagem_original: input.message,
-      },
-      status: parsed.precisa_humano ? "flagged" : "pending",
-    }).select("id").single();
+    const action_taken: "sent" | "suggested" = mode === "ia" ? "sent" : "suggested";
 
-    await sb.from("agent_runs").insert({
+    let draft_id: string | undefined;
+    if (mode === "hibrido") {
+      const { data: draft } = await sb.from("agent_drafts").insert({
+        tenant_id: input.tenant_id,
+        agent_name: "breno",
+        channel: "whatsapp",
+        subject: `Resposta sugerida para conversa ${input.conversation_id}`,
+        content: parsed.resposta,
+        autonomy_level: "hibrido",
+        status: "pending",
+      }).select("id").single();
+      draft_id = draft?.id;
+    }
+
+    // mode === "ia": envio via Evolution fica para Tarefa 6 — apenas loga por ora
+    if (mode === "ia") {
+      console.info("[breno-responder] mode=ia: envio via Evolution pendente (Tarefa 6)", {
+        conversation_id: input.conversation_id,
+      });
+    }
+
+    await sb.from("breno_interactions").insert({
       tenant_id: input.tenant_id,
-      agent_id: "breno",
-      trigger_dev_run_id: ctx.run.id,
-      status: "completed",
-      input: { conversation_id: input.conversation_id, message: input.message.slice(0, 100) },
-      output: { ok: true, resposta: parsed.resposta, precisa_humano: parsed.precisa_humano },
+      conversation_id: input.conversation_id,
+      inbound_message_id: input.message_id,
+      outbound_message_id: null,
+      mode,
+      breno_response: parsed.resposta,
+      action_taken,
+      agent_run_id: null,
+      requires_review: mode === "hibrido",
     });
 
     await logAgentRun({
       runId: ctx.run.id,
       agentSlug: "breno-responder",
-      input: { conversation_id: input.conversation_id },
-      output: { ok: true },
+      input: { conversation_id: input.conversation_id, message_id: input.message_id },
+      output: { ok: true, action_taken, mode },
       tenantId: input.tenant_id,
       triggeredBy: input.triggered_by,
       durationMs: Date.now() - start,
+      status: "success",
     });
 
     return OutputSchema.parse({
       ok: true,
       resposta: parsed.resposta,
       tom: parsed.tom,
-      draft_id: draft?.id,
+      draft_id,
       precisa_humano: parsed.precisa_humano,
       motivo_humano: parsed.motivo_humano ?? undefined,
+      action_taken,
+      mode,
     });
   },
 });
