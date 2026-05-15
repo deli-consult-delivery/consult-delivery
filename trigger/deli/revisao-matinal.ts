@@ -211,7 +211,7 @@ ${anomaliasTexto}`;
       const linhas = resumo.split("\n").map((l) => l.trim()).filter(Boolean);
 
       const alertas = linhas.filter((l) =>
-        /⚠️|🔴|ALERTA/i.test(l)
+        /⚠️|🔴/.test(l) && !l.startsWith("#")
       );
 
       const acoesSugeridas = linhas.filter((l) =>
