@@ -236,7 +236,7 @@ export default function App() {
         {route === 'cora'         && <CoraScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'analise-ifood'   && <AnaliseiFoodScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'tarefas-cliente' && <TarefasClienteScreen tenant={tenant} tenantDbId={tenantDbId} />}
-        {route === 'crm'             && <CRMScreen tenant={tenant} tenantDbId={tenantDbId} />}
+        {route === 'crm'             && <CRMScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={nav => setRoute(nav)} />}
         {route === 'reports'         && <ReportsScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'agents'           && <AgentsPage tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'campanhas' && <CampanhasScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}

@@ -37,7 +37,7 @@ const CrmScreen = ({ tenant, tenantDbId, onNavigate }) => {
       {mode === 'clientes' ? (
         <ClientesView tenant={tenant} tenantDbId={tenantDbId} onNavigate={onNavigate} onImportClick={() => { setMode('leads'); setShowImportModal(true); }}/>
       ) : (
-        <LeadsView tenantDbId={tenantDbId} onImportClick={() => setShowImportModal(true)} refreshKey={leadsRefreshKey}/>
+        <LeadsView tenantDbId={tenantDbId} onImportClick={() => setShowImportModal(true)} refreshKey={leadsRefreshKey} onNavigate={onNavigate}/>
       )}
       {showImportModal && (
         <ImportCSVModal
@@ -197,14 +197,19 @@ const ClientesView = ({ tenant, tenantDbId, onNavigate, onImportClick }) => {
 };
 
 /* ─── LEADS VIEW ─── */
-const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0 }) => {
+const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0, onNavigate }) => {
   const [leads, setLeads] = uSCrm([]);
   const [loading, setLoading] = uSCrm(true);
   const [search, setSearch] = uSCrm('');
   const [selected, setSelected] = uSCrm(new Set());
   const [showMenu, setShowMenu] = uSCrm(false);
   const [showModal, setShowModal] = uSCrm(false);
+  const [rowMenuId, setRowMenuId] = uSCrm(null);
+  const [editLead, setEditLead] = uSCrm(null);
+  const [deleteConfirm, setDeleteConfirm] = uSCrm(null);
+  const [deleting, setDeleting] = uSCrm(false);
   const menuRef = useRef(null);
+  const rowMenuRef = useRef(null);
 
   useEffect(() => {
     if (!tenantDbId) return;
@@ -214,10 +219,19 @@ const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0 }) => {
   useEffect(() => {
     const handler = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) setShowMenu(false);
+      if (rowMenuRef.current && !rowMenuRef.current.contains(e.target)) setRowMenuId(null);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  async function handleDelete(lead) {
+    setDeleting(true);
+    await supabase.from('customers').delete().eq('id', lead.id);
+    setLeads(prev => prev.filter(l => l.id !== lead.id));
+    setDeleteConfirm(null);
+    setDeleting(false);
+  }
 
   async function fetchLeads() {
     setLoading(true);
@@ -458,8 +472,12 @@ const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0 }) => {
                       <div>Total: <strong style={{ color:'var(--g-700)' }}>R$ 0</strong></div>
                       <div style={{ fontSize: 11, marginTop: 2 }}>0 Compras · 0d Ciclo</div>
                     </td>
-                    <td style={{ padding:'12px 8px', textAlign:'center' }}>
-                      <button style={{ background:'none', border:'none', color:'var(--g-500)', cursor:'pointer', padding: 4, borderRadius: 4 }}
+                    <td style={{ padding:'12px 8px', textAlign:'center', position:'relative' }}
+                      ref={rowMenuId === lead.id ? rowMenuRef : null}
+                    >
+                      <button
+                        onClick={e => { e.stopPropagation(); setRowMenuId(rowMenuId === lead.id ? null : lead.id); }}
+                        style={{ background:'none', border:'none', color:'var(--g-500)', cursor:'pointer', padding: 4, borderRadius: 4 }}
                         onMouseEnter={e => e.currentTarget.style.color = 'white'}
                         onMouseLeave={e => e.currentTarget.style.color = 'var(--g-500)'}
                       >
@@ -467,6 +485,34 @@ const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0 }) => {
                           <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
                         </svg>
                       </button>
+                      {rowMenuId === lead.id && (
+                        <div style={{
+                          position:'absolute', top:'100%', right: 8, background:'#1E1E1E',
+                          border:'1px solid #2A2A2A', borderRadius: 10, padding: 6,
+                          minWidth: 180, zIndex: 100, boxShadow:'0 8px 24px rgba(0,0,0,.6)',
+                        }}>
+                          {[
+                            { icon: '✏️', label: 'Editar', action: () => { setEditLead(lead); setRowMenuId(null); } },
+                            { icon: '💬', label: 'Abrir Chat', action: () => { setRowMenuId(null); onNavigate?.('chat'); } },
+                            { icon: '🗑️', label: 'Excluir', danger: true, action: () => { setDeleteConfirm(lead); setRowMenuId(null); } },
+                          ].map(item => (
+                            <button
+                              key={item.label}
+                              onClick={item.action}
+                              style={{
+                                display:'flex', alignItems:'center', gap: 8, width:'100%',
+                                padding:'8px 12px', background:'none', border:'none',
+                                color: item.danger ? '#EF4444' : 'rgba(255,255,255,0.85)',
+                                fontSize: 13, cursor:'pointer', borderRadius: 6, textAlign:'left',
+                              }}
+                              onMouseEnter={e => e.currentTarget.style.background = item.danger ? 'rgba(239,68,68,0.1)' : '#2A2A2A'}
+                              onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                            >
+                              <span style={{ fontSize: 14 }}>{item.icon}</span> {item.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
@@ -503,6 +549,58 @@ const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0 }) => {
 
       {/* New Lead Modal */}
       {showModal && <NewLeadModal onClose={() => setShowModal(false)} onSave={handleNewLead}/>}
+
+      {/* Edit Lead Modal */}
+      {editLead && (
+        <EditLeadModal
+          lead={editLead}
+          onClose={() => setEditLead(null)}
+          onSave={async updated => {
+            const { error } = await supabase.from('customers').update({
+              name:  updated.name,
+              phone: updated.phone || null,
+              email: updated.email || null,
+              tags:  updated.tags ? updated.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+              metadata: { ...editLead.metadata, company: updated.company || undefined },
+            }).eq('id', editLead.id);
+            if (!error) {
+              setLeads(prev => prev.map(l => l.id === editLead.id
+                ? { ...l, name: updated.name, phone: updated.phone, email: updated.email,
+                    tags: updated.tags ? updated.tags.split(',').map(t => t.trim()).filter(Boolean) : l.tags,
+                    metadata: { ...l.metadata, company: updated.company || undefined },
+                    avatar: updated.name.slice(0,2).toUpperCase() }
+                : l));
+              setEditLead(null);
+            }
+          }}
+        />
+      )}
+
+      {/* Delete Confirm Modal */}
+      {deleteConfirm && (
+        <div style={{ position:'fixed', inset: 0, background:'rgba(0,0,0,0.6)', zIndex: 1000, display:'flex', alignItems:'center', justifyContent:'center' }}
+          onClick={e => e.target === e.currentTarget && setDeleteConfirm(null)}>
+          <div style={{ background:'#1A1A1A', border:'1px solid #2A2A2A', borderRadius: 14, padding: 28, width: 380, boxShadow:'0 24px 48px rgba(0,0,0,.6)' }}>
+            <div style={{ fontSize: 32, textAlign:'center', marginBottom: 14 }}>🗑️</div>
+            <h3 style={{ margin:'0 0 8px', fontSize: 16, fontWeight: 700, color:'white', textAlign:'center' }}>Excluir lead</h3>
+            <p style={{ margin:'0 0 24px', fontSize: 13, color:'var(--g-500)', textAlign:'center', lineHeight: 1.5 }}>
+              Tem certeza que deseja excluir <strong style={{ color:'white' }}>{deleteConfirm.name}</strong>?
+              <br/>Esta ação não pode ser desfeita.
+            </p>
+            <div style={{ display:'flex', gap: 8 }}>
+              <button className="btn-secondary" style={{ flex: 1, justifyContent:'center' }} onClick={() => setDeleteConfirm(null)}>Cancelar</button>
+              <button
+                className="btn-primary"
+                style={{ flex: 1, justifyContent:'center', background: deleting ? 'rgba(239,68,68,0.4)' : '#EF4444' }}
+                disabled={deleting}
+                onClick={() => handleDelete(deleteConfirm)}
+              >
+                {deleting ? 'Excluindo…' : 'Excluir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };
@@ -794,6 +892,70 @@ const NotesTab = ({ customer }) => (
     </div>
   </div>
 );
+
+/* ─── EDIT LEAD MODAL ─── */
+const EditLeadModal = ({ lead, onClose, onSave }) => {
+  const [form, setForm] = uSCrm({
+    name:    lead.name || '',
+    phone:   lead.phone || '',
+    email:   lead.email || '',
+    company: lead.metadata?.company || '',
+    tags:    (lead.tags || []).join(', '),
+  });
+  const [saving, setSaving] = uSCrm(false);
+
+  function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!form.name.trim()) return;
+    setSaving(true);
+    await onSave(form);
+    setSaving(false);
+  }
+
+  return (
+    <div style={{ position:'fixed', inset: 0, background:'rgba(0,0,0,0.6)', zIndex: 1000, display:'flex', alignItems:'center', justifyContent:'center' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background:'#1A1A1A', border:'1px solid #2A2A2A', borderRadius: 14, padding: 28, width: 460, boxShadow:'0 24px 48px rgba(0,0,0,.6)' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 20 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color:'white' }}>Editar Lead</h3>
+          <button onClick={onClose} style={{ background:'none', border:'none', color:'var(--g-500)', cursor:'pointer', fontSize: 20 }}>×</button>
+        </div>
+        <form onSubmit={submit} style={{ display:'flex', flexDirection:'column', gap: 14 }}>
+          <div>
+            <label style={labelStyle}>Nome *</label>
+            <input className="input" value={form.name} onChange={e => set('name', e.target.value)} required style={{ width:'100%' }}/>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={labelStyle}>Telefone</label>
+              <input className="input" value={form.phone} onChange={e => set('phone', e.target.value)} style={{ width:'100%' }}/>
+            </div>
+            <div>
+              <label style={labelStyle}>E-mail</label>
+              <input className="input" type="email" value={form.email} onChange={e => set('email', e.target.value)} style={{ width:'100%' }}/>
+            </div>
+          </div>
+          <div>
+            <label style={labelStyle}>Empresa</label>
+            <input className="input" value={form.company} onChange={e => set('company', e.target.value)} style={{ width:'100%' }}/>
+          </div>
+          <div>
+            <label style={labelStyle}>Tags (separadas por vírgula)</label>
+            <input className="input" value={form.tags} onChange={e => set('tags', e.target.value)} placeholder="lead, novo, ..." style={{ width:'100%' }}/>
+          </div>
+          <div style={{ display:'flex', gap: 8, justifyContent:'flex-end', marginTop: 4 }}>
+            <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
+            <button type="submit" className="btn-primary" style={{ background:'#B70C00' }} disabled={saving}>
+              {saving ? 'Salvando…' : 'Salvar alterações'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
 
 /* ─── IMPORT CSV MODAL ─── */
 const ImportCSVModal = ({ tenantDbId, onClose, onImported }) => {
