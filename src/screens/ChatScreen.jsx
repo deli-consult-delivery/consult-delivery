@@ -1111,7 +1111,7 @@ function ForwardModal({ msg, convs, currentConvId, onClose, onForward }) {
 }
 
 // ─── MESSAGE BUBBLE ────────────────────────────────────────────
-function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onStar, onDelete, onResumirMsg, onTraduzirMsg, onForward }) {
+function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onStar, onDelete, onResumirMsg, onTraduzirMsg, onForward, translation }) {
   const isOut = m.from === 'out';
   const isSystem = m.from === 'system';
 
@@ -1202,6 +1202,30 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onSta
             <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{linkify(m.text)}</div>
           )}
         </div>
+        {!isOut && translation && (
+          <div style={{ marginTop: 4, marginLeft: 4, maxWidth: 340 }}>
+            {translation.loading && (
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center', padding: '3px 0' }}>
+                <span className="lc-typ-dot" style={{ animationDelay: '0s', width: 5, height: 5 }} />
+                <span className="lc-typ-dot" style={{ animationDelay: '0.15s', width: 5, height: 5 }} />
+                <span className="lc-typ-dot" style={{ animationDelay: '0.3s', width: 5, height: 5 }} />
+              </div>
+            )}
+            {!translation.loading && translation.error && (
+              <div style={{ fontSize: 11, color: 'rgba(239,68,68,0.6)', fontStyle: 'italic' }}>
+                Tradução indisponível
+              </div>
+            )}
+            {!translation.loading && translation.text && (
+              <div style={{ fontSize: 12, color: 'var(--g-400, rgba(255,255,255,0.5))', fontStyle: 'italic', lineHeight: 1.4 }}>
+                {translation.text}
+                {translation.lang && (
+                  <sub style={{ marginLeft: 6, fontSize: 10, opacity: 0.7, fontStyle: 'normal' }}>{translation.lang}</sub>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         {m.reactions?.length > 0 && (() => {
           const grouped = {};
           (m.reactions || []).forEach(r => { if (r.emoji) grouped[r.emoji] = (grouped[r.emoji] || 0) + 1; });
@@ -1352,6 +1376,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [replyTo, setReplyTo]                = useState(null);
   const [lightboxUrl, setLightboxUrl]        = useState(null);
   const [forwardMsg, setForwardMsg]          = useState(null);
+
+  // ── Tradução por mensagem ─────────────────────────────────
+  const [translations, setTranslations]      = useState({}); // { msgId: { loading, text, lang, error } }
 
   // ── AI / Composer ─────────────────────────────────────────
   const [aiMode, setAiMode]                  = useState('humano');
@@ -2733,6 +2760,33 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     }
   }
 
+  // ── Tradução por mensagem ─────────────────────────────────
+  async function translateMessage(msgId, msgText) {
+    if (!msgText) return;
+    setTranslations(t => ({ ...t, [msgId]: { loading: true } }));
+    try {
+      const BRIDGE_URL = import.meta.env.VITE_BRIDGE_URL || '';
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch(`${BRIDGE_URL}/chat/ai`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ command: '/traduzir', messages: [{ direction: 'inbound', content: msgText }] }),
+      });
+      const data = await r.json();
+      if (data.ok && data.bullets?.length) {
+        const tradLine = data.bullets[0] || '';
+        const langLine = data.bullets[1] || '';
+        const text = tradLine.replace(/^Tradu[çc][ãa]o:\s*/i, '');
+        const lang = langLine.replace(/^Idioma detectado:\s*/i, '');
+        setTranslations(t => ({ ...t, [msgId]: { loading: false, text, lang } }));
+      } else {
+        setTranslations(t => ({ ...t, [msgId]: { loading: false, error: true } }));
+      }
+    } catch {
+      setTranslations(t => ({ ...t, [msgId]: { loading: false, error: true } }));
+    }
+  }
+
   async function triggerIaAutoReply(convId, chatId) {
     if (!chatId || iaPendingRef.current.has(convId)) return;
     iaPendingRef.current.add(convId);
@@ -3559,8 +3613,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                       onViewImage={url => setLightboxUrl(url)}
                       onCreateTask={msg => console.log('criar tarefa:', msg.text)}
                       onResumirMsg={() => runCommand('/resumir')}
-                      onTraduzirMsg={() => runCommand('/traduzir')}
+                      onTraduzirMsg={msg => translateMessage(msg.id, msg.text)}
                       onForward={msg => setForwardMsg(msg)}
+                      translation={translations[m.id]}
                     />
                   );
                   return acc;
