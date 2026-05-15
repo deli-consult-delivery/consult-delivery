@@ -240,6 +240,16 @@ export async function fetchProfile(instanceName, phoneNumber) {
   return res.json();
 }
 
+// Apagar mensagem no WhatsApp (revoke — apaga para todos)
+export async function deleteWhatsAppMessage(instanceName, remoteJid, whatsappMsgId, fromMe = true) {
+  const res = await fetch(`${EVO_URL}/message/delete/${instanceName}`, {
+    method: 'DELETE',
+    headers,
+    body: JSON.stringify({ id: whatsappMsgId, remoteJid, fromMe }),
+  });
+  return res.json();
+}
+
 // Marcar mensagens como lidas
 export async function markAsRead(instanceName, remoteJid, msgIds) {
   const res = await fetch(`${EVO_URL}/chat/markMessageAsRead/${instanceName}`, {
