@@ -273,10 +273,10 @@ function NoLeadSection({ conversation, tenantId, onClose, onLinked }) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
       <LeadPanelHeader conversation={conversation} onClose={onClose} />
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 16px' }}>
+      <div style={{ padding: '20px 16px' }}>
 
         {mode === 'idle' && (
           <>

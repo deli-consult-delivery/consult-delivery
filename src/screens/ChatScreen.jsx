@@ -2390,12 +2390,18 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const finalizadoCount = statusCounts.finalizado;
   const unreadCount     = convs.reduce((s, c) => s + (c.unread || 0), 0);
 
+  const isSearching = search.length >= 3;
   const filtered = convs.filter(c => {
     if (tab === 'fav'    && !favConvs.has(c.id))   return false;
     if (tab === 'wa'     && c.type !== 'whatsapp') return false;
     if (tab === 'groups' && c.type !== 'group')    return false;
     if (tab === 'int'    && !(c.type === 'internal' || c.type === 'agent')) return false;
-    if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (isSearching) {
+      const q = search.toLowerCase();
+      const phone = (c.whatsapp_chat_id || '').split('@')[0];
+      if (!c.name.toLowerCase().includes(q) && !phone.includes(q)) return false;
+      return true; // busca ignora filtros de status
+    }
     // Sem filtro ativo: oculta finalizadas e arquivadas por padrão
     if (!statusFilter && !c.id.startsWith('chan-') && (c.status === 'finalizado' || c.status === 'archived')) return false;
     if (!c.id.startsWith('chan-') && statusFilter) {
@@ -3275,82 +3281,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               </div>
             </div>
 
-            {/* Copiloto DELI */}
-            {showCopilot && (
-              <CollapseSection title="Copiloto DELI" open={openIA} onToggle={() => setOpenIA(v => !v)} accent>
-                <div className="lc-copilot-card">
-                  {active.type === 'whatsapp' || active.type === 'group' ? (
-                    <>
-                      <div className="lc-copilot-row">
-                        <span className="lc-copilot-k">Status</span>
-                        <ConversationStatusBadge status={active.status_v2 || 'open'} />
-                      </div>
-                      <div className="lc-copilot-row">
-                        <span className="lc-copilot-k">Atendente</span>
-                        <span className="lc-copilot-v">{STATUS_EMOJI[convStatus] || '❓'} {convStatus || 'aguardando'}</span>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="lc-copilot-row">
-                      <span className="lc-copilot-k">Canal</span>
-                      <span className="lc-copilot-v">{active.name}</span>
-                    </div>
-                  )}
-                  <div className="lc-copilot-row">
-                    <span className="lc-copilot-k">Mensagens</span>
-                    <span className="lc-copilot-v">{activeMsgs.length}</span>
-                  </div>
-                </div>
-                <div className="lc-copilot-actions">
-                  <button className="lc-mini-action" onClick={() => runCommand('/resumir')}><Icon name="sparkles" size={12} /> Resumir agora</button>
-                  <button className="lc-mini-action" onClick={() => runCommand('/proxima')}><Icon name="arrowright" size={12} /> Próxima ação</button>
-                  <button className="lc-mini-action" onClick={() => runCommand('/tarefa')}><Icon name="check" size={12} /> Criar tarefa</button>
-                  <button className="lc-mini-action" onClick={() => runCommand('/cobranca')}><Icon name="dollar" size={12} /> Acionar CORA</button>
-                </div>
-              </CollapseSection>
-            )}
-
-            {/* Ações rápidas */}
-            <div className="lc-insp-section">
-              <div className="lc-insp-title">Ações</div>
-              <div className="lc-actions-grid">
-                <button className="lc-mini-action"><Icon name="plus" size={12} /> Adicionar negócio</button>
-                <button className="lc-mini-action"><Icon name="sparkles" size={12} /> Executar automação</button>
-                <button className="lc-mini-action" onClick={() => onNavigate?.('tasks')}><Icon name="check" size={12} /> Ver tarefas</button>
-              </div>
-            </div>
-
-            {/* Perfil do cliente */}
-            {activeCustomer ? (
-              <CollapseSection title="Perfil" open={openPerfil} onToggle={() => setOpenPerfil(v => !v)}>
-                <FieldRow label="Nome"      value={activeCustomer.name} />
-                <FieldRow label="Telefone"  value={activeCustomer.phone} hint="—" />
-                <FieldRow label="E-mail"    value={activeCustomer.email} hint="—" />
-                <FieldRow label="Documento" value={activeCustomer.document} hint="—" />
-              </CollapseSection>
-            ) : active.whatsapp_chat_id ? (
-              <CollapseSection title="Perfil" open={openPerfil} onToggle={() => setOpenPerfil(v => !v)}>
-                <FieldRow label="Nome"     value={active.name} />
-                <FieldRow label="Telefone" value={active.whatsapp_chat_id?.split('@')[0]} hint="—" />
-              </CollapseSection>
-            ) : null}
-
-            {/* Notas */}
-            <CollapseSection title="Notas" open={openNotas} onToggle={() => setOpenNotas(v => !v)}>
-              <textarea className="lc-notes" placeholder="Adicione uma nota interna…" />
-            </CollapseSection>
-
-            {/* iFood */}
-            <CollapseSection title="iFood" open={openIfood} onToggle={() => setOpenIfood(v => !v)}>
-              <FieldRow label="ID Loja"     value="—" />
-              <FieldRow label="Pedidos 30d" value="—" />
-            </CollapseSection>
-
-            {/* Lead Panel — mostra também quando não há customer (cria/vincula) */}
-            {active && (activeCustomer || active.whatsapp_chat_id) && (
+            {/* Sem lead vinculado — mostra bloco de criação/vinculação imediatamente */}
+            {!activeCustomer && active.whatsapp_chat_id ? (
               <LeadPanel
                 conversation={active}
-                customer={activeCustomer}
+                customer={null}
                 tenantId={tenantDbId}
                 members={members}
                 onCustomerLinked={cust => {
@@ -3358,6 +3293,93 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                   setConvs(prev => prev.map(c => c.id === active.id ? { ...c, customer_id: cust.id } : c));
                 }}
               />
+            ) : (
+              <>
+                {/* Copiloto DELI */}
+                {showCopilot && (
+                  <CollapseSection title="Copiloto DELI" open={openIA} onToggle={() => setOpenIA(v => !v)} accent>
+                    <div className="lc-copilot-card">
+                      {active.type === 'whatsapp' || active.type === 'group' ? (
+                        <>
+                          <div className="lc-copilot-row">
+                            <span className="lc-copilot-k">Status</span>
+                            <ConversationStatusBadge status={active.status_v2 || 'open'} />
+                          </div>
+                          <div className="lc-copilot-row">
+                            <span className="lc-copilot-k">Atendente</span>
+                            <span className="lc-copilot-v">{STATUS_EMOJI[convStatus] || '❓'} {convStatus || 'aguardando'}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="lc-copilot-row">
+                          <span className="lc-copilot-k">Canal</span>
+                          <span className="lc-copilot-v">{active.name}</span>
+                        </div>
+                      )}
+                      <div className="lc-copilot-row">
+                        <span className="lc-copilot-k">Mensagens</span>
+                        <span className="lc-copilot-v">{activeMsgs.length}</span>
+                      </div>
+                    </div>
+                    <div className="lc-copilot-actions">
+                      <button className="lc-mini-action" onClick={() => runCommand('/resumir')}><Icon name="sparkles" size={12} /> Resumir agora</button>
+                      <button className="lc-mini-action" onClick={() => runCommand('/proxima')}><Icon name="arrowright" size={12} /> Próxima ação</button>
+                      <button className="lc-mini-action" onClick={() => runCommand('/tarefa')}><Icon name="check" size={12} /> Criar tarefa</button>
+                      <button className="lc-mini-action" onClick={() => runCommand('/cobranca')}><Icon name="dollar" size={12} /> Acionar CORA</button>
+                    </div>
+                  </CollapseSection>
+                )}
+
+                {/* Ações rápidas */}
+                <div className="lc-insp-section">
+                  <div className="lc-insp-title">Ações</div>
+                  <div className="lc-actions-grid">
+                    <button className="lc-mini-action"><Icon name="plus" size={12} /> Adicionar negócio</button>
+                    <button className="lc-mini-action"><Icon name="sparkles" size={12} /> Executar automação</button>
+                    <button className="lc-mini-action" onClick={() => onNavigate?.('tasks')}><Icon name="check" size={12} /> Ver tarefas</button>
+                  </div>
+                </div>
+
+                {/* Perfil do cliente */}
+                {activeCustomer ? (
+                  <CollapseSection title="Perfil" open={openPerfil} onToggle={() => setOpenPerfil(v => !v)}>
+                    <FieldRow label="Nome"      value={activeCustomer.name} />
+                    <FieldRow label="Telefone"  value={activeCustomer.phone} hint="—" />
+                    <FieldRow label="E-mail"    value={activeCustomer.email} hint="—" />
+                    <FieldRow label="Documento" value={activeCustomer.document} hint="—" />
+                  </CollapseSection>
+                ) : active.whatsapp_chat_id ? (
+                  <CollapseSection title="Perfil" open={openPerfil} onToggle={() => setOpenPerfil(v => !v)}>
+                    <FieldRow label="Nome"     value={active.name} />
+                    <FieldRow label="Telefone" value={active.whatsapp_chat_id?.split('@')[0]} hint="—" />
+                  </CollapseSection>
+                ) : null}
+
+                {/* Notas */}
+                <CollapseSection title="Notas" open={openNotas} onToggle={() => setOpenNotas(v => !v)}>
+                  <textarea className="lc-notes" placeholder="Adicione uma nota interna…" />
+                </CollapseSection>
+
+                {/* iFood */}
+                <CollapseSection title="iFood" open={openIfood} onToggle={() => setOpenIfood(v => !v)}>
+                  <FieldRow label="ID Loja"     value="—" />
+                  <FieldRow label="Pedidos 30d" value="—" />
+                </CollapseSection>
+
+                {/* Lead Panel com dados completos (tags, listas, notas, etc.) */}
+                {activeCustomer && (
+                  <LeadPanel
+                    conversation={active}
+                    customer={activeCustomer}
+                    tenantId={tenantDbId}
+                    members={members}
+                    onCustomerLinked={cust => {
+                      setActiveCustomer(cust);
+                      setConvs(prev => prev.map(c => c.id === active.id ? { ...c, customer_id: cust.id } : c));
+                    }}
+                  />
+                )}
+              </>
             )}
           </>
         )}
