@@ -62,15 +62,15 @@ function getSPDate() {
   };
 }
 
-// ─── Helper: gerar imagem via OpenRouter (DALL-E 3) ──────────────────────────
+// ─── Helper: gerar imagem via OpenRouter (Recraft V4.1 Utility) ──────────────
 
-async function generateImage(prompt: string, size: "1792x1024" | "1024x1792"): Promise<string> {
+async function generateImage(prompt: string, aspectRatio: "16:9" | "9:16"): Promise<string> {
   const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
   if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY não configurado no Trigger.dev");
 
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      const r = await fetch("https://openrouter.ai/api/v1/images/generations", {
+      const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type":  "application/json",
@@ -79,12 +79,11 @@ async function generateImage(prompt: string, size: "1792x1024" | "1024x1792"): P
           "X-Title":       "Consult Delivery Bom Dia",
         },
         body: JSON.stringify({
-          model:           "openai/dall-e-3",
-          prompt,
-          n:               1,
-          size,
-          quality:         "standard",
-          response_format: "url",
+          model:    "recraft/recraft-v4.1-utility",
+          messages: [{ role: "user", content: prompt }],
+          provider: {
+            parameters: { aspect_ratio: aspectRatio },
+          },
         }),
         signal: AbortSignal.timeout(90_000),
       });
@@ -94,17 +93,30 @@ async function generateImage(prompt: string, size: "1792x1024" | "1024x1792"): P
         throw new Error(`OpenRouter ${r.status}: ${detail.slice(0, 300)}`);
       }
 
-      const data = (await r.json()) as { data: Array<{ url: string }> };
-      const url = data.data?.[0]?.url;
+      const data = (await r.json()) as {
+        choices: Array<{
+          message: {
+            content: string | Array<{ type: string; image_url?: { url: string } }>;
+          };
+        }>;
+      };
+
+      const content = data.choices?.[0]?.message?.content;
+      let url: string | undefined;
+      if (typeof content === "string") {
+        url = content.trim();
+      } else if (Array.isArray(content)) {
+        url = content.find(b => b.type === "image_url")?.image_url?.url;
+      }
+
       if (!url) throw new Error("OpenRouter não retornou URL de imagem");
       return url;
     } catch (err) {
       logger.warn(`bom-dia: tentativa ${attempt}/3 geração falhou`, {
-        size,
+        aspectRatio,
         error: (err as Error).message,
       });
       if (attempt === 3) throw err;
-      // Aguarda antes da próxima tentativa
       await new Promise((r) => setTimeout(r, 3000 * attempt));
     }
   }
@@ -213,14 +225,14 @@ Retorne JSON: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme
     textOnImage: claudeOut.text_on_image,
   });
 
-  // 3. Gerar duas imagens em paralelo via OpenRouter/DALL-E 3
+  // 3. Gerar duas imagens em paralelo via OpenRouter (Recraft V4.1 Utility)
   const fullPrompt = `${claudeOut.dalle_prompt}. Prominent bold text on image: "${claudeOut.text_on_image}" in Portuguese. Clean composition, Consult Delivery rocket brand logo bottom left.`;
 
-  logger.info("bom-dia: gerando imagens (landscape + portrait) via DALL-E 3");
+  logger.info("bom-dia: gerando imagens (landscape + portrait) via Recraft V4.1");
 
   const [landscapeTempUrl, portraitTempUrl] = await Promise.all([
-    generateImage(fullPrompt, "1792x1024"),
-    generateImage(fullPrompt, "1024x1792"),
+    generateImage(fullPrompt, "16:9"),
+    generateImage(fullPrompt, "9:16"),
   ]);
 
   // 4. Download + upload permanente no Supabase Storage
