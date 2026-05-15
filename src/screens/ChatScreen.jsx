@@ -1071,39 +1071,95 @@ function AiSidePanel({ onClose, onRunCmd, convName, msgs }) {
 // ─── FORWARD MODAL ─────────────────────────────────────────────
 function ForwardModal({ msg, convs, currentConvId, onClose, onForward }) {
   const [search, setSearch] = useState('');
-  const targets = convs.filter(c =>
+  const [selected, setSelected] = useState(new Set());
+
+  const allTargets = convs.filter(c =>
     c.id !== currentConvId &&
     (c.type === 'whatsapp' || c.type === 'group') &&
-    c.whatsapp_chat_id &&
-    (!search || c.name.toLowerCase().includes(search.toLowerCase()))
+    c.whatsapp_chat_id
   );
+  const visible = allTargets.filter(c =>
+    !search || c.name.toLowerCase().includes(search.toLowerCase())
+  );
+  const pvs    = visible.filter(c => c.type === 'whatsapp');
+  const grupos = visible.filter(c => c.type === 'group');
+
+  const toggle = id => setSelected(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const handleSend = () => {
+    const targets = allTargets.filter(c => selected.has(c.id));
+    if (targets.length) onForward(targets);
+  };
+
+  const renderItem = c => (
+    <button
+      key={c.id}
+      onClick={() => toggle(c.id)}
+      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', background: selected.has(c.id) ? 'rgba(255,255,255,0.06)' : 'none', borderBottom: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer', textAlign: 'left' }}
+    >
+      <ConvAvatar conv={c} size={32} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ color: 'white', fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+        <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>{c.preview || '—'}</div>
+      </div>
+      <div style={{ width: 18, height: 18, borderRadius: 4, border: `2px solid ${selected.has(c.id) ? '#E53E3E' : 'rgba(255,255,255,0.25)'}`, background: selected.has(c.id) ? '#E53E3E' : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {selected.has(c.id) && (
+          <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+            <path d="M1 4l3 3 5-6" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        )}
+      </div>
+    </button>
+  );
+
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
-      <div style={{ background: '#1F1F1F', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, width: 360, maxHeight: 520, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+      <div style={{ background: '#1F1F1F', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, width: 380, maxHeight: 560, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
         <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ color: 'white', fontWeight: 700, fontSize: 14 }}>Encaminhar para…</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: 'white', fontWeight: 700, fontSize: 14 }}>Encaminhar mensagem</span>
+            {selected.size > 0 && (
+              <span style={{ fontSize: 11, color: '#E53E3E', fontWeight: 600 }}>{selected.size} selecionado{selected.size > 1 ? 's' : ''}</span>
+            )}
+          </div>
           <button onClick={onClose} style={{ color: 'rgba(255,255,255,0.5)', fontSize: 18, lineHeight: 1 }}>×</button>
         </div>
         <div style={{ padding: '10px 14px 6px' }}>
           <input
             autoFocus value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar conversa…"
-            style={{ width: '100%', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '7px 12px', color: 'white', fontSize: 13, outline: 'none' }}
+            placeholder="Buscar contato ou grupo…"
+            style={{ width: '100%', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '7px 12px', color: 'white', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
           />
         </div>
         <div style={{ overflowY: 'auto', flex: 1 }}>
-          {targets.length === 0 && (
+          {pvs.length > 0 && (
+            <>
+              <div style={{ padding: '6px 16px 3px', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Conversas</div>
+              {pvs.map(renderItem)}
+            </>
+          )}
+          {grupos.length > 0 && (
+            <>
+              <div style={{ padding: '6px 16px 3px', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Grupos</div>
+              {grupos.map(renderItem)}
+            </>
+          )}
+          {visible.length === 0 && (
             <div style={{ textAlign: 'center', padding: 24, color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>Nenhuma conversa encontrada</div>
           )}
-          {targets.map(c => (
-            <button key={c.id} onClick={() => onForward(c)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', background: 'none', borderBottom: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer', textAlign: 'left' }}>
-              <ConvAvatar conv={c} size={32} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ color: 'white', fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
-                <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>{c.preview || '—'}</div>
-              </div>
-            </button>
-          ))}
+        </div>
+        <div style={{ padding: '10px 14px', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+          <button
+            onClick={handleSend}
+            disabled={selected.size === 0}
+            style={{ width: '100%', padding: '9px 0', borderRadius: 8, background: selected.size > 0 ? '#E53E3E' : 'rgba(255,255,255,0.07)', color: selected.size > 0 ? 'white' : 'rgba(255,255,255,0.3)', fontWeight: 700, fontSize: 13, cursor: selected.size > 0 ? 'pointer' : 'not-allowed', transition: 'background 0.15s' }}
+          >
+            {selected.size > 0 ? `Encaminhar (${selected.size})` : 'Selecione os destinatários'}
+          </button>
         </div>
       </div>
     </div>
@@ -2561,10 +2617,12 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     }
   };
 
-  const handleForward = async (targetConv) => {
+  const handleForward = async (targetConvs) => {
     const msg = forwardMsg;
     setForwardMsg(null);
-    if (!msg || !selectedInstance || !targetConv?.whatsapp_chat_id) return;
+    if (!msg || !selectedInstance || !targetConvs?.length) return;
+    const jids = targetConvs.map(tc => tc.whatsapp_chat_id).filter(Boolean);
+    if (!jids.length) return;
     try {
       if (msg.mediaType?.includes('audio')) {
         if (msg.mediaUrl) {
@@ -2573,7 +2631,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           const reader = new FileReader();
           reader.onloadend = async () => {
             const base64 = reader.result.split(',')[1];
-            await sendAudioMessage(selectedInstance, targetConv.whatsapp_chat_id, base64);
+            await Promise.all(jids.map(jid => sendAudioMessage(selectedInstance, jid, base64)));
           };
           reader.readAsDataURL(blob);
         }
@@ -2584,11 +2642,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         reader.onloadend = async () => {
           const base64 = reader.result.split(',')[1];
           const mime = blob.type || 'application/octet-stream';
-          await sendMediaMessage(selectedInstance, targetConv.whatsapp_chat_id, base64, msg.mediaType, mime, msg.text || '', '');
+          await Promise.all(jids.map(jid => sendMediaMessage(selectedInstance, jid, base64, msg.mediaType, mime, msg.text || '', '')));
         };
         reader.readAsDataURL(blob);
       } else if (msg.text) {
-        await sendTextMessage(selectedInstance, targetConv.whatsapp_chat_id, `↪️ ${msg.text}`);
+        await Promise.all(jids.map(jid => sendTextMessage(selectedInstance, jid, `↪️ ${msg.text}`)));
       }
     } catch (err) {
       console.error('Falha ao encaminhar:', err);
