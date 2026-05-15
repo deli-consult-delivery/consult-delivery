@@ -1803,7 +1803,18 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         replyTo: msg.quoted_content || null,
       }));
       const SHOW_EVENT_TYPES = new Set(['created', 'assigned', 'closed', 'reopened']);
-      const evtMsgs = (evts || []).filter(evt => SHOW_EVENT_TYPES.has(evt.event_type)).map(evt => ({
+      // Dedup: trigger SQL + frontend podem inserir o mesmo evento; manter o com actor_name
+      const filteredEvts = (evts || []).filter(evt => SHOW_EVENT_TYPES.has(evt.event_type));
+      const dedupedEvts = filteredEvts.reduce((acc, evt) => {
+        const dup = acc.find(e =>
+          e.event_type === evt.event_type &&
+          Math.abs(new Date(e.ts) - new Date(evt.ts)) < 2000
+        );
+        if (!dup) return [...acc, evt];
+        if (evt.actor_name && !dup.actor_name) return [...acc.filter(e => e !== dup), evt];
+        return acc;
+      }, []);
+      const evtMsgs = dedupedEvts.map(evt => ({
         id: `evt-${evt.id}`, from: 'system',
         text: fmtEventLabel(evt),
         _ts: evt.ts,
@@ -2971,11 +2982,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                   )}
                   <span className="lc-protocol">#{active.id?.slice(-5) || '00000'}</span>
                   {convStatus === 'finalizado' ? (
-                    <button className="lc-action-btn" onClick={async () => { const { error } = await changeStatus('atendimento_aberto'); if (!error) { addSystemMsg(activeId, 'reabriu o atendimento'); await insertEvent(activeId, 'reopened'); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'atendimento_aberto', status_v2: 'in_progress' } : c)); } }} disabled={statusLoading}>
+                    <button className="lc-action-btn" onClick={async () => { const { error } = await changeStatus('atendimento_aberto'); if (!error) { await insertEvent(activeId, 'reopened'); loadMsgs(activeId); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'atendimento_aberto', status_v2: 'in_progress' } : c)); } }} disabled={statusLoading}>
                       <Icon name="refresh" size={13} /> Reabrir
                     </button>
                   ) : (
-                    <button className="lc-action-btn primary" onClick={async () => { const { error } = await finish(); if (!error) { addSystemMsg(activeId, 'finalizou o atendimento'); await insertEvent(activeId, 'closed'); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'finalizado', status_v2: 'closed' } : c)); setResolved(r => ({ ...r, [activeId]: true })); } }} disabled={statusLoading}>
+                    <button className="lc-action-btn primary" onClick={async () => { const { error } = await finish(); if (!error) { await insertEvent(activeId, 'closed'); loadMsgs(activeId); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'finalizado', status_v2: 'closed' } : c)); setResolved(r => ({ ...r, [activeId]: true })); } }} disabled={statusLoading}>
                       <Icon name="check" size={13} /> {resolved[activeId] ? 'Finalizado' : 'Finalizar'}
                     </button>
                   )}
