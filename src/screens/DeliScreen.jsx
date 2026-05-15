@@ -10,7 +10,21 @@ function formatTime(iso) {
   return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
-// ── Componentes ───────────────────────────────────────────────────────────────
+function formatDate(iso) {
+  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+}
+
+function relativeTime(iso) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return 'agora';
+  if (min < 60) return `${min}min atrás`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h atrás`;
+  return `${Math.floor(h / 24)}d atrás`;
+}
+
+// ── Avatares ──────────────────────────────────────────────────────────────────
 
 function DeliAvatar() {
   return (
@@ -34,8 +48,10 @@ function LaraAvatar() {
   );
 }
 
+// ── Chat components ───────────────────────────────────────────────────────────
+
 function DeliMessage({ msg }) {
-  const isUser      = msg.role === 'user';
+  const isUser       = msg.role === 'user';
   const isLaraReport = !isUser && msg.metadata?.source_agent === 'lara';
 
   const avatar = isLaraReport ? <LaraAvatar /> : <DeliAvatar />;
@@ -103,7 +119,300 @@ function TypingIndicator() {
   );
 }
 
-// ── Tela principal ────────────────────────────────────────────────────────────
+// ── Painel components ─────────────────────────────────────────────────────────
+
+const AGENT_META = {
+  deli:  { label: 'DELI',  color: '#B70C00', desc: 'COO Digital' },
+  lara:  { label: 'LARA',  color: '#7C3AED', desc: 'CRM & Marketing' },
+  vera:  { label: 'VERA',  color: '#0EA5E9', desc: 'BI & Relatórios' },
+  cora:  { label: 'CORA',  color: '#F59E0B', desc: 'Cobrança' },
+  sofia: { label: 'SOFIA', color: '#10B981', desc: 'SDR/Prospecção' },
+  breno: { label: 'BRENO', color: '#6366F1', desc: 'Atendimento' },
+};
+
+function AgentStatusCard({ agentId, run }) {
+  const meta   = AGENT_META[agentId] ?? { label: agentId.toUpperCase(), color: '#6B7280', desc: '' };
+  const status = run?.status ?? 'sem dados';
+  const ok     = status === 'success';
+  const failed = status === 'failed';
+
+  return (
+    <div style={{
+      background: 'var(--g-800)',
+      borderRadius: 12,
+      padding: '14px 16px',
+      border: `1px solid ${failed ? '#EF444433' : 'var(--g-700)'}`,
+      display: 'flex', flexDirection: 'column', gap: 6,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{
+          width: 28, height: 28, borderRadius: '50%',
+          background: meta.color, color: '#fff',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 11, fontWeight: 800, flexShrink: 0,
+        }}>{meta.label[0]}</div>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--g-50)' }}>{meta.label}</div>
+          <div style={{ fontSize: 11, color: 'var(--g-500)' }}>{meta.desc}</div>
+        </div>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <div style={{
+            width: 7, height: 7, borderRadius: '50%',
+            background: ok ? '#10B981' : failed ? '#EF4444' : '#6B7280',
+          }} />
+          <span style={{ fontSize: 11, color: ok ? '#10B981' : failed ? '#EF4444' : 'var(--g-500)' }}>
+            {ok ? 'ok' : failed ? 'falhou' : 'sem dados'}
+          </span>
+        </div>
+      </div>
+      {run && (
+        <div style={{ fontSize: 11, color: 'var(--g-500)', display: 'flex', gap: 12 }}>
+          <span>{relativeTime(run.completed_at)}</span>
+          {run.duration_ms && <span>{(run.duration_ms / 1000).toFixed(1)}s</span>}
+          {run.cost_usd != null && <span>${run.cost_usd.toFixed(4)}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AnomaliaCard({ anomalia, onResolve }) {
+  const sevColor = anomalia.severidade === 'alta' ? '#EF4444'
+    : anomalia.severidade === 'media' ? '#F59E0B' : '#6B7280';
+
+  return (
+    <div style={{
+      background: 'var(--g-800)',
+      borderRadius: 10,
+      padding: '12px 14px',
+      border: `1px solid ${sevColor}44`,
+      display: 'flex', alignItems: 'flex-start', gap: 10,
+    }}>
+      <div style={{
+        width: 6, height: 6, borderRadius: '50%',
+        background: sevColor, marginTop: 5, flexShrink: 0,
+      }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, color: 'var(--g-100)', fontWeight: 600 }}>{anomalia.tipo}</div>
+        <div style={{ fontSize: 12, color: 'var(--g-400)', marginTop: 2, wordBreak: 'break-word' }}>{anomalia.descricao}</div>
+        <div style={{ fontSize: 11, color: 'var(--g-600)', marginTop: 4 }}>{relativeTime(anomalia.created_at)}</div>
+      </div>
+      <button
+        onClick={() => onResolve(anomalia.id)}
+        style={{
+          background: 'var(--g-700)', border: '1px solid var(--g-600)',
+          color: 'var(--g-300)', borderRadius: 7,
+          padding: '4px 10px', fontSize: 11, cursor: 'pointer', flexShrink: 0,
+        }}
+      >Resolver</button>
+    </div>
+  );
+}
+
+function RevisaoCard({ revisao }) {
+  const [expanded, setExpanded] = useState(false);
+  const alertas        = revisao.alertas ?? [];
+  const acoes          = revisao.acoes_sugeridas ?? [];
+
+  return (
+    <div style={{
+      background: 'var(--g-800)',
+      borderRadius: 10,
+      padding: '12px 14px',
+      border: '1px solid var(--g-700)',
+      cursor: 'pointer',
+    }} onClick={() => setExpanded(e => !e)}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 12, color: 'var(--g-400)' }}>{formatDate(revisao.created_at)}</span>
+        {alertas.length > 0 && (
+          <span style={{
+            background: '#EF444422', color: '#EF4444',
+            borderRadius: 5, padding: '1px 7px', fontSize: 11, fontWeight: 700,
+          }}>{alertas.length} alerta{alertas.length > 1 ? 's' : ''}</span>
+        )}
+        <div style={{ marginLeft: 'auto' }}>
+          <Icon name={expanded ? 'chevron-up' : 'chevron-down'} size={14} style={{ color: 'var(--g-500)' }} />
+        </div>
+      </div>
+      <div style={{
+        fontSize: 13, color: 'var(--g-200)', marginTop: 6,
+        display: expanded ? 'block' : '-webkit-box',
+        WebkitLineClamp: expanded ? undefined : 2,
+        WebkitBoxOrient: 'vertical',
+        overflow: expanded ? undefined : 'hidden',
+        whiteSpace: 'pre-wrap',
+      }}>
+        {revisao.resumo}
+      </div>
+      {expanded && acoes.length > 0 && (
+        <div style={{ marginTop: 10, borderTop: '1px solid var(--g-700)', paddingTop: 8 }}>
+          <div style={{ fontSize: 11, color: 'var(--g-500)', fontWeight: 700, marginBottom: 4 }}>AÇÕES SUGERIDAS</div>
+          {acoes.map((a, i) => (
+            <div key={i} style={{ fontSize: 12, color: 'var(--g-300)', padding: '2px 0' }}>→ {a}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PainelTab({ tenantDbId, userId }) {
+  const [agentRuns,  setAgentRuns]  = useState({});
+  const [anomalias,  setAnomalias]  = useState([]);
+  const [revisoes,   setRevisoes]   = useState([]);
+  const [loadingBtn, setLoadingBtn] = useState(false);
+  const [loading,    setLoading]    = useState(true);
+
+  useEffect(() => {
+    if (!tenantDbId) return;
+    load();
+  }, [tenantDbId]);
+
+  async function load() {
+    setLoading(true);
+    await Promise.all([loadAgentRuns(), loadAnomalias(), loadRevisoes()]);
+    setLoading(false);
+  }
+
+  async function loadAgentRuns() {
+    const agentIds = ['deli', 'lara', 'vera', 'cora', 'sofia', 'breno'];
+    const runMap = {};
+    for (const agentId of agentIds) {
+      const { data } = await supabase
+        .from('agent_runs')
+        .select('status, completed_at, duration_ms, cost_usd')
+        .eq('tenant_id', tenantDbId)
+        .eq('agent_id', agentId)
+        .order('completed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      runMap[agentId] = data ?? null;
+    }
+    setAgentRuns(runMap);
+  }
+
+  async function loadAnomalias() {
+    const { data } = await supabase
+      .from('vera_anomalias')
+      .select('id, tipo, descricao, severidade, created_at')
+      .eq('tenant_id', tenantDbId)
+      .eq('resolvida', false)
+      .order('created_at', { ascending: false })
+      .limit(10);
+    setAnomalias(data ?? []);
+  }
+
+  async function loadRevisoes() {
+    const { data } = await supabase
+      .from('deli_agenda')
+      .select('id, resumo, alertas, acoes_sugeridas, created_at')
+      .eq('tenant_id', tenantDbId)
+      .eq('tipo', 'revisao_matinal')
+      .order('created_at', { ascending: false })
+      .limit(7);
+    setRevisoes(data ?? []);
+  }
+
+  async function resolveAnomalia(id) {
+    await supabase.from('vera_anomalias').update({ resolvida: true }).eq('id', id);
+    setAnomalias(prev => prev.filter(a => a.id !== id));
+  }
+
+  async function triggerRevisao() {
+    if (loadingBtn) return;
+    setLoadingBtn(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      await fetch(`${BRIDGE_URL}/agents/deli-revisao-matinal/run`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ tenant_id: tenantDbId, payload: { triggered_by: userId } }),
+      });
+      setTimeout(() => { loadRevisoes(); setLoadingBtn(false); }, 8000);
+    } catch {
+      setLoadingBtn(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, color: 'var(--g-500)', fontSize: 13 }}>
+        Carregando painel…
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: '16px 20px', overflowY: 'auto', flex: 1 }}>
+
+      {/* Status dos agentes */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--g-500)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>
+          Status dos Agentes
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
+          {Object.keys(AGENT_META).map(agentId => (
+            <AgentStatusCard key={agentId} agentId={agentId} run={agentRuns[agentId]} />
+          ))}
+        </div>
+      </div>
+
+      {/* Anomalias ativas */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--g-500)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+          Anomalias Ativas
+          {anomalias.length > 0 && (
+            <span style={{ background: '#EF444422', color: '#EF4444', borderRadius: 5, padding: '1px 7px', fontSize: 11 }}>
+              {anomalias.length}
+            </span>
+          )}
+        </div>
+        {anomalias.length === 0 ? (
+          <div style={{ fontSize: 13, color: 'var(--g-600)', padding: '10px 0' }}>🟢 Nenhuma anomalia ativa</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {anomalias.map(a => (
+              <AnomaliaCard key={a.id} anomalia={a} onResolve={resolveAnomalia} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Revisões matinais */}
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--g-500)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
+          Revisões Matinais
+          <button
+            onClick={triggerRevisao}
+            disabled={loadingBtn}
+            style={{
+              background: loadingBtn ? 'var(--g-700)' : 'var(--red, #B70C00)',
+              border: 'none', borderRadius: 7,
+              color: '#fff', padding: '4px 12px',
+              fontSize: 11, fontWeight: 700, cursor: loadingBtn ? 'default' : 'pointer',
+              transition: 'background 0.15s',
+              textTransform: 'none',
+              letterSpacing: 0,
+            }}
+          >{loadingBtn ? 'Gerando…' : '+ Gerar agora'}</button>
+        </div>
+        {revisoes.length === 0 ? (
+          <div style={{ fontSize: 13, color: 'var(--g-600)', padding: '10px 0' }}>Nenhuma revisão disponível. Clique em "Gerar agora".</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {revisoes.map(r => <RevisaoCard key={r.id} revisao={r} />)}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Chat Tab ──────────────────────────────────────────────────────────────────
 
 const SHORTCUTS = [
   'Resumo do negócio hoje',
@@ -112,16 +421,15 @@ const SHORTCUTS = [
   'Situação atual dos clientes',
 ];
 
-export default function DeliScreen({ tenantDbId, userId }) {
+function ChatTab({ tenantDbId, userId }) {
   const [messages, setMessages]       = useState([]);
   const [input, setInput]             = useState('');
   const [loading, setLoading]         = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
-  const bottomRef  = useRef(null);
+  const bottomRef   = useRef(null);
   const textareaRef = useRef(null);
-  const loadingRef = useRef(false);
+  const loadingRef  = useRef(false);
 
-  // ── Carregar histórico ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!tenantDbId || !userId) return;
     async function load() {
@@ -148,10 +456,8 @@ export default function DeliScreen({ tenantDbId, userId }) {
     load();
   }, [tenantDbId, userId]);
 
-  // ── Realtime: captura resposta da DELI ──────────────────────────────────────
   useEffect(() => {
     if (!tenantDbId || !userId) return;
-
     const channel = supabase
       .channel(`deli-msgs-${tenantDbId}`)
       .on('postgres_changes', {
@@ -161,12 +467,10 @@ export default function DeliScreen({ tenantDbId, userId }) {
         filter: `tenant_id=eq.${tenantDbId}`,
       }, payload => {
         const msg = payload.new;
-        // accept DELI replies (user_id === userId) and LARA reports (user_id === null)
         const isOwn   = msg.user_id === userId;
         const isAgent = msg.user_id === null && msg.role === 'assistant';
         if (!isOwn && !isAgent) return;
         if (msg.role !== 'assistant') return;
-
         setMessages(prev => {
           if (prev.some(m => m.id === msg.id)) return prev;
           return [...prev, msg];
@@ -175,24 +479,18 @@ export default function DeliScreen({ tenantDbId, userId }) {
         loadingRef.current = false;
       })
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, [tenantDbId, userId]);
 
-  // ── Auto-scroll ─────────────────────────────────────────────────────────────
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  // ── Enviar mensagem ─────────────────────────────────────────────────────────
   async function sendMessage() {
     const text = input.trim();
     if (!text || loadingRef.current) return;
-
     setInput('');
     loadingRef.current = true;
-
-    // Mensagem otimista do usuário
     const optimisticMsg = {
       id: `opt-${Date.now()}`,
       role: 'user',
@@ -201,16 +499,11 @@ export default function DeliScreen({ tenantDbId, userId }) {
     };
     setMessages(prev => [...prev, optimisticMsg]);
     setLoading(true);
-
-    // Auto-resize textarea reset
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-    }
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
-
       const resp = await fetch(`${BRIDGE_URL}/agents/deli-conversa/run`, {
         method: 'POST',
         headers: {
@@ -219,18 +512,13 @@ export default function DeliScreen({ tenantDbId, userId }) {
         },
         body: JSON.stringify({
           tenant_id: tenantDbId,
-          payload: {
-            user_id: userId,
-            message: text,
-          },
+          payload: { user_id: userId, message: text },
         }),
       });
-
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: resp.statusText }));
         throw new Error(err.error || `Erro ${resp.status}`);
       }
-      // Resposta da DELI chega via Realtime (deli_messages INSERT)
     } catch (err) {
       setLoading(false);
       loadingRef.current = false;
@@ -244,18 +532,13 @@ export default function DeliScreen({ tenantDbId, userId }) {
   }
 
   function onKeyDown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   }
 
   function onTextareaInput(e) {
     e.target.style.height = 'auto';
     e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
   }
-
-  // ── Render ──────────────────────────────────────────────────────────────────
 
   if (initialLoad) {
     return (
@@ -267,39 +550,13 @@ export default function DeliScreen({ tenantDbId, userId }) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', maxWidth: 720, margin: '0 auto', width: '100%' }}>
-
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div style={{
-        padding: '14px 20px',
-        borderBottom: '1px solid var(--g-700)',
-        display: 'flex', alignItems: 'center', gap: 12,
-        flexShrink: 0,
-      }}>
-        <div style={{
-          width: 40, height: 40, borderRadius: '50%',
-          background: 'var(--red, #B70C00)', color: '#fff',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 16, fontWeight: 800,
-        }}>D</div>
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--g-50)' }}>DELI</div>
-          <div style={{ fontSize: 12, color: 'var(--g-400)' }}>COO Digital · Trigger.dev</div>
-        </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981' }} />
-          <span style={{ fontSize: 11, color: 'var(--g-400)' }}>online</span>
-        </div>
-      </div>
-
-      {/* ── Mensagens ───────────────────────────────────────────────────────── */}
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px 20px 8px' }}>
         {messages.map(msg => <DeliMessage key={msg.id} msg={msg} />)}
         {loading && <TypingIndicator />}
         <div ref={bottomRef} />
       </div>
 
-      {/* ── Atalhos ─────────────────────────────────────────────────────────── */}
       {messages.length <= 1 && (
         <div style={{ padding: '0 20px 8px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {SHORTCUTS.map(s => (
@@ -317,7 +574,6 @@ export default function DeliScreen({ tenantDbId, userId }) {
         </div>
       )}
 
-      {/* ── Composer ────────────────────────────────────────────────────────── */}
       <div style={{
         padding: '10px 20px 20px',
         display: 'flex', gap: 8, alignItems: 'flex-end',
@@ -365,6 +621,73 @@ export default function DeliScreen({ tenantDbId, userId }) {
         >
           <Icon name="send" size={16} />
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Tela principal ────────────────────────────────────────────────────────────
+
+const TABS = [
+  { id: 'chat',  label: 'Chat' },
+  { id: 'painel', label: 'Painel' },
+];
+
+export default function DeliScreen({ tenantDbId, userId }) {
+  const [activeTab, setActiveTab] = useState('chat');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', maxWidth: 720, margin: '0 auto', width: '100%' }}>
+
+      {/* ── Header ──────────────────────────────────────────────────────────── */}
+      <div style={{
+        padding: '14px 20px 0',
+        borderBottom: '1px solid var(--g-700)',
+        flexShrink: 0,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: '50%',
+            background: 'var(--red, #B70C00)', color: '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 16, fontWeight: 800,
+          }}>D</div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--g-50)' }}>DELI</div>
+            <div style={{ fontSize: 12, color: 'var(--g-400)' }}>COO Digital · Trigger.dev</div>
+          </div>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981' }} />
+            <span style={{ fontSize: 11, color: 'var(--g-400)' }}>online</span>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: 0 }}>
+          {TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                background: 'none',
+                border: 'none',
+                borderBottom: activeTab === tab.id ? '2px solid var(--red, #B70C00)' : '2px solid transparent',
+                color: activeTab === tab.id ? 'var(--g-50)' : 'var(--g-500)',
+                padding: '6px 16px 10px',
+                fontSize: 13,
+                fontWeight: activeTab === tab.id ? 700 : 400,
+                cursor: 'pointer',
+                transition: 'color 0.15s',
+              }}
+            >{tab.label}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Conteúdo da aba ─────────────────────────────────────────────────── */}
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        {activeTab === 'chat'   && <ChatTab  tenantDbId={tenantDbId} userId={userId} />}
+        {activeTab === 'painel' && <PainelTab tenantDbId={tenantDbId} userId={userId} />}
       </div>
     </div>
   );
