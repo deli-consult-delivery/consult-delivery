@@ -8,7 +8,7 @@ import ChatScreen from './screens/ChatScreen.jsx';
 import TasksScreen from './screens/TasksScreen.jsx';
 import CoraScreen from './screens/CoraScreen.jsx';
 import AnaliseiFoodScreen from './screens/AnaliseiFoodScreen.jsx';
-import TarefasClienteScreen from './screens/TarefasClienteScreen.jsx';
+import TarefasClientesScreen from './screens/TarefasClientesScreen.jsx';
 import CRMScreen from './screens/CRMScreen.jsx';
 import ReportsScreen from './screens/ReportsScreen.jsx';
 import SettingsScreen from './screens/SettingsScreen.jsx';
@@ -235,7 +235,7 @@ export default function App() {
         {route === 'tasks'     && <TasksScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'cora'         && <CoraScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'analise-ifood'   && <AnaliseiFoodScreen tenant={tenant} tenantDbId={tenantDbId} />}
-        {route === 'tarefas-clientes' && <TarefasClienteScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />}
+        {route === 'tarefas-clientes' && <TarefasClientesScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'crm'             && <CRMScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={nav => setRoute(nav)} />}
         {route === 'reports'         && <ReportsScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'agents'           && <AgentsPage tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />}

@@ -15,7 +15,8 @@ const NAV_GROUPS = [
     items: [
       { id: 'chat',   icon: 'chat',  label: 'Chat Ao Vivo' },
       { id: 'crm',    icon: 'users', label: 'Clientes'     },
-      { id: 'tasks',  icon: 'check', label: 'Tarefas'      },
+      { id: 'tasks',           icon: 'check', label: 'Tarefas'         },
+      { id: 'tarefas-clientes', icon: 'list',   label: 'Tarefas Clientes' },
     ],
   },
   {

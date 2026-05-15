@@ -326,6 +326,45 @@ export async function deleteTask(taskId) {
   if (error) throw error;
 }
 
+// ─── Client Tasks (Tarefas Clientes) ──────────────────────────────────────
+
+export async function listClientTasks(tenantId, customerId, phaseId) {
+  let q = supabase
+    .from('client_tasks')
+    .select('*, assignee:profiles!client_tasks_assignee_id_fkey(id, full_name, avatar_url)')
+    .eq('tenant_id', tenantId)
+    .order('position', { ascending: true });
+  if (customerId) q = q.eq('customer_id', customerId);
+  if (phaseId)    q = q.eq('phase_id', phaseId);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createClientTask(payload) {
+  const { data, error } = await supabase
+    .from('client_tasks').insert(payload).select('id').single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateClientTask(id, updates) {
+  const { error } = await supabase
+    .from('client_tasks').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) throw error;
+}
+
+export async function moveClientTask(id, status, position) {
+  const { error } = await supabase
+    .from('client_tasks').update({ status, position, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteClientTask(id) {
+  const { error } = await supabase.from('client_tasks').delete().eq('id', id);
+  if (error) throw error;
+}
+
 export async function createTasksFromAnalise({ tenantId, analiseId, clienteId, pontos }) {
   const rows = pontos.map((p, i) => ({
     tenant_id:   tenantId,
