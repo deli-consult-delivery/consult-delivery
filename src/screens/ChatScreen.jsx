@@ -1174,6 +1174,21 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onSta
             <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{linkify(m.text)}</div>
           )}
         </div>
+        {m.reactions?.length > 0 && (() => {
+          const grouped = {};
+          (m.reactions || []).forEach(r => { if (r.emoji) grouped[r.emoji] = (grouped[r.emoji] || 0) + 1; });
+          const entries = Object.entries(grouped);
+          if (!entries.length) return null;
+          return (
+            <div style={{ display: 'flex', gap: 4, marginTop: 3, flexWrap: 'wrap', justifyContent: isOut ? 'flex-end' : 'flex-start' }}>
+              {entries.map(([emoji, count]) => (
+                <span key={emoji} title={`${count} reação${count > 1 ? 'ões' : ''}`} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 12, padding: '1px 7px', fontSize: 14, display: 'inline-flex', alignItems: 'center', gap: 3, cursor: 'default', userSelect: 'none' }}>
+                  {emoji}{count > 1 && <span style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.65)', marginLeft: 1 }}>{count}</span>}
+                </span>
+              ))}
+            </div>
+          );
+        })()}
         {!isOut && (
           <div className="lc-bubble-actions">
             <button title="Responder" onClick={() => onReply?.(m)}><Icon name="msg" size={11} /></button>
@@ -1682,12 +1697,19 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, payload => {
         const msg = payload.new;
-        if (!msg.media_url) return;
-        setMessages(m => {
-          const convMsgs = m[msg.conversation_id];
-          if (!convMsgs) return m;
-          return { ...m, [msg.conversation_id]: convMsgs.map(ex => ex.id === msg.id ? { ...ex, mediaUrl: msg.media_url } : ex) };
-        });
+        const convMsgs2 = (m2) => {
+          const convMsgs = m2[msg.conversation_id];
+          if (!convMsgs) return m2;
+          const updated = convMsgs.map(ex => {
+            if (ex.id !== msg.id) return ex;
+            const patch = {};
+            if (msg.media_url)  patch.mediaUrl  = msg.media_url;
+            if (msg.reactions !== undefined) patch.reactions = msg.reactions || [];
+            return Object.keys(patch).length ? { ...ex, ...patch } : ex;
+          });
+          return { ...m2, [msg.conversation_id]: updated };
+        };
+        if (msg.media_url || msg.reactions !== undefined) setMessages(convMsgs2);
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -1948,7 +1970,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   async function loadMsgs(convId) {
     try {
       const [{ data }, { data: evts }] = await Promise.all([
-        supabase.from('messages').select('id, direction, content, body, created_at, sender_name, media_url, media_type, whatsapp_msg_id, quoted_content').eq('conversation_id', convId).order('created_at', { ascending: false }).limit(MSG_PAGE),
+        supabase.from('messages').select('id, direction, content, body, created_at, sender_name, media_url, media_type, whatsapp_msg_id, quoted_content, reactions').eq('conversation_id', convId).order('created_at', { ascending: false }).limit(MSG_PAGE),
         supabase.from('conversation_events').select('id, event_type, actor_name, metadata, ts').eq('conversation_id', convId).order('ts', { ascending: true }),
       ]);
       const rows = data || [];
@@ -1959,7 +1981,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         _ts: msg.created_at || new Date(0).toISOString(),
         mediaType: msg.media_type || null, mediaUrl: msg.media_url || null,
         agentName: msg.sender_name || null, waMsgId: msg.whatsapp_msg_id || null,
-        replyTo: msg.quoted_content || null,
+        replyTo: msg.quoted_content || null, reactions: msg.reactions || [],
       }));
       const SHOW_EVENT_TYPES = new Set(['created', 'assigned', 'closed', 'reopened']);
       // Dedup: trigger SQL + frontend podem inserir o mesmo evento; manter o com actor_name
@@ -1998,7 +2020,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     try {
       const { data } = await supabase
         .from('messages')
-        .select('id, direction, content, body, created_at, sender_name, media_url, media_type, whatsapp_msg_id, quoted_content')
+        .select('id, direction, content, body, created_at, sender_name, media_url, media_type, whatsapp_msg_id, quoted_content, reactions')
         .eq('conversation_id', convId)
         .lt('created_at', oldestTs)
         .order('created_at', { ascending: false })
@@ -2011,7 +2033,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         _ts: msg.created_at || new Date(0).toISOString(),
         mediaType: msg.media_type || null, mediaUrl: msg.media_url || null,
         agentName: msg.sender_name || null, waMsgId: msg.whatsapp_msg_id || null,
-        replyTo: msg.quoted_content || null,
+        replyTo: msg.quoted_content || null, reactions: msg.reactions || [],
       }));
       if (olderMsgs.length > 0) {
         scrollAnchorRef.current = scrollRef.current?.scrollHeight || 0;
