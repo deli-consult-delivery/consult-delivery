@@ -544,7 +544,7 @@ function EscalarTab({ tenantDbId, userId }) {
 
       {result && (
         <div style={{ background: 'var(--g-800)', border: '1px solid var(--g-600)', borderRadius: 12, overflow: 'hidden' }}>
-          <div style={{ background: 'var(--g-700)', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--g-600)', flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ background: 'var(--g-700)', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid var(--g-600)', flexWrap: 'wrap' }}>
             <MaxAvatar size={28} />
             <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--g-100)' }}>Análise de Escalação</span>
             <PrioridadeBadge prioridade={result.prioridade} />
