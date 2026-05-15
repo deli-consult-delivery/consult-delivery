@@ -1399,17 +1399,25 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     // Auto-lookup: se é PV (não grupo), tenta vincular pelo telefone
     const isGroup = conv.whatsapp_chat_id?.endsWith('@g.us');
     if (!isGroup && conv.whatsapp_chat_id && tenantDbId) {
-      const phone = conv.whatsapp_chat_id.split('@')[0];
+      const phoneDigits = conv.whatsapp_chat_id.split('@')[0];
+      // Inclui variante com/sem 9º dígito para números brasileiros (celular 8 vs 9 dígitos)
+      const phoneVariants = [phoneDigits];
+      if (phoneDigits.startsWith('55') && phoneDigits.length === 13) {
+        phoneVariants.push(phoneDigits.slice(0, 4) + phoneDigits.slice(5));
+      } else if (phoneDigits.startsWith('55') && phoneDigits.length === 12) {
+        phoneVariants.push(phoneDigits.slice(0, 4) + '9' + phoneDigits.slice(4));
+      }
       supabase.from('customers')
         .select('id, name, phone, email, document, created_at')
         .eq('tenant_id', tenantDbId)
-        .eq('phone', phone)
-        .maybeSingle()
+        .in('phone_normalized', phoneVariants)
+        .limit(1)
         .then(({ data }) => {
-          if (!data) return;
-          supabase.from('conversations').update({ customer_id: data.id }).eq('id', conv.id);
-          setActiveCustomer(data);
-          setConvs(prev => prev.map(c => c.id === conv.id ? { ...c, customer_id: data.id } : c));
+          const customer = Array.isArray(data) ? data[0] : data;
+          if (!customer) return;
+          supabase.from('conversations').update({ customer_id: customer.id }).eq('id', conv.id);
+          setActiveCustomer(customer);
+          setConvs(prev => prev.map(c => c.id === conv.id ? { ...c, customer_id: customer.id } : c));
         });
     }
   }, [activeId, tenantDbId]);
