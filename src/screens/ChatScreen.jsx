@@ -336,6 +336,59 @@ function VideoPlayer({ src, text }) {
   );
 }
 
+// ─── SMART IMAGE (handles HEIC → JPEG conversion) ─────────────
+function SmartImage({ src, alt, marginBottom, onViewImage, showDownload, downloadName }) {
+  const [displaySrc, setDisplaySrc] = useState(null);
+  const blobUrlRef = useRef(null);
+
+  useEffect(() => {
+    if (!src) return;
+    const isHeic = /data:image\/(heic|heif)/i.test(src);
+    if (!isHeic) { setDisplaySrc(src); return; }
+    let cancelled = false;
+    import('heic2any').then(async ({ default: h2a }) => {
+      const [, b64] = src.split(',');
+      const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: 'image/heic' });
+      const out = await h2a({ blob, toType: 'image/jpeg', quality: 0.85 });
+      const jpegBlob = Array.isArray(out) ? out[0] : out;
+      const url = URL.createObjectURL(jpegBlob);
+      blobUrlRef.current = url;
+      if (!cancelled) setDisplaySrc(url);
+    }).catch(() => { if (!cancelled) setDisplaySrc(src); });
+    return () => {
+      cancelled = true;
+      if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
+    };
+  }, [src]);
+
+  const handleDownload = (e) => {
+    e.stopPropagation();
+    if (!displaySrc) return;
+    const a = document.createElement('a');
+    a.href = displaySrc;
+    a.download = (downloadName || 'imagem').replace(/\.(heic|heif)$/i, '.jpg');
+    a.click();
+  };
+
+  return (
+    <div style={{ position: 'relative', display: 'inline-block', marginBottom }} className="lc-media-wrap">
+      {displaySrc
+        ? <img src={displaySrc} alt={alt || 'imagem'} style={{ maxWidth: 260, maxHeight: 200, borderRadius: 8, cursor: 'pointer', display: 'block' }} onClick={() => onViewImage?.(displaySrc)} />
+        : <div style={{ width: 200, height: 120, borderRadius: 8, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{src ? 'Convertendo…' : 'Aguardando…'}</span>
+          </div>}
+      {showDownload && displaySrc && (
+        <a onClick={handleDownload} title="Baixar imagem" className="lc-media-dl" style={{ cursor: 'pointer' }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </a>
+      )}
+    </div>
+  );
+}
+
 function AudioPlayer({ src, isOut }) {
   const [playing, setPlaying]       = useState(false);
   const [currentTime, setCurrent]   = useState(0);
@@ -1058,7 +1111,7 @@ function ForwardModal({ msg, convs, currentConvId, onClose, onForward }) {
 }
 
 // ─── MESSAGE BUBBLE ────────────────────────────────────────────
-function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onStar, onDelete, onResumirMsg, onTraduzirMsg, onForward }) {
+function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onStar, onDelete, onResumirMsg, onTraduzirMsg, onForward, translation }) {
   const isOut = m.from === 'out';
   const isSystem = m.from === 'system';
 
@@ -1072,23 +1125,7 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onSta
     if (!m.mediaType) return null;
     const url = m.mediaUrl;
     if (m.mediaType === 'image') {
-      return (
-        <div style={{ position: 'relative', display: 'inline-block', marginBottom: m.text ? 6 : 0 }} className="lc-media-wrap">
-          <img src={url} alt="imagem" style={{ maxWidth: 260, maxHeight: 200, borderRadius: 8, cursor: 'pointer', display: 'block' }} onClick={() => onViewImage?.(url)} />
-          {url && (
-            <a
-              href={url} download
-              title="Baixar imagem"
-              onClick={e => e.stopPropagation()}
-              className="lc-media-dl"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-            </a>
-          )}
-        </div>
-      );
+      return <SmartImage src={url} marginBottom={m.text ? 6 : 0} onViewImage={onViewImage} showDownload={!!url} downloadName={m.text} />;
     }
     if (m.mediaType === 'video') {
       return <VideoPlayer src={url} text={m.text} />;
@@ -1122,16 +1159,7 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onSta
         }
       };
       if (isImageDoc) {
-        return (
-          <div style={{ position: 'relative', display: 'inline-block', marginBottom: m.text ? 6 : 0 }} className="lc-media-wrap">
-            <img src={url} alt={m.text || 'imagem'} style={{ maxWidth: 260, maxHeight: 200, borderRadius: 8, cursor: 'pointer', display: 'block' }} onClick={() => onViewImage?.(url)} />
-            <a onClick={e => { e.stopPropagation(); handleDocClick(); }} title="Baixar" className="lc-media-dl" style={{ cursor: 'pointer' }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-            </a>
-          </div>
-        );
+        return <SmartImage src={url} alt={m.text || 'imagem'} marginBottom={m.text ? 6 : 0} onViewImage={onViewImage} showDownload={!!url} downloadName={m.text} />;
       }
       return (
         <div onClick={handleDocClick} style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'white', cursor: url ? 'pointer' : 'default', padding: '8px 10px', background: 'rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 12 }}>
@@ -1174,6 +1202,30 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onSta
             <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{linkify(m.text)}</div>
           )}
         </div>
+        {!isOut && translation && (
+          <div style={{ marginTop: 4, marginLeft: 4, maxWidth: 340 }}>
+            {translation.loading && (
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center', padding: '3px 0' }}>
+                <span className="lc-typ-dot" style={{ animationDelay: '0s', width: 5, height: 5 }} />
+                <span className="lc-typ-dot" style={{ animationDelay: '0.15s', width: 5, height: 5 }} />
+                <span className="lc-typ-dot" style={{ animationDelay: '0.3s', width: 5, height: 5 }} />
+              </div>
+            )}
+            {!translation.loading && translation.error && (
+              <div style={{ fontSize: 11, color: 'rgba(239,68,68,0.6)', fontStyle: 'italic' }}>
+                Tradução indisponível
+              </div>
+            )}
+            {!translation.loading && translation.text && (
+              <div style={{ fontSize: 12, color: 'var(--g-400, rgba(255,255,255,0.5))', fontStyle: 'italic', lineHeight: 1.4 }}>
+                {translation.text}
+                {translation.lang && (
+                  <sub style={{ marginLeft: 6, fontSize: 10, opacity: 0.7, fontStyle: 'normal' }}>{translation.lang}</sub>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         {m.reactions?.length > 0 && (() => {
           const grouped = {};
           (m.reactions || []).forEach(r => { if (r.emoji) grouped[r.emoji] = (grouped[r.emoji] || 0) + 1; });
@@ -1324,6 +1376,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [replyTo, setReplyTo]                = useState(null);
   const [lightboxUrl, setLightboxUrl]        = useState(null);
   const [forwardMsg, setForwardMsg]          = useState(null);
+
+  // ── Tradução por mensagem ─────────────────────────────────
+  const [translations, setTranslations]      = useState({}); // { msgId: { loading, text, lang, error } }
 
   // ── AI / Composer ─────────────────────────────────────────
   const [aiMode, setAiMode]                  = useState('humano');
@@ -2705,6 +2760,33 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     }
   }
 
+  // ── Tradução por mensagem ─────────────────────────────────
+  async function translateMessage(msgId, msgText) {
+    if (!msgText) return;
+    setTranslations(t => ({ ...t, [msgId]: { loading: true } }));
+    try {
+      const BRIDGE_URL = import.meta.env.VITE_BRIDGE_URL || '';
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch(`${BRIDGE_URL}/chat/ai`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ command: '/traduzir', messages: [{ direction: 'inbound', content: msgText }] }),
+      });
+      const data = await r.json();
+      if (data.ok && data.bullets?.length) {
+        const tradLine = data.bullets[0] || '';
+        const langLine = data.bullets[1] || '';
+        const text = tradLine.replace(/^Tradu[çc][ãa]o:\s*/i, '');
+        const lang = langLine.replace(/^Idioma detectado:\s*/i, '');
+        setTranslations(t => ({ ...t, [msgId]: { loading: false, text, lang } }));
+      } else {
+        setTranslations(t => ({ ...t, [msgId]: { loading: false, error: true } }));
+      }
+    } catch {
+      setTranslations(t => ({ ...t, [msgId]: { loading: false, error: true } }));
+    }
+  }
+
   async function triggerIaAutoReply(convId, chatId) {
     if (!chatId || iaPendingRef.current.has(convId)) return;
     iaPendingRef.current.add(convId);
@@ -3531,8 +3613,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                       onViewImage={url => setLightboxUrl(url)}
                       onCreateTask={msg => console.log('criar tarefa:', msg.text)}
                       onResumirMsg={() => runCommand('/resumir')}
-                      onTraduzirMsg={() => runCommand('/traduzir')}
+                      onTraduzirMsg={msg => translateMessage(msg.id, msg.text)}
                       onForward={msg => setForwardMsg(msg)}
+                      translation={translations[m.id]}
                     />
                   );
                   return acc;
