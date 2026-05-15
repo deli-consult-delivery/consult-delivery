@@ -25,6 +25,7 @@ const InputSchema = z.object({
   tom: z.string().optional().describe("Ex: informal e próximo, premium, divertido"),
   cupom: z.string().optional().describe("Ex: VOLTA10, FRETE0"),
   triggered_by: z.string().uuid().optional(),
+  campanha_id: z.string().uuid().optional(),
 });
 
 const VariacaoSchema = z.object({
@@ -170,6 +171,21 @@ Retorne o JSON conforme solicitado.`;
       triggeredBy: input.triggered_by,
       durationMs: Date.now() - startedAt,
     });
+
+    // Atualiza campanha com resultado da geração
+    if (input.campanha_id) {
+      await sb
+        .from("campanhas")
+        .update({
+          status: resultado.ok ? "pendente_revisao" : "erro_geracao",
+          conteudo_gerado: resultado,
+          agent_run_id: ctx.run.id,
+        })
+        .eq("id", input.campanha_id)
+        .catch((err: Error) =>
+          console.warn("[lara/gerar-conteudo] campanhas update:", err.message)
+        );
+    }
 
     const tipoStr = tipoLabel[input.tipo] ?? input.tipo;
     await notifyDeli({
