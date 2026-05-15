@@ -29,6 +29,7 @@ const NAV_GROUPS = [
       { id: 'nova',          icon: 'sparkles', label: 'NOVA · Automação', pulse: true },
       { id: 'breno',         icon: 'chat',     label: 'BRENO · Atend.',   pulse: true },
       { id: 'sofia',         icon: 'sparkles', label: 'SOFIA · SDR',      pulse: true },
+      { id: 'vera',          icon: 'chart',    label: 'VERA · BI',         pulse: true },
     ],
   },
   {
