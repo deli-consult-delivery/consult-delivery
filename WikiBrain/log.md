@@ -1,6 +1,39 @@
 # Wiki Log
 
+## [2026-05-15 19:00] session | Feature V2-6 — hook useDashboardData criado
+Touched: none
+
+## [2026-05-15 05:00] session | Importar leads CSV Datacrazy → CRMScreen worktree continuidade
+Touched: none
+
+## [2026-05-15 18:00] session | Merge PRs #13 #14 #15 — BRENO, SOFIA, VERA em main + worktrees
+Touched: none
+
+## [2026-05-15 17:00] session | Feature V2-4 VERA BI — config, migrations, tasks, UI, PR#15
+Touched: none
+
+## [2026-05-15 10:00] session | SofiaScreen UI completa prospects CSV abordagens
+Touched: none
+
+## [2026-05-15 12:00] session | VERA migrations tabelas e views BI
+Touched: none
+
+## [2026-05-15 03:00] session | SOFIA tasks Trigger.dev pesquisar qualificar gerar-abordagem batch
+Touched: none
+
+## [2026-05-15 00:30] session | Feature V2-1 CORA + Asaas end-to-end concluída
+Touched: none
+
+## [2026-05-15] session | SOFIA migrations prospects pesquisas abordagens
+Touched: none
+
+## [2026-05-15] session | Deploy tasks BRENO no Trigger.dev v20260515.1
+Touched: none
+
 ## [2026-05-14 23:59] session | Fases 6-7 + milestone v1 completo — CORA, BRENO, sidebar final
+Touched: none
+
+## [2026-05-14] session | refatoracao smoke-test CORA 3 tasks
 Touched: none
 
 ## [2026-05-14 22:00] session | Fase 6 — CORA · Cobrança Inteligente com dados reais
@@ -174,3 +207,10 @@ Touched: none
 Touched: none
 ## [2026-05-13 00:23] session | Fase 0 Fundação Técnica completa
 Touched: none (infra session — Trigger.dev, Bridge Server, 7 migrations, PR #11 aberto)
+## [2026-05-15 03:30] session | Feature V2-2 BRENO concluída e PR aberto
+Touched: none
+## [2026-05-15 05:30] session | Feature V2-3 SOFIA SDR concluída e PR aberto
+Touched: none
+
+## [2026-05-15 08:30] session | V2-5 DELI COO Digital entregue e validada
+Touched: none
