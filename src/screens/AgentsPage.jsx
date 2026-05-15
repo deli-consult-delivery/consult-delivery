@@ -2,50 +2,20 @@ import { useState as uSAg, useEffect as uEAg, useRef as uRAg, useMemo as uMAg } 
 import Icon from '../components/Icon.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
 import { TENANTS } from '../data.js';
+import { supabase } from '../lib/supabase.js';
 
-// ─── Mock de superagentes (templates) ─────────────────────────
-const SUPERAGENTS = [
-  {
-    id: 'campaign',
-    name: 'Otimizador de Campanha',
-    desc: 'Analisa pedidos e cria a campanha do dia',
-    agent: 'lara',
-    runs: '128 execuções',
-    eta: '~45s',
-  },
-  {
-    id: 'cardapio',
-    name: 'Auditor de Cardápio',
-    desc: 'Detecta fotos ruins e preços fora do mercado',
-    agent: 'max',
-    runs: '64 execuções',
-    eta: '~2 min',
-  },
-  {
-    id: 'cobranca',
-    name: 'Régua de Cobrança',
-    desc: 'Dispara mensagens para inadimplentes em escala',
-    agent: 'cora',
-    runs: '312 execuções',
-    eta: '~30s',
-  },
-  {
-    id: 'relatorio',
-    name: 'Relatório Semanal',
-    desc: 'Compila KPIs e envia ao gestor por WhatsApp',
-    agent: 'vera',
-    runs: '52 execuções',
-    eta: '~1 min',
-  },
-];
-
-// Histórico recente de execuções
-const RECENT_RUNS = [
-  { id: 'r1', title: 'Cobrança em massa — pizzaria',  agent: 'cora', time: 'há 2h' },
-  { id: 'r2', title: 'Campanha de terça do hambúrguer', agent: 'lara', time: 'ontem' },
-  { id: 'r3', title: 'Auditoria do iFood — Sushi Master', agent: 'max', time: 'ontem' },
-  { id: 'r4', title: 'Relatório semanal — Açaí Premium', agent: 'vera', time: '2 dias' },
-];
+// ─── Agentes conhecidos (metadados estáticos) ──────────────────
+const AGENT_META = {
+  lara:           { name: 'LARA',         desc: 'CRM food service + régua de disparo',       eta: '~45s' },
+  cora:           { name: 'CORA',         desc: 'Cobrança inteligente e régua de inadimplência', eta: '~30s' },
+  vera:           { name: 'VERA',         desc: 'BI e relatórios semanais',                  eta: '~1 min' },
+  breno:          { name: 'BRENO',        desc: 'Atendimento e suporte ao cliente',           eta: '~20s' },
+  sofia:          { name: 'SOFIA',        desc: 'SDR / prospecção de novos clientes',         eta: '~2 min' },
+  deli:           { name: 'DELI',         desc: 'COO digital — orquestração e monitoramento', eta: '~1 min' },
+  max:            { name: 'MAX',          desc: 'Consultor técnico e auditoria de cardápio',  eta: '~2 min' },
+  nova:           { name: 'NOVA',         desc: 'Agente de novidades e conteúdo',             eta: '~1 min' },
+  'analise-ifood': { name: 'Analista iFood', desc: 'Análise de métricas e relatório iFood',  eta: '~3 min' },
+};
 
 // Sugestões rápidas no input
 const PROMPT_SUGGESTIONS = [
@@ -55,7 +25,39 @@ const PROMPT_SUGGESTIONS = [
   'Quem deve mais de R$ 500?',
 ];
 
-// ─── Composer (input grande com gradiente, estilo ClickUp) ────
+// ─── Helpers ───────────────────────────────────────────────────
+const STATUS_LABEL = { success: 'Concluído', failed: 'Falhou', running: 'Executando', queued: 'Na fila' };
+const STATUS_COLOR = { success: 'var(--cora-green, #22c55e)', failed: '#ef4444', running: '#f59e0b', queued: '#6b7280' };
+
+function fmtTime(iso) {
+  if (!iso) return '—';
+  const diff = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return 'agora';
+  if (min < 60) return `há ${min}min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `há ${h}h`;
+  const d = Math.floor(h / 24);
+  if (d === 1) return 'ontem';
+  return `há ${d} dias`;
+}
+
+function fmtCost(usd) {
+  if (!usd) return '—';
+  return `$${Number(usd).toFixed(4)}`;
+}
+
+function inputPreview(input) {
+  if (!input) return '—';
+  if (typeof input === 'string') return input.slice(0, 80);
+  if (typeof input === 'object') {
+    const str = JSON.stringify(input);
+    return str.slice(0, 80) + (str.length > 80 ? '…' : '');
+  }
+  return '—';
+}
+
+// ─── Composer (input grande com gradiente) ─────────────────────
 const PromptComposer = ({ value, onChange, onSend, disabled, mode, setMode }) => {
   const ref = uRAg(null);
 
@@ -75,7 +77,6 @@ const PromptComposer = ({ value, onChange, onSend, disabled, mode, setMode }) =>
 
   return (
     <div className="deli-composer-wrap">
-      {/* Tabs */}
       <div className="deli-tabs">
         <button
           className={`deli-tab ${mode === 'ask' ? 'on' : ''}`}
@@ -91,7 +92,6 @@ const PromptComposer = ({ value, onChange, onSend, disabled, mode, setMode }) =>
         </button>
       </div>
 
-      {/* Composer */}
       <div className="deli-composer">
         <textarea
           ref={ref}
@@ -129,17 +129,55 @@ const PromptComposer = ({ value, onChange, onSend, disabled, mode, setMode }) =>
   );
 };
 
-// ─── Card de superagente (template) ───────────────────────────
-const SuperAgentCard = ({ sa, onRun }) => {
+// ─── Card de agente com dados reais ───────────────────────────
+const SuperAgentCard = ({ agentId, stats, onRun }) => {
+  const meta = AGENT_META[agentId] || { name: agentId, desc: '', eta: '—' };
+  const runsLabel = stats ? `${stats.total_runs} execuç${stats.total_runs === 1 ? 'ão' : 'ões'}` : '0 execuções';
+
+  const handleRun = () => {
+    onRun({ id: agentId, name: meta.name, desc: meta.desc });
+  };
+
   return (
-    <div className="sa-card" onClick={() => onRun(sa)}>
+    <div className="sa-card" onClick={handleRun}>
       <div className="sa-card-top">
-        <AgentAvatar id={sa.agent} size={32}/>
-        <span className="sa-eta">{sa.eta}</span>
+        <AgentAvatar id={agentId} size={32}/>
+        <span className="sa-eta">{meta.eta}</span>
       </div>
-      <div className="sa-card-name">{sa.name}</div>
-      <div className="sa-card-desc">{sa.desc}</div>
-      <div className="sa-card-foot">{sa.runs}</div>
+      <div className="sa-card-name">{meta.name}</div>
+      <div className="sa-card-desc">{meta.desc}</div>
+      <div className="sa-card-foot" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>{runsLabel}</span>
+        {stats?.last_status && (
+          <span style={{ fontSize: 10, color: STATUS_COLOR[stats.last_status] }}>
+            {STATUS_LABEL[stats.last_status]}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── Item de run na lista de histórico ────────────────────────
+const RunItem = ({ run }) => {
+  const meta = AGENT_META[run.agent_id] || { name: run.agent_id };
+  return (
+    <div className="ai-sb-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2, padding: '8px 12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+        <AgentAvatar id={run.agent_id} size={18}/>
+        <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {meta.name}
+        </span>
+        <span style={{ fontSize: 10, color: STATUS_COLOR[run.status] || 'rgba(255,255,255,0.5)', flexShrink: 0 }}>
+          {STATUS_LABEL[run.status] || run.status}
+        </span>
+      </div>
+      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', paddingLeft: 26, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+        {inputPreview(run.input)}
+      </div>
+      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', paddingLeft: 26 }}>
+        {fmtTime(run.created_at)}{run.cost_usd ? ` · ${fmtCost(run.cost_usd)}` : ''}
+      </div>
     </div>
   );
 };
@@ -182,12 +220,10 @@ const RunPanel = ({ prompt, onClose, tenant }) => {
       </div>
 
       <div className="run-body dark-scroll">
-        {/* User prompt bubble */}
         <div className="run-msg user">
           <div className="run-bubble user">{prompt}</div>
         </div>
 
-        {/* Stages */}
         <div className="run-stages">
           {STAGES.slice(0, -1).map((s, i) => {
             const state = i < stage ? 'done' : i === stage && !done ? 'active' : i === stage && done ? 'done' : 'pending';
@@ -209,7 +245,6 @@ const RunPanel = ({ prompt, onClose, tenant }) => {
           })}
         </div>
 
-        {/* Result */}
         {done && (
           <div className="run-result fade-in">
             <div className="run-result-head">
@@ -264,13 +299,20 @@ const RunPanel = ({ prompt, onClose, tenant }) => {
 };
 
 // ─── Sub-sidebar IA ───────────────────────────────────────────
-const AISidebar = ({ onPick, current }) => {
+const AISidebar = ({ onPick, current, agentStats, recentRuns, loadingRuns }) => {
   const items = [
-    { id: 'create', icon: 'plus',  label: 'Criar agente' },
-    { id: 'all',    icon: 'bot',   label: 'Todos os agentes', count: 7 },
-    { id: 'mine',   icon: 'star',  label: 'Meus agentes',     count: 3 },
+    { id: 'create', icon: 'plus',    label: 'Criar agente' },
+    { id: 'all',    icon: 'bot',     label: 'Todos os agentes', count: Object.keys(agentStats).length || null },
+    { id: 'mine',   icon: 'star',    label: 'Meus agentes',     count: 3 },
     { id: 'log',    icon: 'refresh', label: 'Atividade' },
   ];
+
+  // Agentes com ao menos 1 run, ordenados por last_run_at desc (para sidebar)
+  const activeAgents = Object.entries(agentStats)
+    .filter(([, s]) => s.total_runs > 0)
+    .sort(([, a], [, b]) => (b.last_run_at || '').localeCompare(a.last_run_at || ''))
+    .slice(0, 2);
+
   return (
     <aside className="ai-sidebar">
       <div className="ai-sb-head">
@@ -299,25 +341,46 @@ const AISidebar = ({ onPick, current }) => {
         ))}
       </div>
 
-      <div className="ai-sb-section">Superagentes recentes</div>
+      <div className="ai-sb-section">Agentes recentes</div>
       <div>
-        {SUPERAGENTS.slice(0, 2).map(sa => (
-          <div key={sa.id} className="ai-sb-item">
-            <AgentAvatar id={sa.agent} size={18}/>
-            <span style={{ flex: 1, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {sa.name}
-            </span>
+        {activeAgents.length === 0 && !loadingRuns && (
+          <div style={{ padding: '6px 12px', fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+            Nenhuma execução ainda
           </div>
-        ))}
+        )}
+        {activeAgents.map(([agentId, stats]) => {
+          const meta = AGENT_META[agentId] || { name: agentId };
+          return (
+            <div key={agentId} className="ai-sb-item">
+              <AgentAvatar id={agentId} size={18}/>
+              <span style={{ flex: 1, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {meta.name}
+              </span>
+              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>
+                {stats.total_runs}
+              </span>
+            </div>
+          );
+        })}
       </div>
 
-      <div className="ai-sb-section">Conversas recentes</div>
+      <div className="ai-sb-section">Execuções recentes</div>
       <div>
-        {RECENT_RUNS.map(r => (
+        {loadingRuns && (
+          <div style={{ padding: '6px 12px', fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+            Carregando…
+          </div>
+        )}
+        {!loadingRuns && recentRuns.length === 0 && (
+          <div style={{ padding: '6px 12px', fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+            Nenhuma execução encontrada
+          </div>
+        )}
+        {recentRuns.slice(0, 4).map(r => (
           <div key={r.id} className="ai-sb-item">
             <Icon name="msg" size={14}/>
             <span style={{ flex: 1, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {r.title}
+              {(AGENT_META[r.agent_id]?.name || r.agent_id)} · {inputPreview(r.input).slice(0, 30)}
             </span>
           </div>
         ))}
@@ -344,12 +407,141 @@ const AISidebar = ({ onPick, current }) => {
 
 // ─── Tela principal ───────────────────────────────────────────
 const AgentsHub = ({ tenant, tenantDbId, userId }) => {
-  const [mode, setMode] = uSAg('agent'); // 'ask' or 'agent'
+  const [mode, setMode] = uSAg('agent');
   const [prompt, setPrompt] = uSAg('');
-  const [running, setRunning] = uSAg(null); // prompt being run
+  const [running, setRunning] = uSAg(null);
   const [sbActive, setSbActive] = uSAg('create');
 
+  // ── Dados reais do Supabase ────────────────────────────────
+  const [recentRuns, setRecentRuns] = uSAg([]);
+  const [agentStats, setAgentStats] = uSAg({});
+  const [loadingRuns, setLoadingRuns] = uSAg(true);
+
   const tenantName = TENANTS.find(t => t.id === tenant)?.name || '';
+
+  // Calcula stats por agente a partir da lista de runs
+  const buildStats = (runs) => {
+    const stats = {};
+    for (const run of runs) {
+      const id = run.agent_id;
+      if (!stats[id]) {
+        stats[id] = { total_runs: 0, total_cost_usd: 0, last_run_at: null, last_status: null };
+      }
+      stats[id].total_runs += 1;
+      stats[id].total_cost_usd += Number(run.cost_usd || 0);
+      if (!stats[id].last_run_at || run.created_at > stats[id].last_run_at) {
+        stats[id].last_run_at = run.created_at;
+        stats[id].last_status = run.status;
+      }
+    }
+    return stats;
+  };
+
+  // Carrega runs iniciais
+  uEAg(() => {
+    if (!tenantDbId) return;
+
+    let cancelled = false;
+
+    const load = async () => {
+      setLoadingRuns(true);
+      const { data, error } = await supabase
+        .from('agent_runs')
+        .select('id, agent_id, status, cost_usd, duration_ms, created_at, input, output')
+        .eq('tenant_id', tenantDbId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error('[AgentsPage] Erro ao buscar agent_runs:', error.message);
+        setLoadingRuns(false);
+        return;
+      }
+
+      const runs = data || [];
+      setRecentRuns(runs.slice(0, 20));
+      setAgentStats(buildStats(runs));
+      setLoadingRuns(false);
+    };
+
+    load();
+    return () => { cancelled = true; };
+  }, [tenantDbId]);
+
+  // Realtime: escuta INSERT e UPDATE em agent_runs do tenant
+  uEAg(() => {
+    if (!tenantDbId) return;
+
+    const channel = supabase
+      .channel(`agent_runs:tenant:${tenantDbId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'agent_runs',
+          filter: `tenant_id=eq.${tenantDbId}`,
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newRun = payload.new;
+            setRecentRuns((prev) => {
+              const updated = [newRun, ...prev].slice(0, 20);
+              return updated;
+            });
+            setAgentStats((prev) => {
+              const id = newRun.agent_id;
+              const existing = prev[id] || { total_runs: 0, total_cost_usd: 0, last_run_at: null, last_status: null };
+              return {
+                ...prev,
+                [id]: {
+                  total_runs: existing.total_runs + 1,
+                  total_cost_usd: existing.total_cost_usd + Number(newRun.cost_usd || 0),
+                  last_run_at: newRun.created_at,
+                  last_status: newRun.status,
+                },
+              };
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedRun = payload.new;
+            setRecentRuns((prev) =>
+              prev.map((r) => (r.id === updatedRun.id ? { ...r, ...updatedRun } : r))
+            );
+            setAgentStats((prev) => {
+              const id = updatedRun.agent_id;
+              if (!prev[id]) return prev;
+              // Atualiza apenas o status do último run se for o mais recente
+              const isLatest = !prev[id].last_run_at || updatedRun.created_at >= prev[id].last_run_at;
+              return {
+                ...prev,
+                [id]: {
+                  ...prev[id],
+                  last_status: isLatest ? updatedRun.status : prev[id].last_status,
+                  last_run_at: isLatest ? updatedRun.created_at : prev[id].last_run_at,
+                },
+              };
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [tenantDbId]);
+
+  // Stats agregados para a barra inferior
+  const totalRuns = uMAg(
+    () => Object.values(agentStats).reduce((sum, s) => sum + s.total_runs, 0),
+    [agentStats]
+  );
+  const activeAgentCount = uMAg(
+    () => Object.keys(agentStats).filter((id) => agentStats[id].total_runs > 0).length,
+    [agentStats]
+  );
 
   const submit = () => {
     if (!prompt.trim()) return;
@@ -358,24 +550,35 @@ const AgentsHub = ({ tenant, tenantDbId, userId }) => {
 
   const runTemplate = (sa) => {
     const exemplos = {
-      campaign: 'Crie a campanha de hoje pra Pizzaria do João baseado no que vendeu mais essa semana',
-      cardapio: 'Audite o cardápio do iFood e me diga o que tá ruim',
-      cobranca: 'Dispare a régua de cobrança pra todos com mais de 7 dias atrasado',
-      relatorio: 'Gera o relatório semanal e me manda no WhatsApp',
+      lara: 'Crie a campanha de hoje pra Pizzaria do João baseado no que vendeu mais essa semana',
+      max:  'Audite o cardápio do iFood e me diga o que tá ruim',
+      cora: 'Dispare a régua de cobrança pra todos com mais de 7 dias atrasado',
+      vera: 'Gera o relatório semanal e me manda no WhatsApp',
     };
     setRunning(exemplos[sa.id] || sa.desc);
   };
 
+  // Agentes a exibir nos cards: todos os conhecidos + qualquer um novo que apareceu nos runs
+  const displayAgentIds = uMAg(() => {
+    const known = Object.keys(AGENT_META);
+    const fromRuns = Object.keys(agentStats).filter((id) => !known.includes(id));
+    return [...known, ...fromRuns];
+  }, [agentStats]);
+
   return (
     <div className="agents-hub">
-      <AISidebar current={sbActive} onPick={(it) => setSbActive(it.id)}/>
+      <AISidebar
+        current={sbActive}
+        onPick={(it) => setSbActive(it.id)}
+        agentStats={agentStats}
+        recentRuns={recentRuns}
+        loadingRuns={loadingRuns}
+      />
 
       <div className="hub-stage">
-        {/* Background glow */}
         <div className="hub-glow"/>
         <div className="hub-grid"/>
 
-        {/* Top bar within stage */}
         <div className="hub-topline">
           <div style={{ display:'flex', alignItems:'center', gap: 10, color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>
             <Icon name="info" size={13}/>
@@ -388,7 +591,6 @@ const AgentsHub = ({ tenant, tenantDbId, userId }) => {
         </div>
 
         <div className="hub-center">
-          {/* Brand */}
           <div className="hub-brand">
             <img src="assets/rocket-logo.png" alt="" className="hub-brand-icon"/>
             <h1 className="hub-brand-title">
@@ -397,19 +599,18 @@ const AgentsHub = ({ tenant, tenantDbId, userId }) => {
             </h1>
           </div>
           <div className="hub-tagline">
-            Sua equipe de 7 agentes IA. Pergunte, delegue, e veja acontecer.
+            Sua equipe de agentes IA. Pergunte, delegue, e veja acontecer.
           </div>
 
-          {/* Composer */}
           <PromptComposer
             value={prompt}
             onChange={setPrompt}
             onSend={submit}
+            disabled={!!running}
             mode={mode}
             setMode={setMode}
           />
 
-          {/* Quick chips (only on Ask mode) */}
           {mode === 'ask' && (
             <div className="hub-chips">
               {PROMPT_SUGGESTIONS.map(s => (
@@ -418,25 +619,55 @@ const AgentsHub = ({ tenant, tenantDbId, userId }) => {
             </div>
           )}
 
-          {/* Templates / superagentes (only on Agents mode) */}
           {mode === 'agent' && (
-            <div className="sa-grid">
-              {SUPERAGENTS.map(sa => (
-                <SuperAgentCard key={sa.id} sa={sa} onRun={runTemplate}/>
-              ))}
+            <>
+              {loadingRuns && (
+                <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 12, padding: '24px 0' }}>
+                  Carregando agentes…
+                </div>
+              )}
+              {!loadingRuns && (
+                <div className="sa-grid">
+                  {displayAgentIds.map((agentId) => (
+                    <SuperAgentCard
+                      key={agentId}
+                      agentId={agentId}
+                      stats={agentStats[agentId] || null}
+                      onRun={runTemplate}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Histórico de runs recentes (sempre visível, abaixo dos cards) */}
+          {!loadingRuns && recentRuns.length > 0 && (
+            <div style={{ marginTop: 24, width: '100%', maxWidth: 700 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', letterSpacing: 1, marginBottom: 8, textTransform: 'uppercase' }}>
+                Últimas execuções
+              </div>
+              <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                {recentRuns.map((r) => (
+                  <RunItem key={r.id} run={r}/>
+                ))}
+              </div>
             </div>
           )}
 
-          {/* Stat strip */}
           <div className="hub-stats">
             <div className="hub-stat">
-              <span className="hub-stat-v">7</span>
+              <span className="hub-stat-v">
+                {loadingRuns ? '…' : activeAgentCount}
+              </span>
               <span className="hub-stat-l">agentes ativos</span>
             </div>
             <span className="hub-stat-sep"/>
             <div className="hub-stat">
-              <span className="hub-stat-v">312</span>
-              <span className="hub-stat-l">tarefas executadas hoje</span>
+              <span className="hub-stat-v">
+                {loadingRuns ? '…' : totalRuns}
+              </span>
+              <span className="hub-stat-l">execuções registradas</span>
             </div>
             <span className="hub-stat-sep"/>
             <div className="hub-stat">
@@ -451,7 +682,6 @@ const AgentsHub = ({ tenant, tenantDbId, userId }) => {
           </div>
         </div>
 
-        {/* Run panel */}
         {running && (
           <RunPanel
             prompt={running}
