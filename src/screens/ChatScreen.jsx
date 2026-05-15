@@ -1254,6 +1254,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [newChanDesc, setNewChanDesc]        = useState('');
   const [newChanColor, setNewChanColor]      = useState('#B70C00');
   const [savingChan, setSavingChan]          = useState(false);
+  const [chanShowEmoji, setChanShowEmoji]    = useState(false);
+  const chanTextareaRef                      = useRef(null);
+  const chanFileInputRef                     = useRef(null);
 
   // ── Respostas rápidas ─────────────────────────────────────
   const [quickReplies, setQuickReplies]      = useState([]);
@@ -1620,7 +1623,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       .channel('channel-messages-rt')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'channel_messages' }, payload => {
         const msg = payload.new;
-        setChanMsgs(m => ({ ...m, [msg.channel_id]: [...(m[msg.channel_id] || []), msg] }));
+        setChanMsgs(m => {
+          const existing = m[msg.channel_id] || [];
+          if (existing.some(e => e.id === msg.id)) return m; // já adicionado por sendChanMsg
+          return { ...m, [msg.channel_id]: [...existing, msg] };
+        });
       })
       .subscribe();
     return () => { supabase.removeChannel(sub); };
@@ -2115,6 +2122,45 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       }, 2400);
     }
   };
+
+  function insertChanEmoji(em) {
+    const el = chanTextareaRef.current;
+    if (!el) { setChanDraft(d => d + em); return; }
+    const start = el.selectionStart;
+    const end   = el.selectionEnd;
+    const next  = chanDraft.slice(0, start) + em + chanDraft.slice(end);
+    setChanDraft(next);
+    setTimeout(() => { el.focus(); el.setSelectionRange(start + em.length, start + em.length); }, 0);
+  }
+
+  async function sendChanFile(file) {
+    if (!file || !active?.chanId) return;
+    const ext = file.name.split('.').pop();
+    const path = `channels/${active.chanId}/${Date.now()}-${file.name}`;
+    const { data: up } = await supabase.storage.from('public').upload(path, file, { upsert: true });
+    if (!up?.path) return;
+    const { data: { publicUrl } } = supabase.storage.from('public').getPublicUrl(up.path);
+    const isImage = file.type.startsWith('image/');
+    const { data } = await supabase.from('channel_messages').insert({
+      channel_id: active.chanId, sender_name: currentUser?.name || 'Você',
+      text: isImage ? `🖼 ${file.name}` : `📎 ${file.name}`,
+      media_url: publicUrl, media_type: file.type,
+    }).select().single();
+    if (data) setChanMsgs(m => ({ ...m, [active.chanId]: [...(m[active.chanId] || []), data] }));
+  }
+
+  async function sendChanAudio(blob) {
+    if (!blob || !active?.chanId) return;
+    const path = `channels/${active.chanId}/${Date.now()}.ogg`;
+    const { data: up } = await supabase.storage.from('public').upload(path, blob, { upsert: true, contentType: 'audio/ogg' });
+    if (!up?.path) return;
+    const { data: { publicUrl } } = supabase.storage.from('public').getPublicUrl(up.path);
+    const { data } = await supabase.from('channel_messages').insert({
+      channel_id: active.chanId, sender_name: currentUser?.name || 'Você',
+      text: '🎵 Áudio', media_url: publicUrl, media_type: 'audio/ogg',
+    }).select().single();
+    if (data) setChanMsgs(m => ({ ...m, [active.chanId]: [...(m[active.chanId] || []), data] }));
+  }
 
   async function createChannel() {
     const name = newChanName.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
@@ -3105,22 +3151,107 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                             <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>{new Date(msg.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
                           </div>
                         )}
-                        <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.85)', lineHeight: 1.45, wordBreak: 'break-word' }}>{msg.text}</div>
+                        {msg.media_url ? (
+                          msg.media_type?.startsWith('image/') ? (
+                            <img src={msg.media_url} alt={msg.text} style={{ maxWidth: 320, maxHeight: 240, borderRadius: 8, marginTop: 4, display: 'block', cursor: 'pointer' }} onClick={() => setLightboxUrl(msg.media_url)} />
+                          ) : msg.media_type?.includes('audio') ? (
+                            <audio controls src={msg.media_url} style={{ marginTop: 4, height: 36, maxWidth: 280 }} />
+                          ) : (
+                            <a href={msg.media_url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 4, padding: '6px 10px', background: 'rgba(255,255,255,0.08)', borderRadius: 7, color: 'rgba(255,255,255,0.8)', fontSize: 12, textDecoration: 'none' }}>
+                              📎 {msg.text.replace('📎 ', '')}
+                            </a>
+                          )
+                        ) : (
+                          <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.85)', lineHeight: 1.45, wordBreak: 'break-word' }}>{msg.text}</div>
+                        )}
                       </div>
                     </div>
                   );
                 })}
               </div>
 
-              <footer className="lc-composer-bar">
-                <div className="lc-composer" style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 10 }}>
-                  <div className="lc-comp-input-wrap">
-                    <textarea value={chanDraft} onChange={e => setChanDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChanMsg(); } }} className="lc-comp-input" placeholder={`Mensagem para ${active.name}…`} rows={1} />
+              {/* Input oculto para arquivos do canal */}
+              <input ref={chanFileInputRef} type="file" accept="image/*,video/*,application/pdf,.doc,.docx,.xlsx,.csv" style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; if (f) sendChanFile(f); e.target.value = ''; }} />
+
+              <footer className="lc-composer-bar" style={{ padding: '8px 12px 12px' }}>
+                {/* Estado de gravação de áudio no canal */}
+                {recState === 'recording' ? (
+                  <div className="lc-composer lc-composer-rec">
+                    <button onClick={cancelRecording} className="lc-comp-icon lc-rec-cancel" title="Cancelar"><Icon name="x" size={16} /></button>
+                    <div className="lc-rec-indicator">
+                      <span className="lc-rec-dot" />
+                      <div className="lc-rec-waves">{[...Array(6)].map((_, i) => <span key={i} className="lc-rec-wave" style={{ animationDelay: `${i * 0.12}s` }} />)}</div>
+                      <span className="lc-rec-time">{formatRecTime(recSeconds)}</span>
+                    </div>
+                    <button onClick={stopRecording} className="lc-comp-send ready" title="Parar"><Icon name="squarestop" size={15} /></button>
                   </div>
-                  <button onClick={sendChanMsg} className={`lc-comp-send${chanDraft.trim() ? ' ready' : ''}`} disabled={!chanDraft.trim()}>
-                    <Icon name="send" size={15} />
-                  </button>
-                </div>
+                ) : recState === 'preview' ? (
+                  <div className="lc-composer lc-composer-rec">
+                    <audio ref={audioElRef} src={audioPreview} onLoadedMetadata={e => setRecDuration(Math.round(e.target.duration))} onTimeUpdate={e => setRecCurrentTime(Math.round(e.target.currentTime))} onEnded={() => setRecPlaying(false)} style={{ display: 'none' }} />
+                    <button onClick={discardAudio} className="lc-comp-icon lc-rec-cancel" title="Descartar"><Icon name="trash" size={16} /></button>
+                    <div className="lc-rec-indicator">
+                      <button onClick={togglePlayPreview} className="lc-rec-play-btn" title={recPlaying ? 'Pausar' : 'Ouvir'}>
+                        {recPlaying ? <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                          : <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>}
+                      </button>
+                      <div className="lc-rec-seek-wrap">
+                        <input type="range" min={0} max={recDuration || 1} value={recCurrentTime} className="lc-rec-seek"
+                          onChange={e => { const t = Number(e.target.value); if (audioElRef.current) audioElRef.current.currentTime = t; setRecCurrentTime(t); }} />
+                      </div>
+                      <span className="lc-rec-time">{recPlaying ? formatRecTime(recCurrentTime) : formatRecTime(recDuration)}</span>
+                    </div>
+                    <button onClick={async () => { if (audioBlobRef.current) { await sendChanAudio(audioBlobRef.current); discardAudio(); } }} className="lc-comp-send ready" title="Enviar áudio"><Icon name="send" size={15} /></button>
+                  </div>
+                ) : (
+                  <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, overflow: 'visible', display: 'flex', flexDirection: 'column' }}>
+                    {/* Área de texto */}
+                    <div style={{ padding: '10px 12px 6px', position: 'relative' }}>
+                      <textarea
+                        ref={chanTextareaRef}
+                        value={chanDraft}
+                        onChange={e => setChanDraft(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChanMsg(); } }}
+                        className="lc-comp-input"
+                        placeholder={`Escreva para ${active.name}…`}
+                        rows={1}
+                        style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', resize: 'none', padding: 0, fontSize: 14 }}
+                      />
+                    </div>
+                    {/* Toolbar inferior estilo ClickUp */}
+                    <div style={{ display: 'flex', alignItems: 'center', padding: '4px 8px 8px', gap: 2, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                      {/* Emoji */}
+                      <div style={{ position: 'relative' }}>
+                        <button className="lc-comp-icon" title="Emoji" onClick={() => setChanShowEmoji(v => !v)} style={{ padding: '5px 7px' }}>
+                          <Icon name="smile" size={15} />
+                        </button>
+                        {chanShowEmoji && <EmojiPicker onSelect={em => { insertChanEmoji(em); setChanShowEmoji(false); }} onClose={() => setChanShowEmoji(false)} />}
+                      </div>
+                      {/* Arquivo */}
+                      <button className="lc-comp-icon" title="Anexar arquivo" onClick={() => chanFileInputRef.current?.click()} style={{ padding: '5px 7px' }}>
+                        <Icon name="paperclip" size={15} />
+                      </button>
+                      {/* Imagem */}
+                      <button className="lc-comp-icon" title="Enviar imagem" onClick={() => { const i = document.createElement('input'); i.type='file'; i.accept='image/*'; i.onchange=e=>{const f=e.target.files?.[0];if(f)sendChanFile(f);}; i.click(); }} style={{ padding: '5px 7px' }}>
+                        <Icon name="image" size={15} />
+                      </button>
+
+                      {/* Spacer */}
+                      <div style={{ flex: 1 }} />
+
+                      {/* Mic ou Enviar */}
+                      {chanDraft.trim() ? (
+                        <button onClick={sendChanMsg} className="lc-comp-send ready" title="Enviar (Enter)" style={{ borderRadius: 7, padding: '6px 10px' }}>
+                          <Icon name="send" size={15} />
+                        </button>
+                      ) : (
+                        <button onClick={startRecording} className="lc-comp-send lc-comp-mic" title="Gravar áudio" style={{ borderRadius: 7, padding: '6px 10px' }}>
+                          <Icon name="mic" size={15} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
               </footer>
             </>
           ) : (
