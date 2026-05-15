@@ -218,10 +218,10 @@ function Divider() {
 
 /* ─── Lead não encontrado ─── */
 function NoLeadSection({ conversation, tenantId, onClose, onLinked }) {
-  const isGroup = conversation?.whatsapp_chat_id?.endsWith('@g.us');
   // name may arrive empty/JID on first render (async Evolution profile fetch); sanitize
   const sanitizeName = n => (n && !n.includes('@') ? n : '');
-  const initialPhone = isGroup ? '' : (conversation?.whatsapp_chat_id?.split('@')[0] || '');
+  // always use the JID numeric part as phone/ID (group or PV — both get the number)
+  const initialPhone = conversation?.whatsapp_chat_id?.split('@')[0] || '';
 
   const [mode, setMode]               = useState('idle'); // 'idle' | 'creating' | 'searching'
   const [name, setName]               = useState(sanitizeName(conversation?.name));

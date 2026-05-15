@@ -498,7 +498,8 @@ const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0, onNavigate }) =>
                           ].map(item => (
                             <button
                               key={item.label}
-                              onClick={item.action}
+                              onMouseDown={e => e.stopPropagation()}
+                              onClick={e => { e.stopPropagation(); item.action(); }}
                               style={{
                                 display:'flex', alignItems:'center', gap: 8, width:'100%',
                                 padding:'8px 12px', background:'none', border:'none',
@@ -561,17 +562,16 @@ const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0, onNavigate }) =>
               phone: updated.phone || null,
               email: updated.email || null,
               tags:  updated.tags ? updated.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
-              metadata: { ...editLead.metadata, company: updated.company || undefined },
+              metadata: { ...(editLead.metadata || {}), company: updated.company || null },
             }).eq('id', editLead.id);
-            if (!error) {
-              setLeads(prev => prev.map(l => l.id === editLead.id
-                ? { ...l, name: updated.name, phone: updated.phone, email: updated.email,
-                    tags: updated.tags ? updated.tags.split(',').map(t => t.trim()).filter(Boolean) : l.tags,
-                    metadata: { ...l.metadata, company: updated.company || undefined },
-                    avatar: updated.name.slice(0,2).toUpperCase() }
-                : l));
-              setEditLead(null);
-            }
+            if (error) throw new Error(error.message);
+            setLeads(prev => prev.map(l => l.id === editLead.id
+              ? { ...l, name: updated.name, phone: updated.phone, email: updated.email,
+                  tags: updated.tags ? updated.tags.split(',').map(t => t.trim()).filter(Boolean) : l.tags,
+                  metadata: { ...(l.metadata || {}), company: updated.company || null },
+                  avatar: updated.name.slice(0,2).toUpperCase() }
+              : l));
+            setEditLead(null);
           }}
         />
       )}
@@ -895,14 +895,16 @@ const NotesTab = ({ customer }) => (
 
 /* ─── EDIT LEAD MODAL ─── */
 const EditLeadModal = ({ lead, onClose, onSave }) => {
+  const tagsArr = Array.isArray(lead.tags) ? lead.tags : [];
   const [form, setForm] = uSCrm({
     name:    lead.name || '',
     phone:   lead.phone || '',
     email:   lead.email || '',
     company: lead.metadata?.company || '',
-    tags:    (lead.tags || []).join(', '),
+    tags:    tagsArr.join(', '),
   });
   const [saving, setSaving] = uSCrm(false);
+  const [saveError, setSaveError] = uSCrm('');
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
@@ -910,7 +912,12 @@ const EditLeadModal = ({ lead, onClose, onSave }) => {
     e.preventDefault();
     if (!form.name.trim()) return;
     setSaving(true);
-    await onSave(form);
+    setSaveError('');
+    try {
+      await onSave(form);
+    } catch (err) {
+      setSaveError(err?.message || 'Erro ao salvar. Tente novamente.');
+    }
     setSaving(false);
   }
 
@@ -945,6 +952,11 @@ const EditLeadModal = ({ lead, onClose, onSave }) => {
             <label style={labelStyle}>Tags (separadas por vírgula)</label>
             <input className="input" value={form.tags} onChange={e => set('tags', e.target.value)} placeholder="lead, novo, ..." style={{ width:'100%' }}/>
           </div>
+          {saveError && (
+            <div style={{ fontSize: 12, color: '#EF4444', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, padding: '8px 12px' }}>
+              {saveError}
+            </div>
+          )}
           <div style={{ display:'flex', gap: 8, justifyContent:'flex-end', marginTop: 4 }}>
             <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
             <button type="submit" className="btn-primary" style={{ background:'#B70C00' }} disabled={saving}>
