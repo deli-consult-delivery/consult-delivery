@@ -220,8 +220,11 @@ function Divider() {
 function NoLeadSection({ conversation, tenantId, onClose, onLinked }) {
   // name may arrive empty/JID on first render (async Evolution profile fetch); sanitize
   const sanitizeName = n => (n && !n.includes('@') ? n : '');
-  // always use the JID numeric part as phone/ID (group or PV — both get the number)
-  const initialPhone = conversation?.whatsapp_chat_id?.split('@')[0] || '';
+
+  const isGroup      = conversation?.whatsapp_chat_id?.endsWith('@g.us') ?? false;
+  const jidNumeric   = conversation?.whatsapp_chat_id?.split('@')[0] || '';
+  // For PV: real phone number. For group: leave phone empty, store jid in metadata
+  const initialPhone = isGroup ? '' : jidNumeric;
 
   const [mode, setMode]               = useState('idle'); // 'idle' | 'creating' | 'searching'
   const [name, setName]               = useState(sanitizeName(conversation?.name));
@@ -257,17 +260,20 @@ function NoLeadSection({ conversation, tenantId, onClose, onLinked }) {
   async function handleCreate() {
     if (!name.trim()) return;
     setSaving(true);
+    const meta = isGroup
+      ? { source: 'chat_create', group_jid: jidNumeric }
+      : { source: 'chat_create' };
     const { data: cust, error } = await supabase
       .from('customers')
       .insert({
         tenant_id: tenantId,
         name:      name.trim(),
-        phone:     phone || null,
+        phone:     isGroup ? null : (phone || null),
         email:     email || null,
         avatar:    name.trim().slice(0, 2).toUpperCase(),
         segment:   'Lead',
         tags:      [],
-        metadata:  { source: 'chat_create' },
+        metadata:  meta,
       })
       .select()
       .single();
@@ -335,11 +341,19 @@ function NoLeadSection({ conversation, tenantId, onClose, onLinked }) {
               <input className="input" value={name} onChange={e => setName(e.target.value)}
                 placeholder="Nome do lead" style={{ width: '100%' }} autoFocus />
             </div>
-            <div>
-              <div style={fieldLabel}>Telefone</div>
-              <input className="input" value={phone} onChange={e => setPhone(e.target.value)}
-                placeholder="5594..." style={{ width: '100%' }} />
-            </div>
+            {isGroup ? (
+              <div>
+                <div style={fieldLabel}>ID do Grupo</div>
+                <input className="input" value={jidNumeric} readOnly disabled
+                  style={{ width: '100%', opacity: 0.6, cursor: 'not-allowed' }} />
+              </div>
+            ) : (
+              <div>
+                <div style={fieldLabel}>Telefone</div>
+                <input className="input" value={phone} onChange={e => setPhone(e.target.value)}
+                  placeholder="5594..." style={{ width: '100%' }} />
+              </div>
+            )}
             <div>
               <div style={fieldLabel}>E-mail</div>
               <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)}
