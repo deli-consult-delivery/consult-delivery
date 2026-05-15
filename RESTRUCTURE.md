@@ -474,15 +474,21 @@ CREATE TABLE agent_memories (
 - 3 migrations novas: `cobrancas` (V2), `cobranca_eventos` (audit trail), `cora_acoes` V2 columns
 - UI: ModoToggle, aba "Asaas V2", CobrancaV2Drawer com histórico de eventos
 
-**BRENO · Atendimento** — ✅ CONCLUÍDO (Feature V2-2, 15/05/2026). Ver `docs/agentes/breno.md`.
-- 2 tasks Trigger.dev: `breno-responder`, `breno-resumir-conversa`
-- Ativação automática via Evolution webhook → Bridge Server (rota interna `x-bridge-secret`)
-- Suporte a 3 modos: humano (skips), híbrido (draft para aprovação), ia (envia direto)
-- 2 migrations: `breno_interactions` (audit), colunas `breno_paused` + `last_breno_handled_at` em `conversations`
-- UI: badge BRENO no chat, botão pausar/liberar, banner de sugestão, BrenoScreen com 4 abas
+**BRENO · Atendimento** — ✅ CONCLUÍDO (V2-2, 15/05/2026). Ver `docs/agentes/breno.md`.
+- 3 tasks: `breno-responder`, `breno-resumir-conversa`, `breno-processar-webhook`
+- Modo híbrido (automático/manual/human) via `tenant_agent_config.modo_override`
+- UI: StatsTab, banner de sugestão no ChatScreen, DraftsTab
 
-**SOFIA · SDR/Prospecção** — V2 piloto.  
-**VERA · BI & Relatórios** — V3.
+**SOFIA · SDR/Prospecção** — ✅ CONCLUÍDA (V2-3, 15/05/2026). Ver `docs/agentes/sofia-icp.md`.
+- 4 tasks: `sofia-pesquisar-prospect`, `sofia-qualificar`, `sofia-gerar-abordagem`, `sofia-batch-pesquisar`
+- 3 migrations: prospects, prospect_pesquisas, prospect_abordagens
+- UI: Prospects, Importar CSV, Abordagens (aprovação)
+
+**VERA · BI & Relatórios** — ✅ CONCLUÍDA (V2-4, 15/05/2026). Ver `docs/agentes/vera-config.md`.
+- 5 tasks: `vera-snapshot-diario`, `vera-relatorio-diario`, `vera-relatorio-semanal`, `vera-detectar-anomalia`, `vera-responder-pergunta`
+- 2 migrations: vera_reports/vera_metricas_snapshot/vera_anomalias + 3 views SQL
+- Schedules: diário 6h/7h UTC, semanal seg 8h UTC, anomalia a cada 4h
+- UI: Dashboard (KPIs), Relatórios (markdown), Anomalias (resolve), Chat VERA
 
 ---
 
