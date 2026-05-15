@@ -132,6 +132,29 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
   const isDocument = !!msgData.message?.documentMessage;
   const isMedia    = isAudio || isImage || isVideo || isDocument;
 
+  // ── Reação de emoji WhatsApp ──────────────────────────────────────────────
+  const reactionMsg = (msgData.message as Record<string, unknown>)?.reactionMessage as Record<string, unknown> | undefined;
+  if (reactionMsg) {
+    const origMsgId    = (reactionMsg.key as Record<string, string>)?.id;
+    const reactionText = (reactionMsg.text as string) ?? '';
+    const reactorJid   = isGroup ? (senderJid ?? chatId) : chatId;
+    if (origMsgId) {
+      const { data: origMsg } = await supabase
+        .from('messages')
+        .select('id, reactions')
+        .eq('whatsapp_msg_id', origMsgId)
+        .maybeSingle();
+      if (origMsg) {
+        const existing = (origMsg.reactions as Array<{ jid: string; emoji: string; name: string }>) || [];
+        const filtered = existing.filter((r: { jid: string }) => r.jid !== reactorJid);
+        if (reactionText) filtered.push({ jid: reactorJid, emoji: reactionText, name: pushName });
+        await supabase.from('messages').update({ reactions: filtered }).eq('id', origMsg.id);
+        console.log('[WEBHOOK] reação atualizada:', reactionText || '(removida)', 'em', origMsgId);
+      }
+    }
+    return; // não processa reação como mensagem normal
+  }
+
   let detectedMediaType: string | null = null;
   if (isAudio)         detectedMediaType = 'audio';
   else if (isImage)    detectedMediaType = 'image';
