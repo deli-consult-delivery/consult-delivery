@@ -289,6 +289,53 @@ function ConvRow({ conv, active, onClick, statusFilter, fav, onFav, selectMode, 
 }
 
 // ─── AUDIO PLAYER ─────────────────────────────────────────────
+function VideoPlayer({ src, text }) {
+  const [blobUrl, setBlobUrl] = useState(null);
+
+  useEffect(() => {
+    if (!src) return;
+    if (src.startsWith('data:')) {
+      const [header, b64] = src.split(',');
+      const mime = header.match(/:(.*?);/)?.[1] || 'video/mp4';
+      const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: mime });
+      const url = URL.createObjectURL(blob);
+      setBlobUrl(url);
+      return () => URL.revokeObjectURL(url);
+    } else {
+      setBlobUrl(src);
+    }
+  }, [src]);
+
+  const handleDownload = () => {
+    if (!blobUrl) return;
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = text || 'video.mp4';
+    a.click();
+  };
+
+  return (
+    <div style={{ marginBottom: text ? 6 : 0 }}>
+      {blobUrl ? (
+        <video src={blobUrl} controls style={{ maxWidth: 260, borderRadius: 8, display: 'block' }} />
+      ) : (
+        <div style={{ width: 260, height: 140, borderRadius: 8, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>
+          {src ? 'Carregando vídeo…' : 'Aguardando vídeo…'}
+        </div>
+      )}
+      {blobUrl && (
+        <button onClick={handleDownload} style={{ marginTop: 5, display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'rgba(255,255,255,0.55)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Baixar vídeo
+        </button>
+      )}
+    </div>
+  );
+}
+
 function AudioPlayer({ src, isOut }) {
   const [playing, setPlaying]       = useState(false);
   const [currentTime, setCurrent]   = useState(0);
@@ -1044,23 +1091,7 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onSta
       );
     }
     if (m.mediaType === 'video') {
-      return (
-        <div style={{ marginBottom: m.text ? 6 : 0 }}>
-          <video src={url} controls style={{ maxWidth: 260, borderRadius: 8, display: 'block' }} />
-          {url && (
-            <a
-              href={url} download
-              title="Baixar vídeo"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 5, fontSize: 11, color: isOut ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.5)', textDecoration: 'none' }}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-              Baixar vídeo
-            </a>
-          )}
-        </div>
-      );
+      return <VideoPlayer src={url} text={m.text} />;
     }
     if (m.mediaType?.includes('audio')) {
       return <AudioPlayer src={url} isOut={isOut} />;
