@@ -1438,6 +1438,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [loadingOlderMsgs, setLoadingOlderMsgs] = useState(false);
   const loadingOlderRef                     = useRef(false); // guard síncrono
   const scrollAnchorRef                     = useRef(null);  // altura antes do prepend
+  const activeIdRef                         = useRef(null);  // ref síncrono para uso em closures de Realtime
 
   // ── Refs ──────────────────────────────────────────────────
   const scrollRef          = useRef(null);
@@ -1497,6 +1498,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     sessionStorage.removeItem('cd-chat-target-cid');
     setActiveId(conv.id);
   }, [tenantDbId, instances]);
+
+  // Mantém ref sincronizado para uso em closures de Realtime (evita stale closure)
+  useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
 
   useEffect(() => {
     const target = sessionStorage.getItem('cd-chat-target');
@@ -1781,6 +1785,16 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           if (existing.some(e => e.id === msg.id)) return m; // já adicionado por sendChanMsg
           return { ...m, [msg.channel_id]: [...existing, msg] };
         });
+        // Atualiza preview e badge de não lidas se o canal não está ativo agora
+        const chanConvId = 'chan-' + msg.channel_id;
+        if (activeIdRef.current !== chanConvId) {
+          const timeStr = new Date(msg.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+          setConvs(prev => prev.map(c =>
+            c.chanId === msg.channel_id
+              ? { ...c, unread: (c.unread || 0) + 1, preview: msg.text || '', time: timeStr }
+              : c
+          ));
+        }
       })
       .subscribe();
     return () => { supabase.removeChannel(sub); };
@@ -2295,7 +2309,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     const { data: { publicUrl } } = supabase.storage.from('public').getPublicUrl(up.path);
     const isImage = file.type.startsWith('image/');
     const { data } = await supabase.from('channel_messages').insert({
-      channel_id: active.chanId, sender_name: currentUser?.name || 'Você',
+      channel_id: active.chanId, sender_id: currentUser?.id || null, sender_name: currentUser?.name || 'Você',
       text: isImage ? `🖼 ${file.name}` : `📎 ${file.name}`,
       media_url: publicUrl, media_type: file.type,
     }).select().single();
@@ -2310,7 +2324,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     if (!up?.path) return;
     const { data: { publicUrl } } = supabase.storage.from('public').getPublicUrl(up.path);
     const { data } = await supabase.from('channel_messages').insert({
-      channel_id: active.chanId, sender_name: currentUser?.name || 'Você',
+      channel_id: active.chanId, sender_id: currentUser?.id || null, sender_name: currentUser?.name || 'Você',
       text: '🎵 Áudio', media_url: publicUrl, media_type: 'audio/ogg',
     }).select().single();
     if (data) setChanMsgs(m => ({ ...m, [active.chanId]: [...(m[active.chanId] || []), data] }));
@@ -2347,7 +2361,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     setChanMsgs(m => ({ ...m, [chanId]: [...(m[chanId] || []), tmpMsg] }));
     setChanDraft('');
     try {
-      const { data } = await supabase.from('channel_messages').insert({ channel_id: chanId, sender_name: currentUser?.name || 'Você', text }).select().single();
+      const { data } = await supabase.from('channel_messages').insert({ channel_id: chanId, sender_id: currentUser?.id || null, sender_name: currentUser?.name || 'Você', text }).select().single();
       if (data) setChanMsgs(m => ({ ...m, [chanId]: (m[chanId] || []).map(msg => msg.id === tmpMsg.id ? data : msg) }));
     } catch { /* ignore */ }
   }
@@ -2913,6 +2927,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
   const baseList = isSearching ? searchConvs : convs;
   const filtered = baseList.filter(c => {
+    // Canais internos aparecem em todas as abas (exceto favoritas, onde exige fav)
+    if (c.id.startsWith('chan-')) {
+      if (tab === 'fav') return favConvs.has(c.id);
+      return true;
+    }
     if (tab === 'fav'    && !favConvs.has(c.id))   return false;
     if (tab === 'wa'     && c.type !== 'whatsapp') return false;
     if (tab === 'groups' && c.type !== 'group')    return false;
@@ -3255,6 +3274,10 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                 setActiveId(c.id);
                 setMobilePane('chat');
                 if (usingRealData && !c.id.startsWith('chan-')) loadMsgs(c.id);
+                // Zera badge de não lidas ao abrir canal
+                if (c.id.startsWith('chan-') && c.unread) {
+                  setConvs(prev => prev.map(x => x.id === c.id ? { ...x, unread: 0 } : x));
+                }
               }}
             />
           ))}
