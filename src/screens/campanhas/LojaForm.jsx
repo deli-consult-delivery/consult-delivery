@@ -8,8 +8,6 @@ const TIPOS = ['restaurante','pizzaria','doceria','hamburgueria','açaiteria','o
 const TONS = ['caloroso e familiar','divertido e jovem','sofisticado','informal e direto','premium'];
 const DIAS = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
 
-const WEBHOOK_BASE = import.meta.env.VITE_N8N_WEBHOOK_BASE;
-
 export default function LojaForm({ go, mode, slug }) {
   const [form, setForm] = useState({
     nome:'', slug:'', tipo:'restaurante', whatsapp:'', nome_fantasia:'',
@@ -20,7 +18,6 @@ export default function LojaForm({ go, mode, slug }) {
   });
   const [openSections, setOpenSections] = useState({ identidade:true, contato:false, visual:false, tom:false, cupom:false, horarios:false, regua:false, obs:false });
   const [saving, setSaving] = useState(false);
-  const [skillLoading, setSkillLoading] = useState(false);
 
   useEffect(() => {
     if (mode==='edit' && slug) {
@@ -90,17 +87,7 @@ export default function LojaForm({ go, mode, slug }) {
       lojaId = data?.id;
     }
 
-    if (lojaId && WEBHOOK_BASE) {
-      setSkillLoading(true);
-      try {
-        await fetch(`${WEBHOOK_BASE}/loja/criar-skill`, {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ loja_id: lojaId }),
-        });
-      } catch(err) { console.error('Webhook skill:', err); }
-    }
-
-    setSaving(false); setSkillLoading(false);
+    setSaving(false);
     go('lojas');
   }
 
@@ -273,8 +260,8 @@ export default function LojaForm({ go, mode, slug }) {
 
         <div style={{ display:'flex', gap:12, justifyContent:'flex-end', marginTop:24 }}>
           <button type="button" onClick={()=>go('lojas')} style={{ background:'transparent', border:'1px solid #2a2a2a', color:'#fff', padding:'10px 18px', borderRadius:8, cursor:'pointer' }}>Cancelar</button>
-          <button type="submit" disabled={saving || skillLoading} style={{ background:'#e63946', border:'none', color:'#fff', padding:'10px 24px', borderRadius:8, cursor:'pointer', fontWeight:600, opacity: saving||skillLoading?0.7:1 }}>
-            {skillLoading ? 'Criando skill no EvoNexus...' : saving ? 'Salvando...' : mode==='edit' ? 'Salvar alterações' : 'Criar loja'}
+          <button type="submit" disabled={saving} style={{ background:'#e63946', border:'none', color:'#fff', padding:'10px 24px', borderRadius:8, cursor:'pointer', fontWeight:600, opacity: saving?0.7:1 }}>
+            {saving ? 'Salvando...' : mode==='edit' ? 'Salvar alterações' : 'Criar loja'}
           </button>
         </div>
       </form>

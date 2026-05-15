@@ -2,9 +2,16 @@ import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import Icon from '../../components/Icon.jsx';
 
-const WEBHOOK_BASE = import.meta.env.VITE_N8N_WEBHOOK_BASE;
+const BRIDGE = import.meta.env.VITE_BRIDGE_URL || 'http://localhost:3001';
 
-export default function CampanhaGerando({ go, id }) {
+const CANAL_TO_TIPO = {
+  WhatsApp: 'mensagem_whatsapp',
+  Delivery: 'legenda_campanha',
+  Salão: 'legenda_campanha',
+  Encomendas: 'legenda_campanha',
+};
+
+export default function CampanhaGerando({ go, id, tenantDbId, userId }) {
   const [status, setStatus] = useState('gerando');
   const [erro, setErro] = useState(null);
   const [timedOut, setTimedOut] = useState(false);
@@ -36,21 +43,27 @@ export default function CampanhaGerando({ go, id }) {
   async function tentarNovamente() {
     setStatus('gerando'); setErro(null); setTimedOut(false);
     timeoutRef.current = setTimeout(() => setTimedOut(true), 3*60*1000);
-    const { data } = await supabase.from('campanhas').select('loja:loja_id(slug),tipo,contexto,imagem_url,canal,tom_override').eq('id',id).single();
+    const { data } = await supabase.from('campanhas').select('loja:loja_id(id,nome),tipo,contexto,imagem_url,canal,tom_override').eq('id',id).single();
     if (!data) return;
-    if (WEBHOOK_BASE) {
-      try {
-        await fetch(`${WEBHOOK_BASE}/campanha/gerar`, {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({
-            campanha_id: id, loja_slug: data.loja?.slug,
-            tipo: data.tipo, contexto: data.contexto,
-            imagem_url: data.imagem_url, canal: data.canal,
-            tom_override: data.tom_override,
-          }),
-        });
-      } catch(err) { console.error('Retry webhook:', err); }
-    }
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      await fetch(`${BRIDGE}/agents/lara-gerar-conteudo/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          tenant_id: tenantDbId,
+          loja_id: data.loja?.id,
+          loja_nome: data.loja?.nome || '',
+          tipo: CANAL_TO_TIPO[data.canal] || 'legenda_campanha',
+          objetivo: data.tipo,
+          contexto: data.contexto,
+          ...(data.tom_override ? { tom: data.tom_override } : {}),
+          campanha_id: id,
+          triggered_by: userId,
+        }),
+      });
+    } catch(err) { console.error('Retry Bridge:', err); }
   }
 
   async function verificarStatus() {

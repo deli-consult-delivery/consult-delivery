@@ -4,7 +4,14 @@ import Icon from '../../components/Icon.jsx';
 import CustomSelect from '../../components/CustomSelect.jsx';
 import EmptyState from './components/EmptyState.jsx';
 
-const WEBHOOK_BASE = import.meta.env.VITE_N8N_WEBHOOK_BASE;
+const BRIDGE = import.meta.env.VITE_BRIDGE_URL || 'http://localhost:3001';
+
+const CANAL_TO_TIPO = {
+  WhatsApp: 'mensagem_whatsapp',
+  Delivery: 'legenda_campanha',
+  Salão: 'legenda_campanha',
+  Encomendas: 'legenda_campanha',
+};
 
 const TIPOS = [
   { group:'Jornada do cliente', items:[
@@ -32,7 +39,7 @@ const TIPOS = [
 
 const CANAIS = ['Delivery','WhatsApp','Salão','Encomendas'];
 
-export default function CampanhaForm({ go, params }) {
+export default function CampanhaForm({ go, params, tenantDbId, userId }) {
   const [lojas, setLojas] = useState([]);
   const [form, setForm] = useState({
     loja_id: params?.lojaId || '', tipo:'boas-vindas', canal:'Delivery',
@@ -80,22 +87,25 @@ export default function CampanhaForm({ go, params }) {
 
     const campanhaId = data.id;
 
-    if (WEBHOOK_BASE) {
-      try {
-        await fetch(`${WEBHOOK_BASE}/campanha/gerar`, {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({
-            campanha_id: campanhaId,
-            loja_slug: loja?.slug,
-            tipo: form.tipo,
-            contexto: form.contexto,
-            imagem_url: form.imagem_url,
-            canal: form.canal,
-            tom_override: form.tom_override || null,
-          }),
-        });
-      } catch(err) { console.error('Webhook gerar:', err); }
-    }
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      await fetch(`${BRIDGE}/agents/lara-gerar-conteudo/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          tenant_id: tenantDbId,
+          loja_id: form.loja_id,
+          loja_nome: loja?.nome || '',
+          tipo: CANAL_TO_TIPO[form.canal] || 'legenda_campanha',
+          objetivo: form.tipo,
+          contexto: form.contexto,
+          ...(form.tom_override ? { tom: form.tom_override } : {}),
+          campanha_id: campanhaId,
+          triggered_by: userId,
+        }),
+      });
+    } catch(err) { console.error('Bridge lara-gerar-conteudo:', err); }
 
     setSaving(false);
     go('gerando', { id: campanhaId });
