@@ -4,6 +4,7 @@ import { runClaudeWithWebSearch } from "../_shared/claude";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 import { notifyDeli } from "../_shared/notify-deli";
+import { notify } from "../_shared/notify";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -185,6 +186,19 @@ Retorne o JSON conforme solicitado.`;
         .catch((err: Error) =>
           console.warn("[lara/gerar-conteudo] campanhas update:", err.message)
         );
+
+      if (resultado.ok) {
+        await notify({
+          tenantId:        input.tenant_id,
+          kind:            "agent_completed",
+          agent:           "lara",
+          title:           "Campanha pronta para revisão",
+          body:            `${resultado.loja_nome} · ${resultado.variacoes.length} variação(ões) aguardando aprovação`,
+          link:            `/campanhas`,
+          recipientUserId: input.triggered_by ?? null,
+          metadata:        { campanha_id: input.campanha_id, run_id: ctx.run.id },
+        });
+      }
     }
 
     const tipoStr = tipoLabel[input.tipo] ?? input.tipo;

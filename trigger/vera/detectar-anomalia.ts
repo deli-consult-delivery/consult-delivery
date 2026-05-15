@@ -4,6 +4,7 @@ import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
+import { notify } from "../_shared/notify";
 
 // =====================================================
 // SCHEMAS
@@ -289,6 +290,24 @@ Retorne APENAS JSON: {"explicacao": "sua explicação aqui"}`,
         tenant_id:            input.tenant_id,
         anomalias_detectadas: anomaliasDetectadas.length,
       });
+
+      // Notificar equipe para anomalias alta/media
+      const anomaliasUrgentes = anomaliasDetectadas.filter(
+        (a) => a.severidade === "alta" || a.severidade === "media"
+      );
+      if (anomaliasUrgentes.length > 0) {
+        const top = anomaliasUrgentes[0];
+        await notify({
+          tenantId:        input.tenant_id,
+          kind:            "deli_alert",
+          agent:           "vera",
+          title:           `⚠️ VERA detectou ${anomaliasUrgentes.length} anomalia(s)`,
+          body:            `${top.metrica}: esperado ${top.valor_esperado?.toFixed?.(2) ?? "—"}, observado ${top.valor_observado?.toFixed?.(2) ?? "—"} (${top.severidade})`,
+          link:            `/vera`,
+          recipientUserId: null, // broadcast
+          metadata:        { anomalias: anomaliasUrgentes.map((a) => a.metrica), run_id: ctx.run.id },
+        });
+      }
 
       const output = OutputSchema.parse({
         ok:                   true,

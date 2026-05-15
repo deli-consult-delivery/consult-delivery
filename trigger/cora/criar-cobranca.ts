@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createCharge, AsaasApiError } from "../_shared/asaas";
 import { logAgentRun } from "../_shared/audit";
 import { getSupabase } from "../_shared/supabase";
+import { notify } from "../_shared/notify";
 
 // ── OBRIGATÓRIO: Schema de entrada ───────────────────────────────────────────
 
@@ -175,6 +176,17 @@ export const coraCriarCobranca = task({
       cobranca_id: cobrancaId,
       asaas_charge_id: charge.id,
       duration_ms: durationMs,
+    });
+
+    await notify({
+      tenantId:        input.tenant_id,
+      kind:            "agent_completed",
+      agent:           "cora",
+      title:           "CORA criou cobrança no Asaas",
+      body:            `${input.customer_name} · R$ ${input.valor.toFixed(2)} · venc. ${input.vencimento}`,
+      link:            "/cora",
+      recipientUserId: input.triggered_by ?? null,
+      metadata:        { cobranca_id: cobrancaId, run_id: ctx.run.id },
     });
 
     return output;
