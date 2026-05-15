@@ -57,6 +57,55 @@ function Spinner() {
   );
 }
 
+function StatusBadgeV2({ status }) {
+  const map = {
+    pending:  { label: 'Pendente',  cls: 'badge-yellow', dot: 'pulse-amber' },
+    received: { label: 'Recebido',  cls: 'badge-green',  dot: '' },
+    overdue:  { label: 'Vencido',   cls: 'badge-red',    dot: 'pulse-red' },
+    refunded: { label: 'Estornado', cls: 'badge-blue',   dot: '' },
+    canceled: { label: 'Cancelado', cls: 'badge-gray',   dot: '' },
+  };
+  const m = map[status] || map.pending;
+  return (
+    <span className={`badge ${m.cls}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      {m.dot && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} className={m.dot} />}
+      {m.label}
+    </span>
+  );
+}
+
+function ModoToggle({ modo, onChange, saving }) {
+  const opts = [
+    { id: 'humano', label: 'Humano', icon: '👤' },
+    { id: 'hibrido', label: 'Híbrido', icon: '🤝' },
+    { id: 'ia', label: 'IA Auto', icon: '🤖' },
+  ];
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontWeight: 600 }}>MODO CORA</span>
+      <div style={{ display: 'flex', background: 'rgba(255,255,255,0.06)', borderRadius: 8, padding: 2, gap: 2 }}>
+        {opts.map(o => (
+          <button
+            key={o.id}
+            disabled={saving}
+            onClick={() => onChange(o.id)}
+            style={{
+              padding: '5px 11px', borderRadius: 6, border: 'none', cursor: saving ? 'not-allowed' : 'pointer',
+              fontSize: 12, fontWeight: modo === o.id ? 700 : 500, display: 'flex', alignItems: 'center', gap: 4,
+              background: modo === o.id ? 'var(--red, #B70C00)' : 'transparent',
+              color: modo === o.id ? '#fff' : 'rgba(255,255,255,0.5)',
+              transition: 'all 150ms',
+            }}
+          >
+            {o.icon} {o.label}
+          </button>
+        ))}
+      </div>
+      {saving && <Spinner />}
+    </div>
+  );
+}
+
 // ── Nova Cobrança Modal ───────────────────────────────────────────────────────
 function NovaCobrancaModal({ tenantDbId, onClose, onCreated }) {
   const [form, setForm] = useState({
@@ -121,6 +170,105 @@ function NovaCobrancaModal({ tenantDbId, onClose, onCreated }) {
             <button onClick={onClose} style={{ padding: '8px 18px', background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 7, color: 'rgba(255,255,255,0.6)', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
             <button onClick={submit} disabled={saving} style={{ padding: '8px 18px', background: 'var(--red, #B70C00)', border: 'none', borderRadius: 7, color: '#fff', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
               {saving ? <Spinner /> : null} Cadastrar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Nova Cobrança Asaas Modal (V2) ────────────────────────────────────────────
+function NovaCobrancaAsaasModal({ tenantDbId, userId, onClose, onCreated }) {
+  const [form, setForm] = useState({
+    customer_name: '',
+    customer_phone: '',
+    asaas_customer_id: '',
+    valor: '',
+    vencimento: '',
+    billing_type: 'PIX',
+    description: '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const submit = async () => {
+    if (!form.customer_name || !form.asaas_customer_id || !form.valor || !form.vencimento) {
+      setError('Nome, ID Asaas, valor e vencimento são obrigatórios.');
+      return;
+    }
+    const valor = parseFloat(form.valor.replace(',', '.'));
+    if (isNaN(valor) || valor <= 0) { setError('Valor inválido.'); return; }
+    setSaving(true);
+    try {
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      const res = await fetch(`${BRIDGE}/agents/cora-criar-cobranca/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          tenant_id: tenantDbId,
+          asaas_customer_id: form.asaas_customer_id,
+          customer_name: form.customer_name,
+          customer_phone: form.customer_phone || undefined,
+          valor,
+          vencimento: form.vencimento,
+          billing_type: form.billing_type,
+          description: form.description || undefined,
+          triggered_by: userId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao criar cobrança');
+      onCreated();
+      onClose();
+    } catch (e) {
+      setError(e.message);
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={onClose}>
+      <div style={{ background: 'var(--surface, #1a1a1a)', borderRadius: 12, padding: 24, width: 480, maxWidth: '95vw' }}
+        onClick={e => e.stopPropagation()}>
+        <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700 }}>Nova Cobrança Asaas</h3>
+        <p style={{ margin: '0 0 20px', fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>Cria cobrança via Asaas (Trigger.dev)</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {[
+            { label: 'Nome do cliente *', key: 'customer_name', placeholder: 'Ex: João Silva' },
+            { label: 'ID Asaas do cliente *', key: 'asaas_customer_id', placeholder: 'cus_xxx' },
+            { label: 'Telefone (opcional)', key: 'customer_phone', placeholder: '55119XXXXXXXX' },
+            { label: 'Valor (R$) *', key: 'valor', placeholder: '350,00' },
+            { label: 'Vencimento *', key: 'vencimento', type: 'date' },
+          ].map(f => (
+            <div key={f.key}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.6)', display: 'block', marginBottom: 6 }}>{f.label}</label>
+              <input type={f.type || 'text'} placeholder={f.placeholder}
+                style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 7, color: 'rgba(255,255,255,0.85)', fontSize: 13, fontFamily: 'inherit' }}
+                value={form[f.key]} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))} />
+            </div>
+          ))}
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.6)', display: 'block', marginBottom: 6 }}>Tipo de cobrança *</label>
+            <select value={form.billing_type} onChange={e => setForm(p => ({ ...p, billing_type: e.target.value }))}
+              style={{ width: '100%', padding: '8px 12px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 7, color: 'rgba(255,255,255,0.85)', fontSize: 13, fontFamily: 'inherit' }}>
+              <option value="PIX">PIX</option>
+              <option value="BOLETO">Boleto</option>
+              <option value="CREDIT_CARD">Cartão de crédito</option>
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.6)', display: 'block', marginBottom: 6 }}>Descrição (opcional)</label>
+            <input type="text" placeholder="Ex: Mensalidade consultoria maio/2026"
+              style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 7, color: 'rgba(255,255,255,0.85)', fontSize: 13, fontFamily: 'inherit' }}
+              value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
+          </div>
+          {error && <p style={{ color: '#f87171', fontSize: 12, margin: 0 }}>{error}</p>}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
+            <button onClick={onClose} style={{ padding: '8px 18px', background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 7, color: 'rgba(255,255,255,0.6)', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+            <button onClick={submit} disabled={saving} style={{ padding: '8px 18px', background: 'var(--red, #B70C00)', border: 'none', borderRadius: 7, color: '#fff', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+              {saving ? <Spinner /> : null} Criar no Asaas
             </button>
           </div>
         </div>
@@ -340,13 +488,221 @@ function CobrancaDrawer({ cobranca, tenantDbId, userId, onClose, onRefresh }) {
   );
 }
 
+// ── Drawer V2: cobrança Asaas ─────────────────────────────────────────────────
+function CobrancaV2Drawer({ cobranca, tenantDbId, userId, onClose, onRefresh }) {
+  const [eventos, setEventos] = useState([]);
+  const [acoes, setAcoes] = useState([]);
+  const [loadingEventos, setLoadingEventos] = useState(true);
+  const [loadingAnalise, setLoadingAnalise] = useState(false);
+  const [loadingMensagem, setLoadingMensagem] = useState(false);
+  const [mensagemGerada, setMensagemGerada] = useState(null);
+  const [error, setError] = useState('');
+  const pendingRef = useRef(null);
+  const dias = diasAtraso(cobranca.vencimento);
+
+  const loadEventos = useCallback(async () => {
+    const [{ data: evs }, { data: acs }] = await Promise.all([
+      supabase.from('cobranca_eventos').select('*').eq('cobranca_id', cobranca.id).order('created_at', { ascending: false }),
+      supabase.from('cora_acoes').select('*').eq('cobranca_v2_id', cobranca.id).order('created_at', { ascending: false }),
+    ]);
+    setEventos(evs || []);
+    setAcoes(acs || []);
+    setLoadingEventos(false);
+  }, [cobranca.id]);
+
+  useEffect(() => { loadEventos(); }, [loadEventos]);
+
+  useEffect(() => {
+    if (!tenantDbId) return;
+    const ch = supabase.channel(`cora-v2-drawer-${cobranca.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'agent_runs', filter: `tenant_id=eq.${tenantDbId}` }, (payload) => {
+        const run = payload.new;
+        if (run.agent_id !== 'cora') return;
+        if (!pendingRef.current || run.trigger_dev_run_id !== pendingRef.current) return;
+        if (run.status === 'success' || run.status === 'completed') {
+          if (run.output?.mensagem) { setMensagemGerada(run.output); setLoadingMensagem(false); }
+          setLoadingAnalise(false);
+          pendingRef.current = null;
+          loadEventos();
+        }
+      })
+      .subscribe();
+    return () => supabase.removeChannel(ch);
+  }, [tenantDbId, cobranca.id, loadEventos]);
+
+  const callAgent = async (slug, extra = {}) => {
+    const token = (await supabase.auth.getSession()).data.session?.access_token;
+    const res = await fetch(`${BRIDGE}/agents/${slug}/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ cobranca_id: cobranca.id, tenant_id: tenantDbId, user_id: userId, triggered_by: userId, source: 'v2', ...extra }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Erro ao chamar ${slug}`);
+    pendingRef.current = data.trigger_run_id || data.run_id;
+  };
+
+  const analisar = async () => {
+    setError(''); setLoadingAnalise(true);
+    try { await callAgent('cora-analisar-devedor'); } catch (e) { setError(e.message); setLoadingAnalise(false); }
+  };
+  const gerarMensagem = async () => {
+    setError(''); setLoadingMensagem(true);
+    try { await callAgent('cora-gerar-mensagem', { tom: 'amigavel' }); } catch (e) { setError(e.message); setLoadingMensagem(false); }
+  };
+
+  const billingLabel = { PIX: 'PIX', BOLETO: 'Boleto', CREDIT_CARD: 'Cartão', UNDEFINED: '-' };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', justifyContent: 'flex-end' }}
+      onClick={onClose}>
+      <div style={{ width: 580, maxWidth: '96vw', background: 'var(--surface, #1a1a1a)', height: '100vh', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}
+        onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', padding: 4 }}><Icon name="chevleft" size={18} /></button>
+          <UserAvatar name={cobranca.customer_name.slice(0, 2).toUpperCase()} size={36} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>{cobranca.customer_name}</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+              {billingLabel[cobranca.billing_type] || cobranca.billing_type} · {cobranca.asaas_charge_id}
+            </div>
+          </div>
+          <StatusBadgeV2 status={cobranca.status} />
+        </div>
+
+        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 20, flex: 1 }}>
+          {/* KPIs */}
+          <div style={{ display: 'flex', gap: 12 }}>
+            {[
+              { label: 'Valor', value: fmtBRL(cobranca.valor), color: cobranca.status === 'overdue' ? '#dc2626' : 'rgba(255,255,255,0.9)' },
+              { label: 'Atraso', value: `${dias} dia${dias !== 1 ? 's' : ''}`, color: dias > 20 ? '#dc2626' : dias > 7 ? '#D97706' : 'rgba(255,255,255,0.7)' },
+              { label: 'Vencimento', value: new Date(cobranca.vencimento).toLocaleDateString('pt-BR'), color: 'rgba(255,255,255,0.7)' },
+            ].map(k => (
+              <div key={k.label} style={{ flex: 1, padding: '12px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 8 }}>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{k.label}</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: k.color, marginTop: 4 }}>{k.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Links de pagamento */}
+          {(cobranca.invoice_url || cobranca.bank_slip_url || cobranca.pix_qr_code) && (
+            <div style={{ padding: 14, background: 'rgba(255,255,255,0.03)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.5)', marginBottom: 2 }}>Links de pagamento</div>
+              {cobranca.invoice_url && (
+                <a href={cobranca.invoice_url} target="_blank" rel="noreferrer"
+                  style={{ fontSize: 12, color: '#60a5fa', textDecoration: 'none' }}>
+                  🔗 Link da fatura
+                </a>
+              )}
+              {cobranca.bank_slip_url && (
+                <a href={cobranca.bank_slip_url} target="_blank" rel="noreferrer"
+                  style={{ fontSize: 12, color: '#60a5fa', textDecoration: 'none' }}>
+                  📄 Boleto bancário
+                </a>
+              )}
+              {cobranca.pix_qr_code && (
+                <div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>PIX copia-e-cola</div>
+                  <div style={{ fontFamily: 'monospace', fontSize: 10, color: 'rgba(255,255,255,0.6)', wordBreak: 'break-all', background: 'rgba(255,255,255,0.04)', padding: '6px 8px', borderRadius: 6 }}>
+                    {cobranca.pix_qr_code.slice(0, 120)}…
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Ações CORA */}
+          {error && <p style={{ color: '#f87171', fontSize: 12, margin: 0 }}>{error}</p>}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button onClick={analisar} disabled={loadingAnalise}
+              style={{ flex: 1, padding: '9px 14px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 7, color: 'rgba(255,255,255,0.8)', fontSize: 13, cursor: loadingAnalise ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              {loadingAnalise ? <Spinner /> : <Icon name="sparkles" size={13} />} Analisar com CORA
+            </button>
+            <button onClick={gerarMensagem} disabled={loadingMensagem}
+              style={{ flex: 1, padding: '9px 14px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 7, color: 'rgba(255,255,255,0.8)', fontSize: 13, cursor: loadingMensagem ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              {loadingMensagem ? <Spinner /> : '💬'} Gerar Mensagem
+            </button>
+          </div>
+
+          {/* Mensagem gerada */}
+          {mensagemGerada && (
+            <div style={{ padding: 14, background: 'rgba(255,255,255,0.03)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>Mensagem gerada — aguarda aprovação</div>
+              <p style={{ margin: '0 0 10px', fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{mensagemGerada.mensagem}</p>
+              {mensagemGerada.dica_envio && (
+                <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>💡 {mensagemGerada.dica_envio}</p>
+              )}
+            </div>
+          )}
+
+          {/* Histórico de eventos (audit trail) */}
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.5)', marginBottom: 10 }}>Eventos Asaas</div>
+            {loadingEventos ? (
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>Carregando…</div>
+            ) : eventos.length === 0 ? (
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>Nenhum evento ainda.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {eventos.map(ev => (
+                  <div key={ev.id} style={{ padding: '9px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, borderLeft: `3px solid ${ev.event_type === 'payment_received' ? '#16a34a' : ev.event_type === 'created' ? '#3b82f6' : 'rgba(255,255,255,0.15)'}` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>{ev.event_type.replace(/_/g, ' ')}</span>
+                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{new Date(ev.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    {ev.old_status && ev.new_status && (
+                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{ev.old_status} → {ev.new_status}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Ações CORA sobre esta cobrança */}
+          {acoes.length > 0 && (
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.5)', marginBottom: 10 }}>Ações CORA</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {acoes.map(a => (
+                  <div key={a.id} style={{ padding: '9px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, borderLeft: '3px solid rgba(183,12,0,0.4)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>{(a.acao || a.tipo || 'ação').replace(/_/g, ' ')}</span>
+                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{new Date(a.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    {a.mensagem_enviada && <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.5)', lineHeight: 1.4 }}>{a.mensagem_enviada.slice(0, 120)}{a.mensagem_enviada.length > 120 ? '…' : ''}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Screen ───────────────────────────────────────────────────────────────
 export default function CoraScreen({ tenant, tenantDbId, userId }) {
   const [tab, setTab] = useState('inad');
+
+  // V1 state
   const [cobrancas, setCobrancas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState(null);
   const [showNovaModal, setShowNovaModal] = useState(false);
+
+  // V2 state
+  const [cobrancasV2, setCobrancasV2] = useState([]);
+  const [loadingV2, setLoadingV2] = useState(true);
+  const [selectedV2Id, setSelectedV2Id] = useState(null);
+  const [showNovaAsaasModal, setShowNovaAsaasModal] = useState(false);
+
+  // Modo CORA
+  const [modo, setModo] = useState('humano');
+  const [savingModo, setSavingModo] = useState(false);
 
   const loadCobrancas = useCallback(async () => {
     if (!tenantDbId) return;
@@ -360,9 +716,45 @@ export default function CoraScreen({ tenant, tenantDbId, userId }) {
     setLoading(false);
   }, [tenantDbId]);
 
-  useEffect(() => { loadCobrancas(); }, [loadCobrancas]);
+  const loadCobrancasV2 = useCallback(async () => {
+    if (!tenantDbId) return;
+    setLoadingV2(true);
+    const { data } = await supabase
+      .from('cobrancas')
+      .select('*')
+      .eq('tenant_id', tenantDbId)
+      .order('vencimento', { ascending: true });
+    setCobrancasV2(data || []);
+    setLoadingV2(false);
+  }, [tenantDbId]);
 
-  // Realtime updates
+  const loadModo = useCallback(async () => {
+    if (!tenantDbId) return;
+    const { data } = await supabase
+      .from('tenant_agent_config')
+      .select('mode')
+      .eq('tenant_id', tenantDbId)
+      .eq('agent', 'cora')
+      .single();
+    if (data?.mode) setModo(data.mode);
+  }, [tenantDbId]);
+
+  const saveModo = async (novoModo) => {
+    if (!tenantDbId) return;
+    setSavingModo(true);
+    await supabase.from('tenant_agent_config').upsert(
+      { tenant_id: tenantDbId, agent: 'cora', mode: novoModo },
+      { onConflict: 'tenant_id,agent' }
+    );
+    setModo(novoModo);
+    setSavingModo(false);
+  };
+
+  useEffect(() => { loadCobrancas(); }, [loadCobrancas]);
+  useEffect(() => { loadCobrancasV2(); }, [loadCobrancasV2]);
+  useEffect(() => { loadModo(); }, [loadModo]);
+
+  // Realtime — V1
   useEffect(() => {
     if (!tenantDbId) return;
     const ch = supabase.channel('cora-cobrancas-realtime')
@@ -371,21 +763,32 @@ export default function CoraScreen({ tenant, tenantDbId, userId }) {
     return () => supabase.removeChannel(ch);
   }, [tenantDbId, loadCobrancas]);
 
+  // Realtime — V2
+  useEffect(() => {
+    if (!tenantDbId) return;
+    const ch = supabase.channel('cora-cobrancas-v2-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cobrancas', filter: `tenant_id=eq.${tenantDbId}` }, () => loadCobrancasV2())
+      .subscribe();
+    return () => supabase.removeChannel(ch);
+  }, [tenantDbId, loadCobrancasV2]);
+
   const emAberto = cobrancas.filter(c => c.status === 'aberto' || c.status === 'negociando');
   const pagos = cobrancas.filter(c => c.status === 'pago');
   const escalonados = cobrancas.filter(c => c.status === 'escalonado');
+  const vencidosV2 = cobrancasV2.filter(c => c.status === 'overdue');
 
   const totalAberto = emAberto.reduce((s, c) => s + Number(c.valor_atual), 0);
   const totalPago = pagos.reduce((s, c) => s + Number(c.valor_original), 0);
   const taxaRec = cobrancas.length > 0 ? Math.round((pagos.length / cobrancas.length) * 100) : 0;
 
-  const tabCobrancas = tab === 'inad' ? emAberto : tab === 'escalonados' ? escalonados : pagos;
+  const tabCobrancas = tab === 'inad' ? emAberto : tab === 'escalonados' ? escalonados : tab === 'asaas' ? cobrancasV2 : pagos;
   const selected = cobrancas.find(c => c.id === selectedId);
+  const selectedV2 = cobrancasV2.find(c => c.id === selectedV2Id);
 
   return (
     <div className="route-enter" style={{ padding: 32, maxWidth: 1400, margin: '0 auto' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <AgentAvatar id="cora" size={56} />
           <div>
@@ -393,14 +796,20 @@ export default function CoraScreen({ tenant, tenantDbId, userId }) {
             <p className="page-sub">
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ width: 7, height: 7, background: 'var(--success)', borderRadius: '50%' }} className="pulse-green" />
-                <strong style={{ color: 'var(--success)' }}>Ativa</strong> · {emAberto.length} cobrança{emAberto.length !== 1 ? 's' : ''} em aberto
+                <strong style={{ color: 'var(--success)' }}>Ativa</strong> · {emAberto.length} em aberto · {vencidosV2.length} vencidos Asaas
               </span>
             </p>
           </div>
         </div>
-        <button className="btn-primary" onClick={() => setShowNovaModal(true)}>
-          <Icon name="plus" size={14} /> Nova cobrança
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <ModoToggle modo={modo} onChange={saveModo} saving={savingModo} />
+          <button className="btn-primary" onClick={() => setShowNovaAsaasModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Icon name="plus" size={14} /> Asaas
+          </button>
+          <button className="btn-secondary" onClick={() => setShowNovaModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Icon name="plus" size={14} /> Manual
+          </button>
+        </div>
       </div>
 
       {/* KPIs */}
@@ -433,6 +842,7 @@ export default function CoraScreen({ tenant, tenantDbId, userId }) {
           { id: 'inad', label: 'Em aberto', count: emAberto.length },
           { id: 'escalonados', label: 'Escalonados', count: escalonados.length },
           { id: 'pagos', label: 'Pagos', count: pagos.length },
+          { id: 'asaas', label: 'Asaas V2', count: cobrancasV2.length, badge: vencidosV2.length > 0 },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
             padding: '12px 16px', fontSize: 13, fontWeight: tab === t.id ? 700 : 500,
@@ -442,18 +852,67 @@ export default function CoraScreen({ tenant, tenantDbId, userId }) {
           }}>
             {t.label}
             {t.count != null && <span style={{ marginLeft: 6, color: 'var(--g-500)', fontSize: 12 }}>{t.count}</span>}
+            {t.badge && <span style={{ marginLeft: 4, background: 'var(--red)', color: '#fff', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 6px' }}>{vencidosV2.length}</span>}
           </button>
         ))}
       </div>
 
       {/* Tabela */}
       <div className="card" style={{ overflow: 'hidden' }}>
-        {loading ? (
+        {(tab === 'asaas' ? loadingV2 : loading) ? (
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--g-500)' }}>Carregando cobranças…</div>
         ) : tabCobrancas.length === 0 ? (
           <div style={{ padding: 60, textAlign: 'center', color: 'var(--g-500)' }}>
-            {tab === 'inad' ? '🎉 Nenhuma cobrança em aberto!' : tab === 'escalonados' ? '✅ Sem escalonamentos pendentes.' : '💰 Nenhum pagamento registrado ainda.'}
+            {tab === 'inad' ? '🎉 Nenhuma cobrança em aberto!' : tab === 'escalonados' ? '✅ Sem escalonamentos pendentes.' : tab === 'asaas' ? '📭 Nenhuma cobrança Asaas registrada.' : '💰 Nenhum pagamento registrado ainda.'}
           </div>
+        ) : tab === 'asaas' ? (
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Cliente</th>
+                <th>Tipo</th>
+                <th>Valor</th>
+                <th>Atraso</th>
+                <th>Vencimento</th>
+                <th>Status</th>
+                <th style={{ textAlign: 'right' }}>Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tabCobrancas.map(c => {
+                const dias = diasAtraso(c.vencimento);
+                return (
+                  <tr key={c.id} onClick={() => setSelectedV2Id(c.id)} style={{ cursor: 'pointer' }}>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <UserAvatar name={c.customer_name.slice(0, 2).toUpperCase()} size={32} />
+                        <div style={{ fontWeight: 600 }}>{c.customer_name}</div>
+                      </div>
+                    </td>
+                    <td style={{ fontSize: 12, color: 'var(--g-600)' }}>{c.billing_type}</td>
+                    <td style={{ fontWeight: 700, color: c.status === 'overdue' ? 'var(--red)' : 'var(--g-900)', fontVariantNumeric: 'tabular-nums' }}>
+                      {fmtBRL(c.valor)}
+                    </td>
+                    <td>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: dias > 30 ? 'var(--red)' : dias > 10 ? 'var(--warn)' : 'var(--g-700)' }}>
+                        {dias > 0 ? `${dias} ${dias === 1 ? 'dia' : 'dias'}` : '—'}
+                      </span>
+                    </td>
+                    <td style={{ fontSize: 12, color: 'var(--g-600)' }}>
+                      {new Date(c.vencimento).toLocaleDateString('pt-BR')}
+                    </td>
+                    <td><StatusBadgeV2 status={c.status} /></td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button className="btn-ghost" style={{ fontSize: 12 }}
+                        onClick={(e) => { e.stopPropagation(); setSelectedV2Id(c.id); }}>
+                        <Icon name="eye" size={12} /> Ver
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         ) : (
           <table className="tbl">
             <thead>
@@ -512,6 +971,9 @@ export default function CoraScreen({ tenant, tenantDbId, userId }) {
       {showNovaModal && (
         <NovaCobrancaModal tenantDbId={tenantDbId} onClose={() => setShowNovaModal(false)} onCreated={loadCobrancas} />
       )}
+      {showNovaAsaasModal && (
+        <NovaCobrancaAsaasModal tenantDbId={tenantDbId} userId={userId} onClose={() => setShowNovaAsaasModal(false)} onCreated={loadCobrancasV2} />
+      )}
       {selected && (
         <CobrancaDrawer
           cobranca={selected}
@@ -519,6 +981,15 @@ export default function CoraScreen({ tenant, tenantDbId, userId }) {
           userId={userId}
           onClose={() => setSelectedId(null)}
           onRefresh={loadCobrancas}
+        />
+      )}
+      {selectedV2 && (
+        <CobrancaV2Drawer
+          cobranca={selectedV2}
+          tenantDbId={tenantDbId}
+          userId={userId}
+          onClose={() => setSelectedV2Id(null)}
+          onRefresh={loadCobrancasV2}
         />
       )}
     </div>

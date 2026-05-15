@@ -4,8 +4,6 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 
-const anthropic = new Anthropic();
-
 const InputSchema = z.object({
   tenant_id: z.string().uuid(),
   cobranca_id: z.string().uuid(),
@@ -29,6 +27,18 @@ export const coraGerarMensagem = task({
     const start = Date.now();
     const input = InputSchema.parse(payload);
     const sb = getSupabase();
+
+    // Instanciado dentro do run() para evitar throw no topo de módulo (anti-padrão #4)
+    const anthropic = new Anthropic();
+
+    // Lê modo do tenant em tenant_agent_config
+    const { data: agentCfg } = await sb
+      .from("tenant_agent_config")
+      .select("mode")
+      .eq("tenant_id", input.tenant_id)
+      .eq("agent_id", "cora")
+      .maybeSingle();
+    const modo = (agentCfg?.mode as "humano" | "hibrido" | "ia") ?? "hibrido";
 
     const { data: cob, error } = await sb
       .from("cora_cobrancas")
@@ -113,38 +123,46 @@ A mensagem deve ser em português brasileiro natural, adequada ao relacionamento
     }
 
     // Salva draft na tabela de drafts para aprovação humana
+    // Colunas corretas conforme schema real de agent_drafts
     await sb.from("agent_drafts").insert({
-      tenant_id: input.tenant_id,
-      agent_id: "cora",
-      draft_type: "cobranca_mensagem",
-      content: result.mensagem,
+      tenant_id:      input.tenant_id,
+      agent_name:     "cora",
+      channel:        input.canal,
+      subject:        `Cobrança — ${cob.customer_name}`,
+      content:        result.mensagem,
+      status:         "pending",
+      autonomy_level: modo,
       metadata: {
-        cobranca_id: input.cobranca_id,
-        customer_name: cob.customer_name,
-        canal: input.canal,
-        tom: tomFinal,
-        dica_envio: result.dica_envio,
+        cobranca_id:      input.cobranca_id,
+        customer_name:    cob.customer_name,
+        canal:            input.canal,
+        tom:              tomFinal,
+        dica_envio:       result.dica_envio,
+        requires_approval: modo !== "ia",
+        modo,
       },
-      status: "pending",
     });
 
-    // Registra ação
+    // Registra ação (V1 + campos V2)
     await sb.from("cora_acoes").insert({
-      cobranca_id: input.cobranca_id,
-      tenant_id: input.tenant_id,
-      tipo: "mensagem_enviada",
-      canal: input.canal,
-      agente: "cora",
-      conteudo: result.mensagem,
+      cobranca_id:      input.cobranca_id,
+      tenant_id:        input.tenant_id,
+      tipo:             "mensagem_enviada",
+      acao:             "mensagem_enviada",
+      canal:            input.canal,
+      agente:           "cora",
+      conteudo:         result.mensagem,
+      mensagem_enviada: result.mensagem,
     });
 
     await sb.from("agent_runs").insert({
-      tenant_id: input.tenant_id,
-      agent_id: "cora",
+      tenant_id:          input.tenant_id,
+      agent_id:           "cora",
       trigger_dev_run_id: ctx.run.id,
-      status: "completed",
-      input: { cobranca_id: input.cobranca_id, tom: tomFinal },
-      output: { ok: true, ...result },
+      status:             "success",
+      input:              { cobranca_id: input.cobranca_id, tom: tomFinal, modo },
+      output:             { ...result, ok: true },
+      duration_ms:        Date.now() - start,
     });
 
     await logAgentRun({
@@ -157,6 +175,6 @@ A mensagem deve ser em português brasileiro natural, adequada ao relacionamento
       durationMs: Date.now() - start,
     });
 
-    return OutputSchema.parse({ ok: true, ...result });
+    return OutputSchema.parse({ ...result, ok: true });
   },
 });

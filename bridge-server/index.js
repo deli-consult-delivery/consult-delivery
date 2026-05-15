@@ -23,6 +23,7 @@ const NEXUS_TICKET_BASE      = process.env.NEXUS_TICKET_BASE || 'http://187.127.
 const NEXUS_TICKET_TOKEN     = process.env.NEXUS_TICKET_TOKEN;
 const TRIGGER_SECRET_KEY     = process.env.TRIGGER_SECRET_KEY;
 const TRIGGER_API_URL        = 'https://api.trigger.dev';
+const ASAAS_WEBHOOK_SECRET   = process.env.ASAAS_WEBHOOK_SECRET;
 const OLLAMA_API_KEY         = process.env.OLLAMA_API_KEY;
 const OLLAMA_MODEL           = process.env.OLLAMA_MODEL || 'llama3.2';
 // EvoNexus webhook trigger IDs (visibilidade no painel, fire-and-forget)
@@ -104,6 +105,38 @@ function runOpenclawAgent(agentId, message, sessionId) {
 }
 
 // ── Helper: Supabase REST write (service role) ────────────────────────────────
+async function supabaseSelect(table, filters = {}) {
+  if (!SUPABASE_SERVICE_KEY) return null;
+  const qs = Object.entries(filters).map(([k, v]) => `${k}=eq.${encodeURIComponent(v)}`).join('&');
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${qs}&limit=1`, {
+    headers: {
+      apikey: SUPABASE_SERVICE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+    },
+  });
+  if (!r.ok) throw new Error(`supabase ${table} select ${r.status}: ${await r.text()}`);
+  const data = await r.json();
+  return Array.isArray(data) ? data[0] ?? null : null;
+}
+
+async function supabaseUpdate(table, filters = {}, updates = {}) {
+  if (!SUPABASE_SERVICE_KEY) return null;
+  const qs = Object.entries(filters).map(([k, v]) => `${k}=eq.${encodeURIComponent(v)}`).join('&');
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${qs}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: SUPABASE_SERVICE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+      Prefer: 'return=representation',
+    },
+    body: JSON.stringify(updates),
+  });
+  if (!r.ok) throw new Error(`supabase ${table} update ${r.status}: ${await r.text()}`);
+  const data = await r.json();
+  return Array.isArray(data) ? data[0] ?? null : data;
+}
+
 async function supabaseInsert(table, row) {
   if (!SUPABASE_SERVICE_KEY) {
     console.warn(`[bridge] supabaseInsert(${table}): sem SUPABASE_SERVICE_ROLE_KEY, ignorado`);
@@ -628,6 +661,117 @@ Responda SOMENTE com JSON válido no formato:
   }
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// POST /webhooks/asaas — Webhook receiver Asaas (pagamentos)
+// Asaas envia POST com header asaas-access-token = ASAAS_WEBHOOK_SECRET
+// Docs: https://docs.asaas.com/docs/criando-webhooks
+// ════════════════════════════════════════════════════════════════════════════
+
+const ASAAS_STATUS_MAP = {
+  PAYMENT_CREATED:              'pending',
+  PAYMENT_UPDATED:              null,       // sem mudança de status
+  PAYMENT_CONFIRMED:            'received',
+  PAYMENT_RECEIVED:             'received',
+  PAYMENT_OVERDUE:              'overdue',
+  PAYMENT_DELETED:              'canceled',
+  PAYMENT_RESTORED:             'pending',
+  PAYMENT_REFUNDED:             'refunded',
+  PAYMENT_PARTIALLY_REFUNDED:   'refunded',
+  PAYMENT_CHARGEBACK_REQUESTED: 'overdue',
+  PAYMENT_CHARGEBACK_DISPUTE:   'overdue',
+  PAYMENT_AWAITING_CHARGEBACK_REVERSAL: 'overdue',
+};
+
+app.post('/webhooks/asaas', async (req, res) => {
+  // 1. Validar token — Asaas envia em asaas-access-token (lowercase)
+  const token = req.headers['asaas-access-token'] || req.headers['x-asaas-access-token'] || '';
+  if (!ASAAS_WEBHOOK_SECRET) {
+    console.warn('[webhooks/asaas] ASAAS_WEBHOOK_SECRET não configurado — webhook rejeitado');
+    return res.status(500).json({ error: 'webhook secret não configurado no servidor' });
+  }
+  if (token !== ASAAS_WEBHOOK_SECRET) {
+    console.warn(`[webhooks/asaas] token inválido: "${token.slice(0, 8)}..."`);
+    return res.status(401).json({ error: 'token inválido' });
+  }
+
+  const { event, payment } = req.body || {};
+  if (!event || !payment?.id) {
+    return res.status(400).json({ error: 'payload inválido: faltam event ou payment.id' });
+  }
+
+  console.log(`[webhooks/asaas] evento=${event} charge=${payment.id}`);
+
+  // Responde 200 imediatamente — Asaas não faz retry se receber 200
+  res.json({ ok: true, received: event });
+
+  // Processa de forma assíncrona após responder
+  setImmediate(async () => {
+    try {
+      // 2. Encontra cobrança pelo asaas_charge_id
+      const cob = await supabaseSelect('cobrancas', { asaas_charge_id: payment.id });
+      if (!cob) {
+        console.warn(`[webhooks/asaas] cobrança não encontrada para charge_id=${payment.id}`);
+        return;
+      }
+
+      const oldStatus = cob.status;
+      const newStatus = ASAAS_STATUS_MAP[event] ?? null;
+
+      // 3. Atualiza status se evento tem mapeamento
+      if (newStatus && newStatus !== oldStatus) {
+        await supabaseUpdate(
+          'cobrancas',
+          { id: cob.id },
+          { status: newStatus, updated_at: new Date().toISOString() }
+        );
+        console.log(`[webhooks/asaas] cobranca ${cob.id} status ${oldStatus} → ${newStatus}`);
+      }
+
+      // 4. Registra em cobranca_eventos
+      await supabaseInsert('cobranca_eventos', {
+        cobranca_id:  cob.id,
+        tenant_id:    cob.tenant_id,
+        event_type:   newStatus === oldStatus ? 'manual' : (newStatus === 'received' ? 'payment_received' : 'status_changed'),
+        old_status:   oldStatus,
+        new_status:   newStatus,
+        triggered_by: 'asaas_webhook',
+        metadata: {
+          asaas_event:      event,
+          asaas_charge_id:  payment.id,
+          asaas_value:      payment.value,
+          asaas_due_date:   payment.dueDate,
+          asaas_pay_date:   payment.paymentDate ?? null,
+        },
+      });
+
+      // 5. Se PAYMENT_OVERDUE: dispara cora-analisar-devedor automaticamente
+      if (event === 'PAYMENT_OVERDUE' && TRIGGER_SECRET_KEY) {
+        const tr = await fetch(`${TRIGGER_API_URL}/api/v1/tasks/cora-analisar-devedor/trigger`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${TRIGGER_SECRET_KEY}`,
+          },
+          body: JSON.stringify({
+            payload: {
+              tenant_id:   cob.tenant_id,
+              cobranca_id: cob.id,
+            },
+          }),
+        });
+        if (tr.ok) {
+          const trData = await tr.json();
+          console.log(`[webhooks/asaas] cora-analisar-devedor disparado: runId=${trData.id}`);
+        } else {
+          console.error(`[webhooks/asaas] falha ao disparar cora: ${tr.status} ${await tr.text()}`);
+        }
+      }
+    } catch (err) {
+      console.error('[webhooks/asaas] erro no processamento assíncrono:', err.message);
+    }
+  });
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[bridge] ouvindo em 0.0.0.0:${PORT}`);
   console.log(`[bridge] SUPABASE_URL:          ${SUPABASE_URL           ? '✓' : '✗'}`);
@@ -637,5 +781,6 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`[bridge] NEXUS_BASE_URL:        ${NEXUS_BASE_URL         ? '✓' : '✗ mock mode'}`);
   console.log(`[bridge] BRIDGE_SECRET:         ${BRIDGE_SECRET          ? '✓' : '✗'}`);
   console.log(`[bridge] TRIGGER_SECRET_KEY:    ${TRIGGER_SECRET_KEY     ? '✓' : '✗ /agents/:slug/run desativado'}`);
+  console.log(`[bridge] ASAAS_WEBHOOK_SECRET:  ${ASAAS_WEBHOOK_SECRET   ? '✓' : '✗ /webhooks/asaas rejeitará tudo'}`);
   console.log(`[bridge] OLLAMA_API_KEY:        ${OLLAMA_API_KEY         ? '✓' : '✗ /chat/ai desativado'} model=${OLLAMA_MODEL}`);
 });
