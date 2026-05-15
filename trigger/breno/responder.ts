@@ -1,4 +1,4 @@
-import { task } from "@trigger.dev/sdk/v3";
+import { task, logger } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "../_shared/supabase";
@@ -157,18 +157,72 @@ Regras:
       draft_id = draft?.id;
     }
 
-    // mode === "ia": envio via Evolution fica para Tarefa 6 — apenas loga por ora
+    let outboundMessageId: string | null = null;
+
     if (mode === "ia") {
-      console.info("[breno-responder] mode=ia: envio via Evolution pendente (Tarefa 6)", {
-        conversation_id: input.conversation_id,
-      });
+      const { data: convRow } = await sb
+        .from("conversations")
+        .select("whatsapp_chat_id, instance_id")
+        .eq("id", input.conversation_id)
+        .maybeSingle();
+
+      if (convRow?.whatsapp_chat_id && convRow?.instance_id) {
+        const { data: inst } = await sb
+          .from("evolution_instances")
+          .select("evolution_url, api_key, instance_name")
+          .eq("id", convRow.instance_id)
+          .maybeSingle();
+
+        if (inst) {
+          try {
+            const sendRes = await fetch(
+              `${inst.evolution_url}/message/sendText/${inst.instance_name}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json", apikey: inst.api_key },
+                body: JSON.stringify({ number: convRow.whatsapp_chat_id, text: parsed.resposta }),
+                signal: AbortSignal.timeout(10_000),
+              }
+            );
+
+            if (sendRes.ok) {
+              const sendData = await sendRes.json();
+              outboundMessageId = sendData?.key?.id ?? null;
+
+              await sb.from("messages").insert({
+                tenant_id:       input.tenant_id,
+                conversation_id: input.conversation_id,
+                direction:       "outbound",
+                sender_name:     "BRENO",
+                content:         parsed.resposta,
+                whatsapp_msg_id: outboundMessageId,
+                created_at:      new Date().toISOString(),
+              });
+
+              await sb.from("conversations")
+                .update({ last_breno_handled_at: new Date().toISOString() })
+                .eq("id", input.conversation_id);
+            } else {
+              logger.warn("breno-responder: falha ao enviar via Evolution", {
+                status: sendRes.status,
+                conversation_id: input.conversation_id,
+              });
+            }
+          } catch (err) {
+            logger.warn("breno-responder: erro ao chamar Evolution API", {
+              error: (err as Error).message,
+              conversation_id: input.conversation_id,
+            });
+          }
+        }
+      }
     }
 
     await sb.from("breno_interactions").insert({
       tenant_id: input.tenant_id,
       conversation_id: input.conversation_id,
       inbound_message_id: input.message_id,
-      outbound_message_id: null,
+      outbound_message_id: outboundMessageId,
       mode,
       breno_response: parsed.resposta,
       action_taken,

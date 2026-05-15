@@ -263,6 +263,11 @@ function ConvRow({ conv, active, onClick, statusFilter, fav, onFav, selectMode, 
           <span className="lc-row-pill" style={{ background: wColor.bg, color: wColor.color }}>
             {statusLabels[displayStatus] || displayStatus}
           </span>
+          {conv.last_breno_handled_at && (
+            <span className="lc-row-pill" style={{ background: conv.breno_paused ? 'rgba(107,114,128,0.15)' : 'rgba(168,85,247,0.15)', color: conv.breno_paused ? '#6B7280' : '#C084FC', fontSize: 9 }}>
+              {conv.breno_paused ? '⏸ BRENO' : '🤖 BRENO'}
+            </span>
+          )}
           {conv.type === 'internal' && <span className="lc-row-tag" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)' }}>Interno</span>}
         </div>
       </div>
@@ -1204,6 +1209,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [bulkLoading, setBulkLoading]          = useState(false);
   const [showAiPanel, setShowAiPanel]          = useState(false);
 
+  // ── BRENO ─────────────────────────────────────────────────
+  const [brenoSuggestion, setBrenoSuggestion] = useState(null);
+
   // ── Mensagens ─────────────────────────────────────────────
   const [messages, setMessages]              = useState({});
   const [typing, setTyping]                  = useState(false);
@@ -1337,7 +1345,19 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   useEffect(() => {
     refreshStatus();
     setReplyTo(null);
-  }, [activeId, refreshStatus]);
+    setBrenoSuggestion(null);
+    if (!activeId || !tenantDbId) return;
+    supabase
+      .from('breno_interactions')
+      .select('id, breno_response, action_taken, created_at')
+      .eq('conversation_id', activeId)
+      .eq('requires_review', true)
+      .eq('action_taken', 'suggested')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => { if (data) setBrenoSuggestion(data); });
+  }, [activeId, refreshStatus, tenantDbId]);
 
   useEffect(() => {
     const conv = convsRef.current.find(c => c.id === activeId);
@@ -1692,7 +1712,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         const lm    = lastMsgMap[c.id];
         const preview = lm ? (lm.media_type === 'image' ? '🖼 Imagem' : lm.media_type === 'video' ? '🎬 Vídeo' : lm.media_type === 'document' ? '📄 Documento' : lm.media_type?.includes('audio') ? '🎵 Áudio' : lm.content || lm.body || '') : '';
         const previewFrom = lm?.direction === 'inbound' ? 'in' : 'out';
-        return { id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null, type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id, preview, previewFrom, time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '', _sortTs: c.updated_at || '', unread: 0, online: false, messages: [], status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null, status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null };
+        return { id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null, type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id, preview, previewFrom, time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '', _sortTs: c.updated_at || '', unread: 0, online: false, messages: [], status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null, status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null, breno_paused: c.breno_paused || false, last_breno_handled_at: c.last_breno_handled_at || null };
       });
       setConvs(prev => {
         const existingIds = new Set(prev.map(c => c.id));
@@ -1759,7 +1779,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           const lm    = lastMsgMap[c.id];
           const preview = lm ? (lm.media_type === 'image' ? '🖼 Imagem' : lm.media_type === 'video' ? '🎬 Vídeo' : lm.media_type === 'document' ? '📄 Documento' : lm.media_type?.includes('audio') ? '🎵 Áudio' : lm.content || lm.body || '') : '';
           const previewFrom = lm?.direction === 'inbound' ? 'in' : 'out';
-          return { id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null, type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id, preview, previewFrom, time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '', _sortTs: c.updated_at || '', unread: 0, online: false, messages: [], status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null, status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null };
+          return { id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null, type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id, preview, previewFrom, time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '', _sortTs: c.updated_at || '', unread: 0, online: false, messages: [], status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null, status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null, breno_paused: c.breno_paused || false, last_breno_handled_at: c.last_breno_handled_at || null };
         });
         setConvs(prev => [...prev.filter(c => !statuses.includes(c.status)), ...mapped]);
       } catch { /* silencioso */ }
@@ -2045,6 +2065,22 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         metadata:        meta,
       });
     } catch { /* silencioso */ }
+  };
+
+  const toggleBrenoPause = async () => {
+    if (!activeId) return;
+    const conv = convsRef.current.find(c => c.id === activeId);
+    if (!conv) return;
+    const newPaused = !conv.breno_paused;
+    await supabase.from('conversations').update({ breno_paused: newPaused }).eq('id', activeId);
+    setConvs(prev => prev.map(c => c.id === activeId ? { ...c, breno_paused: newPaused } : c));
+  };
+
+  const dismissBrenoSuggestion = async (interactionId) => {
+    setBrenoSuggestion(null);
+    if (interactionId) {
+      await supabase.from('breno_interactions').update({ requires_review: false }).eq('id', interactionId).catch(() => {});
+    }
   };
 
   const handleForward = async (targetConv) => {
@@ -2795,6 +2831,16 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                       <Icon name="check" size={13} /> {resolved[activeId] ? 'Finalizado' : 'Finalizar'}
                     </button>
                   )}
+                  {!active?.is_group && active?.last_breno_handled_at && (
+                    <button
+                      className="lc-action-btn"
+                      onClick={toggleBrenoPause}
+                      title={active.breno_paused ? 'Liberar BRENO para esta conversa' : 'Pausar BRENO nesta conversa'}
+                      style={{ background: active.breno_paused ? 'rgba(107,114,128,0.15)' : 'rgba(168,85,247,0.12)', color: active.breno_paused ? '#9CA3AF' : '#C084FC', border: `1px solid ${active.breno_paused ? 'rgba(107,114,128,0.2)' : 'rgba(168,85,247,0.3)'}` }}
+                    >
+                      {active.breno_paused ? '▶ Liberar BRENO' : '⏸ Pausar BRENO'}
+                    </button>
+                  )}
                   <button className="lc-icon-btn-dark" title="Mais"><Icon name="chevdown" size={16} style={{ transform: 'rotate(90deg)' }} /></button>
                 </div>
               </header>
@@ -2824,6 +2870,24 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                           <button className="lc-ai-cta ghost">Editar</button>
                         </div>
                       )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* BRENO suggestion banner */}
+              {brenoSuggestion && (
+                <div className="lc-ai-result fade-in" style={{ borderLeft: '3px solid #A855F7' }}>
+                  <button className="lc-ai-result-close" onClick={() => dismissBrenoSuggestion(brenoSuggestion.id)}><Icon name="x" size={12} /></button>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                    <AgentAvatar id="breno" size={28} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, color: '#C084FC', fontWeight: 700, marginBottom: 4 }}>BRENO · Resposta sugerida</div>
+                      <p style={{ margin: 0, fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6 }}>{brenoSuggestion.breno_response}</p>
+                      <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                        <button className="lc-ai-cta" onClick={() => { setDraft(brenoSuggestion.breno_response); setBrenoSuggestion(null); }}>Usar resposta</button>
+                        <button className="lc-ai-cta ghost" onClick={() => dismissBrenoSuggestion(brenoSuggestion.id)}>Dispensar</button>
+                      </div>
                     </div>
                   </div>
                 </div>
