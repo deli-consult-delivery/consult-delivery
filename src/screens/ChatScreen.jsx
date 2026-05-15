@@ -1274,6 +1274,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const textareaRef    = useRef(null);
   const chanScrollRef  = useRef(null);
+  const chatTargetRef  = useRef(sessionStorage.getItem('cd-chat-target'));
   const activeIdRef            = useRef(activeId);
   const photoCacheRef          = useRef({});
   const convsRef               = useRef(convs);
@@ -1287,6 +1288,18 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const cameraInputRef = useRef(null);
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
   useEffect(() => { convsRef.current = convs; }, [convs]);
+
+  // Auto-seleciona conversa vinda do "Abrir Chat" no CRM
+  useEffect(() => {
+    if (!chatTargetRef.current || !convs.length) return;
+    const target = chatTargetRef.current;
+    const conv = convs.find(c => c.whatsapp_chat_id?.split('@')[0] === target);
+    if (conv) {
+      setActiveId(conv.id);
+      chatTargetRef.current = null;
+      sessionStorage.removeItem('cd-chat-target');
+    }
+  }, [convs]);
   useEffect(() => { aiModeRef.current = aiMode; }, [aiMode]);
   useEffect(() => { selectedInstanceRef.current = selectedInstance; }, [selectedInstance]);
 
@@ -1525,9 +1538,13 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     // Conversa nova sendo aberta: espera mensagens carregarem, depois vai pro fundo
     if (activeId !== lastScrolledConv.current) {
       if (activeMsgsList.length > 0) {
-        el.scrollTop = el.scrollHeight;
-        setShowScrollBtn(false);
         lastScrolledConv.current = activeId;
+        requestAnimationFrame(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+            setShowScrollBtn(false);
+          }
+        });
       }
       return;
     }

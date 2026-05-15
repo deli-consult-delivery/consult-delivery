@@ -1,4 +1,5 @@
 import { useState as uSCrm, useMemo as uMCrm, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import Icon from '../components/Icon.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
 import UserAvatar from '../components/UserAvatar.jsx';
@@ -493,7 +494,7 @@ const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0, onNavigate }) =>
                         }}>
                           {[
                             { icon: '✏️', label: 'Editar', action: () => { setEditLead(lead); setRowMenuId(null); } },
-                            { icon: '💬', label: 'Abrir Chat', action: () => { setRowMenuId(null); onNavigate?.('chat'); } },
+                            { icon: '💬', label: 'Abrir Chat', action: () => { setRowMenuId(null); if (lead.phone) sessionStorage.setItem('cd-chat-target', lead.phone.replace(/\D/g,'')); onNavigate?.('chat'); } },
                             { icon: '🗑️', label: 'Excluir', danger: true, action: () => { setDeleteConfirm(lead); setRowMenuId(null); } },
                           ].map(item => (
                             <button
@@ -548,11 +549,14 @@ const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0, onNavigate }) =>
         )}
       </div>
 
-      {/* New Lead Modal */}
-      {showModal && <NewLeadModal onClose={() => setShowModal(false)} onSave={handleNewLead}/>}
+      {/* New Lead Modal — portal para sair do route-enter */}
+      {showModal && createPortal(
+        <NewLeadModal onClose={() => setShowModal(false)} onSave={handleNewLead}/>,
+        document.body
+      )}
 
-      {/* Edit Lead Modal */}
-      {editLead && (
+      {/* Edit Lead Modal — portal para sair do route-enter */}
+      {editLead && createPortal(
         <EditLeadModal
           lead={editLead}
           onClose={() => setEditLead(null)}
@@ -573,11 +577,12 @@ const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0, onNavigate }) =>
               : l));
             setEditLead(null);
           }}
-        />
+        />,
+        document.body
       )}
 
-      {/* Delete Confirm Modal */}
-      {deleteConfirm && (
+      {/* Delete Confirm Modal — portal para sair do route-enter */}
+      {deleteConfirm && createPortal(
         <div style={{ position:'fixed', inset: 0, background:'rgba(0,0,0,0.6)', zIndex: 1000, display:'flex', alignItems:'center', justifyContent:'center' }}
           onClick={e => e.target === e.currentTarget && setDeleteConfirm(null)}>
           <div style={{ background:'#1A1A1A', border:'1px solid #2A2A2A', borderRadius: 14, padding: 28, width: 380, boxShadow:'0 24px 48px rgba(0,0,0,.6)' }}>
@@ -599,7 +604,8 @@ const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0, onNavigate }) =>
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
