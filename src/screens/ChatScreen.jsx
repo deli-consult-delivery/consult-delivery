@@ -1296,23 +1296,53 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   useEffect(() => { convsRef.current = convs; }, [convs]);
 
   // Auto-seleciona conversa vinda do "Abrir Chat" no CRM
-  const openChatByPhone = useCallback((digits) => {
+  const openChatByPhone = useCallback(async (digits, name, customerId) => {
     if (!digits) return;
     const variants = [digits];
     if (digits.startsWith('55') && digits.length === 13) variants.push(digits.slice(0, 4) + digits.slice(5));
     else if (digits.startsWith('55') && digits.length === 12) variants.push(digits.slice(0, 4) + '9' + digits.slice(4));
-    const conv = convsRef.current.find(c => variants.includes(c.whatsapp_chat_id?.split('@')[0]));
-    if (conv) { setActiveId(conv.id); sessionStorage.removeItem('cd-chat-target'); }
-  }, []);
+    let conv = convsRef.current.find(c => variants.includes(c.whatsapp_chat_id?.split('@')[0]));
+    if (!conv) {
+      // Conversa não existe: cria uma nova para poder enviar a primeira mensagem
+      if (!tenantDbId) return; // sem tenant, aguarda retry automático via convs/instances
+      const instanceName = selectedInstanceRef.current; // é uma string (instance_name)
+      const instanceObj = instances.find(i => i.instance_name === instanceName);
+      if (!instanceObj) return; // sem instância carregada, aguarda retry
+      const jid = `${digits}@s.whatsapp.net`;
+      const { data: newConv } = await supabase
+        .from('conversations')
+        .insert({
+          tenant_id: tenantDbId,
+          instance_id: instanceObj.id,
+          whatsapp_chat_id: jid,
+          type: 'whatsapp',
+          status: 'aguardando',
+          title: name || digits,
+          ...(customerId ? { customer_id: customerId } : {}),
+        })
+        .select()
+        .single();
+      if (!newConv) return;
+      setConvs(prev => [newConv, ...prev]);
+      conv = newConv;
+    }
+    // Só limpa o sessionStorage quando a operação foi bem-sucedida
+    sessionStorage.removeItem('cd-chat-target');
+    sessionStorage.removeItem('cd-chat-target-name');
+    sessionStorage.removeItem('cd-chat-target-cid');
+    setActiveId(conv.id);
+  }, [tenantDbId, instances]);
 
   useEffect(() => {
     const target = sessionStorage.getItem('cd-chat-target');
     if (!target || !convs.length) return;
-    openChatByPhone(target);
+    const name = sessionStorage.getItem('cd-chat-target-name') || '';
+    const cid = sessionStorage.getItem('cd-chat-target-cid') || null;
+    openChatByPhone(target, name, cid);
   }, [convs, openChatByPhone]);
 
   useEffect(() => {
-    const handle = (e) => openChatByPhone(e.detail?.phone);
+    const handle = (e) => openChatByPhone(e.detail?.phone, e.detail?.name, e.detail?.customerId);
     window.addEventListener('cd-open-chat', handle);
     return () => window.removeEventListener('cd-open-chat', handle);
   }, [openChatByPhone]);

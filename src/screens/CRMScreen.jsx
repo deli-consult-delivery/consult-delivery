@@ -494,7 +494,7 @@ const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0, onNavigate }) =>
                         }}>
                           {[
                             { icon: '✏️', label: 'Editar', action: () => { setEditLead(lead); setRowMenuId(null); } },
-                            { icon: '💬', label: 'Abrir Chat', action: () => { setRowMenuId(null); if (lead.phone) sessionStorage.setItem('cd-chat-target', lead.phone.replace(/\D/g,'')); onNavigate?.('chat'); } },
+                            { icon: '💬', label: 'Abrir Chat', action: () => { setRowMenuId(null); if (lead.phone) { const digits = lead.phone.replace(/\D/g,''); sessionStorage.setItem('cd-chat-target', digits); sessionStorage.setItem('cd-chat-target-name', lead.name || ''); sessionStorage.setItem('cd-chat-target-cid', lead.id || ''); window.dispatchEvent(new CustomEvent('cd-open-chat', { detail: { phone: digits, name: lead.name, customerId: lead.id } })); } onNavigate?.('chat'); } },
                             { icon: '🗑️', label: 'Excluir', danger: true, action: () => { setDeleteConfirm(lead); setRowMenuId(null); } },
                           ].map(item => (
                             <button
