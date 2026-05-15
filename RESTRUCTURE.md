@@ -474,7 +474,13 @@ CREATE TABLE agent_memories (
 - 3 migrations novas: `cobrancas` (V2), `cobranca_eventos` (audit trail), `cora_acoes` V2 columns
 - UI: ModoToggle, aba "Asaas V2", CobrancaV2Drawer com histórico de eventos
 
-**BRENO · Atendimento** — Eduardo já cobre manualmente, prioridade baixa.  
+**BRENO · Atendimento** — ✅ CONCLUÍDO (Feature V2-2, 15/05/2026). Ver `docs/agentes/breno.md`.
+- 2 tasks Trigger.dev: `breno-responder`, `breno-resumir-conversa`
+- Ativação automática via Evolution webhook → Bridge Server (rota interna `x-bridge-secret`)
+- Suporte a 3 modos: humano (skips), híbrido (draft para aprovação), ia (envia direto)
+- 2 migrations: `breno_interactions` (audit), colunas `breno_paused` + `last_breno_handled_at` em `conversations`
+- UI: badge BRENO no chat, botão pausar/liberar, banner de sugestão, BrenoScreen com 4 abas
+
 **SOFIA · SDR/Prospecção** — V2 piloto.  
 **VERA · BI & Relatórios** — V3.
 

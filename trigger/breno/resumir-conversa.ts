@@ -4,8 +4,6 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 
-const anthropic = new Anthropic();
-
 const InputSchema = z.object({
   tenant_id: z.string().uuid(),
   conversation_id: z.string().uuid(),
@@ -26,10 +24,11 @@ const OutputSchema = z.object({
 
 export const brenoResumirConversa = task({
   id: "breno-resumir-conversa",
-  retry: { maxAttempts: 2 },
+  retry: { maxAttempts: 3, minTimeoutInMs: 1000 },
   run: async (payload: unknown, { ctx }) => {
     const start = Date.now();
     const input = InputSchema.parse(payload);
+    const anthropic = new Anthropic();
     const sb = getSupabase();
 
     const { data: conv } = await sb
@@ -61,14 +60,18 @@ export const brenoResumirConversa = task({
         proxima_acao: "Aguardar mensagem do cliente",
         urgencia: "baixa" as const,
       };
-      await sb.from("agent_runs").insert({
-        tenant_id: input.tenant_id,
-        agent_id: "breno",
-        trigger_dev_run_id: ctx.run.id,
-        status: "completed",
+
+      await logAgentRun({
+        runId: ctx.run.id,
+        agentSlug: "breno-resumir-conversa",
         input: { conversation_id: input.conversation_id },
         output: { ok: true, resumo },
+        tenantId: input.tenant_id,
+        triggeredBy: input.triggered_by,
+        durationMs: Date.now() - start,
+        status: "success",
       });
+
       return OutputSchema.parse({ ok: true, resumo });
     }
 
@@ -116,23 +119,15 @@ Retorne APENAS JSON:
       };
     }
 
-    await sb.from("agent_runs").insert({
-      tenant_id: input.tenant_id,
-      agent_id: "breno",
-      trigger_dev_run_id: ctx.run.id,
-      status: "completed",
-      input: { conversation_id: input.conversation_id },
-      output: { ok: true, resumo },
-    });
-
     await logAgentRun({
       runId: ctx.run.id,
       agentSlug: "breno-resumir-conversa",
       input: { conversation_id: input.conversation_id },
-      output: { ok: true },
+      output: { ok: true, resumo },
       tenantId: input.tenant_id,
       triggeredBy: input.triggered_by,
       durationMs: Date.now() - start,
+      status: "success",
     });
 
     return OutputSchema.parse({ ok: true, resumo });

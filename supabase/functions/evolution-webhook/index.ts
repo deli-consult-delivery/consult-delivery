@@ -380,6 +380,20 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
     });
   }
 
+  // ── BRENO: atendimento automático em PV (somente inbound, sem menção) ────────
+
+  if (!isGroup && convId && savedMsg && messageText && !isMentionToBot) {
+    triggerBrenoIfNeeded({
+      tenantId,
+      conversationId: convId,
+      messageId: savedMsg.id,
+      messageText,
+      senderName: pushName,
+    }).catch(err => {
+      console.warn('[BRENO] triggerBrenoIfNeeded falhou (não crítico):', err.message);
+    });
+  }
+
   // ── Enfileirar invoke se há menção ────────────────────────────────────────
 
   if (isMentionToBot && mentionedAgent && mentionedAgent !== 'deli') {
@@ -811,6 +825,44 @@ async function enqueueAgentInvoke({ mentionedAgent, tenantId, groupId, messageTe
 
   if (!res.ok) console.warn('[WEBHOOK] enqueueAgentInvoke status:', res.status);
   else         console.log('[WEBHOOK] agente enfileirado:', mentionedAgent);
+}
+
+// Dispara breno-responder via Bridge Server interno (sem JWT de usuário)
+async function triggerBrenoIfNeeded({ tenantId, conversationId, messageId, messageText, senderName }: {
+  tenantId: string; conversationId: string; messageId: string; messageText: string; senderName: string;
+}) {
+  if (!BRIDGE_URL || !BRIDGE_SECRET) return;
+  if (!messageText.trim()) return;
+
+  const { data: conv } = await supabase
+    .from('conversations')
+    .select('breno_paused')
+    .eq('id', conversationId)
+    .maybeSingle();
+
+  if (conv?.breno_paused) {
+    console.log('[BRENO] pausado para conversa', conversationId);
+    return;
+  }
+
+  const r = await fetch(`${BRIDGE_URL}/internal/agents/breno-responder/run`, {
+    method:  'POST',
+    headers: {
+      'Content-Type':    'application/json',
+      'x-bridge-secret': BRIDGE_SECRET,
+    },
+    body: JSON.stringify({
+      tenant_id:        tenantId,
+      conversation_id:  conversationId,
+      message_id:       messageId,
+      message:          messageText,
+      sender_name:      senderName,
+      context_messages: [],
+    }),
+  });
+
+  if (!r.ok) console.warn('[BRENO] Bridge dispatch falhou:', r.status);
+  else       console.log('[BRENO] dispatched para conversa', conversationId);
 }
 
 // Verifica se mensagem chegou fora do horário e envia resposta automática

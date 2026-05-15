@@ -57,6 +57,80 @@ const labelStyle = { fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.6
 const inputStyle = { width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '9px 12px', color: 'rgba(255,255,255,0.85)', fontSize: 13, outline: 'none', fontFamily: 'inherit' };
 const cardStyle = { padding: 16, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10 };
 
+// ── Aba Estatísticas ──────────────────────────────────────────────────────────
+function StatsTab({ tenantDbId }) {
+  const [stats, setStats] = useState(null);
+  const [interactions, setInteractions] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!tenantDbId) return;
+    (async () => {
+      const [{ data: ints }, { data: pending }] = await Promise.all([
+        supabase.from('breno_interactions').select('id, mode, action_taken, requires_review, created_at, breno_response').eq('tenant_id', tenantDbId).order('created_at', { ascending: false }).limit(50),
+        supabase.from('breno_interactions').select('id', { count: 'exact' }).eq('tenant_id', tenantDbId).eq('requires_review', true).eq('action_taken', 'suggested'),
+      ]);
+      const rows = ints || [];
+      const total = rows.length;
+      const byMode = rows.reduce((acc, r) => { acc[r.mode] = (acc[r.mode] || 0) + 1; return acc; }, {});
+      const byAction = rows.reduce((acc, r) => { acc[r.action_taken] = (acc[r.action_taken] || 0) + 1; return acc; }, {});
+      setStats({ total, byMode, byAction, pendingReview: pending?.length ?? 0 });
+      setInteractions(rows.slice(0, 20));
+      setLoading(false);
+    })();
+  }, [tenantDbId]);
+
+  if (loading) return <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Carregando estatísticas…</div>;
+
+  const statCard = (label, value, color = BRENO_COLOR) => (
+    <div style={{ flex: 1, minWidth: 100, padding: '16px 20px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, textAlign: 'center' }}>
+      <div style={{ fontSize: 28, fontWeight: 700, color }}>{value}</div>
+      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 4 }}>{label}</div>
+    </div>
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        {statCard('Total de interações', stats?.total ?? 0)}
+        {statCard('Enviadas diretamente', stats?.byAction?.sent ?? 0, '#16a34a')}
+        {statCard('Sugestões pendentes', stats?.pendingReview ?? 0, '#D97706')}
+        {statCard('Ignoradas (modo humano)', stats?.byAction?.skipped ?? 0, 'rgba(255,255,255,0.4)')}
+      </div>
+
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.08em', marginBottom: 12 }}>ÚLTIMAS INTERAÇÕES</div>
+        {!interactions.length ? (
+          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13, textAlign: 'center', padding: '32px 0' }}>Nenhuma interação registrada ainda.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {interactions.map(i => {
+              const modeColor = i.mode === 'ia' ? '#16a34a' : i.mode === 'hibrido' ? BRENO_COLOR : 'rgba(255,255,255,0.3)';
+              const actionColor = i.action_taken === 'sent' ? '#16a34a' : i.action_taken === 'suggested' ? '#D97706' : 'rgba(255,255,255,0.3)';
+              return (
+                <div key={i.id} style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', lineHeight: 1.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {i.breno_response || <em style={{ color: 'rgba(255,255,255,0.3)' }}>sem resposta gerada</em>}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>
+                      {new Date(i.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: modeColor, background: `${modeColor}22`, padding: '2px 7px', borderRadius: 5 }}>{i.mode}</span>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: actionColor, background: `${actionColor}22`, padding: '2px 7px', borderRadius: 5 }}>{i.action_taken}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Aba Responder ─────────────────────────────────────────────────────────────
 function ResponderTab({ tenantDbId, userId }) {
   const [conversationId, setConversationId] = useState('');
@@ -273,7 +347,7 @@ function DraftsTab({ tenantDbId }) {
 
   const load = useCallback(async () => {
     if (!tenantDbId) return;
-    const { data } = await supabase.from('agent_drafts').select('*').eq('tenant_id', tenantDbId).eq('agent_id', 'breno').order('created_at', { ascending: false }).limit(30);
+    const { data } = await supabase.from('agent_drafts').select('*').eq('tenant_id', tenantDbId).eq('agent_name', 'breno').order('created_at', { ascending: false }).limit(30);
     setDrafts(data || []);
     setLoading(false);
   }, [tenantDbId]);
@@ -334,7 +408,7 @@ function DraftsTab({ tenantDbId }) {
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-const TABS = ['Responder', 'Resumir', 'Drafts'];
+const TABS = ['Estatísticas', 'Responder', 'Resumir', 'Drafts'];
 
 export default function BrenoScreen({ tenantDbId, userId }) {
   const [activeTab, setActiveTab] = useState(0);
@@ -357,9 +431,10 @@ export default function BrenoScreen({ tenantDbId, userId }) {
         ))}
       </div>
 
-      {activeTab === 0 && <ResponderTab tenantDbId={tenantDbId} userId={userId} />}
-      {activeTab === 1 && <ResumirTab tenantDbId={tenantDbId} userId={userId} />}
-      {activeTab === 2 && <DraftsTab tenantDbId={tenantDbId} />}
+      {activeTab === 0 && <StatsTab tenantDbId={tenantDbId} />}
+      {activeTab === 1 && <ResponderTab tenantDbId={tenantDbId} userId={userId} />}
+      {activeTab === 2 && <ResumirTab tenantDbId={tenantDbId} userId={userId} />}
+      {activeTab === 3 && <DraftsTab tenantDbId={tenantDbId} />}
     </div>
   );
 }
