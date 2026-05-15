@@ -24,8 +24,8 @@ const NEXUS_TICKET_TOKEN     = process.env.NEXUS_TICKET_TOKEN;
 const TRIGGER_SECRET_KEY     = process.env.TRIGGER_SECRET_KEY;
 const TRIGGER_API_URL        = 'https://api.trigger.dev';
 const ASAAS_WEBHOOK_SECRET   = process.env.ASAAS_WEBHOOK_SECRET;
-const OLLAMA_API_KEY         = process.env.OLLAMA_API_KEY;
-const OLLAMA_MODEL           = process.env.OLLAMA_MODEL || 'llama3.2';
+const ANTHROPIC_API_KEY      = process.env.ANTHROPIC_API_KEY;
+const ANTHROPIC_MODEL        = process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001';
 // EvoNexus webhook trigger IDs (visibilidade no painel, fire-and-forget)
 const NEXUS_TRIGGER_IDS = { pesquisa: 3, regua: 2, midia: 1 };
 // In-memory job store para polling de status (request_id → estado)
@@ -601,7 +601,7 @@ app.get('/agents/:slug/runs/:id', requireJwt, async (req, res) => {
 app.post('/chat/ai', requireJwt, async (req, res) => {
   const { command, prompt: freePrompt, messages = [], conversation_id, tenant_id } = req.body;
   if (!command) return res.status(400).json({ error: 'command required' });
-  if (!OLLAMA_API_KEY) return res.status(503).json({ error: 'OLLAMA_API_KEY não configurado' });
+  if (!ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY não configurado' });
 
   const SYSTEM_PROMPTS = {
     '/resumir': `Você é DELI, COO digital da Consult Delivery. Resuma esta conversa de atendimento.
@@ -647,31 +647,29 @@ Responda SOMENTE com JSON válido no formato:
     : `Conversa:\n\n${transcript || '(sem mensagens ainda)'}`;
 
   try {
-    const r = await fetch('https://ollama.com/api/chat', {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OLLAMA_API_KEY}`,
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: OLLAMA_MODEL,
-        stream: false,
-        format: 'json',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userContent },
-        ],
+        model: ANTHROPIC_MODEL,
+        max_tokens: 512,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userContent }],
       }),
       signal: AbortSignal.timeout(30_000),
     });
 
     if (!r.ok) {
       const detail = await r.text();
-      return res.status(r.status).json({ error: `Ollama error ${r.status}`, detail });
+      return res.status(r.status).json({ error: `Anthropic error ${r.status}`, detail });
     }
 
     const data = await r.json();
-    const text = data.message?.content || '';
+    const text = data.content?.[0]?.text || '';
     let parsed;
     try {
       const cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
@@ -691,7 +689,7 @@ Responda SOMENTE com JSON válido no formato:
       parsed.text = parsed.bullets?.[0] || parsed.body || '';
     }
 
-    console.log(`[bridge/chat/ai] ${command} model=${OLLAMA_MODEL} conv=${conversation_id}`);
+    console.log(`[bridge/chat/ai] ${command} model=${ANTHROPIC_MODEL} conv=${conversation_id}`);
     res.json({ ok: true, ...parsed });
   } catch (err) {
     console.error('[bridge/chat/ai]', err.message);
@@ -820,5 +818,5 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`[bridge] BRIDGE_SECRET:         ${BRIDGE_SECRET          ? '✓' : '✗'}`);
   console.log(`[bridge] TRIGGER_SECRET_KEY:    ${TRIGGER_SECRET_KEY     ? '✓' : '✗ /agents/:slug/run desativado'}`);
   console.log(`[bridge] ASAAS_WEBHOOK_SECRET:  ${ASAAS_WEBHOOK_SECRET   ? '✓' : '✗ /webhooks/asaas rejeitará tudo'}`);
-  console.log(`[bridge] OLLAMA_API_KEY:        ${OLLAMA_API_KEY         ? '✓' : '✗ /chat/ai desativado'} model=${OLLAMA_MODEL}`);
+  console.log(`[bridge] ANTHROPIC_API_KEY:     ${ANTHROPIC_API_KEY      ? '✓' : '✗ /chat/ai desativado'} model=${ANTHROPIC_MODEL}`);
 });
