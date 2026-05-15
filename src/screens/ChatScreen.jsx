@@ -1249,6 +1249,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   // ── Canais internos ───────────────────────────────────────
   const [chanMsgs, setChanMsgs]              = useState({});
   const [chanDraft, setChanDraft]            = useState('');
+  const [showNewChan, setShowNewChan]        = useState(false);
+  const [newChanName, setNewChanName]        = useState('');
+  const [newChanDesc, setNewChanDesc]        = useState('');
+  const [newChanColor, setNewChanColor]      = useState('#B70C00');
+  const [savingChan, setSavingChan]          = useState(false);
 
   // ── Respostas rápidas ─────────────────────────────────────
   const [quickReplies, setQuickReplies]      = useState([]);
@@ -1608,6 +1613,18 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [selectedInstance]);
+
+  // Realtime para mensagens de canal interno
+  useEffect(() => {
+    const sub = supabase
+      .channel('channel-messages-rt')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'channel_messages' }, payload => {
+        const msg = payload.new;
+        setChanMsgs(m => ({ ...m, [msg.channel_id]: [...(m[msg.channel_id] || []), msg] }));
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(sub); };
+  }, []);
 
   // Canal interno — carrega mensagens ao selecionar
   useEffect(() => {
@@ -2098,6 +2115,28 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       }, 2400);
     }
   };
+
+  async function createChannel() {
+    const name = newChanName.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    if (!name || !tenantDbId) return;
+    setSavingChan(true);
+    try {
+      const { data } = await supabase.from('internal_channels').insert({
+        tenant_id: tenantDbId, name, description: newChanDesc.trim() || null,
+        color: newChanColor, is_global: false,
+      }).select().single();
+      if (data) {
+        setConvs(prev => [...prev, {
+          id: 'chan-' + data.id, name: '#' + data.name, avatar: data.name.slice(0, 2).toUpperCase(),
+          type: 'internal', chanId: data.id, color: data.color || '#B70C00',
+          isGlobal: false, description: data.description || '', preview: data.description || 'Canal interno',
+          time: '', unread: 0, online: false, messages: [],
+        }]);
+      }
+      setShowNewChan(false); setNewChanName(''); setNewChanDesc(''); setNewChanColor('#B70C00');
+    } catch { /* ignore */ }
+    setSavingChan(false);
+  }
 
   async function sendChanMsg() {
     const text = chanDraft.trim();
@@ -2957,6 +2996,19 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               Nenhuma conversa favorita ainda.<br/>Clique na estrela de uma conversa para favoritar.
             </div>
           )}
+          {/* Header canais internos com botão criar */}
+          {tab === 'int' && (
+            <div style={{ padding: '10px 12px 6px', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: 1, flex: 1 }}>Canais</span>
+              <button
+                onClick={() => setShowNewChan(true)}
+                style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 5, padding: '2px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+              >
+                + Novo Canal
+              </button>
+            </div>
+          )}
+
           {filtered.map(c => (
             <ConvRow
               key={c.id}
@@ -3001,39 +3053,67 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                   </button>
                   <ConvAvatar conv={active} size={40} />
                   <div style={{ minWidth: 0 }}>
-                    <div className="lc-chat-name">{active.name}</div>
-                    <div className="lc-chat-sub">
-                      <span>{active.description || 'Canal interno'}</span>
-                      {active.isGlobal && <span style={{ marginLeft: 4, fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 9999, background: 'rgba(37,99,235,0.15)', color: '#93C5FD' }}>Global</span>}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: active.color || '#B70C00', flexShrink: 0 }} />
+                      <span className="lc-chat-name">{active.name}</span>
+                    </div>
+                    <div className="lc-chat-sub" style={{ marginTop: 1 }}>
+                      <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>{active.description || 'Canal interno'}</span>
+                      {active.isGlobal && <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 9999, background: 'rgba(183,12,0,0.18)', color: '#FF6B6B', textTransform: 'uppercase', letterSpacing: 0.5 }}>Global</span>}
                     </div>
                   </div>
                 </div>
-                <button className="lc-action-btn" onClick={() => onNavigate?.('grupos')}><Icon name="users" size={13} /> Membros</button>
+                <button className="lc-action-btn" onClick={() => onNavigate?.('grupos')} style={{ fontSize: 11 }}><Icon name="users" size={12} /> Membros</button>
               </header>
 
-              <div ref={chanScrollRef} className="lc-msgs dark-scroll">
+              {/* Divider com nome do canal */}
+              <div style={{ padding: '16px 20px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: active.color || '#B70C00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, color: 'white', flexShrink: 0 }}>
+                    #
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 15, color: 'white' }}>{active.name}</div>
+                    {active.description && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 1 }}>{active.description}</div>}
+                  </div>
+                </div>
+              </div>
+
+              <div ref={chanScrollRef} className="lc-msgs dark-scroll" style={{ padding: '8px 0' }}>
                 {activeChanMsgs.length === 0 && (
-                  <div style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>
-                    Nenhuma mensagem ainda. Seja o primeiro a escrever! 👋
+                  <div style={{ textAlign: 'center', padding: '40px 20px', color: 'rgba(255,255,255,0.35)', fontSize: 13 }}>
+                    <div style={{ fontSize: 32, marginBottom: 10 }}>👋</div>
+                    Este é o início de <strong style={{ color: 'white' }}>{active.name}</strong>.<br/>Seja o primeiro a escrever!
                   </div>
                 )}
-                {activeChanMsgs.map(msg => (
-                  <div key={msg.id} className="lc-msg-row in slide-up">
-                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#374151', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11, color: 'white', flexShrink: 0 }}>
-                      {(msg.sender_name || '?').slice(0, 2).toUpperCase()}
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', maxWidth: '72%' }}>
-                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', fontWeight: 600, marginBottom: 3 }}>
-                        {msg.sender_name || 'Equipe'} <span style={{ marginLeft: 6, opacity: 0.6 }}>{new Date(msg.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                {activeChanMsgs.map((msg, i) => {
+                  const prevMsg = i > 0 ? activeChanMsgs[i - 1] : null;
+                  const sameAuthor = prevMsg?.sender_name === msg.sender_name && (new Date(msg.created_at) - new Date(prevMsg.created_at)) < 5 * 60 * 1000;
+                  return (
+                    <div key={msg.id} style={{ display: 'flex', gap: 10, padding: sameAuthor ? '1px 20px' : '8px 20px 2px', alignItems: 'flex-start' }}>
+                      {sameAuthor ? (
+                        <div style={{ width: 32, flexShrink: 0 }} />
+                      ) : (
+                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: active.color || '#B70C00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 12, color: 'white', flexShrink: 0 }}>
+                          {(msg.sender_name || '?').slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {!sameAuthor && (
+                          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 2 }}>
+                            <span style={{ fontWeight: 700, fontSize: 13, color: 'white' }}>{msg.sender_name || 'Equipe'}</span>
+                            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>{new Date(msg.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+                        )}
+                        <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.85)', lineHeight: 1.45, wordBreak: 'break-word' }}>{msg.text}</div>
                       </div>
-                      <div className="lc-bubble in">{msg.text}</div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <footer className="lc-composer-bar">
-                <div className="lc-composer">
+                <div className="lc-composer" style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 10 }}>
                   <div className="lc-comp-input-wrap">
                     <textarea value={chanDraft} onChange={e => setChanDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChanMsg(); } }} className="lc-comp-input" placeholder={`Mensagem para ${active.name}…`} rows={1} />
                   </div>
@@ -3664,6 +3744,66 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     )}
     {/* Lightbox de imagem */}
     {lightboxUrl && <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
+
+    {/* Modal — Criar novo canal interno */}
+    {showNewChan && (
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}
+        onClick={e => { if (e.target === e.currentTarget) setShowNewChan(false); }}>
+        <div style={{ background: 'var(--lc-bg, #111827)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: 24, width: 360, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 10, height: 10, borderRadius: '50%', background: newChanColor, flexShrink: 0 }} />
+            <span style={{ fontWeight: 700, fontSize: 15, color: 'white' }}>Novo Canal Interno</span>
+            <button onClick={() => setShowNewChan(false)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: 18, cursor: 'pointer', lineHeight: 1 }}>×</button>
+          </div>
+
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.45)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 }}>Nome do canal *</div>
+            <input
+              className="input"
+              value={newChanName}
+              onChange={e => setNewChanName(e.target.value)}
+              placeholder="ex: equipe-vendas"
+              autoFocus
+              style={{ width: '100%', background: 'rgba(255,255,255,0.06)', color: 'white', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 7, padding: '8px 10px', fontSize: 13 }}
+            />
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 3 }}>
+              Será exibido como #{newChanName.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || 'nome-do-canal'}
+            </div>
+          </div>
+
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.45)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.5 }}>Descrição</div>
+            <input
+              className="input"
+              value={newChanDesc}
+              onChange={e => setNewChanDesc(e.target.value)}
+              placeholder="Para que serve este canal?"
+              style={{ width: '100%', background: 'rgba(255,255,255,0.06)', color: 'white', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 7, padding: '8px 10px', fontSize: 13 }}
+            />
+          </div>
+
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.45)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Cor</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {['#B70C00','#7C3AED','#0369A1','#047857','#B45309','#374151'].map(c => (
+                <button key={c} onClick={() => setNewChanColor(c)} style={{ width: 24, height: 24, borderRadius: '50%', background: c, border: newChanColor === c ? '2px solid white' : '2px solid transparent', cursor: 'pointer' }} />
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            <button onClick={() => setShowNewChan(false)} style={{ flex: 1, padding: '8px 0', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 7, color: 'rgba(255,255,255,0.7)', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+            <button
+              onClick={createChannel}
+              disabled={savingChan || !newChanName.trim()}
+              style={{ flex: 2, padding: '8px 0', background: savingChan || !newChanName.trim() ? 'rgba(183,12,0,0.35)' : '#B70C00', border: 'none', borderRadius: 7, color: 'white', fontSize: 13, fontWeight: 700, cursor: savingChan || !newChanName.trim() ? 'default' : 'pointer' }}
+            >
+              {savingChan ? 'Criando…' : 'Criar Canal'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </>
   );
 }
