@@ -364,7 +364,7 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
       .eq('whatsapp_msg_id', msgId).maybeSingle();
     if (alreadySaved) {
       console.log('[WEBHOOK][DEDUP] mensagem inbound já salva, ignorando', msgId);
-      return new Response('ok', { status: 200 });
+      return;
     }
   }
 
