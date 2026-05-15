@@ -1380,10 +1380,33 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
   useEffect(() => {
     const conv = convsRef.current.find(c => c.id === activeId);
-    if (!conv?.customer_id) { setActiveCustomer(null); return; }
-    supabase.from('customers').select('id, name, phone, email, document, created_at').eq('id', conv.customer_id).maybeSingle()
-      .then(({ data }) => setActiveCustomer(data ?? null));
-  }, [activeId]);
+    if (!conv) return;
+
+    if (conv.customer_id) {
+      supabase.from('customers').select('id, name, phone, email, document, created_at').eq('id', conv.customer_id).maybeSingle()
+        .then(({ data }) => setActiveCustomer(data ?? null));
+      return;
+    }
+
+    setActiveCustomer(null);
+
+    // Auto-lookup: se é PV (não grupo), tenta vincular pelo telefone
+    const isGroup = conv.whatsapp_chat_id?.endsWith('@g.us');
+    if (!isGroup && conv.whatsapp_chat_id && tenantDbId) {
+      const phone = conv.whatsapp_chat_id.split('@')[0];
+      supabase.from('customers')
+        .select('id, name, phone, email, document, created_at')
+        .eq('tenant_id', tenantDbId)
+        .eq('phone', phone)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (!data) return;
+          supabase.from('conversations').update({ customer_id: data.id }).eq('id', conv.id);
+          setActiveCustomer(data);
+          setConvs(prev => prev.map(c => c.id === conv.id ? { ...c, customer_id: data.id } : c));
+        });
+    }
+  }, [activeId, tenantDbId]);
 
   // Fetch foto/nome WhatsApp
   useEffect(() => {
@@ -1912,9 +1935,14 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         // Equipe enviou → conversa vai para "Em aberto" (atendimento_aberto)
         const canUpdateStatus = !['finalizado', 'falha', 'archived'].includes(convStatus);
         if (canUpdateStatus) {
+          const isFirstAssign = convStatus !== 'atendimento_aberto';
           await changeStatus('atendimento_aberto');
-          addSystemMsg(active.id, 'assumiu o atendimento');
-          await insertEvent(active.id, 'assigned');
+          if (isFirstAssign) {
+            // Evento com ts 1s antes da mensagem para aparecer acima dela na timeline
+            const eventTs = new Date(now.getTime() - 1000).toISOString();
+            addSystemMsg(active.id, 'assumiu o atendimento');
+            await insertEvent(active.id, 'assigned', {}, eventTs);
+          }
           setConvs(prev => prev.map(c => c.id === active.id ? { ...c, status: 'atendimento_aberto', previewFrom: 'out' } : c));
         } else {
           setConvs(prev => prev.map(c => c.id === active.id ? { ...c, previewFrom: 'out' } : c));
@@ -2110,7 +2138,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     }));
   };
 
-  const insertEvent = async (convId, eventType, meta = {}) => {
+  const insertEvent = async (convId, eventType, meta = {}, ts = null) => {
     if (!convId || !tenantDbId) return;
     try {
       await supabase.from('conversation_events').insert({
@@ -2121,6 +2149,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         actor_name:      currentUser?.name || 'Sistema',
         actor_type:      'user',
         metadata:        meta,
+        ...(ts ? { ts } : {}),
       });
     } catch { /* silencioso */ }
   };
