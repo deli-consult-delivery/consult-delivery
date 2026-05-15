@@ -1268,6 +1268,12 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [openDados, setOpenDados]            = useState(false);
   const [openIfood, setOpenIfood]            = useState(false);
 
+  // ── Paginação de mensagens ────────────────────────────────
+  const [msgHasMore, setMsgHasMore]         = useState({});
+  const [loadingOlderMsgs, setLoadingOlderMsgs] = useState(false);
+  const loadingOlderRef                     = useRef(false); // guard síncrono
+  const scrollAnchorRef                     = useRef(null);  // altura antes do prepend
+
   // ── Refs ──────────────────────────────────────────────────
   const scrollRef          = useRef(null);
   const lastScrolledConv   = useRef(null);
@@ -1556,6 +1562,14 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
+
+    // Restaura posição após prepend de mensagens antigas (evita salto para o topo)
+    if (scrollAnchorRef.current !== null) {
+      el.scrollTop = el.scrollHeight - scrollAnchorRef.current;
+      scrollAnchorRef.current = null;
+      return;
+    }
+
     const activeMsgsList = messages[activeId] || [];
 
     // Conversa nova sendo aberta: espera mensagens carregarem, depois vai pro fundo
@@ -1770,13 +1784,16 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     } catch { /* ignore */ }
   }
 
+  const MSG_PAGE = 30;
+
   async function loadMsgs(convId) {
     try {
       const [{ data }, { data: evts }] = await Promise.all([
-        supabase.from('messages').select('id, direction, content, body, created_at, sender_name, media_url, media_type, whatsapp_msg_id, quoted_content').eq('conversation_id', convId).order('created_at', { ascending: false }).limit(100),
+        supabase.from('messages').select('id, direction, content, body, created_at, sender_name, media_url, media_type, whatsapp_msg_id, quoted_content').eq('conversation_id', convId).order('created_at', { ascending: false }).limit(MSG_PAGE),
         supabase.from('conversation_events').select('id, event_type, actor_name, metadata, ts').eq('conversation_id', convId).order('ts', { ascending: true }),
       ]);
-      const dbMsgs = (data || []).reverse().filter(msg => msg.content || msg.body || msg.media_url).map(msg => ({
+      const rows = data || [];
+      const dbMsgs = rows.reverse().filter(msg => msg.content || msg.body || msg.media_url).map(msg => ({
         id: msg.id, from: msg.direction === 'outbound' ? 'out' : 'in',
         text: msg.content || msg.body || '',
         time: new Date(msg.created_at || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
@@ -1796,7 +1813,49 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         const tmpMsgs = (m[convId] || []).filter(ex => ex.id?.startsWith('tmp-') || ex.id?.startsWith('sys-'));
         return { ...m, [convId]: [...merged, ...tmpMsgs] };
       });
+      setMsgHasMore(prev => ({ ...prev, [convId]: rows.length === MSG_PAGE }));
     } catch { /* ignore */ }
+  }
+
+  async function loadOlderMsgs(convId) {
+    if (loadingOlderRef.current) return;
+    const currentMsgs = messages[convId] || [];
+    const realMsgs = currentMsgs.filter(m => !m.id?.startsWith('tmp-') && !m.id?.startsWith('sys-') && !m.id?.startsWith('evt-'));
+    if (!realMsgs.length) return;
+    const oldestTs = realMsgs[0]._ts;
+    loadingOlderRef.current = true;
+    setLoadingOlderMsgs(true);
+    try {
+      const { data } = await supabase
+        .from('messages')
+        .select('id, direction, content, body, created_at, sender_name, media_url, media_type, whatsapp_msg_id, quoted_content')
+        .eq('conversation_id', convId)
+        .lt('created_at', oldestTs)
+        .order('created_at', { ascending: false })
+        .limit(MSG_PAGE);
+      const rows = data || [];
+      const olderMsgs = rows.reverse().filter(msg => msg.content || msg.body || msg.media_url).map(msg => ({
+        id: msg.id, from: msg.direction === 'outbound' ? 'out' : 'in',
+        text: msg.content || msg.body || '',
+        time: new Date(msg.created_at || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        _ts: msg.created_at || new Date(0).toISOString(),
+        mediaType: msg.media_type || null, mediaUrl: msg.media_url || null,
+        agentName: msg.sender_name || null, waMsgId: msg.whatsapp_msg_id || null,
+        replyTo: msg.quoted_content || null,
+      }));
+      if (olderMsgs.length > 0) {
+        scrollAnchorRef.current = scrollRef.current?.scrollHeight || 0;
+        setMessages(m => {
+          const existing = m[convId] || [];
+          const existingIds = new Set(existing.map(x => x.id));
+          const toAdd = olderMsgs.filter(x => !existingIds.has(x.id));
+          return { ...m, [convId]: [...toAdd, ...existing] };
+        });
+      }
+      setMsgHasMore(prev => ({ ...prev, [convId]: rows.length === MSG_PAGE }));
+    } catch { /* ignore */ }
+    loadingOlderRef.current = false;
+    setLoadingOlderMsgs(false);
   }
 
   // ── REFRESH ACTIVE CONVS ──────────────────────────────────
@@ -1940,8 +1999,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           if (isFirstAssign) {
             // Evento com ts 1s antes da mensagem para aparecer acima dela na timeline
             const eventTs = new Date(now.getTime() - 1000).toISOString();
-            addSystemMsg(active.id, 'assumiu o atendimento');
             await insertEvent(active.id, 'assigned', {}, eventTs);
+            // Recarrega do banco para renderizar o evento na posição correta (antes da msg)
+            loadMsgs(active.id);
           }
           setConvs(prev => prev.map(c => c.id === active.id ? { ...c, status: 'atendimento_aberto', previewFrom: 'out' } : c));
         } else {
