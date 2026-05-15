@@ -1,6 +1,12 @@
 # Wiki Log
 
+## [2026-05-15 20:30] session | limpeza OpenClaw bridge-server + migration client_tasks
+Touched: none
+
 ## [2026-05-15 19:00] session | Feature V2-6 — hook useDashboardData criado
+Touched: none
+
+## [2026-05-15 20:10] session | docs agentes LARA MAX NOVA DELI + cleanup OpenClaw
 Touched: none
 
 ## [2026-05-15 05:00] session | Importar leads CSV Datacrazy → CRMScreen worktree continuidade
