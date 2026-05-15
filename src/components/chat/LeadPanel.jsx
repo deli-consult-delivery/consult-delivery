@@ -241,6 +241,11 @@ function NoLeadSection({ conversation, tenantId, onClose, onLinked }) {
     if (n) setName(prev => prev || n);
   }, [conversation?.name]);
 
+  // Sync phone whenever the conversation JID becomes available (async) or changes
+  useEffect(() => {
+    if (!isGroup && jidNumeric) setPhone(prev => prev || jidNumeric);
+  }, [conversation?.whatsapp_chat_id]);
+
   useEffect(() => {
     if (!searchQuery.trim()) { setResults([]); return; }
     const t = setTimeout(async () => {
