@@ -199,7 +199,7 @@ function ProspectDrawer({ prospect, onClose, tenantDbId, userId, onRefresh, onTo
   const dispatchAction = async (action, canal) => {
     const endpointMap = {
       pesquisar: '/agents/sofia-pesquisar-prospect/run',
-      qualificar: '/agents/sofia-qualificar-prospect/run',
+      qualificar: '/agents/sofia-qualificar/run',
       abordagem_whatsapp: '/agents/sofia-gerar-abordagem/run',
       abordagem_instagram: '/agents/sofia-gerar-abordagem/run',
     };
@@ -217,9 +217,9 @@ function ProspectDrawer({ prospect, onClose, tenantDbId, userId, onRefresh, onTo
   };
 
   const saveAbordEdit = async (id) => {
-    await supabase.from('prospect_abordagens').update({ texto: editText }).eq('id', id);
+    await supabase.from('prospect_abordagens').update({ mensagem: editText }).eq('id', id);
     setEditAbordId(null);
-    setAbordagens(prev => prev.map(a => a.id === id ? { ...a, texto: editText } : a));
+    setAbordagens(prev => prev.map(a => a.id === id ? { ...a, mensagem: editText } : a));
     onToast('Abordagem salva', 'success');
   };
 
@@ -271,9 +271,9 @@ function ProspectDrawer({ prospect, onClose, tenantDbId, userId, onRefresh, onTo
                 </div>
               ))}
             </div>
-            {prospect.score_razao && (
+            {prospect.razao_score && (
               <div style={{ marginTop: 10, padding: '8px 10px', background: `${SOFIA_COLOR}18`, borderRadius: 7, fontSize: 12, color: 'rgba(255,255,255,0.65)' }}>
-                {prospect.score_razao}
+                {prospect.razao_score}
               </div>
             )}
           </div>
@@ -329,9 +329,9 @@ function ProspectDrawer({ prospect, onClose, tenantDbId, userId, onRefresh, onTo
                     ) : (
                       <>
                         <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.75)', lineHeight: 1.5 }}>
-                          {a.texto || '—'}
+                          {a.mensagem || '—'}
                         </p>
-                        <button onClick={() => { setEditAbordId(a.id); setEditText(a.texto || ''); }} style={{ ...btnBase, marginTop: 8, padding: '4px 10px', background: `${SOFIA_COLOR}18`, border: `1px solid ${SOFIA_COLOR}33`, color: SOFIA_COLOR }}>Editar</button>
+                        <button onClick={() => { setEditAbordId(a.id); setEditText(a.mensagem || ''); }} style={{ ...btnBase, marginTop: 8, padding: '4px 10px', background: `${SOFIA_COLOR}18`, border: `1px solid ${SOFIA_COLOR}33`, color: SOFIA_COLOR }}>Editar</button>
                       </>
                     )}
                   </div>
@@ -375,7 +375,7 @@ function ProspectsTab({ tenantDbId, userId, onToast }) {
     if (!tenantDbId) return;
     setLoading(true);
     let q = supabase.from('prospects')
-      .select('id, nome, cidade, estado, segmento, fonte, status, score, avaliacao_ifood, instagram, whatsapp, created_at, dados_coletados, score_razao')
+      .select('id, nome, cidade, estado, segmento, fonte, status, score, razao_score, avaliacao_ifood, instagram, whatsapp, created_at')
       .eq('tenant_id', tenantDbId)
       .order('created_at', { ascending: false })
       .limit(100);
@@ -401,9 +401,12 @@ function ProspectsTab({ tenantDbId, userId, onToast }) {
   const batchAction = async (action) => {
     if (selected.size === 0) return;
     setBatchLoading(true);
-    const endpoint = action === 'pesquisar'
-      ? '/agents/sofia-batch-pesquisar/run'
-      : '/agents/sofia-batch-qualificar/run';
+    if (action !== 'pesquisar') {
+      onToast('Qualificação em batch ainda não disponível', 'info');
+      setBatchLoading(false);
+      return;
+    }
+    const endpoint = '/agents/sofia-batch-pesquisar/run';
     try {
       await bridgeCall(endpoint, {
         tenant_id: tenantDbId,
@@ -522,7 +525,7 @@ function ProspectsTab({ tenantDbId, userId, onToast }) {
                     style={{ ...btnBase, padding: '4px 8px', background: 'rgba(96,165,250,0.12)', border: '1px solid rgba(96,165,250,0.25)', color: '#60a5fa', fontSize: 11 }}>
                     🔍
                   </button>
-                  <button onClick={() => dispatchOne('/agents/sofia-qualificar-prospect/run', p.id, p.nome)}
+                  <button onClick={() => dispatchOne('/agents/sofia-qualificar/run', p.id, p.nome)}
                     style={{ ...btnBase, padding: '4px 8px', background: 'rgba(22,163,74,0.12)', border: '1px solid rgba(22,163,74,0.25)', color: '#16a34a', fontSize: 11 }}>
                     ✓
                   </button>
@@ -669,6 +672,7 @@ function ImportarTab({ tenantDbId, onToast }) {
       instagram: form.instagram || null, whatsapp: form.whatsapp || null,
       site: form.site || null, ifood_link: form.ifood_link || null,
       avaliacao_ifood: form.avaliacao_ifood ? parseFloat(form.avaliacao_ifood) : null,
+      num_avaliacoes_ifood: form.num_avaliacoes ? parseInt(form.num_avaliacoes) : null,
       cnpj: form.cnpj || null,
     };
     const { error } = await supabase.from('prospects').insert(rec);
@@ -827,7 +831,7 @@ function AbordagensTab({ tenantDbId, onToast }) {
 
   const openModal = (a) => {
     setModalId(a.id);
-    setModalText(a.texto || '');
+    setModalText(a.mensagem || '');
     setModalEditing(false);
   };
 
@@ -842,9 +846,9 @@ function AbordagensTab({ tenantDbId, onToast }) {
   };
 
   const saveModal = async () => {
-    const { error } = await supabase.from('prospect_abordagens').update({ texto: modalText }).eq('id', modalId);
+    const { error } = await supabase.from('prospect_abordagens').update({ mensagem: modalText }).eq('id', modalId);
     if (error) { onToast(error.message, 'error'); return; }
-    setAbordagens(prev => prev.map(a => a.id === modalId ? { ...a, texto: modalText } : a));
+    setAbordagens(prev => prev.map(a => a.id === modalId ? { ...a, mensagem: modalText } : a));
     setModalEditing(false);
     onToast('Salvo', 'success');
   };
@@ -885,9 +889,9 @@ function AbordagensTab({ tenantDbId, onToast }) {
               </div>
 
               {/* Preview */}
-              {a.texto && (
+              {a.mensagem && (
                 <p style={{ margin: '0 0 10px', fontSize: 12, color: 'rgba(255,255,255,0.6)', lineHeight: 1.5 }}>
-                  {a.texto.slice(0, 120)}{a.texto.length > 120 ? '…' : ''}
+                  {a.mensagem.slice(0, 120)}{a.mensagem.length > 120 ? '…' : ''}
                 </p>
               )}
 
@@ -940,7 +944,7 @@ function AbordagensTab({ tenantDbId, onToast }) {
                   value={modalText} onChange={e => setModalText(e.target.value)} />
               ) : (
                 <p style={{ margin: 0, fontSize: 13, color: 'rgba(255,255,255,0.82)', lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>
-                  {modalAbord.texto || '(sem texto)'}
+                  {modalAbord.mensagem || '(sem texto)'}
                 </p>
               )}
             </div>
@@ -948,7 +952,7 @@ function AbordagensTab({ tenantDbId, onToast }) {
               {modalEditing ? (
                 <>
                   <button onClick={saveModal} style={{ ...btnBase, padding: '8px 16px', background: 'rgba(22,163,74,0.15)', border: '1px solid rgba(22,163,74,0.3)', color: '#16a34a' }}>Salvar</button>
-                  <button onClick={() => { setModalEditing(false); setModalText(modalAbord.texto || ''); }} style={{ ...btnBase, padding: '8px 16px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)' }}>Cancelar</button>
+                  <button onClick={() => { setModalEditing(false); setModalText(modalAbord.mensagem || ''); }} style={{ ...btnBase, padding: '8px 16px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)' }}>Cancelar</button>
                 </>
               ) : (
                 <>
