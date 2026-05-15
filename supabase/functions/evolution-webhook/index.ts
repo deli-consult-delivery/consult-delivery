@@ -357,6 +357,17 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
 
   // ── Backward compat: conversations + messages ─────────────────────────────
 
+  // Dedup inbound: Evolution API pode disparar o webhook múltiplas vezes para a
+  // mesma mensagem. Checa antes do upsertConversation para evitar processamento desnecessário.
+  {
+    const { data: alreadySaved } = await supabase.from('messages').select('id')
+      .eq('whatsapp_msg_id', msgId).maybeSingle();
+    if (alreadySaved) {
+      console.log('[WEBHOOK][DEDUP] mensagem inbound já salva, ignorando', msgId);
+      return new Response('ok', { status: 200 });
+    }
+  }
+
   const convId = await upsertConversation({
     tenantId,
     instanceId: inst.id,
@@ -369,7 +380,7 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
     const inQuoted = await buildQuotedContent();
     const { data: savedMsg } = await supabase
       .from('messages')
-      .insert({
+      .upsert({
         tenant_id:       tenantId,
         conversation_id: convId,
         whatsapp_msg_id: msgId,
@@ -380,7 +391,7 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
         media_url:       null,
         created_at:      msgTimestamp,
         ...(inQuoted ? { quoted_content: inQuoted } : {}),
-      })
+      }, { onConflict: 'whatsapp_msg_id', ignoreDuplicates: true })
       .select('id')
       .single();
 
