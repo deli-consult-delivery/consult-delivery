@@ -28,6 +28,7 @@ const NAV_GROUPS = [
       { id: 'max',           icon: 'bot',      label: 'MAX · Suporte',    pulse: true },
       { id: 'nova',          icon: 'sparkles', label: 'NOVA · Automação', pulse: true },
       { id: 'breno',         icon: 'chat',     label: 'BRENO · Atend.',   pulse: true },
+      { id: 'sofia',         icon: 'sparkles', label: 'SOFIA · SDR',      pulse: true },
     ],
   },
   {
