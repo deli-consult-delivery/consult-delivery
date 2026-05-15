@@ -218,14 +218,25 @@ function Divider() {
 
 /* ─── Lead não encontrado ─── */
 function NoLeadSection({ conversation, tenantId, onClose, onLinked }) {
+  const isGroup = conversation?.whatsapp_chat_id?.endsWith('@g.us');
+  // name may arrive empty/JID on first render (async Evolution profile fetch); sanitize
+  const sanitizeName = n => (n && !n.includes('@') ? n : '');
+  const initialPhone = isGroup ? '' : (conversation?.whatsapp_chat_id?.split('@')[0] || '');
+
   const [mode, setMode]               = useState('idle'); // 'idle' | 'creating' | 'searching'
-  const [name, setName]               = useState(conversation?.name || '');
-  const [phone, setPhone]             = useState(conversation?.whatsapp_chat_id?.split('@')[0] || '');
+  const [name, setName]               = useState(sanitizeName(conversation?.name));
+  const [phone, setPhone]             = useState(initialPhone);
   const [email, setEmail]             = useState('');
   const [saving, setSaving]           = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setResults]   = useState([]);
   const [searching, setSearching]     = useState(false);
+
+  // Sync name once Evolution profile arrives asynchronously after mount
+  useEffect(() => {
+    const n = sanitizeName(conversation?.name);
+    if (n) setName(prev => prev || n);
+  }, [conversation?.name]);
 
   useEffect(() => {
     if (!searchQuery.trim()) { setResults([]); return; }
