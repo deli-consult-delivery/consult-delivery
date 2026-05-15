@@ -389,6 +389,8 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
       messageId: savedMsg.id,
       messageText,
       senderName: pushName,
+      senderJid:  senderJid ?? chatId,
+      instanceName: instance,
     }).catch(err => {
       console.warn('[BRENO] triggerBrenoIfNeeded falhou (não crítico):', err.message);
     });
@@ -827,9 +829,10 @@ async function enqueueAgentInvoke({ mentionedAgent, tenantId, groupId, messageTe
   else         console.log('[WEBHOOK] agente enfileirado:', mentionedAgent);
 }
 
-// Dispara breno-responder via Bridge Server interno (sem JWT de usuário)
-async function triggerBrenoIfNeeded({ tenantId, conversationId, messageId, messageText, senderName }: {
-  tenantId: string; conversationId: string; messageId: string; messageText: string; senderName: string;
+// Dispara breno-processar-webhook via Bridge Server interno (sem JWT de usuário)
+async function triggerBrenoIfNeeded({ tenantId, conversationId, messageId, messageText, senderName, senderJid, instanceName }: {
+  tenantId: string; conversationId: string; messageId: string; messageText: string;
+  senderName: string; senderJid: string; instanceName: string;
 }) {
   if (!BRIDGE_URL || !BRIDGE_SECRET) return;
   if (!messageText.trim()) return;
@@ -845,24 +848,24 @@ async function triggerBrenoIfNeeded({ tenantId, conversationId, messageId, messa
     return;
   }
 
-  const r = await fetch(`${BRIDGE_URL}/internal/agents/breno-responder/run`, {
+  const r = await fetch(`${BRIDGE_URL}/internal/agents/breno-processar-webhook/run`, {
     method:  'POST',
     headers: {
       'Content-Type':    'application/json',
       'x-bridge-secret': BRIDGE_SECRET,
     },
     body: JSON.stringify({
-      tenant_id:        tenantId,
-      conversation_id:  conversationId,
-      message_id:       messageId,
-      message:          messageText,
-      sender_name:      senderName,
-      context_messages: [],
+      tenant_id:       tenantId,
+      instance_name:   instanceName,
+      sender_jid:      senderJid,
+      message_body:    messageText,
+      message_id:      messageId,
+      conversation_id: conversationId,
     }),
   });
 
   if (!r.ok) console.warn('[BRENO] Bridge dispatch falhou:', r.status);
-  else       console.log('[BRENO] dispatched para conversa', conversationId);
+  else       console.log('[BRENO] processar-webhook dispatched para conversa', conversationId);
 }
 
 // Verifica se mensagem chegou fora do horário e envia resposta automática
