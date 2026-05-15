@@ -1190,6 +1190,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [activeId, setActiveId]              = useState(null);
   const [headerTab, setHeaderTab]            = useState('inbox');
   const [search, setSearch]                  = useState('');
+  const isSearching                          = search.length >= 3;
+  const [searchConvs, setSearchConvs]        = useState([]);
+  const searchTimerRef                       = useRef(null);
   const [statusFilter, setStatusFilter]      = useState(null);
   const [statusTab, setStatusTab]            = useState('aberto');
   const [tab, setTab]                        = useState('all');
@@ -1291,15 +1294,18 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const { status: convStatus, loading: statusLoading, refresh: refreshStatus, changeStatus, finish } = useConversationStatus(activeId, tenantDbId, currentUser?.id);
 
   // ── CONTAGENS para badges de status ────────────────────────
-  const statusCounts = useMemo(() => ({
-    nao_iniciado: convs.filter(c => (c.status || 'aguardando') === 'aguardando').length,
-    aguardando:   convs.filter(c => c.status === 'em_atendimento' || (c.status === 'atendimento_aberto' && c.previewFrom === 'in')).length,
-    aberto:       convs.filter(c => c.status === 'atendimento_aberto').length,
-    automacao:    convs.filter(c => c.status === 'automacao').length,
-    finalizado:   convs.filter(c => c.status === 'finalizado').length,
-    falha:        convs.filter(c => c.status === 'falha').length,
-    oculto:       convs.filter(c => c.status === 'archived').length,
-  }), [convs]);
+  const statusCounts = useMemo(() => {
+    const src = isSearching ? searchConvs : convs;
+    return {
+      nao_iniciado: src.filter(c => (c.status || 'aguardando') === 'aguardando').length,
+      aguardando:   src.filter(c => c.status === 'em_atendimento' || (c.status === 'atendimento_aberto' && c.previewFrom === 'in')).length,
+      aberto:       src.filter(c => c.status === 'atendimento_aberto').length,
+      automacao:    src.filter(c => c.status === 'automacao').length,
+      finalizado:   src.filter(c => c.status === 'finalizado').length,
+      falha:        src.filter(c => c.status === 'falha').length,
+      oculto:       src.filter(c => c.status === 'archived').length,
+    };
+  }, [isSearching, searchConvs, convs]);
 
   const COUNTS = useMemo(() => [
     { id: 'nao_iniciado', icon: 'inbox', value: statusCounts.nao_iniciado, label: 'Não iniciados' },
@@ -1785,6 +1791,41 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       } catch { /* silencioso */ }
     })();
   }, [statusFilter, selectedInstance, tenantDbId]);
+
+  // ── BUSCA SERVER-SIDE: consulta o banco quando 3+ chars ────
+  useEffect(() => {
+    clearTimeout(searchTimerRef.current);
+    if (!isSearching || !tenantDbId) { setSearchConvs([]); return; }
+    searchTimerRef.current = setTimeout(async () => {
+      try {
+        const q = search.replace(/%/g, '').replace(/_/g, '');
+        const { data } = await supabase
+          .from('conversations')
+          .select('id, push_name, contact_name, group_name, whatsapp_chat_id, is_group, push_photo_url, status, updated_at, department_id, customer_id, status_v2, tenant_id, breno_paused, last_breno_handled_at')
+          .eq('tenant_id', tenantDbId)
+          .or(`push_name.ilike.%${q}%,contact_name.ilike.%${q}%,group_name.ilike.%${q}%,whatsapp_chat_id.ilike.%${q}%`)
+          .order('updated_at', { ascending: false })
+          .limit(100);
+        if (!data) return;
+        const mapped = data.map(c => {
+          const phone = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
+          const name  = c.push_name || c.contact_name || c.group_name || phone || 'Desconhecido';
+          return {
+            id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null,
+            type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id,
+            preview: '', previewFrom: 'out',
+            time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
+            _sortTs: c.updated_at || '', unread: 0, online: false, messages: [],
+            status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null,
+            status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null,
+            breno_paused: c.breno_paused || false, last_breno_handled_at: c.last_breno_handled_at || null,
+          };
+        });
+        setSearchConvs(mapped);
+      } catch { /* silencioso */ }
+    }, 300);
+    return () => clearTimeout(searchTimerRef.current);
+  }, [isSearching, search, tenantDbId]);
 
   async function refreshPendingConvs() {
     if (!selectedInstance || refreshing) return;
@@ -2390,18 +2431,13 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const finalizadoCount = statusCounts.finalizado;
   const unreadCount     = convs.reduce((s, c) => s + (c.unread || 0), 0);
 
-  const isSearching = search.length >= 3;
-  const filtered = convs.filter(c => {
+  const baseList = isSearching ? searchConvs : convs;
+  const filtered = baseList.filter(c => {
     if (tab === 'fav'    && !favConvs.has(c.id))   return false;
     if (tab === 'wa'     && c.type !== 'whatsapp') return false;
     if (tab === 'groups' && c.type !== 'group')    return false;
     if (tab === 'int'    && !(c.type === 'internal' || c.type === 'agent')) return false;
-    if (isSearching) {
-      const q = search.toLowerCase();
-      const phone = (c.whatsapp_chat_id || '').split('@')[0];
-      if (!c.name.toLowerCase().includes(q) && !phone.includes(q)) return false;
-      return true; // busca ignora filtros de status
-    }
+    if (isSearching) return true; // DB já filtrou por nome/telefone, só aplica tab
     // Sem filtro ativo: oculta finalizadas e arquivadas por padrão
     if (!statusFilter && !c.id.startsWith('chan-') && (c.status === 'finalizado' || c.status === 'archived')) return false;
     if (!c.id.startsWith('chan-') && statusFilter) {
