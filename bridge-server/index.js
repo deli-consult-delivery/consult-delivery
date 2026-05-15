@@ -32,7 +32,7 @@ const NEXUS_TRIGGER_IDS = { pesquisa: 3, regua: 2, midia: 1 };
 const nexusJobs = new Map();
 const GOOGLE_API_KEY         = process.env.GOOGLE_API_KEY || '';
 const EDGE_CALLBACK          = `${SUPABASE_URL}/functions/v1/analista-callback`;
-const TRANSCRICOES           = '/root/.openclaw/agents/analista-ifood/workspace/transcricoes';
+const TRANSCRICOES           = '/root/.openclaw/agents/analista-ifood/workspace/transcricoes'; // TODO: migrar do OpenClaw
 
 app.use(express.json({ limit: '2mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
 
