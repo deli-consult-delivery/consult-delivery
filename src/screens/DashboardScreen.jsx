@@ -2,12 +2,13 @@ import { useMemo as uMDb } from 'react';
 import Icon from '../components/Icon.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
 import UserAvatar from '../components/UserAvatar.jsx';
-import { TENANTS, AGENTS, EVENT_FEED, AGENDA } from '../data.js';
+import { TENANTS, AGENTS, AGENDA } from '../data.js';
 import { useDashboardData } from './hooks/useDashboardData.js';
+import { useFeedEventos } from './hooks/useFeedEventos.js';
 
 const DashboardScreen = ({ tenant, tenantDbId, onNavigate }) => {
   const tenantMeta = TENANTS.find(t => t.id === tenant) ?? TENANTS[0];
-  const events = EVENT_FEED || [];
+  const { events, loading: feedLoading } = useFeedEventos(tenantDbId);
   const agenda = AGENDA || [];
 
   const { data: dash, loading } = useDashboardData(tenantDbId);
@@ -233,25 +234,37 @@ const DashboardScreen = ({ tenant, tenantDbId, onNavigate }) => {
           </div>
         </div>
 
-        {/* Event feed — mantém mock até ter tabela de eventos reais */}
+        {/* Event feed — agent_runs reais via useFeedEventos (Realtime ativo) */}
         <div className="card" style={{ padding: 22 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h2 className="card-h3">Feed da plataforma</h2>
             <span className="live-dot"/>
           </div>
           <div className="dash-feed">
-            {events.map((e, i) => {
-              const ag = AGENTS.find(a => a.id === e.agent);
+            {feedLoading ? (
+              <div style={{ fontSize: 13, color: 'var(--g-500)', textAlign: 'center', padding: '16px 0' }}>
+                Carregando…
+              </div>
+            ) : events.length === 0 ? (
+              <div style={{ fontSize: 13, color: 'var(--g-500)', textAlign: 'center', padding: '16px 0' }}>
+                Nenhuma ação registrada ainda
+              </div>
+            ) : events.map((e, i) => {
+              const ag = AGENTS.find(a => a.id === e.agente);
               return (
                 <div key={e.id} className="dash-feed-item slide-up" style={{ animationDelay: `${i * 60}ms` }}>
-                  <AgentAvatar id={e.agent} size={28}/>
+                  <AgentAvatar id={e.agente} size={28}/>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, color: 'var(--g-900)', lineHeight: 1.4 }}>{e.text}</div>
+                    <div style={{ fontSize: 13, color: 'var(--g-900)', lineHeight: 1.4 }}>{e.label}</div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
                       <div style={{ fontSize: 11, color: 'var(--g-500)' }}>
-                        <strong style={{ color: ag?.color }}>{ag?.name}</strong> · {e.time}
+                        <strong style={{ color: ag?.color }}>{ag?.name}</strong> · {e.ts}
                       </div>
-                      <button className="dash-feed-cta">{e.cta}</button>
+                      {e.cta && (
+                        <button className="dash-feed-cta" onClick={() => onNavigate?.(e.cta.screen)}>
+                          {e.cta.text}
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
