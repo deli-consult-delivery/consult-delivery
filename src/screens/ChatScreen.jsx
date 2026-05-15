@@ -359,6 +359,17 @@ function AudioPlayer({ src, isOut }) {
 }
 
 const URL_REGEX = /https?:\/\/[^\s<>"')\]]+|www\.[^\s<>"')\]]+/g;
+
+function textToNodes(str, keyBase) {
+  const lines = str.split('\n');
+  const nodes = [];
+  lines.forEach((line, i) => {
+    if (line) nodes.push(line);
+    if (i < lines.length - 1) nodes.push(<br key={`${keyBase}-br-${i}`} />);
+  });
+  return nodes;
+}
+
 function linkify(text) {
   if (!text) return null;
   const parts = [];
@@ -366,14 +377,14 @@ function linkify(text) {
   let match;
   URL_REGEX.lastIndex = 0;
   while ((match = URL_REGEX.exec(text)) !== null) {
-    if (match.index > last) parts.push(text.slice(last, match.index));
+    if (match.index > last) parts.push(...textToNodes(text.slice(last, match.index), `pre-${match.index}`));
     const url = match[0];
     const href = url.startsWith('http') ? url : `https://${url}`;
-    parts.push(<a key={match.index} href={href} target="_blank" rel="noopener noreferrer" style={{ color: '#60A5FA', textDecoration: 'underline', wordBreak: 'break-all' }}>{url}</a>);
+    parts.push(<a key={`url-${match.index}`} href={href} target="_blank" rel="noopener noreferrer" style={{ color: '#60A5FA', textDecoration: 'underline', wordBreak: 'break-all' }}>{url}</a>);
     last = match.index + url.length;
   }
-  if (last < text.length) parts.push(text.slice(last));
-  return parts;
+  if (last < text.length) parts.push(...textToNodes(text.slice(last), `post-${last}`));
+  return parts.length ? parts : null;
 }
 
 // ─── QUOTED MESSAGE HELPERS ────────────────────────────────────
