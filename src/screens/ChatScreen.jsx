@@ -4,7 +4,7 @@ import AgentAvatar from '../components/AgentAvatar.jsx';
 import CustomSelect from '../components/CustomSelect.jsx';
 import { useConversationStatus, STATUS_EMOJI } from '../lib/conversationStatus.js';
 import { supabase } from '../lib/supabase.js';
-import { sendTextMessage, sendMediaMessage, sendAudioMessage, fetchProfile, fetchGroups, fetchContacts } from '../lib/evolution.js';
+import { sendTextMessage, sendMediaMessage, sendAudioMessage, fetchProfile, fetchGroups, fetchContacts, deleteWhatsAppMessage } from '../lib/evolution.js';
 import ConversationFiltersBar from '../components/chat/ConversationFiltersBar.jsx';
 import DepartmentSelector from '../components/chat/DepartmentSelector.jsx';
 import ConversationStatusBadge from '../components/chat/ConversationStatusBadge.jsx';
@@ -2201,6 +2201,14 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     // Remove do Supabase se for mensagem real (não temporária)
     if (!msg.id.startsWith('tmp-')) {
       await supabase.from('messages').delete().eq('id', msg.id);
+    }
+    // Apaga no WhatsApp (revoke para todos) — apenas mensagens enviadas por nós com ID do WA
+    if (msg.waMsgId && msg.from === 'out' && selectedInstanceRef.current) {
+      const conv = convsRef.current.find(c => c.id === activeId);
+      const remoteJid = conv?.whatsapp_chat_id;
+      if (remoteJid) {
+        deleteWhatsAppMessage(selectedInstanceRef.current, remoteJid, msg.waMsgId).catch(() => {});
+      }
     }
   };
 
