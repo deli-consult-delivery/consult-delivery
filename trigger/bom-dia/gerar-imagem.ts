@@ -79,11 +79,9 @@ async function generateImage(prompt: string, aspectRatio: "16:9" | "9:16"): Prom
           "X-Title":       "Consult Delivery Bom Dia",
         },
         body: JSON.stringify({
-          model:    "recraft/recraft-v4.1-utility",
-          messages: [{ role: "user", content: prompt }],
-          provider: {
-            parameters: { aspect_ratio: aspectRatio },
-          },
+          model:        "recraft/recraft-v4.1-utility",
+          messages:     [{ role: "user", content: prompt }],
+          aspect_ratio: aspectRatio,
         }),
         signal: AbortSignal.timeout(90_000),
       });
