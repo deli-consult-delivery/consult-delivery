@@ -1,5 +1,11 @@
 # Wiki Log
 
+## [2026-05-15 23:00] session | agente bom-dia + fix OpenRouter recraft
+Touched: none
+
+## [2026-05-15 21:00] session | notificações de canal interno + canais em todas as abas
+Touched: none
+
 ## [2026-05-15 20:30] session | limpeza OpenClaw bridge-server + migration client_tasks
 Touched: none
 
