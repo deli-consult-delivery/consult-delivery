@@ -15,6 +15,7 @@ const AGENT_META = {
   max:            { name: 'MAX',          desc: 'Consultor técnico e auditoria de cardápio',  eta: '~2 min' },
   nova:           { name: 'NOVA',         desc: 'Agente de novidades e conteúdo',             eta: '~1 min' },
   'analise-ifood': { name: 'Analista iFood', desc: 'Análise de métricas e relatório iFood',  eta: '~3 min' },
+  'bom-dia':       { name: 'Bom Dia',        desc: 'Artes motivacionais diárias para WhatsApp (seg–sáb)', eta: '~2 min' },
 };
 
 // Sugestões rápidas no input

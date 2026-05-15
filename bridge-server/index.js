@@ -2,10 +2,7 @@
 require('dotenv').config();
 
 const express  = require('express');
-const { spawn } = require('child_process');
 const crypto   = require('crypto');
-const fs       = require('fs');
-const path     = require('path');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -30,9 +27,6 @@ const ANTHROPIC_MODEL        = process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-
 const NEXUS_TRIGGER_IDS = { pesquisa: 3, regua: 2, midia: 1 };
 // In-memory job store para polling de status (request_id → estado)
 const nexusJobs = new Map();
-const GOOGLE_API_KEY         = process.env.GOOGLE_API_KEY || '';
-const EDGE_CALLBACK          = `${SUPABASE_URL}/functions/v1/analista-callback`;
-const TRANSCRICOES           = '/root/.openclaw/agents/analista-ifood/workspace/transcricoes'; // TODO: migrar do OpenClaw
 
 app.use(express.json({ limit: '2mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
 
@@ -75,33 +69,6 @@ function requireInternalToken(req, res, next) {
   if (req.headers['x-internal-token'] !== INTERNAL_BRIDGE_TOKEN)
     return res.status(401).json({ error: 'unauthorized' });
   next();
-}
-
-// ── Helper: run openclaw agent ────────────────────────────────────────────────
-function runOpenclawAgent(agentId, message, sessionId) {
-  return new Promise((resolve, reject) => {
-    const args = ['agent', '--agent', agentId, '--message', message, '--json'];
-    if (sessionId) args.push('--session-id', sessionId);
-
-    const child = spawn('openclaw', args, {
-      timeout: 300_000,
-      env: { ...process.env, PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin' },
-    });
-
-    let stdout = '', stderr = '';
-    child.stdout.on('data', d => { stdout += d.toString(); });
-    child.stderr.on('data', d => { stderr += d.toString(); });
-
-    child.on('close', code => {
-      if (code !== 0) return reject(new Error(`openclaw ${agentId} exit ${code}: ${stderr.slice(0, 400)}`));
-      try {
-        const w = JSON.parse(stdout);
-        const text = w.result?.payloads?.[0]?.text || w.result?.meta?.finalAssistantRawText || w.response || w.content || w.text || stdout;
-        resolve(typeof text === 'string' ? text : JSON.stringify(text));
-      } catch (_) { resolve(stdout); }
-    });
-    child.on('error', reject);
-  });
 }
 
 // ── Helper: Supabase REST write (service role) ────────────────────────────────
@@ -300,134 +267,6 @@ app.post('/analise', async (req, res) => {
   }
 });
 
-// ── buscarDadosLoja ───────────────────────────────────────────────────────────
-async function buscarDadosLoja(driveLink, clienteNome) {
-  const local = lerTranscricaoLocal(clienteNome);
-  if (local) { console.log(`[bridge] usando transcrição local para "${clienteNome}"`); return local; }
-  if (GOOGLE_API_KEY) { const c = await fetchDriveViaAPI(driveLink); if (c) return c; }
-  return await fetchDrivePublico(driveLink);
-}
-
-function lerTranscricaoLocal(clienteNome) {
-  if (!clienteNome) return null;
-  try {
-    const norm = clienteNome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-    for (const p of [path.join(TRANSCRICOES, `${norm}.txt`), path.join(TRANSCRICOES, `${norm}.md`)]) {
-      if (fs.existsSync(p)) return fs.readFileSync(p, 'utf8');
-    }
-    if (!fs.existsSync(TRANSCRICOES)) return null;
-    const palavras = norm.split('_').filter(w => w.length > 3);
-    for (const arq of fs.readdirSync(TRANSCRICOES)) {
-      const an = arq.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-      if (palavras.some(p => an.includes(p))) return fs.readFileSync(path.join(TRANSCRICOES, arq), 'utf8');
-    }
-  } catch (err) { console.warn('[bridge] lerTranscricaoLocal:', err.message); }
-  return null;
-}
-
-async function fetchDriveViaAPI(driveLink) {
-  try {
-    const m = driveLink.match(/\/folders\/([a-zA-Z0-9_-]+)/);
-    if (!m) return null;
-    const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=%27${m[1]}%27+in+parents&fields=files(id,name,mimeType)&key=${GOOGLE_API_KEY}`, { signal: AbortSignal.timeout(10_000) });
-    if (!r.ok) return null;
-    const { files } = await r.json();
-    if (!files?.length) return null;
-    let out = '';
-    for (const f of files.slice(0, 10)) {
-      if (f.mimeType === 'application/vnd.google-apps.folder') continue;
-      const url = f.mimeType === 'application/vnd.google-apps.document'
-        ? `https://docs.google.com/document/d/${f.id}/export?format=txt`
-        : `https://drive.google.com/uc?export=download&id=${f.id}`;
-      const dr = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-      if (dr.ok) out += `\n--- ${f.name} ---\n${(await dr.text()).slice(0, 8000)}\n`;
-    }
-    return out.trim() || null;
-  } catch (err) { console.warn('[bridge] fetchDriveViaAPI:', err.message); return null; }
-}
-
-async function fetchDrivePublico(driveLink) {
-  try {
-    const m = driveLink.match(/\/folders\/([a-zA-Z0-9_-]+)/);
-    if (!m) return null;
-    const pr = await fetch(`https://drive.google.com/drive/folders/${m[1]}`, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(10_000) });
-    if (!pr.ok) return null;
-    const html = await pr.text();
-    const ids = new Set();
-    let match;
-    const re = /"([\w-]{28,44})"/g;
-    while ((match = re.exec(html)) !== null) { if (match[1] !== m[1]) ids.add(match[1]); }
-    let out = '';
-    for (const id of [...ids].slice(0, 5)) {
-      try {
-        const dr = await fetch(`https://drive.google.com/uc?export=download&id=${id}`, { signal: AbortSignal.timeout(10_000) });
-        if (dr.ok) { const ct = dr.headers.get('content-type') || ''; if (ct.includes('text')) { const t = await dr.text(); if (t.length > 100) out += `\n${t.slice(0, 8000)}\n`; } }
-      } catch (_) {}
-    }
-    return out.trim() || null;
-  } catch (err) { console.warn('[bridge] fetchDrivePublico:', err.message); return null; }
-}
-
-async function processAnalise({ job_id, cliente_nome, drive_link, periodo, correcoes }) {
-  const periodoLabel = { diaria: 'Diária', semanal: 'Semanal', mensal: 'Mensal' }[periodo] || periodo;
-  const clienteLabel = cliente_nome || 'cliente';
-  const dadosLoja = await buscarDadosLoja(drive_link, clienteLabel);
-
-  const linhas = [
-    'CORREÇÃO ORTOGRÁFICA: Antes de iniciar, corrija silenciosamente todos os erros ortográficos e gramaticais nos dados fornecidos, adaptando o texto sem alterar o sentido.',
-    'TOM: Escreva na perspectiva da Consult Delivery (consultoria). Use frases como "Nossa equipe vai configurar...", "Vamos implementar...", "A consultoria irá ajustar...".',
-    'TEMPO: NÃO inclua estimativas de tempo de execução para nenhum ajuste.',
-  ];
-  if (Array.isArray(correcoes) && correcoes.length > 0) {
-    linhas.push('', 'CORREÇÕES APRENDIDAS (aplique nestas e em todas as análises futuras):');
-    correcoes.forEach(c => linhas.push(`- ${c}`));
-  }
-  const prefixo = linhas.join('\n');
-
-  const message = dadosLoja
-    ? [prefixo, '', 'saída JSON.', `Cliente: ${clienteLabel}. Tipo de análise: ${periodoLabel}.`, '', 'Dados da loja:', dadosLoja, '', 'Gere a análise completa. Retorne SOMENTE o JSON estruturado conforme o system_prompt, sem texto adicional.'].join('\n')
-    : `${prefixo}\n\nsaída JSON. Cliente: ${clienteLabel}. Drive: ${drive_link}. Tipo de análise: ${periodoLabel}. Acesse o link e gere a análise. Retorne SOMENTE o JSON estruturado.`;
-
-  console.log(`[bridge] job=${job_id} fonte=${dadosLoja ? 'dados_carregados' : 'link_drive'}`);
-
-  let agentOutput;
-  try {
-    agentOutput = await runOpenclawAgent('analista-ifood', message, undefined);
-    console.log(`[bridge] agente respondeu ${agentOutput.length} chars`);
-  } catch (err) {
-    console.error('[bridge] falha agente:', err.message);
-    await postCallback({ job_id, status: 'error', error_message: `Erro no agente: ${err.message}` });
-    return;
-  }
-
-  let resultado_json = null, mensagem_whatsapp = null;
-  try {
-    const cleaned = agentOutput.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-    const parsed = JSON.parse(cleaned);
-    resultado_json = parsed;
-    mensagem_whatsapp = parsed.mensagem_whatsapp || null;
-  } catch (_) {
-    resultado_json = { texto_bruto: agentOutput };
-    const wm = agentOutput.match(/"mensagem_whatsapp"\s*:\s*"([\s\S]*?)(?:"\s*[,}])/);
-    if (wm) mensagem_whatsapp = wm[1].replace(/\\n/g, '\n');
-  }
-
-  await postCallback({ job_id, status: 'done', resultado_json, mensagem_whatsapp });
-}
-
-async function postCallback(payload) {
-  try {
-    const r = await fetch(EDGE_CALLBACK, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-bridge-secret': BRIDGE_SECRET || '' },
-      body: JSON.stringify(payload),
-    });
-    const txt = await r.text();
-    if (!r.ok) console.error(`[bridge] callback falhou ${r.status}: ${txt}`);
-    else console.log(`[bridge] callback ok job=${payload.job_id} status=${payload.status}`);
-  } catch (err) { console.error('[bridge] erro callback:', err.message); }
-}
-
 // ════════════════════════════════════════════════════════════════════════════
 // AGENTS — POST /agents/:slug/run  |  GET /agents/:slug/runs/:id
 // Trigger.dev Management API (paths validados contra @trigger.dev/core SDK)
@@ -435,7 +274,7 @@ async function postCallback(payload) {
 
 // Roles que podem invocar agentes cujo slug começa com o prefixo
 const ROLE_AGENT_PREFIXES = {
-  'marketing':   ['lara-', 'nova-'],
+  'marketing':   ['lara-', 'nova-', 'bom-dia'],
   'atendimento': ['lara-', 'max-', 'breno-'],
   'financeiro':  ['cora-', 'nova-'],
   'admin':       [''],   // admin pode tudo (prefixo vazio = match qualquer)

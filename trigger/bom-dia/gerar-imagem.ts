@@ -1,0 +1,317 @@
+import { task, logger, schedules } from "@trigger.dev/sdk/v3";
+import { z } from "zod";
+import Anthropic from "@anthropic-ai/sdk";
+import { getSupabase } from "../_shared/supabase";
+import { logAgentRun } from "../_shared/audit";
+
+// ─── Schemas ─────────────────────────────────────────────────────────────────
+
+const InputSchema = z.object({
+  tenant_id:    z.string().uuid().optional(),
+  triggered_by: z.string().uuid().optional(),
+});
+
+const ClaudeOutputSchema = z.object({
+  dalle_prompt:  z.string(),
+  text_on_image: z.string(),
+  caption:       z.string(),
+  theme:         z.string(),
+});
+
+const OutputSchema = z.object({
+  caption:           z.string(),
+  img_landscape_url: z.string().url(),
+  img_portrait_url:  z.string().url(),
+  theme:             z.string(),
+  date:              z.string(),
+});
+
+type Input  = z.infer<typeof InputSchema>;
+type Output = z.infer<typeof OutputSchema>;
+
+// ─── Tema por dia da semana ───────────────────────────────────────────────────
+
+const THEMES: Record<number, string> = {
+  1: "energia para começar a semana",
+  2: "foco e persistência",
+  3: "metade da semana – ânimo",
+  4: "crescimento e superação",
+  5: "celebração da semana",
+  6: "reflexão e preparação",
+  0: "descanso e recarga",
+};
+
+const DAY_NAMES: Record<number, string> = {
+  0: "Domingo",    1: "Segunda-feira", 2: "Terça-feira",
+  3: "Quarta-feira", 4: "Quinta-feira", 5: "Sexta-feira", 6: "Sábado",
+};
+
+// ─── Helper: data no fuso de São Paulo (UTC-3, sem DST desde 2020) ───────────
+
+function getSPDate() {
+  const SP_OFFSET_MS = -3 * 60 * 60 * 1000;
+  const nowSP = new Date(Date.now() + SP_OFFSET_MS);
+  const dateStr = nowSP.toISOString().split("T")[0]; // YYYY-MM-DD
+  const weekday = nowSP.getUTCDay();
+  return {
+    dateStr,
+    weekday,
+    dayName: DAY_NAMES[weekday],
+    theme:   THEMES[weekday] ?? "motivação",
+    isSat:   weekday === 6,
+  };
+}
+
+// ─── Helper: gerar imagem via OpenRouter (DALL-E 3) ──────────────────────────
+
+async function generateImage(prompt: string, size: "1792x1024" | "1024x1792"): Promise<string> {
+  const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+  if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY não configurado no Trigger.dev");
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const r = await fetch("https://openrouter.ai/api/v1/images/generations", {
+        method: "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+          "HTTP-Referer":  "https://app.consultdelivery.com.br",
+          "X-Title":       "Consult Delivery Bom Dia",
+        },
+        body: JSON.stringify({
+          model:           "openai/dall-e-3",
+          prompt,
+          n:               1,
+          size,
+          quality:         "standard",
+          response_format: "url",
+        }),
+        signal: AbortSignal.timeout(90_000),
+      });
+
+      if (!r.ok) {
+        const detail = await r.text();
+        throw new Error(`OpenRouter ${r.status}: ${detail.slice(0, 300)}`);
+      }
+
+      const data = (await r.json()) as { data: Array<{ url: string }> };
+      const url = data.data?.[0]?.url;
+      if (!url) throw new Error("OpenRouter não retornou URL de imagem");
+      return url;
+    } catch (err) {
+      logger.warn(`bom-dia: tentativa ${attempt}/3 geração falhou`, {
+        size,
+        error: (err as Error).message,
+      });
+      if (attempt === 3) throw err;
+      // Aguarda antes da próxima tentativa
+      await new Promise((r) => setTimeout(r, 3000 * attempt));
+    }
+  }
+  throw new Error("generateImage: esgotou retentativas");
+}
+
+// ─── Helper: download + upload para Supabase Storage ─────────────────────────
+
+async function uploadToStorage(imageUrl: string, storagePath: string): Promise<string> {
+  const imgResp = await fetch(imageUrl, { signal: AbortSignal.timeout(30_000) });
+  if (!imgResp.ok) throw new Error(`Falha ao baixar imagem: ${imgResp.status}`);
+
+  const buffer = Buffer.from(await imgResp.arrayBuffer());
+  const sb = getSupabase();
+
+  const { error } = await sb.storage.from("public").upload(storagePath, buffer, {
+    contentType: "image/png",
+    upsert: true,
+  });
+
+  if (error) throw new Error(`Supabase Storage upload falhou: ${error.message}`);
+
+  const { data: { publicUrl } } = sb.storage.from("public").getPublicUrl(storagePath);
+  return publicUrl;
+}
+
+// ─── Lógica principal (compartilhada entre on-demand e agendamentos) ──────────
+
+async function executar(input: Input, runId: string): Promise<Output> {
+  const { dateStr, weekday, dayName, theme, isSat } = getSPDate();
+
+  logger.info("bom-dia-gerar-imagem iniciado", { dateStr, dayName, theme });
+
+  // 1. Idempotência: verificar se já existe run bem-sucedido hoje
+  const sb = getSupabase();
+  const { data: existing } = await sb
+    .from("agent_runs")
+    .select("output")
+    .eq("agent_id", "bom-dia")
+    .eq("status", "success")
+    .gte("created_at", new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString())
+    .limit(1)
+    .maybeSingle();
+
+  if (existing?.output && (existing.output as Record<string, unknown>).date === dateStr) {
+    logger.info("bom-dia: run de hoje já existe, retornando cache", { dateStr });
+    return OutputSchema.parse(existing.output);
+  }
+
+  // Domingo não está no calendário
+  if (weekday === 0) {
+    throw new Error("Domingo não está no calendário do Bom Dia (seg–sáb)");
+  }
+
+  // 2. Claude gera prompt DALL-E + legenda completa
+  const anthropic = new Anthropic();
+
+  const hoursLine = isSat
+    ? "🕗 Atendimento Consult Delivery: 08:00–12:00"
+    : "🕘 Atendimento Consult Delivery: 09:00–12:00 | 13:00–18:00 (intervalo de almoço das 12:00 às 13:00)";
+
+  const claudeResp = await anthropic.messages.create({
+    model:      "claude-sonnet-4-6",
+    max_tokens: 1024,
+    system: `Você é o criador de conteúdo da Consult Delivery, consultoria para negócios de delivery.
+
+Identidade visual Consult Delivery:
+- Logo: foguete estilizado vermelho + texto "Consult Delivery" + tagline "Consultoria para Delivery"
+- Cores: fundo azul escuro profundo + acentos vermelho/laranja energético
+- Estilo: moderno, profissional, vibrante, alto contraste, legível em celular
+
+Regras:
+- Texto NA ARTE: sempre em PT-BR, máx 7 palavras, forte e direto, conectado à realidade de delivery
+- Legenda: PT-BR, sem hashtags, tom motivacional e próximo
+- Prompt DALL-E: sempre em inglês (melhora qualidade)
+- Retorne SOMENTE JSON válido, sem texto extra`,
+    messages: [{
+      role:    "user",
+      content: `Dia: ${dayName}
+Tema: ${theme}
+Data: ${dateStr}
+Horários para a legenda: ${hoursLine}
+
+Gere:
+1. "dalle_prompt": prompt em inglês detalhado para DALL-E 3 — arte motivacional para donos de delivery. Inclua: dark navy blue background, red and orange accents matching Consult Delivery brand, delivery-themed elements (routes, packages, growth charts, arrows), professional and vibrant composition, space for short Portuguese text center-stage, rocket logo "Consult Delivery" bottom-left corner, optimized for WhatsApp sharing. NÃO mencione pixel, resolução ou proporção.
+2. "text_on_image": texto curto em PT-BR (máx 7 palavras) para aparecer NA arte — conectado ao tema "${theme}", direto e impactante.
+3. "caption": legenda completa em PT-BR para WhatsApp: (a) emoji temático + "Bom dia da equipe Consult Delivery!" + frase motivacional original sobre "${theme}" conectada à rotina de delivery, (b) linha com os horários exatamente como fornecidos acima, (c) frase curta de disponibilidade da equipe. Sem hashtags. Parágrafos curtos.
+4. "theme": o tema do dia em PT-BR (resumido, ex: "foco e persistência").
+
+Retorne JSON: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme":"..."}`,
+    }],
+  });
+
+  const rawText = claudeResp.content
+    .filter((b) => b.type === "text")
+    .map((b) => (b as Anthropic.TextBlock).text)
+    .join("");
+
+  const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("Claude não retornou JSON válido");
+
+  const claudeOut = ClaudeOutputSchema.parse(JSON.parse(jsonMatch[0]));
+
+  logger.info("bom-dia: conteúdo gerado pelo Claude", {
+    theme:       claudeOut.theme,
+    textOnImage: claudeOut.text_on_image,
+  });
+
+  // 3. Gerar duas imagens em paralelo via OpenRouter/DALL-E 3
+  const fullPrompt = `${claudeOut.dalle_prompt}. Prominent bold text on image: "${claudeOut.text_on_image}" in Portuguese. Clean composition, Consult Delivery rocket brand logo bottom left.`;
+
+  logger.info("bom-dia: gerando imagens (landscape + portrait) via DALL-E 3");
+
+  const [landscapeTempUrl, portraitTempUrl] = await Promise.all([
+    generateImage(fullPrompt, "1792x1024"),
+    generateImage(fullPrompt, "1024x1792"),
+  ]);
+
+  // 4. Download + upload permanente no Supabase Storage
+  logger.info("bom-dia: fazendo upload para Supabase Storage");
+
+  const [imgLandscapeUrl, imgPortraitUrl] = await Promise.all([
+    uploadToStorage(landscapeTempUrl, `bom-dia/${dateStr}-landscape.png`),
+    uploadToStorage(portraitTempUrl,  `bom-dia/${dateStr}-portrait.png`),
+  ]);
+
+  const output: Output = OutputSchema.parse({
+    caption:           claudeOut.caption,
+    img_landscape_url: imgLandscapeUrl,
+    img_portrait_url:  imgPortraitUrl,
+    theme:             claudeOut.theme,
+    date:              dateStr,
+  });
+
+  // 5. Audit log
+  await logAgentRun({
+    runId,
+    agentSlug:   "bom-dia",
+    tenantId:    input.tenant_id,
+    triggeredBy: input.triggered_by,
+    input,
+    output,
+    status:      "success",
+  });
+
+  logger.info("bom-dia-gerar-imagem concluído", {
+    dateStr,
+    theme:        output.theme,
+    landscapeUrl: imgLandscapeUrl,
+    portraitUrl:  imgPortraitUrl,
+  });
+
+  return output;
+}
+
+// ─── Task on-demand ───────────────────────────────────────────────────────────
+
+export const bomDiaGerarImagem = task({
+  id:    "bom-dia-gerar-imagem",
+  retry: { maxAttempts: 2, minTimeoutInMs: 5000 },
+
+  run: async (payload: unknown, { ctx }) => {
+    const input = InputSchema.parse(payload ?? {});
+
+    try {
+      return await executar(input, ctx.run.id);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error("bom-dia-gerar-imagem falhou", { error: errorMessage });
+
+      await logAgentRun({
+        runId:       ctx.run.id,
+        agentSlug:   "bom-dia",
+        tenantId:    input.tenant_id,
+        triggeredBy: input.triggered_by,
+        input,
+        output:      { error: errorMessage },
+        status:      "failed",
+      });
+
+      throw error;
+    }
+  },
+});
+
+// ─── Agendamento: Segunda–Sexta às 08:55 SP (11:55 UTC) ──────────────────────
+
+export const bomDiaScheduleWeekday = schedules.task({
+  id:    "bom-dia-schedule-weekday",
+  cron:  "55 11 * * 1-5",
+  retry: { maxAttempts: 2, minTimeoutInMs: 5000 },
+
+  run: async () => {
+    logger.info("bom-dia-schedule-weekday: disparando (seg–sex)");
+    await bomDiaGerarImagem.trigger({});
+  },
+});
+
+// ─── Agendamento: Sábado às 07:55 SP (10:55 UTC) ─────────────────────────────
+
+export const bomDiaScheduleSabado = schedules.task({
+  id:    "bom-dia-schedule-sabado",
+  cron:  "55 10 * * 6",
+  retry: { maxAttempts: 2, minTimeoutInMs: 5000 },
+
+  run: async () => {
+    logger.info("bom-dia-schedule-sabado: disparando (sáb)");
+    await bomDiaGerarImagem.trigger({});
+  },
+});
