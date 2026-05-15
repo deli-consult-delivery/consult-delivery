@@ -39,12 +39,18 @@ export const brenoResponder = task({
 
     const { data: configRow } = await sb
       .from("tenant_agent_config")
-      .select("mode")
+      .select("modo_override")
       .eq("tenant_id", input.tenant_id)
-      .eq("agent", "breno")
+      .eq("agent_id", "breno")
       .maybeSingle();
 
-    const mode = configRow?.mode ?? "humano";
+    const { data: tenantRow } = await sb
+      .from("tenants")
+      .select("modo_padrao")
+      .eq("id", input.tenant_id)
+      .maybeSingle();
+
+    const mode = configRow?.modo_override ?? tenantRow?.modo_padrao ?? "humano";
 
     if (mode === "humano") {
       await logAgentRun({
