@@ -1494,7 +1494,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [loadingOlderMsgs, setLoadingOlderMsgs] = useState(false);
   const loadingOlderRef                     = useRef(false); // guard síncrono
   const scrollAnchorRef                     = useRef(null);  // altura antes do prepend
-  const activeIdRef                         = useRef(null);  // ref síncrono para uso em closures de Realtime
+
 
   // ── Refs ──────────────────────────────────────────────────
   const scrollRef          = useRef(null);
@@ -1554,9 +1554,6 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     sessionStorage.removeItem('cd-chat-target-cid');
     setActiveId(conv.id);
   }, [tenantDbId, instances]);
-
-  // Mantém ref sincronizado para uso em closures de Realtime (evita stale closure)
-  useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
 
   useEffect(() => {
     const target = sessionStorage.getItem('cd-chat-target');
