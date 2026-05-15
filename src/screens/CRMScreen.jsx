@@ -7,6 +7,8 @@ import { TENANTS, CRM_CUSTOMERS } from '../data.js';
 
 const CrmScreen = ({ tenant, tenantDbId, onNavigate }) => {
   const [mode, setMode] = uSCrm('clientes');
+  const [showImportModal, setShowImportModal] = uSCrm(false);
+  const [leadsRefreshKey, setLeadsRefreshKey] = uSCrm(0);
 
   return (
     <div className="route-enter" style={{ padding: '28px 32px 56px', maxWidth: 1480, margin: '0 auto' }}>
@@ -33,16 +35,23 @@ const CrmScreen = ({ tenant, tenantDbId, onNavigate }) => {
       </div>
 
       {mode === 'clientes' ? (
-        <ClientesView tenant={tenant} tenantDbId={tenantDbId} onNavigate={onNavigate}/>
+        <ClientesView tenant={tenant} tenantDbId={tenantDbId} onNavigate={onNavigate} onImportClick={() => { setMode('leads'); setShowImportModal(true); }}/>
       ) : (
-        <LeadsView tenantDbId={tenantDbId}/>
+        <LeadsView tenantDbId={tenantDbId} onImportClick={() => setShowImportModal(true)} refreshKey={leadsRefreshKey}/>
+      )}
+      {showImportModal && (
+        <ImportCSVModal
+          tenantDbId={tenantDbId}
+          onClose={() => setShowImportModal(false)}
+          onImported={count => { if (count > 0) { setLeadsRefreshKey(k => k + 1); setMode('leads'); } }}
+        />
       )}
     </div>
   );
 };
 
 /* ─── CLIENTES (original layout) ─── */
-const ClientesView = ({ tenant, tenantDbId, onNavigate }) => {
+const ClientesView = ({ tenant, tenantDbId, onNavigate, onImportClick }) => {
   const customers = CRM_CUSTOMERS[tenant] || [];
 
   const [search, setSearch] = uSCrm('');
@@ -86,7 +95,7 @@ const ClientesView = ({ tenant, tenantDbId, onNavigate }) => {
           <p className="page-sub">Base completa de contatos · {stats.total} clientes na {TENANTS.find(t=>t.id===tenant)?.name}</p>
         </div>
         <div style={{ display:'flex', gap: 8 }}>
-          <button className="btn-secondary"><Icon name="paper" size={14}/> Importar CSV</button>
+          <button className="btn-secondary" onClick={onImportClick}><Icon name="paper" size={14}/> Importar CSV</button>
           <button className="btn-secondary"><Icon name="sparkles" size={14}/> Segmentar com IA</button>
           <button className="btn-primary"><Icon name="plus" size={14}/> Novo cliente</button>
         </div>
@@ -188,7 +197,7 @@ const ClientesView = ({ tenant, tenantDbId, onNavigate }) => {
 };
 
 /* ─── LEADS VIEW ─── */
-const LeadsView = ({ tenantDbId }) => {
+const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0 }) => {
   const [leads, setLeads] = uSCrm([]);
   const [loading, setLoading] = uSCrm(true);
   const [search, setSearch] = uSCrm('');
@@ -200,7 +209,7 @@ const LeadsView = ({ tenantDbId }) => {
   useEffect(() => {
     if (!tenantDbId) return;
     fetchLeads();
-  }, [tenantDbId]);
+  }, [tenantDbId, refreshKey]);
 
   useEffect(() => {
     const handler = (e) => {
@@ -343,11 +352,12 @@ const LeadsView = ({ tenantDbId }) => {
                   <Icon name="paper" size={13}/> Exportar CSV
                 </button>
                 <button
+                  onClick={() => { onImportClick?.(); setShowMenu(false); }}
                   style={{ display:'flex', alignItems:'center', gap: 8, width:'100%', padding:'8px 12px', background:'none', border:'none', color:'rgba(255,255,255,0.85)', fontSize: 13, cursor:'pointer', borderRadius: 6, textAlign:'left' }}
                   onMouseEnter={e => e.currentTarget.style.background = '#2A2A2A'}
                   onMouseLeave={e => e.currentTarget.style.background = 'none'}
                 >
-                  <Icon name="upload" size={13}/> Importar
+                  <Icon name="upload" size={13}/> Importar CSV
                 </button>
               </div>
             )}
@@ -784,5 +794,280 @@ const NotesTab = ({ customer }) => (
     </div>
   </div>
 );
+
+/* ─── IMPORT CSV MODAL ─── */
+const ImportCSVModal = ({ tenantDbId, onClose, onImported }) => {
+  const [rows, setRows] = uSCrm([]);
+  const [headers, setHeaders] = uSCrm([]);
+  const [importing, setImporting] = uSCrm(false);
+  const [result, setResult] = uSCrm(null);
+  const [dragging, setDragging] = uSCrm(false);
+
+  function parseCSV(text) {
+    const clean = text.replace(/^﻿/, '');
+    const lines = clean.trim().split('\n');
+    if (lines.length < 2) return { headers: [], rows: [] };
+    const sep = lines[0].includes(';') ? ';' : ',';
+    const hdrs = lines[0].replace(/\r$/, '').split(sep).map(h => h.trim().replace(/^"|"$/g, ''));
+    const rws = lines.slice(1).map(l => l.replace(/\r$/, '').split(sep).map(c => c.trim().replace(/^"|"$/g, '')));
+    return { headers: hdrs, rows: rws };
+  }
+
+  function loadFile(f) {
+    setResult(null);
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const { headers: hdrs, rows: rws } = parseCSV(ev.target.result || '');
+      setHeaders(hdrs);
+      setRows(rws);
+    };
+    reader.readAsText(f, 'UTF-8');
+  }
+
+  function isEmojiOnly(str) {
+    return str.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '').trim().length === 0;
+  }
+
+  function looksLikePhone(str) {
+    const digits = str.replace(/\D/g, '');
+    return digits.length >= 8 && digits.length / str.replace(/\s/g, '').length > 0.75;
+  }
+
+  function isGroupJID(phone) {
+    return phone.replace(/\D/g, '').length > 15;
+  }
+
+  function normalizePhone(raw) {
+    if (!raw) return null;
+    const norm = raw.replace(/[^\d]/g, '');
+    return norm || null;
+  }
+
+  function mapSegment(tagsStr) {
+    if (!tagsStr) return 'Lead';
+    const lower = tagsStr.toLowerCase();
+    if (lower.includes('cliente ativo') || lower.includes('consultoria ativa')) return 'VIP';
+    return 'Lead';
+  }
+
+  function buildIdx(hdrs) {
+    const idx = {};
+    hdrs.forEach((h, i) => { idx[h.toLowerCase()] = i; });
+    return idx;
+  }
+
+  function isValidRow(row, idx) {
+    const nome = (row[idx['nome']] || '').trim();
+    const telefone = row[idx['telefone']] || '';
+    if (!nome) return false;
+    if (isEmojiOnly(nome)) return false;
+    if (looksLikePhone(nome)) return false;
+    if (telefone && isGroupJID(telefone)) return false;
+    return true;
+  }
+
+  const idx = buildIdx(headers);
+  const validCount = rows.filter(r => isValidRow(r, idx)).length;
+  const skipCount = rows.length - validCount;
+
+  async function handleImport() {
+    if (!rows.length) return;
+    setImporting(true);
+
+    const { data: existing } = await supabase
+      .from('customers')
+      .select('metadata')
+      .eq('tenant_id', tenantDbId);
+    const existingOrigIds = new Set(
+      (existing || []).map(r => r.metadata?.original_id).filter(Boolean)
+    );
+
+    let ok = 0, skipped = 0, duped = 0, err = 0;
+    const records = [];
+
+    for (const row of rows) {
+      const nome = (row[idx['nome']] || '').trim();
+      const telefone = row[idx['telefone']] || '';
+      const email = row[idx['email']] || '';
+      const empresa = row[idx['empresa']] || '';
+      const tags = row[idx['tags']] || '';
+      const atendente = row[idx['atendente']] || '';
+      const originalId = row[idx['id']] || '';
+
+      if (!nome || isEmojiOnly(nome) || looksLikePhone(nome) || (telefone && isGroupJID(telefone))) {
+        skipped++;
+        continue;
+      }
+
+      if (originalId && existingOrigIds.has(originalId)) {
+        duped++;
+        continue;
+      }
+
+      const phone = normalizePhone(telefone);
+      const segment = mapSegment(tags);
+      const isVip = segment === 'VIP';
+      const tagArr = tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : [];
+      const meta = { source: 'datacrazy_import' };
+      if (originalId) meta.original_id = originalId;
+      if (empresa) meta.company = empresa;
+      if (atendente) meta.attendant = atendente;
+
+      records.push({
+        tenant_id: tenantDbId,
+        name: nome,
+        phone,
+        email: email || null,
+        avatar: nome.slice(0, 2).toUpperCase(),
+        segment,
+        is_vip: isVip,
+        tags: tagArr,
+        metadata: meta,
+      });
+    }
+
+    for (let i = 0; i < records.length; i += 50) {
+      const { error } = await supabase.from('customers').insert(records.slice(i, i + 50));
+      if (error) err += Math.min(50, records.length - i);
+      else ok += Math.min(50, records.length - i);
+    }
+
+    setResult({ ok, skipped, duped, err, total: rows.length });
+    setImporting(false);
+    onImported?.(ok);
+  }
+
+  return (
+    <div
+      style={{ position:'fixed', inset: 0, background:'rgba(0,0,0,0.7)', zIndex: 1000, display:'flex', alignItems:'center', justifyContent:'center', padding: 20 }}
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
+      <div style={{ background:'#1A1A1A', border:'1px solid #2A2A2A', borderRadius: 16, width: '100%', maxWidth: 640, maxHeight: '85vh', display:'flex', flexDirection:'column', boxShadow:'0 32px 64px rgba(0,0,0,.7)' }}>
+        {/* Header */}
+        <div style={{ padding:'20px 24px 16px', borderBottom:'1px solid #222', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink: 0 }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color:'white' }}>Importar Leads via CSV</h3>
+            <p style={{ margin:'4px 0 0', fontSize: 12, color:'var(--g-500)' }}>Formato: id;nome;telefone;email;empresa;tags;atendente</p>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', color:'var(--g-500)', cursor:'pointer', fontSize: 22, lineHeight: 1, padding: 4 }}>×</button>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: 24, overflowY:'auto', flex: 1 }}>
+          {!rows.length && (
+            <div
+              onDragOver={e => { e.preventDefault(); setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files?.[0]; if (f) loadFile(f); }}
+              style={{
+                border: `2px dashed ${dragging ? '#B70C00' : 'rgba(255,255,255,0.15)'}`,
+                borderRadius: 12, padding: 40, textAlign:'center',
+                transition: 'border-color .15s', cursor:'pointer',
+                background: dragging ? 'rgba(183,12,0,0.05)' : 'transparent',
+              }}
+              onClick={() => document.getElementById('crm-csv-input').click()}
+            >
+              <div style={{ fontSize: 32, marginBottom: 12 }}>📄</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color:'rgba(255,255,255,0.7)', marginBottom: 6 }}>
+                Arraste o CSV aqui ou clique para selecionar
+              </div>
+              <div style={{ fontSize: 12, color:'var(--g-500)' }}>Suporta separadores ; e ,  ·  UTF-8</div>
+              <input id="crm-csv-input" type="file" accept=".csv,.txt" style={{ display:'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) loadFile(f); }}/>
+            </div>
+          )}
+
+          {rows.length > 0 && !result && (
+            <div style={{ display:'flex', flexDirection:'column', gap: 16 }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                <div style={{ fontSize: 13, color:'rgba(255,255,255,0.7)' }}>
+                  <strong style={{ color:'white' }}>{rows.length}</strong> linhas ·{' '}
+                  <strong style={{ color:'#10B981' }}>{validCount} válidas</strong>
+                  {skipCount > 0 && <span style={{ color:'#F59E0B' }}> · {skipCount} serão ignoradas</span>}
+                </div>
+                <button
+                  onClick={() => { setRows([]); setHeaders([]); const el = document.getElementById('crm-csv-input'); if (el) el.value = ''; }}
+                  style={{ background:'none', border:'none', color:'var(--g-500)', fontSize: 12, cursor:'pointer', textDecoration:'underline' }}
+                >
+                  Trocar arquivo
+                </button>
+              </div>
+
+              <div style={{ overflowX:'auto', borderRadius: 8, border:'1px solid #222' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr>
+                      {headers.map(h => (
+                        <th key={h} style={{ padding:'8px 12px', background:'#111', borderBottom:'1px solid #222', textAlign:'left', color:'var(--g-500)', fontWeight: 700, textTransform:'uppercase', letterSpacing: 0.4, whiteSpace:'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.slice(0, 5).map((row, ri) => (
+                      <tr key={ri} style={{ borderBottom:'1px solid #1A1A1A' }}>
+                        {row.map((cell, ci) => (
+                          <td key={ci} style={{ padding:'7px 12px', color:'rgba(255,255,255,0.7)', maxWidth: 160, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                            {cell || <span style={{ color:'var(--g-600)' }}>—</span>}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {rows.length > 5 && <div style={{ padding:'8px 12px', fontSize: 11, color:'var(--g-600)', borderTop:'1px solid #1A1A1A' }}>…e mais {rows.length - 5} linhas</div>}
+              </div>
+
+              <div style={{ padding:'10px 14px', background:'rgba(255,255,255,0.04)', borderRadius: 8, fontSize: 12, color:'var(--g-500)', lineHeight: 1.6 }}>
+                Regras de limpeza: nomes vazios, apenas emojis, ou que são números de telefone serão ignorados. Registros já importados (via original_id) serão pulados automaticamente.
+              </div>
+            </div>
+          )}
+
+          {result && (
+            <div style={{ display:'flex', flexDirection:'column', gap: 16 }}>
+              <div style={{ textAlign:'center', padding: '12px 0' }}>
+                <div style={{ fontSize: 40, marginBottom: 8 }}>{result.ok > 0 ? '✅' : '⚠️'}</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color:'white' }}>Importação concluída</div>
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: 10 }}>
+                <div style={{ padding:'14px 16px', background:'rgba(16,185,129,0.1)', border:'1px solid rgba(16,185,129,0.2)', borderRadius: 10, textAlign:'center' }}>
+                  <div style={{ fontSize: 28, fontWeight: 800, color:'#10B981' }}>{result.ok}</div>
+                  <div style={{ fontSize: 11, color:'rgba(255,255,255,0.6)', marginTop: 4 }}>Importados</div>
+                </div>
+                <div style={{ padding:'14px 16px', background:'rgba(245,158,11,0.08)', border:'1px solid rgba(245,158,11,0.2)', borderRadius: 10, textAlign:'center' }}>
+                  <div style={{ fontSize: 28, fontWeight: 800, color:'#F59E0B' }}>{result.skipped + result.duped}</div>
+                  <div style={{ fontSize: 11, color:'rgba(255,255,255,0.6)', marginTop: 4 }}>Pulados ({result.duped} já existiam)</div>
+                </div>
+                {result.err > 0 && (
+                  <div style={{ padding:'14px 16px', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.2)', borderRadius: 10, textAlign:'center', gridColumn:'1/-1' }}>
+                    <div style={{ fontSize: 22, fontWeight: 700, color:'#EF4444' }}>{result.err} com erro</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding:'16px 24px', borderTop:'1px solid #222', display:'flex', justifyContent:'flex-end', gap: 8, flexShrink: 0 }}>
+          {!result ? (
+            <>
+              <button className="btn-secondary" onClick={onClose}>Cancelar</button>
+              <button
+                className="btn-primary"
+                style={{ background: (!rows.length || importing) ? 'rgba(183,12,0,0.4)' : '#B70C00', cursor: (!rows.length || importing) ? 'not-allowed' : 'pointer' }}
+                disabled={!rows.length || importing}
+                onClick={handleImport}
+              >
+                {importing ? 'Importando…' : `Importar ${validCount} leads`}
+              </button>
+            </>
+          ) : (
+            <button className="btn-primary" style={{ background:'#B70C00' }} onClick={onClose}>Concluir</button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default CrmScreen;
