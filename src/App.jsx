@@ -21,6 +21,7 @@ import DeliScreen from './screens/DeliScreen.jsx';
 import MaxScreen from './screens/MaxScreen.jsx';
 import NovaScreen from './screens/NovaScreen.jsx';
 import BrenoScreen from './screens/BrenoScreen.jsx';
+import SofiaScreen from './screens/SofiaScreen.jsx';
 import { CONVERSATIONS, INADIMPLENTES, TENANTS } from './data.js';
 import { supabase } from './lib/supabase.js';
 import { listTenants } from './lib/api.js';
@@ -245,6 +246,7 @@ export default function App() {
         {route === 'max'      && <MaxScreen  tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'nova'     && <NovaScreen  tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'breno'    && <BrenoScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
+        {route === 'sofia'    && <SofiaScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'settings'  && <SettingsScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} onTenantChange={async (newSlug) => {
           if (newSlug) {
             setTenant(newSlug);
