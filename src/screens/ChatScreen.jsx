@@ -3346,9 +3346,18 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               <FieldRow label="Pedidos 30d" value="—" />
             </CollapseSection>
 
-            {/* Lead Panel (se disponível) */}
-            {activeCustomer && active && (
-              <LeadPanel conversation={active} customer={activeCustomer} tenantId={tenantDbId} members={members} />
+            {/* Lead Panel — mostra também quando não há customer (cria/vincula) */}
+            {active && (activeCustomer || active.whatsapp_chat_id) && (
+              <LeadPanel
+                conversation={active}
+                customer={activeCustomer}
+                tenantId={tenantDbId}
+                members={members}
+                onCustomerLinked={cust => {
+                  setActiveCustomer(cust);
+                  setConvs(prev => prev.map(c => c.id === active.id ? { ...c, customer_id: cust.id } : c));
+                }}
+              />
             )}
           </>
         )}
