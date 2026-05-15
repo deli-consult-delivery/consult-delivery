@@ -130,7 +130,6 @@ Se não encontrar o dado, use null. Para avaliacao_ifood e num_avaliacoes, use n
 
       // 4. Monta campos a atualizar (só campos não-null)
       const updateFields: Record<string, unknown> = {
-        status:     "pesquisado",
         updated_at: new Date().toISOString(),
       };
       if (pesquisa.instagram      !== null) updateFields.instagram             = pesquisa.instagram;
@@ -166,11 +165,10 @@ Se não encontrar o dado, use null. Para avaliacao_ifood e num_avaliacoes, use n
 
       // 7. Insere registro em prospect_pesquisas
       await sb.from("prospect_pesquisas").insert({
-        tenant_id:      input.tenant_id,
         prospect_id:    input.prospect_id,
         dados_coletados: dadosColetados,
         fontes,
-        trigger_run_id: ctx.run.id,
+        agent_run_id: ctx.run.id,
       });
 
       const dadosEncontrados = fontes.length > 0;

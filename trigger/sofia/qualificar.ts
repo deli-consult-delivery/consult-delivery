@@ -72,7 +72,6 @@ export const sofiaQualificar = task({
         .from("prospect_pesquisas")
         .select("dados_coletados")
         .eq("prospect_id", input.prospect_id)
-        .eq("tenant_id", input.tenant_id)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();

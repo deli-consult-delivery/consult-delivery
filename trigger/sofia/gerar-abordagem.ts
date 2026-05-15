@@ -72,7 +72,6 @@ export const sofiaGerarAbordagem = task({
         .from("prospect_pesquisas")
         .select("dados_coletados")
         .eq("prospect_id", input.prospect_id)
-        .eq("tenant_id", input.tenant_id)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -186,14 +185,11 @@ NUNCA:
       const { data: abordagemInserida, error: insertError } = await sb
         .from("prospect_abordagens")
         .insert({
-          tenant_id:      input.tenant_id,
-          prospect_id:    input.prospect_id,
-          canal:          input.canal,
-          mensagem:       abordagem.mensagem,
-          assunto:        abordagem.assunto ?? null,
-          status:         "rascunho",
-          created_by:     input.triggered_by ?? null,
-          trigger_run_id: ctx.run.id,
+          prospect_id: input.prospect_id,
+          canal:       input.canal,
+          mensagem:    abordagem.mensagem,
+          status:      "rascunho",
+          created_by:  input.triggered_by ?? null,
         })
         .select("id")
         .single();
