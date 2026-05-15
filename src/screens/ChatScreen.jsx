@@ -336,6 +336,59 @@ function VideoPlayer({ src, text }) {
   );
 }
 
+// ─── SMART IMAGE (handles HEIC → JPEG conversion) ─────────────
+function SmartImage({ src, alt, marginBottom, onViewImage, showDownload, downloadName }) {
+  const [displaySrc, setDisplaySrc] = useState(null);
+  const blobUrlRef = useRef(null);
+
+  useEffect(() => {
+    if (!src) return;
+    const isHeic = /data:image\/(heic|heif)/i.test(src);
+    if (!isHeic) { setDisplaySrc(src); return; }
+    let cancelled = false;
+    import('heic2any').then(async ({ default: h2a }) => {
+      const [, b64] = src.split(',');
+      const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: 'image/heic' });
+      const out = await h2a({ blob, toType: 'image/jpeg', quality: 0.85 });
+      const jpegBlob = Array.isArray(out) ? out[0] : out;
+      const url = URL.createObjectURL(jpegBlob);
+      blobUrlRef.current = url;
+      if (!cancelled) setDisplaySrc(url);
+    }).catch(() => { if (!cancelled) setDisplaySrc(src); });
+    return () => {
+      cancelled = true;
+      if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
+    };
+  }, [src]);
+
+  const handleDownload = (e) => {
+    e.stopPropagation();
+    if (!displaySrc) return;
+    const a = document.createElement('a');
+    a.href = displaySrc;
+    a.download = (downloadName || 'imagem').replace(/\.(heic|heif)$/i, '.jpg');
+    a.click();
+  };
+
+  return (
+    <div style={{ position: 'relative', display: 'inline-block', marginBottom }} className="lc-media-wrap">
+      {displaySrc
+        ? <img src={displaySrc} alt={alt || 'imagem'} style={{ maxWidth: 260, maxHeight: 200, borderRadius: 8, cursor: 'pointer', display: 'block' }} onClick={() => onViewImage?.(displaySrc)} />
+        : <div style={{ width: 200, height: 120, borderRadius: 8, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{src ? 'Convertendo…' : 'Aguardando…'}</span>
+          </div>}
+      {showDownload && displaySrc && (
+        <a onClick={handleDownload} title="Baixar imagem" className="lc-media-dl" style={{ cursor: 'pointer' }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </a>
+      )}
+    </div>
+  );
+}
+
 function AudioPlayer({ src, isOut }) {
   const [playing, setPlaying]       = useState(false);
   const [currentTime, setCurrent]   = useState(0);
@@ -1072,23 +1125,7 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onSta
     if (!m.mediaType) return null;
     const url = m.mediaUrl;
     if (m.mediaType === 'image') {
-      return (
-        <div style={{ position: 'relative', display: 'inline-block', marginBottom: m.text ? 6 : 0 }} className="lc-media-wrap">
-          <img src={url} alt="imagem" style={{ maxWidth: 260, maxHeight: 200, borderRadius: 8, cursor: 'pointer', display: 'block' }} onClick={() => onViewImage?.(url)} />
-          {url && (
-            <a
-              href={url} download
-              title="Baixar imagem"
-              onClick={e => e.stopPropagation()}
-              className="lc-media-dl"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-            </a>
-          )}
-        </div>
-      );
+      return <SmartImage src={url} marginBottom={m.text ? 6 : 0} onViewImage={onViewImage} showDownload={!!url} downloadName={m.text} />;
     }
     if (m.mediaType === 'video') {
       return <VideoPlayer src={url} text={m.text} />;
@@ -1122,16 +1159,7 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onSta
         }
       };
       if (isImageDoc) {
-        return (
-          <div style={{ position: 'relative', display: 'inline-block', marginBottom: m.text ? 6 : 0 }} className="lc-media-wrap">
-            <img src={url} alt={m.text || 'imagem'} style={{ maxWidth: 260, maxHeight: 200, borderRadius: 8, cursor: 'pointer', display: 'block' }} onClick={() => onViewImage?.(url)} />
-            <a onClick={e => { e.stopPropagation(); handleDocClick(); }} title="Baixar" className="lc-media-dl" style={{ cursor: 'pointer' }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-            </a>
-          </div>
-        );
+        return <SmartImage src={url} alt={m.text || 'imagem'} marginBottom={m.text ? 6 : 0} onViewImage={onViewImage} showDownload={!!url} downloadName={m.text} />;
       }
       return (
         <div onClick={handleDocClick} style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'white', cursor: url ? 'pointer' : 'default', padding: '8px 10px', background: 'rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 12 }}>
