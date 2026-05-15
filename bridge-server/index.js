@@ -32,7 +32,6 @@ const NEXUS_TRIGGER_IDS = { pesquisa: 3, regua: 2, midia: 1 };
 const nexusJobs = new Map();
 const GOOGLE_API_KEY         = process.env.GOOGLE_API_KEY || '';
 const EDGE_CALLBACK          = `${SUPABASE_URL}/functions/v1/analista-callback`;
-const TRANSCRICOES           = '/root/.openclaw/agents/analista-ifood/workspace/transcricoes'; // TODO: migrar do OpenClaw
 
 app.use(express.json({ limit: '2mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
 
@@ -75,33 +74,6 @@ function requireInternalToken(req, res, next) {
   if (req.headers['x-internal-token'] !== INTERNAL_BRIDGE_TOKEN)
     return res.status(401).json({ error: 'unauthorized' });
   next();
-}
-
-// ── Helper: run openclaw agent ────────────────────────────────────────────────
-function runOpenclawAgent(agentId, message, sessionId) {
-  return new Promise((resolve, reject) => {
-    const args = ['agent', '--agent', agentId, '--message', message, '--json'];
-    if (sessionId) args.push('--session-id', sessionId);
-
-    const child = spawn('openclaw', args, {
-      timeout: 300_000,
-      env: { ...process.env, PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin' },
-    });
-
-    let stdout = '', stderr = '';
-    child.stdout.on('data', d => { stdout += d.toString(); });
-    child.stderr.on('data', d => { stderr += d.toString(); });
-
-    child.on('close', code => {
-      if (code !== 0) return reject(new Error(`openclaw ${agentId} exit ${code}: ${stderr.slice(0, 400)}`));
-      try {
-        const w = JSON.parse(stdout);
-        const text = w.result?.payloads?.[0]?.text || w.result?.meta?.finalAssistantRawText || w.response || w.content || w.text || stdout;
-        resolve(typeof text === 'string' ? text : JSON.stringify(text));
-      } catch (_) { resolve(stdout); }
-    });
-    child.on('error', reject);
-  });
 }
 
 // ── Helper: Supabase REST write (service role) ────────────────────────────────
@@ -302,27 +274,8 @@ app.post('/analise', async (req, res) => {
 
 // ── buscarDadosLoja ───────────────────────────────────────────────────────────
 async function buscarDadosLoja(driveLink, clienteNome) {
-  const local = lerTranscricaoLocal(clienteNome);
-  if (local) { console.log(`[bridge] usando transcrição local para "${clienteNome}"`); return local; }
   if (GOOGLE_API_KEY) { const c = await fetchDriveViaAPI(driveLink); if (c) return c; }
   return await fetchDrivePublico(driveLink);
-}
-
-function lerTranscricaoLocal(clienteNome) {
-  if (!clienteNome) return null;
-  try {
-    const norm = clienteNome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-    for (const p of [path.join(TRANSCRICOES, `${norm}.txt`), path.join(TRANSCRICOES, `${norm}.md`)]) {
-      if (fs.existsSync(p)) return fs.readFileSync(p, 'utf8');
-    }
-    if (!fs.existsSync(TRANSCRICOES)) return null;
-    const palavras = norm.split('_').filter(w => w.length > 3);
-    for (const arq of fs.readdirSync(TRANSCRICOES)) {
-      const an = arq.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-      if (palavras.some(p => an.includes(p))) return fs.readFileSync(path.join(TRANSCRICOES, arq), 'utf8');
-    }
-  } catch (err) { console.warn('[bridge] lerTranscricaoLocal:', err.message); }
-  return null;
 }
 
 async function fetchDriveViaAPI(driveLink) {
@@ -435,7 +388,7 @@ async function postCallback(payload) {
 
 // Roles que podem invocar agentes cujo slug começa com o prefixo
 const ROLE_AGENT_PREFIXES = {
-  'marketing':   ['lara-', 'nova-'],
+  'marketing':   ['lara-', 'nova-', 'bom-dia'],
   'atendimento': ['lara-', 'max-', 'breno-'],
   'financeiro':  ['cora-', 'nova-'],
   'admin':       [''],   // admin pode tudo (prefixo vazio = match qualquer)
