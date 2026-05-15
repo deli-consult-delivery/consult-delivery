@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Icon from '../components/Icon.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
 import CustomSelect from '../components/CustomSelect.jsx';
@@ -1296,16 +1296,26 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   useEffect(() => { convsRef.current = convs; }, [convs]);
 
   // Auto-seleciona conversa vinda do "Abrir Chat" no CRM
+  const openChatByPhone = useCallback((digits) => {
+    if (!digits) return;
+    const variants = [digits];
+    if (digits.startsWith('55') && digits.length === 13) variants.push(digits.slice(0, 4) + digits.slice(5));
+    else if (digits.startsWith('55') && digits.length === 12) variants.push(digits.slice(0, 4) + '9' + digits.slice(4));
+    const conv = convsRef.current.find(c => variants.includes(c.whatsapp_chat_id?.split('@')[0]));
+    if (conv) { setActiveId(conv.id); sessionStorage.removeItem('cd-chat-target'); }
+  }, []);
+
   useEffect(() => {
-    if (!chatTargetRef.current || !convs.length) return;
-    const target = chatTargetRef.current;
-    const conv = convs.find(c => c.whatsapp_chat_id?.split('@')[0] === target);
-    if (conv) {
-      setActiveId(conv.id);
-      chatTargetRef.current = null;
-      sessionStorage.removeItem('cd-chat-target');
-    }
-  }, [convs]);
+    const target = sessionStorage.getItem('cd-chat-target');
+    if (!target || !convs.length) return;
+    openChatByPhone(target);
+  }, [convs, openChatByPhone]);
+
+  useEffect(() => {
+    const handle = (e) => openChatByPhone(e.detail?.phone);
+    window.addEventListener('cd-open-chat', handle);
+    return () => window.removeEventListener('cd-open-chat', handle);
+  }, [openChatByPhone]);
   useEffect(() => { aiModeRef.current = aiMode; }, [aiMode]);
   useEffect(() => { selectedInstanceRef.current = selectedInstance; }, [selectedInstance]);
 
@@ -2367,6 +2377,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const handleComposerPaste = (e) => {
     const items = e.clipboardData?.items;
     if (!items) return;
+
+    // Imagem colada
     for (const item of items) {
       if (item.kind === 'file' && item.type.startsWith('image/')) {
         e.preventDefault();
@@ -2378,7 +2390,35 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         return;
       }
     }
-    // texto: deixa colar normalmente
+
+    // Texto: garante que quebras de linha sejam preservadas independente da fonte
+    e.preventDefault();
+    let text = e.clipboardData.getData('text/plain') || '';
+
+    // Quando copiado de editores ricos (Notion, Google Docs, WhatsApp Web, etc.)
+    // o text/plain pode não ter \n, mas o text/html tem <br> e <div> — extraímos dali
+    if (!text.includes('\n') && e.clipboardData.types.includes('text/html')) {
+      const html = e.clipboardData.getData('text/html');
+      text = html
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n')
+        .replace(/<\/div>/gi, '\n')
+        .replace(/<\/li>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+        .replace(/&nbsp;/g, ' ').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+    }
+
+    // Normaliza \r\n e \r → \n (Windows)
+    const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+    const el = textareaRef.current;
+    if (!el) { onDraftChange(draft + normalized); return; }
+    const start  = el.selectionStart;
+    const end    = el.selectionEnd;
+    const newVal = el.value.slice(0, start) + normalized + el.value.slice(end);
+    onDraftChange(newVal);
+    setTimeout(() => el.setSelectionRange(start + normalized.length, start + normalized.length), 0);
   };
 
   const sendPasteImage = async () => {
