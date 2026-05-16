@@ -33,24 +33,18 @@ function formatTime(isoStr) {
 }
 
 async function downloadFile(url, filename) {
-  // Converte para PNG via canvas (independe do formato original WebP/JPG)
   try {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
-    const canvas = document.createElement('canvas');
-    canvas.width  = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    canvas.getContext('2d').drawImage(img, 0, 0);
-    const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
-    const base = filename.replace(/\.\w+$/, '');
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    const href = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = base + '.png';
+    a.href = href;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+    setTimeout(() => URL.revokeObjectURL(href), 5000);
   } catch {
     window.open(url, '_blank');
   }
