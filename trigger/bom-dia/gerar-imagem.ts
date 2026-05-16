@@ -357,34 +357,28 @@ Retorne JSON: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme
   });
 
   // Paths únicos por run — evita sobrescrita entre gerações no mesmo dia
-  const pathId            = runId.slice(-8);
+  const pathId             = runId.slice(-8);
   const groupStoragePath   = `bom-dia/${dateStr}-${pathId}-group.webp`;
   const portraitStoragePath = `bom-dia/${dateStr}-${pathId}-portrait.webp`;
 
-  // 3. Geração SEQUENCIAL: Feed primeiro → upload → Story usa Feed como referência visual
-  // Com custom_brief: brief assume controle criativo, sem override de paleta obrigatória
-  const feedPrompt: MsgContent = input.custom_brief?.trim()
-    ? `${claudeOut.dalle_prompt}. ${input.custom_brief.trim()}. Prominent bold white text center-stage: "${claudeOut.text_on_image}" in Portuguese. Consult Delivery rocket logo bottom-left. High contrast, professional.`
-    : `${claudeOut.dalle_prompt}. Prominent bold white text center-stage: "${claudeOut.text_on_image}" in Portuguese. MANDATORY BRAND RULES: background color exactly #0d0d0d (pure black) — NO variation, accent colors strictly #B70C00 (red) and white ONLY — no orange, no blue, no other hues, NO human figures, Consult Delivery rocket logo bottom-left corner, maximum contrast.`;
+  // 3. Prompt base de marca (texto puro → Recraft respeita o parâmetro size)
+  // Multimodal (image_url + text) faz o Recraft ignorar size e retornar 1024×1024 quadrado
+  const brandSuffix = input.custom_brief?.trim()
+    ? `${input.custom_brief.trim()}. Prominent bold white text center-stage: "${claudeOut.text_on_image}" in Portuguese. Consult Delivery rocket logo bottom-left. High contrast, professional.`
+    : `Prominent bold white text center-stage: "${claudeOut.text_on_image}" in Portuguese. MANDATORY BRAND RULES: background color exactly #0d0d0d (pure black) — NO variation, accent colors strictly #B70C00 (red) and white ONLY — no orange, no blue, no other hues, NO human figures, Consult Delivery rocket logo bottom-left corner, maximum contrast.`;
+
+  const feedPrompt    = `${claudeOut.dalle_prompt}. ${brandSuffix}`;
+  // Story: mesmo tema e regras, composição vertical nativa (sem referência de imagem)
+  const portraitPrompt = `${claudeOut.dalle_prompt}. Vertical 9:16 portrait composition. ${brandSuffix}`;
 
   logger.info("bom-dia: gerando Feed 16:9 via Recraft V4.1");
   const groupTempUrl = await generateImage(feedPrompt, "group");
 
-  // 4. Upload Feed → URL permanente usada como referência para o Story
   logger.info("bom-dia: upload Feed para Supabase Storage");
   const imgGroupUrl = await uploadToStorage(groupTempUrl, groupStoragePath, "group");
 
-  // Story gerado com referência visual ao Feed — garante mesma identidade
-  const storyContent: MsgContent = [
-    { type: "image_url", image_url: { url: imgGroupUrl } },
-    {
-      type: "text",
-      text: `Recompose this exact image into a 9:16 portrait format. MUST KEEP identical: same black background (#0d0d0d), same red (#B70C00) and white color palette, same abstract delivery elements, same brand style, same Consult Delivery rocket logo in bottom-left corner, same text "${claudeOut.text_on_image}" prominently displayed. Only adapt the composition/layout for vertical portrait orientation. NO human figures. NO new colors.`,
-    },
-  ];
-
-  logger.info("bom-dia: gerando Story 9:16 com referência ao Feed");
-  const portraitTempUrl = await generateImage(storyContent, "portrait");
+  logger.info("bom-dia: gerando Story 9:16 via Recraft V4.1");
+  const portraitTempUrl = await generateImage(portraitPrompt, "portrait");
 
   logger.info("bom-dia: upload Story para Supabase Storage");
   const imgPortraitUrl = await uploadToStorage(portraitTempUrl, portraitStoragePath, "portrait");
