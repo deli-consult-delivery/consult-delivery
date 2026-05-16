@@ -91,23 +91,42 @@ async function generateImage(prompt: string, aspectRatio: "16:9" | "9:16"): Prom
         throw new Error(`OpenRouter ${r.status}: ${detail.slice(0, 300)}`);
       }
 
-      const data = (await r.json()) as {
-        choices: Array<{
-          message: {
-            content: string | Array<{ type: string; image_url?: { url: string } }>;
-          };
-        }>;
-      };
-
-      const content = data.choices?.[0]?.message?.content;
-      let url: string | undefined;
-      if (typeof content === "string") {
-        url = content.trim();
-      } else if (Array.isArray(content)) {
-        url = content.find(b => b.type === "image_url")?.image_url?.url;
+      const rawText = await r.text();
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        throw new Error(`OpenRouter retornou resposta não-JSON: ${rawText.slice(0, 300)}`);
       }
 
-      if (!url) throw new Error("OpenRouter não retornou URL de imagem");
+      // Recraft retorna imagem em message.images (não em message.content)
+      type MsgWithImages = {
+        content: unknown;
+        images?: Array<{ type: string; image_url?: { url: string } }>;
+      };
+      const choices = data.choices as Array<{ message: MsgWithImages }> | undefined;
+      const msg     = choices?.[0]?.message;
+
+      let url: string | undefined;
+
+      // 1. message.images (Recraft via OpenRouter)
+      if (msg?.images?.[0]?.image_url?.url) {
+        url = msg.images[0].image_url.url;
+      }
+      // 2. message.content string
+      if (!url && typeof msg?.content === "string" && (msg.content as string).trim()) {
+        url = (msg.content as string).trim();
+      }
+      // 3. message.content array
+      if (!url && Array.isArray(msg?.content)) {
+        const block = (msg!.content as Array<Record<string, unknown>>).find(b => b.type === "image_url");
+        url = (block?.image_url as { url?: string } | undefined)?.url;
+      }
+      // 4. data[0].url (images API format)
+      const imgData = (data.data as Array<{ url?: string }> | undefined)?.[0];
+      if (!url && imgData?.url) url = imgData.url;
+
+      if (!url) throw new Error(`OpenRouter não retornou imagem. Preview: ${rawText.slice(0, 400)}`);
       return url;
     } catch (err) {
       logger.warn(`bom-dia: tentativa ${attempt}/3 geração falhou`, {
@@ -123,15 +142,25 @@ async function generateImage(prompt: string, aspectRatio: "16:9" | "9:16"): Prom
 
 // ─── Helper: download + upload para Supabase Storage ─────────────────────────
 
-async function uploadToStorage(imageUrl: string, storagePath: string): Promise<string> {
-  const imgResp = await fetch(imageUrl, { signal: AbortSignal.timeout(30_000) });
-  if (!imgResp.ok) throw new Error(`Falha ao baixar imagem: ${imgResp.status}`);
+async function uploadToStorage(imageData: string, storagePath: string): Promise<string> {
+  let buffer: Buffer;
+  let contentType = "image/webp";
 
-  const buffer = Buffer.from(await imgResp.arrayBuffer());
+  if (imageData.startsWith("data:")) {
+    const commaIdx = imageData.indexOf(",");
+    const meta     = imageData.slice(5, commaIdx);           // e.g. "image/webp;base64"
+    contentType    = meta.split(";")[0];                     // e.g. "image/webp"
+    buffer         = Buffer.from(imageData.slice(commaIdx + 1), "base64");
+  } else {
+    const imgResp = await fetch(imageData, { signal: AbortSignal.timeout(30_000) });
+    if (!imgResp.ok) throw new Error(`Falha ao baixar imagem: ${imgResp.status}`);
+    buffer = Buffer.from(await imgResp.arrayBuffer());
+  }
+
   const sb = getSupabase();
 
   const { error } = await sb.storage.from("public").upload(storagePath, buffer, {
-    contentType: "image/png",
+    contentType,
     upsert: true,
   });
 
@@ -237,8 +266,8 @@ Retorne JSON: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme
   logger.info("bom-dia: fazendo upload para Supabase Storage");
 
   const [imgLandscapeUrl, imgPortraitUrl] = await Promise.all([
-    uploadToStorage(landscapeTempUrl, `bom-dia/${dateStr}-landscape.png`),
-    uploadToStorage(portraitTempUrl,  `bom-dia/${dateStr}-portrait.png`),
+    uploadToStorage(landscapeTempUrl, `bom-dia/${dateStr}-landscape.webp`),
+    uploadToStorage(portraitTempUrl,  `bom-dia/${dateStr}-portrait.webp`),
   ]);
 
   const output: Output = OutputSchema.parse({
