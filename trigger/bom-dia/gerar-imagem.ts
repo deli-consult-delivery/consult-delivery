@@ -292,9 +292,9 @@ Retorne JSON: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme
 
   logger.info("bom-dia-gerar-imagem concluído", {
     dateStr,
-    theme:        output.theme,
-    landscapeUrl: imgLandscapeUrl,
-    portraitUrl:  imgPortraitUrl,
+    theme:       output.theme,
+    groupUrl:    imgGroupUrl,
+    portraitUrl: imgPortraitUrl,
   });
 
   return output;
