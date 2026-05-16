@@ -1,5 +1,11 @@
 # Wiki Log
 
+## [2026-05-15 24:00] session | BomDia RLS fix + 3 formatos + envio grupos + config agente
+Touched: none
+
+## [2026-05-15 23:30] session | Espaços redesign + fix HEIC + useMemo build error
+Touched: none
+
 ## [2026-05-15 23:00] session | agente bom-dia + fix OpenRouter recraft
 Touched: none
 

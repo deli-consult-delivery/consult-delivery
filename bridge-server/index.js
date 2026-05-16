@@ -647,6 +647,71 @@ app.post('/webhooks/asaas', async (req, res) => {
   });
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// POST /agents/bom-dia/send-groups — Envia imagem + legenda para grupos WhatsApp
+// ════════════════════════════════════════════════════════════════════════════
+app.post('/agents/bom-dia/send-groups', requireJwt, async (req, res) => {
+  const { group_jids = [], image_url, caption, tenant_id } = req.body;
+
+  if (!group_jids.length || !image_url)
+    return res.status(400).json({ error: 'group_jids e image_url são obrigatórios' });
+
+  if (!SUPABASE_SERVICE_KEY)
+    return res.status(503).json({ error: 'SUPABASE_SERVICE_KEY não configurado' });
+
+  let inst;
+  try {
+    inst = await supabaseSelect('evolution_instances', { tenant_id });
+  } catch (err) {
+    return res.status(500).json({ error: 'erro ao buscar instância Evolution', detail: err.message });
+  }
+
+  if (!inst) {
+    // Fallback: buscar qualquer instância ativa (agente global)
+    try {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/evolution_instances?ativo=eq.true&select=evolution_url,api_key,instance_name&limit=1`,
+        { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }
+      );
+      const rows = await r.json();
+      inst = rows?.[0] ?? null;
+    } catch {}
+  }
+
+  if (!inst)
+    return res.status(404).json({ error: 'nenhuma instância Evolution configurada' });
+
+  const results = { sent: [], failed: [] };
+
+  for (const jid of group_jids) {
+    try {
+      const r = await fetch(
+        `${inst.evolution_url}/message/sendMedia/${inst.instance_name}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', apikey: inst.api_key },
+          body: JSON.stringify({
+            number:    jid,
+            mediatype: 'image',
+            caption:   caption || '',
+            media:     image_url,
+          }),
+          signal: AbortSignal.timeout(20_000),
+        }
+      );
+      if (!r.ok) throw new Error(`Evolution ${r.status}: ${(await r.text()).slice(0, 200)}`);
+      const data = await r.json();
+      results.sent.push({ jid, msg_id: data.key?.id ?? null });
+      console.log(`[bom-dia/send-groups] enviado → ${jid}`);
+    } catch (err) {
+      console.error(`[bom-dia/send-groups] falha → ${jid}:`, err.message);
+      results.failed.push({ jid, error: err.message });
+    }
+  }
+
+  res.json(results);
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[bridge] ouvindo em 0.0.0.0:${PORT}`);
   console.log(`[bridge] SUPABASE_URL:          ${SUPABASE_URL           ? '✓' : '✗'}`);

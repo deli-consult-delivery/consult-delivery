@@ -21,27 +21,48 @@ function formatShort(dateStr) {
   return `${String(d).padStart(2,'0')}/${String(m).padStart(2,'0')}`;
 }
 
+// ── Avatar sol ──────────────────────────────────────────────────────────────
+
 function BomDiaAvatar({ size = 32 }) {
+  const cx = size / 2, cy = size / 2;
+  const coreR  = size * 0.27;
+  const r1     = size * 0.34;
+  const r2     = size * 0.48;
+  const rays   = [0, 45, 90, 135, 180, 225, 270, 315];
+  const sw     = Math.max(1.5, size * 0.07);
   return (
-    <div style={{
-      width: size, height: size, borderRadius: '50%',
-      background: `linear-gradient(135deg, ${BD_COLOR}, #FCD34D)`,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: Math.round(size * 0.38), fontWeight: 700, color: '#1a1a1a', flexShrink: 0,
-    }}>BD</div>
+    <div style={{ width: size, height: size, flexShrink: 0 }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id={`sg${size}`} cx="40%" cy="35%" r="65%">
+            <stop offset="0%" stopColor="#FDE68A" />
+            <stop offset="100%" stopColor="#F59E0B" />
+          </radialGradient>
+        </defs>
+        {rays.map(a => {
+          const rad = (a * Math.PI) / 180;
+          return (
+            <line
+              key={a}
+              x1={cx + r1 * Math.cos(rad)} y1={cy + r1 * Math.sin(rad)}
+              x2={cx + r2 * Math.cos(rad)} y2={cy + r2 * Math.sin(rad)}
+              stroke="#F59E0B" strokeWidth={sw} strokeLinecap="round"
+            />
+          );
+        })}
+        <circle cx={cx} cy={cy} r={coreR} fill={`url(#sg${size})`} />
+      </svg>
+    </div>
   );
 }
 
-// Download WebP da Storage → converte para JPEG via canvas
+// ── Download WebP → JPEG ────────────────────────────────────────────────────
+
 async function downloadAsJpeg(url, filename) {
   try {
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    await new Promise((res, rej) => {
-      img.onload  = res;
-      img.onerror = rej;
-      img.src = url;
-    });
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
     const canvas = document.createElement('canvas');
     canvas.width  = img.naturalWidth;
     canvas.height = img.naturalHeight;
@@ -49,7 +70,7 @@ async function downloadAsJpeg(url, filename) {
     await new Promise(res => {
       canvas.toBlob(blob => {
         const a = document.createElement('a');
-        a.href     = URL.createObjectURL(blob);
+        a.href = URL.createObjectURL(blob);
         a.download = filename;
         a.click();
         setTimeout(() => URL.revokeObjectURL(a.href), 2000);
@@ -57,12 +78,11 @@ async function downloadAsJpeg(url, filename) {
       }, 'image/jpeg', 0.93);
     });
   } catch {
-    // fallback: abre em nova aba se canvas falhar (CORS)
     window.open(url, '_blank');
   }
 }
 
-// ── Estilos compartilhados ──────────────────────────────────────────────────
+// ── Estilos ─────────────────────────────────────────────────────────────────
 
 const card = {
   background: 'rgba(255,255,255,0.03)',
@@ -85,20 +105,48 @@ const btnOutline = (disabled) => ({
   opacity: disabled ? 0.6 : 1,
 });
 
-// ── Componente principal ────────────────────────────────────────────────────
+const btnGhost = {
+  display: 'inline-flex', alignItems: 'center', gap: 6,
+  padding: '7px 13px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)',
+  cursor: 'pointer', fontSize: 12, fontWeight: 500,
+  background: 'transparent', color: 'rgba(255,255,255,0.55)',
+};
+
+// ── Formatos de imagem ───────────────────────────────────────────────────────
+
+const FORMATS = [
+  { key: 'group',    label: 'WhatsApp Grupo',    sub: '1080×1350 · 4:5 · Feed da conversa', ratio: '4/5',  field: 'img_group_url'    },
+  { key: 'portrait', label: 'Stories Instagram', sub: '1080×1920 · 9:16 · Status / Reels',  ratio: '9/16', field: 'img_portrait_url' },
+];
+
+// ── Componente principal ─────────────────────────────────────────────────────
 
 export default function BomDiaScreen({ tenantDbId, userId }) {
-  const [runs,      setRuns]      = useState([]);
-  const [selected,  setSelected]  = useState(null);
-  const [loading,   setLoading]   = useState(true);
+  // run state
+  const [runs,       setRuns]       = useState([]);
+  const [selected,   setSelected]   = useState(null);
+  const [loading,    setLoading]    = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [genError,  setGenError]  = useState('');
-  const [caption,   setCaption]   = useState('');  // editável localmente
-  const [copied,    setCopied]    = useState(false);
-  const [dlState,   setDlState]   = useState({});  // { landscape: bool, portrait: bool }
+  const [genError,   setGenError]   = useState('');
+  const [caption,    setCaption]    = useState('');
+  const [copied,     setCopied]     = useState(false);
+  const [dlState,    setDlState]    = useState({});
   const pendingRef = useRef(null);
 
-  // ── Fetch inicial (sem filtro de tenant_id — imagens são globais) ───────────
+  // send-groups state
+  const [sendOpen,   setSendOpen]   = useState(false);
+  const [groups,     setGroups]     = useState([]);
+  const [selGroups,  setSelGroups]  = useState(new Set());
+  const [sendFmt,    setSendFmt]    = useState('group');
+  const [sending,    setSending]    = useState(false);
+  const [sendResult, setSendResult] = useState(null);
+
+  // agent config state
+  const [configOpen, setConfigOpen] = useState(false);
+  const [agentCfg,   setAgentCfg]  = useState({ memory: '', instructions: '' });
+  const [savingCfg,  setSavingCfg] = useState(false);
+
+  // ── Fetch runs ─────────────────────────────────────────────────────────────
   const fetchRuns = () => {
     supabase
       .from('agent_runs')
@@ -108,7 +156,7 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
       .order('created_at', { ascending: false })
       .limit(10)
       .then(({ data }) => {
-        const valid = (data || []).filter(r => r.output?.img_landscape_url);
+        const valid = (data || []).filter(r => r.output?.img_group_url || r.output?.img_landscape_url);
         setRuns(valid);
         if (valid.length && !selected) {
           setSelected(valid[0]);
@@ -120,22 +168,49 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
 
   useEffect(() => { fetchRuns(); }, []);
 
-  // Quando usuário seleciona item do histórico, reseta caption para o do run
+  // ── Fetch WhatsApp groups ──────────────────────────────────────────────────
+  const fetchGroups = () => {
+    if (!tenantDbId) return;
+    supabase
+      .from('whatsapp_groups')
+      .select('id, group_jid, nome')
+      .eq('tenant_id', tenantDbId)
+      .eq('ativo', true)
+      .order('nome')
+      .then(({ data }) => setGroups(data || []));
+  };
+
+  // ── Fetch agent config ─────────────────────────────────────────────────────
+  const fetchConfig = () => {
+    if (!tenantDbId) return;
+    supabase
+      .from('tenant_agent_config')
+      .select('config')
+      .eq('tenant_id', tenantDbId)
+      .eq('agent_id', 'bom-dia')
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.config) setAgentCfg({
+          memory:       data.config.memory       ?? '',
+          instructions: data.config.instructions ?? '',
+        });
+      });
+  };
+
   const selectRun = (r) => {
     setSelected(r);
     setCaption(r.output?.caption ?? '');
+    setSendResult(null);
   };
 
-  // ── Real-time: aguarda novo run após "Gerar agora" ──────────────────────────
+  // ── Realtime: aguarda novo run após "Gerar agora" ──────────────────────────
   useEffect(() => {
     const channel = supabase
       .channel('bom-dia-screen-runs')
-      .on('postgres_changes', {
-        event: 'INSERT', schema: 'public', table: 'agent_runs',
-      }, (payload) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'agent_runs' }, (payload) => {
         const run = payload.new;
         if (run.agent_id !== 'bom-dia') return;
-        if (!pendingRef.current && run.trigger_dev_run_id !== pendingRef.current) return;
+        if (!pendingRef.current || run.trigger_dev_run_id !== pendingRef.current) return;
         if (run.status === 'success' && run.output?.img_landscape_url) {
           setRuns(prev => [run, ...prev].slice(0, 10));
           setSelected(run);
@@ -148,7 +223,7 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
     return () => supabase.removeChannel(channel);
   }, []);
 
-  // ── Gerar agora ─────────────────────────────────────────────────────────────
+  // ── Gerar agora ────────────────────────────────────────────────────────────
   const handleGenerate = async () => {
     setGenError('');
     setGenerating(true);
@@ -162,7 +237,6 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
       const body = await r.json();
       if (!r.ok) throw new Error(body.error || `Erro ${r.status}`);
       pendingRef.current = body.run_id ?? null;
-      // Se retornou output direto (idempotência / run já existia hoje)
       if (body.output?.img_landscape_url) {
         fetchRuns();
         setGenerating(false);
@@ -174,18 +248,20 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
     }
   };
 
-  // ── Download como JPEG ──────────────────────────────────────────────────────
-  const handleDownload = async (type) => {
+  // ── Download JPEG ──────────────────────────────────────────────────────────
+  const handleDownload = async (fmtKey) => {
     const out = selected?.output;
     if (!out) return;
-    const url  = type === 'landscape' ? out.img_landscape_url : out.img_portrait_url;
+    const fmt = FORMATS.find(f => f.key === fmtKey);
+    const url = out[fmt.field];
+    if (!url) return;
     const date = out.date ?? 'bom-dia';
-    setDlState(s => ({ ...s, [type]: true }));
-    await downloadAsJpeg(url, `bom-dia-${date}-${type}.jpg`);
-    setDlState(s => ({ ...s, [type]: false }));
+    setDlState(s => ({ ...s, [fmtKey]: true }));
+    await downloadAsJpeg(url, `bom-dia-${date}-${fmtKey}.jpg`);
+    setDlState(s => ({ ...s, [fmtKey]: false }));
   };
 
-  // ── Copy caption ────────────────────────────────────────────────────────────
+  // ── Copy caption ───────────────────────────────────────────────────────────
   const handleCopy = () => {
     if (!caption) return;
     navigator.clipboard.writeText(caption).then(() => {
@@ -194,9 +270,68 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
     });
   };
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Enviar nos grupos ──────────────────────────────────────────────────────
+  const handleOpenSend = () => {
+    fetchGroups();
+    setSendResult(null);
+    setSendOpen(true);
+  };
+
+  const toggleGroup = (jid) => {
+    setSelGroups(prev => {
+      const next = new Set(prev);
+      next.has(jid) ? next.delete(jid) : next.add(jid);
+      return next;
+    });
+  };
+
+  const handleSend = async () => {
+    if (!selGroups.size) return;
+    const out = selected?.output;
+    if (!out) return;
+    const fmt = FORMATS.find(f => f.key === sendFmt);
+    const imageUrl = out[fmt?.field] || out.img_landscape_url;
+    setSending(true);
+    setSendResult(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch(`${BRIDGE_URL}/agents/bom-dia/send-groups`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ tenant_id: tenantDbId, group_jids: [...selGroups], image_url: imageUrl, caption }),
+      });
+      const body = await r.json();
+      setSendResult(body);
+    } catch (e) {
+      setSendResult({ error: e.message });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // ── Salvar config ──────────────────────────────────────────────────────────
+  const handleOpenConfig = () => {
+    fetchConfig();
+    setConfigOpen(true);
+  };
+
+  const handleSaveConfig = async () => {
+    if (!tenantDbId) return;
+    setSavingCfg(true);
+    await supabase.from('tenant_agent_config').upsert(
+      { tenant_id: tenantDbId, agent_id: 'bom-dia', config: agentCfg },
+      { onConflict: 'tenant_id,agent_id' }
+    );
+    setSavingCfg(false);
+    setConfigOpen(false);
+  };
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   const out = selected?.output ?? null;
+
+  const availFmts = FORMATS.filter(f => out && out[f.field]);
+  const colCount  = Math.max(1, availFmts.length);
 
   if (loading) {
     return (
@@ -208,27 +343,32 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
   }
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto', padding: '28px 20px' }}>
+    <div style={{ maxWidth: 940, margin: '0 auto', padding: '28px 20px', position: 'relative' }}>
 
       {/* Cabeçalho */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 12,
         paddingBottom: 20, borderBottom: '1px solid rgba(255,255,255,0.07)', marginBottom: 24,
       }}>
-        <BomDiaAvatar size={40} />
+        <BomDiaAvatar size={42} />
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>Bom Dia</div>
           <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
             Arte motivacional diária para WhatsApp · seg–sex 08:55 · sáb 07:55
           </div>
         </div>
-        <button
-          style={generating ? { ...btnYellow, opacity: 0.65, cursor: 'default' } : btnYellow}
-          onClick={generating ? undefined : handleGenerate}
-          disabled={generating}
-        >
-          {generating ? '⏳ Gerando…' : '✦ Gerar agora'}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button style={btnGhost} onClick={handleOpenConfig} title="Configurar agente">
+            ⚙ Configurar
+          </button>
+          <button
+            style={generating ? { ...btnYellow, opacity: 0.65, cursor: 'default' } : btnYellow}
+            onClick={generating ? undefined : handleGenerate}
+            disabled={generating}
+          >
+            {generating ? '⏳ Gerando…' : '✦ Gerar agora'}
+          </button>
+        </div>
       </div>
 
       {genError && (
@@ -242,7 +382,7 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
           <BomDiaAvatar size={28} />
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, color: BD_COLOR }}>Gerando imagens…</div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>Claude está criando o prompt e a Recraft está renderizando (~1–2 min)</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>Claude cria o prompt · Recraft renderiza Grupo WA (4:5) + Stories (9:16) (~1–2 min)</div>
           </div>
         </div>
       )}
@@ -250,8 +390,8 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
       {/* Estado vazio */}
       {!out && !generating && (
         <div style={{ ...card, textAlign: 'center', padding: 48 }}>
-          <div style={{ fontSize: 36, marginBottom: 12 }}>☀️</div>
-          <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>Nenhuma arte gerada ainda.</div>
+          <BomDiaAvatar size={48} />
+          <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, marginTop: 16 }}>Nenhuma arte gerada ainda.</div>
           <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12, marginTop: 6 }}>
             Clique em "Gerar agora" ou aguarde o agendamento automático.
           </div>
@@ -266,41 +406,43 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
             <div style={{ fontSize: 13, color: BD_COLOR, marginTop: 4 }}>Tema: {out.theme}</div>
           </div>
 
-          {/* Imagens */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
-            {[
-              { type: 'landscape', url: out.img_landscape_url, label: 'Landscape · 16:9 · Stories/Feed' },
-              { type: 'portrait',  url: out.img_portrait_url,  label: 'Portrait · 9:16 · Status/Reels' },
-            ].map(({ type, url, label }) => (
-              <div key={type} style={card}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.4)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          {/* Imagens — grid dinâmico */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${colCount}, 1fr)`,
+            gap: 14, marginBottom: 20,
+          }}>
+            {availFmts.map(({ key, label, sub, ratio, field }) => (
+              <div key={key} style={card}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.35)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                   {label}
+                  <span style={{ fontWeight: 400, marginLeft: 4 }}>· {sub}</span>
                 </div>
-                <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 8, overflow: 'hidden', marginBottom: 12 }}>
+                <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
                   <img
-                    src={url}
-                    alt={`Arte ${type}`}
+                    src={out[field]}
+                    alt={`Arte ${key}`}
                     style={{
                       width: '100%', display: 'block',
-                      aspectRatio: type === 'landscape' ? '16/9' : '9/16',
+                      aspectRatio: ratio,
                       objectFit: 'cover', objectPosition: 'top',
-                      maxHeight: type === 'portrait' ? 260 : undefined,
+                      maxHeight: key === 'portrait' ? 220 : key === 'group' ? 300 : undefined,
                     }}
                   />
                 </div>
                 <button
-                  style={{ ...btnYellow, width: '100%', justifyContent: 'center', opacity: dlState[type] ? 0.65 : 1 }}
-                  onClick={() => handleDownload(type)}
-                  disabled={!!dlState[type]}
+                  style={{ ...btnYellow, width: '100%', justifyContent: 'center', fontSize: 12, opacity: dlState[key] ? 0.65 : 1 }}
+                  onClick={() => handleDownload(key)}
+                  disabled={!!dlState[key]}
                 >
-                  {dlState[type] ? 'Baixando…' : `↓ Baixar JPEG (${type === 'landscape' ? '16:9' : '9:16'})`}
+                  {dlState[key] ? 'Baixando…' : '↓ Baixar JPEG'}
                 </button>
               </div>
             ))}
           </div>
 
           {/* Legenda editável */}
-          <div style={{ ...card, marginBottom: 24 }}>
+          <div style={{ ...card, marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 Legenda para WhatsApp
@@ -310,7 +452,7 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
             <textarea
               value={caption}
               onChange={e => setCaption(e.target.value)}
-              rows={10}
+              rows={9}
               style={{
                 width: '100%', boxSizing: 'border-box',
                 background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)',
@@ -319,23 +461,121 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
                 fontFamily: 'inherit', resize: 'vertical', outline: 'none',
               }}
             />
-            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-              <button
-                style={copied ? { ...btnYellow, opacity: 0.8 } : btnOutline(false)}
-                onClick={handleCopy}
-              >
+            <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+              <button style={copied ? { ...btnYellow, opacity: 0.8 } : btnOutline(false)} onClick={handleCopy}>
                 {copied ? '✓ Copiado!' : 'Copiar legenda'}
               </button>
               <button
                 style={btnOutline(caption === (out?.caption ?? ''))}
                 onClick={() => setCaption(out?.caption ?? '')}
                 disabled={caption === (out?.caption ?? '')}
-                title="Desfazer edições"
               >
                 ↺ Restaurar original
               </button>
+              <button
+                style={{ ...btnOutline(false), marginLeft: 'auto' }}
+                onClick={handleOpenSend}
+              >
+                📤 Enviar nos grupos
+              </button>
             </div>
           </div>
+
+          {/* Painel: Enviar nos grupos */}
+          {sendOpen && (
+            <div style={{ ...card, marginBottom: 16, border: `1px solid ${BD_COLOR}44`, background: BD_BG }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: BD_COLOR }}>Enviar nos grupos WhatsApp</div>
+                <button style={{ ...btnGhost, padding: '4px 10px', fontSize: 11 }} onClick={() => { setSendOpen(false); setSendResult(null); }}>
+                  Fechar
+                </button>
+              </div>
+
+              {/* Seletor de formato */}
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>Formato a enviar</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {FORMATS.filter(f => out[f.field]).map(f => (
+                    <button
+                      key={f.key}
+                      onClick={() => setSendFmt(f.key)}
+                      style={{
+                        padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                        border: `1px solid ${sendFmt === f.key ? BD_COLOR : 'rgba(255,255,255,0.15)'}`,
+                        background: sendFmt === f.key ? `${BD_COLOR}22` : 'transparent',
+                        color: sendFmt === f.key ? BD_COLOR : 'rgba(255,255,255,0.6)',
+                      }}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Lista de grupos */}
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Grupos ({groups.length})
+                </div>
+                {groups.length === 0 ? (
+                  <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', padding: '12px 0' }}>
+                    Nenhum grupo WhatsApp cadastrado para este tenant.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {groups.map(g => (
+                      <label
+                        key={g.group_jid}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
+                          borderRadius: 6, cursor: 'pointer',
+                          background: selGroups.has(g.group_jid) ? 'rgba(245,158,11,0.1)' : 'rgba(255,255,255,0.02)',
+                          border: `1px solid ${selGroups.has(g.group_jid) ? BD_COLOR + '44' : 'rgba(255,255,255,0.07)'}`,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selGroups.has(g.group_jid)}
+                          onChange={() => toggleGroup(g.group_jid)}
+                          style={{ accentColor: BD_COLOR, width: 15, height: 15 }}
+                        />
+                        <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', flex: 1 }}>
+                          {g.nome || g.group_jid}
+                        </span>
+                        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace' }}>
+                          {g.group_jid.split('@')[0].slice(-6)}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Resultado de envio */}
+              {sendResult && (
+                <div style={{
+                  marginBottom: 14, padding: '10px 14px', borderRadius: 8, fontSize: 13,
+                  background: sendResult.error ? 'rgba(220,38,38,0.1)' : 'rgba(34,197,94,0.08)',
+                  border: `1px solid ${sendResult.error ? 'rgba(220,38,38,0.3)' : 'rgba(34,197,94,0.25)'}`,
+                  color: sendResult.error ? '#FCA5A5' : 'rgba(255,255,255,0.8)',
+                }}>
+                  {sendResult.error
+                    ? `Erro: ${sendResult.error}`
+                    : `✓ Enviado para ${sendResult.sent?.length ?? 0} grupo(s)${sendResult.failed?.length ? ` · ${sendResult.failed.length} falha(s)` : ''}`
+                  }
+                </div>
+              )}
+
+              {/* Botão enviar */}
+              <button
+                style={{ ...btnYellow, opacity: (sending || !selGroups.size) ? 0.65 : 1, cursor: (!selGroups.size || sending) ? 'default' : 'pointer' }}
+                onClick={handleSend}
+                disabled={sending || !selGroups.size}
+              >
+                {sending ? '⏳ Enviando…' : `📤 Enviar para ${selGroups.size || '—'} grupo${selGroups.size !== 1 ? 's' : ''}`}
+              </button>
+            </div>
+          )}
         </>
       )}
 
@@ -347,8 +587,9 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {runs.map(r => {
-              const o       = r.output ?? {};
+              const o = r.output ?? {};
               const isActive = r.id === selected?.id;
+              const hasGroup = !!o.img_group_url;
               return (
                 <div
                   key={r.id}
@@ -366,10 +607,88 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
                   <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', flex: 1 }}>
                     {o.theme ?? 'sem tema'}
                   </span>
+                  {hasGroup && (
+                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', fontWeight: 500 }}>3 formatos</span>
+                  )}
                   {isActive && <span style={{ fontSize: 11, color: BD_COLOR, fontWeight: 600 }}>exibindo</span>}
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Configurar agente */}
+      {configOpen && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+          }}
+          onClick={e => { if (e.target === e.currentTarget) setConfigOpen(false); }}
+        >
+          <div style={{
+            background: '#181818', border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 14, padding: 28, width: '100%', maxWidth: 540,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 22 }}>
+              <BomDiaAvatar size={32} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>Configurar Agente Bom Dia</div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>Salvo no perfil do tenant · aplicado nas próximas gerações</div>
+              </div>
+              <button style={{ ...btnGhost, padding: '4px 10px' }} onClick={() => setConfigOpen(false)}>✕</button>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 8 }}>
+                Memória do agente
+              </label>
+              <textarea
+                value={agentCfg.memory}
+                onChange={e => setAgentCfg(c => ({ ...c, memory: e.target.value }))}
+                rows={4}
+                placeholder="Ex: Clientes preferem mensagens mais curtas. Sempre mencionar o Thiago no grupo da Padaria Bom Pão."
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 8, padding: '10px 12px',
+                  color: 'rgba(255,255,255,0.8)', fontSize: 13, lineHeight: 1.55,
+                  fontFamily: 'inherit', resize: 'vertical', outline: 'none',
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: 24 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 8 }}>
+                Instruções personalizadas
+              </label>
+              <textarea
+                value={agentCfg.instructions}
+                onChange={e => setAgentCfg(c => ({ ...c, instructions: e.target.value }))}
+                rows={5}
+                placeholder="Ex: Sempre incluir emojis de foguete 🚀. Usar tom mais descontraído às sextas-feiras. Evitar frases genéricas como 'bom dia'."
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 8, padding: '10px 12px',
+                  color: 'rgba(255,255,255,0.8)', fontSize: 13, lineHeight: 1.55,
+                  fontFamily: 'inherit', resize: 'vertical', outline: 'none',
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button style={btnGhost} onClick={() => setConfigOpen(false)}>Cancelar</button>
+              <button
+                style={{ ...btnYellow, opacity: savingCfg ? 0.65 : 1 }}
+                onClick={handleSaveConfig}
+                disabled={savingCfg}
+              >
+                {savingCfg ? 'Salvando…' : 'Salvar configuração'}
+              </button>
+            </div>
           </div>
         </div>
       )}

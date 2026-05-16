@@ -20,8 +20,9 @@ const ClaudeOutputSchema = z.object({
 
 const OutputSchema = z.object({
   caption:           z.string(),
-  img_landscape_url: z.string().url(),
-  img_portrait_url:  z.string().url(),
+  img_landscape_url: z.string().url().optional(), // legado — runs antigos
+  img_group_url:     z.string().url(),            // 4:5  · 1080×1350 · WhatsApp grupo
+  img_portrait_url:  z.string().url(),            // 9:16 · 1080×1920 · Stories Instagram
   theme:             z.string(),
   date:              z.string(),
 });
@@ -64,7 +65,7 @@ function getSPDate() {
 
 // ─── Helper: gerar imagem via OpenRouter (Recraft V4.1 Utility) ──────────────
 
-async function generateImage(prompt: string, aspectRatio: "16:9" | "9:16"): Promise<string> {
+async function generateImage(prompt: string, aspectRatio: "16:9" | "9:16" | "4:5"): Promise<string> {
   const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
   if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY não configurado no Trigger.dev");
 
@@ -228,7 +229,7 @@ Data: ${dateStr}
 Horários para a legenda: ${hoursLine}
 
 Gere:
-1. "dalle_prompt": prompt em inglês detalhado para DALL-E 3 — arte motivacional para donos de delivery. Inclua: dark navy blue background, red and orange accents matching Consult Delivery brand, delivery-themed elements (routes, packages, growth charts, arrows), professional and vibrant composition, space for short Portuguese text center-stage, rocket logo "Consult Delivery" bottom-left corner, optimized for WhatsApp sharing. NÃO mencione pixel, resolução ou proporção.
+1. "dalle_prompt": prompt em inglês detalhado para DALL-E 3 — arte motivacional para donos de delivery. OBRIGATÓRIO: dark deep navy blue background (hex #0a1628 ou similar), vibrant red and orange energetic accents exclusively (NO other accent colors), delivery-themed elements (routes, packages, growth arrows, speed lines), Consult Delivery rocket logo bottom-left corner, professional high-contrast composition with space for bold Portuguese text center-stage, optimized for WhatsApp sharing. NÃO mencione pixel, resolução ou proporção.
 2. "text_on_image": texto curto em PT-BR (máx 7 palavras) para aparecer NA arte — conectado ao tema "${theme}", direto e impactante.
 3. "caption": legenda completa em PT-BR para WhatsApp: (a) emoji temático + "Bom dia da equipe Consult Delivery!" + frase motivacional original sobre "${theme}" conectada à rotina de delivery, (b) linha com os horários exatamente como fornecidos acima, (c) frase curta de disponibilidade da equipe. Sem hashtags. Parágrafos curtos.
 4. "theme": o tema do dia em PT-BR (resumido, ex: "foco e persistência").
@@ -253,29 +254,29 @@ Retorne JSON: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme
   });
 
   // 3. Gerar duas imagens em paralelo via OpenRouter (Recraft V4.1 Utility)
-  const fullPrompt = `${claudeOut.dalle_prompt}. Prominent bold text on image: "${claudeOut.text_on_image}" in Portuguese. Clean composition, Consult Delivery rocket brand logo bottom left.`;
+  const fullPrompt = `${claudeOut.dalle_prompt}. Prominent bold white/light text center-stage: "${claudeOut.text_on_image}" in Portuguese. MANDATORY BRAND RULES: deep navy blue background (#0a1628), red and orange accents ONLY, Consult Delivery rocket logo bottom-left, no competing colors, maximum contrast.`;
 
-  logger.info("bom-dia: gerando imagens (landscape + portrait) via Recraft V4.1");
+  logger.info("bom-dia: gerando 2 formatos (4:5 grupo WA · 9:16 Stories) via Recraft V4.1");
 
-  const [landscapeTempUrl, portraitTempUrl] = await Promise.all([
-    generateImage(fullPrompt, "16:9"),
+  const [groupTempUrl, portraitTempUrl] = await Promise.all([
+    generateImage(fullPrompt, "4:5"),
     generateImage(fullPrompt, "9:16"),
   ]);
 
   // 4. Download + upload permanente no Supabase Storage
-  logger.info("bom-dia: fazendo upload para Supabase Storage");
+  logger.info("bom-dia: fazendo upload para Supabase Storage (2 formatos)");
 
-  const [imgLandscapeUrl, imgPortraitUrl] = await Promise.all([
-    uploadToStorage(landscapeTempUrl, `bom-dia/${dateStr}-landscape.webp`),
-    uploadToStorage(portraitTempUrl,  `bom-dia/${dateStr}-portrait.webp`),
+  const [imgGroupUrl, imgPortraitUrl] = await Promise.all([
+    uploadToStorage(groupTempUrl,    `bom-dia/${dateStr}-group.webp`),
+    uploadToStorage(portraitTempUrl, `bom-dia/${dateStr}-portrait.webp`),
   ]);
 
   const output: Output = OutputSchema.parse({
-    caption:           claudeOut.caption,
-    img_landscape_url: imgLandscapeUrl,
-    img_portrait_url:  imgPortraitUrl,
-    theme:             claudeOut.theme,
-    date:              dateStr,
+    caption:          claudeOut.caption,
+    img_group_url:    imgGroupUrl,
+    img_portrait_url: imgPortraitUrl,
+    theme:            claudeOut.theme,
+    date:             dateStr,
   });
 
   // 5. Audit log
