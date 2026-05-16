@@ -3441,7 +3441,12 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                         )}
                         {msg.media_url ? (
                           msg.media_type?.startsWith('image/') ? (
-                            <img src={msg.media_url} alt={msg.text} style={{ maxWidth: 320, maxHeight: 240, borderRadius: 8, marginTop: 4, display: 'block', cursor: 'pointer' }} onClick={() => setLightboxUrl(msg.media_url)} />
+                            <div>
+                              <img src={msg.media_url} alt={msg.text} style={{ maxWidth: 320, maxHeight: 240, borderRadius: 8, marginTop: 4, display: 'block', cursor: 'pointer' }} onClick={() => setLightboxUrl(msg.media_url)} />
+                              {msg.text && !msg.text.startsWith('🖼') && (
+                                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 1.45, wordBreak: 'break-word', marginTop: 4 }}>{formatWhatsApp(msg.text)}</div>
+                              )}
+                            </div>
                           ) : msg.media_type?.includes('audio') ? (
                             <audio controls src={msg.media_url} style={{ marginTop: 4, height: 36, maxWidth: 280 }} />
                           ) : (
@@ -3450,7 +3455,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                             </a>
                           )
                         ) : (
-                          <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.85)', lineHeight: 1.45, wordBreak: 'break-word' }}>{msg.text}</div>
+                          <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.85)', lineHeight: 1.45, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{formatWhatsApp(msg.text)}</div>
                         )}
                       </div>
                     </div>
@@ -3881,11 +3886,12 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                       <Icon name="x" size={14} />
                     </button>
                     <img src={pasteImage.previewUrl} alt="preview" className="lc-paste-thumb" />
-                    <input
+                    <textarea
                       ref={pasteCaptionRef}
                       className="lc-paste-caption"
-                      placeholder="Adicionar legenda (opcional)…"
+                      placeholder="Adicionar legenda (opcional)… Shift+Enter = nova linha"
                       value={pasteCaption}
+                      rows={2}
                       onChange={e => setPasteCaption(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendPasteImage(); } if (e.key === 'Escape') { URL.revokeObjectURL(pasteImage.previewUrl); setPasteImage(null); setPasteCaption(''); } }}
                     />
