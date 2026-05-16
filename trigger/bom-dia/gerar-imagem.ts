@@ -68,16 +68,20 @@ function getSPDate() {
 
 // ─── Helper: gerar imagem via OpenRouter (Recraft V4.1 Utility) ──────────────
 
-async function generateImage(prompt: string, format: "group" | "portrait"): Promise<string> {
+type MsgContent = string | Array<Record<string, unknown>>;
+
+async function generateImage(content: MsgContent, format: "group" | "portrait"): Promise<string> {
   // aspect_ratio é ignorado pelo OpenRouter/Recraft — usar size com px explícito
   // group = landscape 16:9 (1820×1024), portrait = 9:16 (1024×1820)
   const size = format === "group" ? "1820x1024" : "1024x1820";
   const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
   if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY não configurado no Trigger.dev");
 
+  const contentLen = typeof content === "string" ? content.length : JSON.stringify(content).length;
+
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      logger.info("bom-dia: recraft request", { format, size, attempt, promptLength: prompt.length });
+      logger.info("bom-dia: recraft request", { format, size, attempt, contentLen });
       const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -88,7 +92,7 @@ async function generateImage(prompt: string, format: "group" | "portrait"): Prom
         },
         body: JSON.stringify({
           model:    "recraft/recraft-v4.1-utility",
-          messages: [{ role: "user", content: prompt }],
+          messages: [{ role: "user", content }],
           size,
         }),
         signal: AbortSignal.timeout(90_000),
@@ -140,6 +144,7 @@ async function generateImage(prompt: string, format: "group" | "portrait"): Prom
       logger.warn(`bom-dia: tentativa ${attempt}/3 geração falhou`, {
         format,
         size,
+        contentLen,
         error: (err as Error).message,
       });
       if (attempt === 3) throw err;
@@ -311,13 +316,14 @@ async function executar(input: Input, runId: string): Promise<Output> {
     max_tokens: 1024,
     system: `Você é o criador de conteúdo da Consult Delivery, consultoria para negócios de delivery.
 
-Identidade visual Consult Delivery:
-- Logo: foguete estilizado vermelho + texto "Consult Delivery" + tagline "Consultoria para Delivery"
-- Cores: fundo azul escuro profundo + acentos vermelho/laranja energético
-- Estilo: moderno, profissional, vibrante, alto contraste, legível em celular
+Identidade visual Consult Delivery (OBRIGATÓRIO seguir):
+- Logo: foguete estilizado vermelho + texto "Consult Delivery"
+- Paleta restrita: fundo PRETO (#0d0d0d), acentos vermelho (#B70C00) e branco — SOMENTE essas cores
+- Estilo: moderno, geométrico, abstrato, alto contraste, sem figuras humanas
+- Elementos visuais: pacotes, rotas, gráficos de crescimento, setas de velocidade, ícones de delivery
 
 Regras:
-- Texto NA ARTE: sempre em PT-BR, máx 7 palavras, forte e direto, conectado à realidade de delivery
+- Texto NA ARTE: PT-BR, máx 7 palavras, impactante, conectado à realidade de delivery
 - Legenda: PT-BR, sem hashtags, tom motivacional e próximo
 - Prompt DALL-E: sempre em inglês (melhora qualidade)
 - Retorne SOMENTE JSON válido, sem texto extra`,
@@ -329,7 +335,7 @@ Data: ${dateStr}
 Horários para a legenda: ${hoursLine}${briefLine}
 
 Gere:
-1. "dalle_prompt": prompt em inglês detalhado para Recraft — arte motivacional para donos de delivery. OBRIGATÓRIO: dark deep navy blue background (hex #0a1628 ou similar), vibrant red and orange energetic accents exclusively (NO other accent colors), delivery-themed elements (routes, packages, growth arrows, speed lines), Consult Delivery rocket logo bottom-left corner, professional high-contrast composition with space for bold Portuguese text center-stage. A mesma arte será gerada em dois formatos: landscape 16:9 (1200×630, Feed social media) e portrait 9:16 (1080×1920, Stories). NÃO mencione pixel, resolução ou proporção no prompt.
+1. "dalle_prompt": prompt em inglês detalhado para Recraft — arte motivacional abstrata para donos de delivery. OBRIGATÓRIO: pure black background (#0d0d0d), vibrant red (#B70C00) and white accents EXCLUSIVELY (NO orange, NO blue, NO other hues), abstract delivery-themed geometric elements (delivery boxes, route lines, growth arrows, speed lines, charts — NO human figures or characters), Consult Delivery rocket logo bottom-left corner, professional high-contrast composition, bold text space center-stage. NÃO mencione pixel, resolução ou proporção no prompt.
 2. "text_on_image": texto curto em PT-BR (máx 7 palavras) para aparecer NA arte — conectado ao tema "${theme}", direto e impactante.
 3. "caption": legenda completa em PT-BR para WhatsApp: (a) emoji temático + "Bom dia da equipe Consult Delivery!" + frase motivacional original sobre "${theme}" conectada à rotina de delivery, (b) linha com os horários exatamente como fornecidos acima, (c) frase curta de disponibilidade da equipe. Sem hashtags. Parágrafos curtos.
 4. "theme": o tema do dia em PT-BR (resumido, ex: "foco e persistência").
@@ -353,26 +359,38 @@ Retorne JSON: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme
     textOnImage: claudeOut.text_on_image,
   });
 
-  // 3. Gerar duas imagens em paralelo via OpenRouter (Recraft V4.1 Utility)
+  // Paths únicos por run — evita sobrescrita entre gerações no mesmo dia
+  const pathId            = runId.slice(-8);
+  const groupStoragePath   = `bom-dia/${dateStr}-${pathId}-group.webp`;
+  const portraitStoragePath = `bom-dia/${dateStr}-${pathId}-portrait.webp`;
+
+  // 3. Geração SEQUENCIAL: Feed primeiro → upload → Story usa Feed como referência visual
   // Com custom_brief: brief assume controle criativo, sem override de paleta obrigatória
-  const fullPrompt = input.custom_brief?.trim()
-    ? `${claudeOut.dalle_prompt}. ${input.custom_brief.trim()}. Prominent bold white/light text center-stage: "${claudeOut.text_on_image}" in Portuguese. Consult Delivery rocket logo bottom-left corner. High contrast, professional composition.`
-    : `${claudeOut.dalle_prompt}. Prominent bold white/light text center-stage: "${claudeOut.text_on_image}" in Portuguese. MANDATORY BRAND RULES: background color exactly #0a1628 (deep navy blue) — NO variation allowed, accent colors strictly #B70C00 (red) and #FF6B35 (orange) ONLY — no other hues, Consult Delivery rocket logo bottom-left corner, white text only, maximum contrast. CONSISTENCY RULE: the 16:9 (landscape Feed 1200×630) and 9:16 (portrait Story 1080×1920) versions must use the exact same scene, lighting, color palette, and composition — only the crop/framing differs.`;
+  const feedPrompt: MsgContent = input.custom_brief?.trim()
+    ? `${claudeOut.dalle_prompt}. ${input.custom_brief.trim()}. Prominent bold white text center-stage: "${claudeOut.text_on_image}" in Portuguese. Consult Delivery rocket logo bottom-left. High contrast, professional.`
+    : `${claudeOut.dalle_prompt}. Prominent bold white text center-stage: "${claudeOut.text_on_image}" in Portuguese. MANDATORY BRAND RULES: background color exactly #0d0d0d (pure black) — NO variation, accent colors strictly #B70C00 (red) and white ONLY — no orange, no blue, no other hues, NO human figures, Consult Delivery rocket logo bottom-left corner, maximum contrast.`;
 
-  logger.info("bom-dia: gerando 2 formatos (16:9 Feed 1200×630 · 9:16 Story 1080×1920) via Recraft V4.1");
+  logger.info("bom-dia: gerando Feed 16:9 via Recraft V4.1");
+  const groupTempUrl = await generateImage(feedPrompt, "group");
 
-  const [groupTempUrl, portraitTempUrl] = await Promise.all([
-    generateImage(fullPrompt, "group"),
-    generateImage(fullPrompt, "portrait"),
-  ]);
+  // 4. Upload Feed → URL permanente usada como referência para o Story
+  logger.info("bom-dia: upload Feed para Supabase Storage");
+  const imgGroupUrl = await uploadToStorage(groupTempUrl, groupStoragePath, "group");
 
-  // 4. Download + upload permanente no Supabase Storage
-  logger.info("bom-dia: fazendo upload para Supabase Storage (2 formatos)");
+  // Story gerado com referência visual ao Feed — garante mesma identidade
+  const storyContent: MsgContent = [
+    { type: "image_url", image_url: { url: imgGroupUrl } },
+    {
+      type: "text",
+      text: `Recompose this exact image into a 9:16 portrait format. MUST KEEP identical: same black background (#0d0d0d), same red (#B70C00) and white color palette, same abstract delivery elements, same brand style, same Consult Delivery rocket logo in bottom-left corner, same text "${claudeOut.text_on_image}" prominently displayed. Only adapt the composition/layout for vertical portrait orientation. NO human figures. NO new colors.`,
+    },
+  ];
 
-  const [imgGroupUrl, imgPortraitUrl] = await Promise.all([
-    uploadToStorage(groupTempUrl,    `bom-dia/${dateStr}-group.webp`,   "group"),
-    uploadToStorage(portraitTempUrl, `bom-dia/${dateStr}-portrait.webp`, "portrait"),
-  ]);
+  logger.info("bom-dia: gerando Story 9:16 com referência ao Feed");
+  const portraitTempUrl = await generateImage(storyContent, "portrait");
+
+  logger.info("bom-dia: upload Story para Supabase Storage");
+  const imgPortraitUrl = await uploadToStorage(portraitTempUrl, portraitStoragePath, "portrait");
 
   const output: Output = OutputSchema.parse({
     caption:          claudeOut.caption,
