@@ -58,7 +58,7 @@ async function downloadFile(url, filename) {
 
 // ── Image formats ─────────────────────────────────────────────────────────────
 const FORMATS = [
-  { key: 'group',    label: 'Feed',  sub: '4:5 · 1080×1350', ratio: '4/5',  field: 'img_group_url'    },
+  { key: 'group',    label: 'Feed',  sub: '16:9 · 1200×630',  ratio: '16/9', field: 'img_group_url'    },
   { key: 'portrait', label: 'Story', sub: '9:16 · 1080×1920', ratio: '9/16', field: 'img_portrait_url' },
 ];
 
@@ -158,6 +158,54 @@ function BomDiaAvatar({ size = 32 }) {
         })}
         <circle cx={cx} cy={cy} r={coreR} fill={`url(#${gId})`} />
       </svg>
+    </div>
+  );
+}
+
+// ── ImageLightbox ─────────────────────────────────────────────────────────────
+function ImageLightbox({ src, alt, onClose }) {
+  const [scale, setScale] = useState(1);
+
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  const handleWheel = (e) => {
+    e.preventDefault();
+    setScale(s => Math.min(5, Math.max(0.5, s * (e.deltaY < 0 ? 1.1 : 0.9))));
+  };
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.94)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      onWheel={handleWheel}
+    >
+      <img
+        src={src}
+        alt={alt}
+        draggable={false}
+        style={{ maxWidth: '90vw', maxHeight: '90vh', transform: `scale(${scale})`, transition: 'transform 0.15s', objectFit: 'contain', borderRadius: 8, userSelect: 'none' }}
+      />
+      <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 6 }}>
+        {[
+          { label: '+', title: 'Ampliar',   onClick: () => setScale(s => Math.min(5, s + 0.3)) },
+          { label: `${Math.round(scale * 100)}%`, title: 'Resetar', onClick: () => setScale(1) },
+          { label: '−', title: 'Reduzir',   onClick: () => setScale(s => Math.max(0.5, s - 0.3)) },
+          { label: '✕', title: 'Fechar',    onClick: onClose },
+        ].map(btn => (
+          <button
+            key={btn.label}
+            onClick={btn.onClick}
+            title={btn.title}
+            style={{ minWidth: 36, height: 36, padding: '0 8px', borderRadius: 8, border: `1px solid ${BORDER}`, background: 'rgba(0,0,0,0.7)', color: btn.label === '✕' ? 'rgba(255,255,255,0.5)' : '#fff', cursor: 'pointer', fontSize: btn.label === '✕' ? 14 : 18, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            {btn.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -298,6 +346,7 @@ function AgentMessage({ run, tenantDbId, isLast }) {
   const [caption,    setCaption]   = useState(out.caption ?? '');
   const [copied,     setCopied]    = useState(false);
   const [dlState,    setDlState]   = useState({});
+  const [previewImg, setPreviewImg] = useState(null);
   const [sendOpen,   setSendOpen]  = useState(false);
   const [groups,     setGroups]    = useState([]);
   const [selGroups,  setSelGroups] = useState(new Set());
@@ -318,7 +367,7 @@ function AgentMessage({ run, tenantDbId, isLast }) {
     const url = key === 'group' ? groupUrl : portraitUrl;
     if (!url) return;
     setDlState(s => ({ ...s, [key]: true }));
-    await downloadFile(url, `bom-dia-${out.date ?? 'arte'}-${key}.jpg`);
+    await downloadFile(url, `bom-dia-${out.date ?? 'arte'}-${key}.png`);
     setDlState(s => ({ ...s, [key]: false }));
   };
 
@@ -354,8 +403,8 @@ function AgentMessage({ run, tenantDbId, isLast }) {
 
   const chips = [
     { label: copied ? '✓ Copiado' : 'Copiar',   onClick: handleCopy,                                  disabled: false              },
-    { label: dlState.group   ? '…' : '↓ Feed PNG (16:9)',  onClick: () => handleDownload('group'),    disabled: !hasFeed  },
-    { label: dlState.portrait? '…' : '↓ Story PNG (9:16)', onClick: () => handleDownload('portrait'), disabled: !hasStory },
+    { label: dlState.group   ? '…' : '↓ Feed 16:9',  onClick: () => handleDownload('group'),    disabled: !hasFeed  },
+    { label: dlState.portrait? '…' : '↓ Story 9:16', onClick: () => handleDownload('portrait'), disabled: !hasStory },
     { label: '↺ Restaurar',                       onClick: () => setCaption(out.caption ?? ''),         disabled: caption === (out.caption ?? '') },
     { label: '📤 Enviar nos grupos',               onClick: handleOpenSend,                              disabled: false              },
   ];
@@ -407,20 +456,37 @@ function AgentMessage({ run, tenantDbId, isLast }) {
               </div>
 
               {artTab !== 'both' ? (
-                <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: 10, overflow: 'hidden', display: 'inline-block', maxWidth: artTab === 'story' ? 160 : 320 }}>
+                <div
+                  onClick={() => setPreviewImg({ src: artTab === 'story' ? portraitUrl : groupUrl, alt: artTab === 'story' ? 'Story 9:16' : 'Feed 16:9' })}
+                  title="Clique para ampliar"
+                  style={{ background: 'rgba(0,0,0,0.4)', borderRadius: 10, overflow: 'hidden', display: 'inline-block', maxWidth: artTab === 'story' ? 160 : 320, cursor: 'zoom-in', position: 'relative' }}
+                >
                   <img
                     src={artTab === 'story' ? portraitUrl : groupUrl}
                     alt={artTab === 'story' ? 'Story 9:16' : 'Feed 16:9'}
                     style={{ width: '100%', display: 'block', aspectRatio: artTab === 'story' ? '9/16' : '16/9', objectFit: 'cover' }}
                   />
+                  <div style={{ position: 'absolute', bottom: 6, right: 6, background: 'rgba(0,0,0,0.55)', borderRadius: 5, padding: '2px 6px', fontSize: 10, color: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(4px)', pointerEvents: 'none' }}>
+                    🔍 Ampliar
+                  </div>
                 </div>
               ) : (
                 <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                  <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: 10, overflow: 'hidden', width: 250 }}>
+                  <div
+                    onClick={() => setPreviewImg({ src: groupUrl, alt: 'Feed 16:9' })}
+                    title="Clique para ampliar"
+                    style={{ background: 'rgba(0,0,0,0.4)', borderRadius: 10, overflow: 'hidden', width: 250, cursor: 'zoom-in', position: 'relative' }}
+                  >
                     <img src={groupUrl} alt="Feed 16:9" style={{ width: '100%', display: 'block', aspectRatio: '16/9', objectFit: 'cover' }} />
+                    <div style={{ position: 'absolute', bottom: 6, right: 6, background: 'rgba(0,0,0,0.55)', borderRadius: 5, padding: '2px 6px', fontSize: 10, color: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(4px)', pointerEvents: 'none' }}>🔍</div>
                   </div>
-                  <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: 10, overflow: 'hidden', width: 80 }}>
+                  <div
+                    onClick={() => setPreviewImg({ src: portraitUrl, alt: 'Story 9:16' })}
+                    title="Clique para ampliar"
+                    style={{ background: 'rgba(0,0,0,0.4)', borderRadius: 10, overflow: 'hidden', width: 80, cursor: 'zoom-in', position: 'relative' }}
+                  >
                     <img src={portraitUrl} alt="Story 9:16" style={{ width: '100%', display: 'block', aspectRatio: '9/16', objectFit: 'cover' }} />
+                    <div style={{ position: 'absolute', bottom: 4, right: 4, background: 'rgba(0,0,0,0.55)', borderRadius: 4, padding: '2px 4px', fontSize: 9, color: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(4px)', pointerEvents: 'none' }}>🔍</div>
                   </div>
                 </div>
               )}
@@ -461,6 +527,11 @@ function AgentMessage({ run, tenantDbId, isLast }) {
               </button>
             ))}
           </div>
+
+          {/* Image lightbox */}
+          {previewImg && (
+            <ImageLightbox src={previewImg.src} alt={previewImg.alt} onClose={() => setPreviewImg(null)} />
+          )}
 
           {/* Send panel */}
           {sendOpen && (
