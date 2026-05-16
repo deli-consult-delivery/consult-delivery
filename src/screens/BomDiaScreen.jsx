@@ -1153,7 +1153,15 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
       const r = await fetch(`${BRIDGE_URL}/agents/bom-dia-gerar-imagem/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ tenant_id: tenantDbId, payload: { triggered_by: userId, theme: form?.theme, brief: form?.brief } }),
+        body: JSON.stringify({
+          tenant_id: tenantDbId,
+          payload: {
+            triggered_by: userId,
+            custom_theme: form?.theme?.trim() || undefined,
+            custom_brief: form?.brief?.trim() || undefined,
+            force_new:    true,
+          },
+        }),
       });
       const body = await r.json();
       if (!r.ok) throw new Error(body.error || `Erro ${r.status}`);
