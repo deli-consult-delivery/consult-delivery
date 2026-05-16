@@ -7,11 +7,13 @@ import { logAgentRun } from "../_shared/audit";
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
 const InputSchema = z.object({
-  tenant_id:    z.string().uuid().optional(),
-  triggered_by: z.string().uuid().optional(),
-  custom_theme: z.string().optional(), // tema fornecido manualmente pelo usuário
-  custom_brief: z.string().optional(), // contexto adicional fornecido pelo usuário
-  force_new:    z.boolean().optional(), // ignora idempotência e gera nova arte
+  tenant_id:        z.string().uuid().optional(),
+  triggered_by:     z.string().uuid().optional(),
+  custom_theme:     z.string().optional(),  // tema fornecido manualmente
+  custom_brief:     z.string().optional(),  // contexto adicional
+  force_new:        z.boolean().optional(), // ignora idempotência
+  weekday_override: z.number().int().min(0).max(6).optional(), // dia da semana selecionado no formulário (0=Dom..6=Sáb)
+  formats:          z.enum(["feed", "story", "both"]).optional(), // quais formatos gerar (padrão: both)
 });
 
 const ClaudeOutputSchema = z.object({
@@ -24,10 +26,11 @@ const ClaudeOutputSchema = z.object({
 const OutputSchema = z.object({
   caption:           z.string(),
   img_landscape_url: z.string().url().optional(), // legado — runs antigos
-  img_group_url:     z.string().url(),            // 16:9 · 1200×630  · Feed (Facebook/Instagram/WhatsApp link)
-  img_portrait_url:  z.string().url(),            // 9:16 · 1080×1920 · Stories Instagram + Status WhatsApp
+  img_group_url:     z.string().url().optional(), // 16:9 · 1800×630  · Feed
+  img_portrait_url:  z.string().url().optional(), // 9:16 · 1024×1820 · Stories Instagram + Status WhatsApp
   theme:             z.string(),
   date:              z.string(),
+  formats:           z.enum(["feed", "story", "both"]).optional(),
 });
 
 type Input  = z.infer<typeof InputSchema>;
@@ -72,8 +75,8 @@ type MsgContent = string | Array<Record<string, unknown>>;
 
 async function generateImage(content: MsgContent, format: "group" | "portrait"): Promise<string> {
   // aspect_ratio é ignorado pelo OpenRouter/Recraft — usar size com px explícito
-  // group = landscape 16:9 (1820×1024), portrait = 9:16 (1024×1820)
-  const size = format === "group" ? "1820x1024" : "1024x1820";
+  // group = Feed 1800×630, portrait = 9:16 Story 1024×1820
+  const size = format === "group" ? "1800x630" : "1024x1820";
   const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
   if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY não configurado no Trigger.dev");
 
@@ -259,11 +262,18 @@ async function uploadToStorage(
 // ─── Lógica principal (compartilhada entre on-demand e agendamentos) ──────────
 
 async function executar(input: Input, runId: string): Promise<Output> {
-  const { dateStr, weekday, dayName, theme: autoTheme, isSat } = getSPDate();
+  const spDate = getSPDate();
+  // weekday_override permite ao formulário sobrescrever o dia detectado automaticamente
+  const weekday = input.weekday_override ?? spDate.weekday;
+  const dayName = DAY_NAMES[weekday] ?? spDate.dayName;
+  const autoTheme = THEMES[weekday] ?? "motivação";
+  const isSat   = weekday === 6;
+  const dateStr = spDate.dateStr;
 
   // Tema efetivo: custom_theme tem prioridade sobre o automático por dia da semana
-  const isManual = !!(input.custom_theme || input.custom_brief || input.force_new);
+  const isManual = !!(input.custom_theme || input.custom_brief || input.force_new || input.weekday_override !== undefined);
   const theme    = input.custom_theme?.trim() || autoTheme;
+  const formats  = input.formats ?? "both";
 
   logger.info("bom-dia-gerar-imagem iniciado", { dateStr, dayName, theme, isManual });
 
@@ -305,7 +315,7 @@ async function executar(input: Input, runId: string): Promise<Output> {
     : "🕘 Atendimento Consult Delivery: 09:00–12:00 | 13:00–18:00 (intervalo de almoço das 12:00 às 13:00)";
 
   const briefLine = input.custom_brief?.trim()
-    ? `\nContexto adicional (PRIORIDADE sobre paleta padrão): ${input.custom_brief.trim()}`
+    ? `\nContexto adicional (PRIORIDADE — guia a criatividade): ${input.custom_brief.trim()}`
     : "";
 
   const claudeResp = await anthropic.messages.create({
@@ -313,16 +323,16 @@ async function executar(input: Input, runId: string): Promise<Output> {
     max_tokens: 1024,
     system: `Você é o criador de conteúdo da Consult Delivery, consultoria para negócios de delivery.
 
-Identidade visual Consult Delivery (OBRIGATÓRIO seguir):
-- Logo: foguete estilizado vermelho + texto "Consult Delivery"
-- Paleta restrita: fundo PRETO (#0d0d0d), acentos vermelho (#B70C00) e branco — SOMENTE essas cores
-- Estilo: moderno, geométrico, abstrato, alto contraste, sem figuras humanas
-- Elementos visuais: pacotes, rotas, gráficos de crescimento, setas de velocidade, ícones de delivery
+Identidade visual Consult Delivery:
+- Logo: foguete estilizado vermelho + texto "Consult Delivery" (sempre presente)
+- Estilo: vibrante, energético, inspirado nas cores dos grandes apps de delivery (iFood vermelho #EA1D2C, laranja, amarelo, verde — paleta viva e impactante)
+- LIBERDADE CRIATIVA: pode usar pessoas, personagens, ilustrações, mascotes, cenas do cotidiano de delivery, ambientes urbanos, motos, entregadores, donos de loja, clientes felizes
+- Composição: dinâmica, com movimento, alta energia — como uma campanha de marketing de app
 
 Regras:
 - Texto NA ARTE: PT-BR, máx 7 palavras, impactante, conectado à realidade de delivery
 - Legenda: PT-BR, sem hashtags, tom motivacional e próximo
-- Prompt DALL-E: sempre em inglês (melhora qualidade)
+- Prompt de imagem: sempre em inglês (melhora qualidade)
 - Retorne SOMENTE JSON válido, sem texto extra`,
     messages: [{
       role:    "user",
@@ -332,7 +342,7 @@ Data: ${dateStr}
 Horários para a legenda: ${hoursLine}${briefLine}
 
 Gere:
-1. "dalle_prompt": prompt em inglês detalhado para Recraft — arte motivacional abstrata para donos de delivery. OBRIGATÓRIO: pure black background (#0d0d0d), vibrant red (#B70C00) and white accents EXCLUSIVELY (NO orange, NO blue, NO other hues), abstract delivery-themed geometric elements (delivery boxes, route lines, growth arrows, speed lines, charts — NO human figures or characters), Consult Delivery rocket logo bottom-left corner, professional high-contrast composition, bold text space center-stage. NÃO mencione pixel, resolução ou proporção no prompt.
+1. "dalle_prompt": prompt em inglês detalhado para Recraft — arte motivacional vibrante para donos de delivery. Use cores vivas inspiradas nos apps de delivery (vermelho iFood #EA1D2C, laranja, amarelo, verde). PODE ter pessoas, entregadores, personagens, mascotes, cenas urbanas de delivery. Inclua Consult Delivery rocket logo bottom-left. Alta energia, dinâmico, estilo campanha de marketing. Bold text space center-stage. NÃO mencione pixels, resolução ou proporção no prompt.
 2. "text_on_image": texto curto em PT-BR (máx 7 palavras) para aparecer NA arte — conectado ao tema "${theme}", direto e impactante.
 3. "caption": legenda completa em PT-BR para WhatsApp: (a) emoji temático + "Bom dia da equipe Consult Delivery!" + frase motivacional original sobre "${theme}" conectada à rotina de delivery, (b) linha com os horários exatamente como fornecidos acima, (c) frase curta de disponibilidade da equipe. Sem hashtags. Parágrafos curtos.
 4. "theme": o tema do dia em PT-BR (resumido, ex: "foco e persistência").
@@ -361,27 +371,27 @@ Retorne JSON: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme
   const groupStoragePath   = `bom-dia/${dateStr}-${pathId}-group.webp`;
   const portraitStoragePath = `bom-dia/${dateStr}-${pathId}-portrait.webp`;
 
-  // 3. Prompt base de marca (texto puro → Recraft respeita o parâmetro size)
-  // Multimodal (image_url + text) faz o Recraft ignorar size e retornar 1024×1024 quadrado
-  const brandSuffix = input.custom_brief?.trim()
-    ? `${input.custom_brief.trim()}. Prominent bold white text center-stage: "${claudeOut.text_on_image}" in Portuguese. Consult Delivery rocket logo bottom-left. High contrast, professional.`
-    : `Prominent bold white text center-stage: "${claudeOut.text_on_image}" in Portuguese. MANDATORY BRAND RULES: background color exactly #0d0d0d (pure black) — NO variation, accent colors strictly #B70C00 (red) and white ONLY — no orange, no blue, no other hues, NO human figures, Consult Delivery rocket logo bottom-left corner, maximum contrast.`;
+  // 3. Prompts de texto puro — Recraft respeita size com texto (multimodal quebra)
+  const textSuffix = `Prominent bold text center-stage: "${claudeOut.text_on_image}" in Portuguese. Consult Delivery rocket logo bottom-left corner.`;
+  const feedPrompt    = `${claudeOut.dalle_prompt}. Horizontal 1800x630 landscape composition. ${textSuffix}`;
+  const portraitPrompt = `${claudeOut.dalle_prompt}. Vertical 9:16 portrait composition. ${textSuffix}`;
 
-  const feedPrompt    = `${claudeOut.dalle_prompt}. ${brandSuffix}`;
-  // Story: mesmo tema e regras, composição vertical nativa (sem referência de imagem)
-  const portraitPrompt = `${claudeOut.dalle_prompt}. Vertical 9:16 portrait composition. ${brandSuffix}`;
+  let imgGroupUrl: string | undefined;
+  let imgPortraitUrl: string | undefined;
 
-  logger.info("bom-dia: gerando Feed 16:9 via Recraft V4.1");
-  const groupTempUrl = await generateImage(feedPrompt, "group");
+  if (formats === "feed" || formats === "both") {
+    logger.info("bom-dia: gerando Feed 1800×630 via Recraft V4.1");
+    const groupTempUrl = await generateImage(feedPrompt, "group");
+    logger.info("bom-dia: upload Feed para Supabase Storage");
+    imgGroupUrl = await uploadToStorage(groupTempUrl, groupStoragePath, "group");
+  }
 
-  logger.info("bom-dia: upload Feed para Supabase Storage");
-  const imgGroupUrl = await uploadToStorage(groupTempUrl, groupStoragePath, "group");
-
-  logger.info("bom-dia: gerando Story 9:16 via Recraft V4.1");
-  const portraitTempUrl = await generateImage(portraitPrompt, "portrait");
-
-  logger.info("bom-dia: upload Story para Supabase Storage");
-  const imgPortraitUrl = await uploadToStorage(portraitTempUrl, portraitStoragePath, "portrait");
+  if (formats === "story" || formats === "both") {
+    logger.info("bom-dia: gerando Story 9:16 via Recraft V4.1");
+    const portraitTempUrl = await generateImage(portraitPrompt, "portrait");
+    logger.info("bom-dia: upload Story para Supabase Storage");
+    imgPortraitUrl = await uploadToStorage(portraitTempUrl, portraitStoragePath, "portrait");
+  }
 
   const output: Output = OutputSchema.parse({
     caption:          claudeOut.caption,
@@ -389,6 +399,7 @@ Retorne JSON: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme
     img_portrait_url: imgPortraitUrl,
     theme:            claudeOut.theme,
     date:             dateStr,
+    formats,
   });
 
   // 5. Audit log
