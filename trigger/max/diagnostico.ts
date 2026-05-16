@@ -143,8 +143,7 @@ ${kbBlock}
           source_task: "max-diagnostico",
           run_id: ctx.run.id,
         },
-      })
-      .catch(() => {});
+      });
 
     // 8. Log de execução
     await logAgentRun({

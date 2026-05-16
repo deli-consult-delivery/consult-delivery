@@ -293,7 +293,7 @@ Retorne APENAS JSON: {"explicacao": "sua explicação aqui"}`,
 
       // Notificar equipe para anomalias alta/media
       const anomaliasUrgentes = anomaliasDetectadas.filter(
-        (a) => a.severidade === "alta" || a.severidade === "media"
+        (a) => a.severidade === "critical" || a.severidade === "warning"
       );
       if (anomaliasUrgentes.length > 0) {
         const top = anomaliasUrgentes[0];

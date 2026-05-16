@@ -126,7 +126,7 @@ Retorne o JSON estruturado conforme solicitado.`;
         key: "pesquisa_lara",
         value: JSON.stringify(resultado),
         ts: new Date().toISOString(),
-      }, { onConflict: "loja_id,key" }).catch(() => {});
+      }, { onConflict: "loja_id,key" });
     }
 
     await logAgentRun({

@@ -141,8 +141,8 @@ Responda em português brasileiro.`;
             prioridade: output.prioridade,
             loja_id: input.loja_id ?? null,
           },
-        })
-        .catch(() => {});
+        });
+
 
       // Notificar DELI
       await sb
@@ -158,7 +158,7 @@ Responda em português brasileiro.`;
             run_id: ctx.run.id,
           },
         })
-        .catch(() => {});
+        ;
     }
 
     // 5. Log de execução

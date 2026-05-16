@@ -484,8 +484,7 @@ ${memoriesBlock}
           kind: "decision",
           content: `[${new Date().toISOString().slice(0, 10)}] "${input.message.slice(0, 250)}"`,
           importance: 7,
-        })
-        .catch(() => {});
+        });
     }
 
     // 9. Log de execução

@@ -106,8 +106,7 @@ export const analiseIfoodRun = task({
     await sb
       .from("analises")
       .update({ status: "processing" })
-      .eq("id", input.analise_id)
-      .catch(() => {});
+      .eq("id", input.analise_id);
 
     // 2. Tentar carregar dados do Google Drive
     const driveData = await fetchDriveContent(input.drive_link);
@@ -177,8 +176,7 @@ Retorne SOMENTE o JSON abaixo, sem texto adicional:
           status: "error",
           resultado_json: { error: (err as Error).message },
         })
-        .eq("id", input.analise_id)
-        .catch(() => {});
+        .eq("id", input.analise_id);
       throw err;
     }
 

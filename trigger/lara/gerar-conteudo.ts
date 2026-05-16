@@ -158,9 +158,9 @@ Retorne o JSON conforme solicitado.`;
         },
       }));
 
-      await sb.from("agent_drafts").insert(drafts).catch((err: Error) =>
-        console.warn("[lara/gerar-conteudo] agent_drafts insert:", err.message)
-      );
+      const { error: draftErr } = await sb.from("agent_drafts").insert(drafts);
+      if (draftErr) console.warn("[lara/gerar-conteudo] agent_drafts insert:", draftErr.message);
+
     }
 
     await logAgentRun({
@@ -175,17 +175,17 @@ Retorne o JSON conforme solicitado.`;
 
     // Atualiza campanha com resultado da geração
     if (input.campanha_id) {
-      await sb
+      const { error: campanhaErr } = await sb
         .from("campanhas")
         .update({
           status: resultado.ok ? "pendente_revisao" : "erro_geracao",
           conteudo_gerado: resultado,
           agent_run_id: ctx.run.id,
         })
-        .eq("id", input.campanha_id)
-        .catch((err: Error) =>
-          console.warn("[lara/gerar-conteudo] campanhas update:", err.message)
-        );
+        .eq("id", input.campanha_id);
+      if (campanhaErr) console.warn("[lara/gerar-conteudo] campanhas update:", campanhaErr.message);
+
+
 
       if (resultado.ok) {
         await notify({

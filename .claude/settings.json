@@ -61,7 +61,11 @@
       "Skill(gsd-discuss-phase:*)",
       "Bash(npx trigger.dev@latest deploy --skip-typecheck)",
       "Bash(node -e \"const d=require\\('./package.json'\\); console.log\\(JSON.stringify\\(d.scripts, null, 2\\)\\)\")",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Skill(*)",
+      "mcp__*",
+      "WebFetch(*)",
+      "WebSearch(*)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Consult Delivery\\.openclaw",
@@ -69,6 +73,50 @@
       "C:\\Users\\Consult Delivery\\consult-rename",
       "C:\\Users\\Consult Delivery\\consult-migrations",
       "C:\\Users\\Consult Delivery\\consult-frontend"
+    ],
+    "defaultMode": "bypassPermissions",
+    "ask": [
+      "Bash(npx trigger.dev@* deploy)"
     ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"C:/Users/Consult Delivery/consult-delivery/.claude/hooks/typecheck.cjs\"",
+            "timeout": 35
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"C:/Users/Consult Delivery/consult-delivery/.claude/hooks/gsd-commit-hint.cjs\"",
+            "timeout": 3,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"C:/Users/Consult Delivery/consult-delivery/.claude/hooks/gsd-session-start.cjs\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "autoCompactEnabled": true,
+  "worktree": {
+    "bgIsolation": "none"
   }
 }
