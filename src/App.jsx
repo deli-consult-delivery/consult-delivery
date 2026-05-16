@@ -131,43 +131,48 @@ export default function App() {
     const notifAudio = new Audio('/assets/soundreality-ding-411634.mp3');
     notifAudio.volume = 1.0;
 
+    const playSound = () => {
+      const now = Date.now();
+      if (now - lastSoundRef.current > 3000) {
+        lastSoundRef.current = now;
+        notifAudio.currentTime = 0;
+        notifAudio.play().catch(() => {});
+      }
+    };
+
+    const showNotif = (sender, body, tag) => {
+      if ('Notification' in window && Notification.permission === 'granted') {
+        const truncated = body.length > 80 ? body.slice(0, 77) + '…' : body;
+        const notif = new Notification(sender, {
+          body: truncated,
+          icon:     '/assets/logo.svg',
+          badge:    '/assets/icon-rocket.svg',
+          tag,
+          renotify: true,
+        });
+        notif.onclick = () => { window.focus(); setRoute('chat'); notif.close(); };
+      }
+    };
+
     const channel = supabase
       .channel('app-global-notif')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
         const msg = payload.new;
         if (msg.direction !== 'inbound') return;
-
-        // Som — throttle de 3s para não disparar em rajada
-        const now = Date.now();
-        if (now - lastSoundRef.current > 3000) {
-          lastSoundRef.current = now;
-          notifAudio.currentTime = 0;
-          notifAudio.play().catch(() => {});
-        }
-
-        // Notificação do browser — aparece mesmo em outra aba ou rota
-        if ('Notification' in window && Notification.permission === 'granted') {
-          const sender  = msg.sender_name || 'Nova mensagem';
-          const rawBody = msg.content || (
-            msg.media_type === 'image'    ? '🖼 Imagem'    :
-            msg.media_type === 'video'    ? '🎬 Vídeo'     :
-            msg.media_type === 'document' ? '📄 Documento' :
-            msg.media_type?.includes('audio') ? '🎵 Áudio' : '...'
-          );
-          const body = rawBody.length > 80 ? rawBody.slice(0, 77) + '…' : rawBody;
-          const notif = new Notification(sender, {
-            body,
-            icon:      '/assets/logo.svg',
-            badge:     '/assets/icon-rocket.svg',
-            tag:       msg.conversation_id,
-            renotify:  true,
-          });
-          notif.onclick = () => {
-            window.focus();
-            setRoute('chat');
-            notif.close();
-          };
-        }
+        playSound();
+        const rawBody = msg.content || (
+          msg.media_type === 'image'    ? '🖼 Imagem'    :
+          msg.media_type === 'video'    ? '🎬 Vídeo'     :
+          msg.media_type === 'document' ? '📄 Documento' :
+          msg.media_type?.includes('audio') ? '🎵 Áudio' : '...'
+        );
+        showNotif(msg.sender_name || 'Nova mensagem', rawBody, msg.conversation_id);
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'channel_messages' }, payload => {
+        const msg = payload.new;
+        if (msg.sender_id === session.user.id) return;
+        playSound();
+        showNotif(msg.sender_name || 'Chat interno', msg.text || '📎 Arquivo', 'chan-' + msg.channel_id);
       })
       .subscribe();
 

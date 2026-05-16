@@ -459,33 +459,39 @@ function AudioPlayer({ src, isOut }) {
   );
 }
 
-const URL_REGEX = /https?:\/\/[^\s<>"')\]]+|www\.[^\s<>"')\]]+/g;
+const WA_REGEX = /(\*[^*\n]+\*|_[^_\n]+_|~[^~\n]+~|`[^`\n]+`|https?:\/\/[^\s<>"')\]]+|www\.[^\s<>"')\]]+)/g;
 
-function textToNodes(str, keyBase) {
-  const lines = str.split('\n');
-  const nodes = [];
-  lines.forEach((line, i) => {
-    if (line) nodes.push(line);
-    if (i < lines.length - 1) nodes.push(<br key={`${keyBase}-br-${i}`} />);
-  });
-  return nodes;
-}
-
-function linkify(text) {
+function formatWhatsApp(text) {
   if (!text) return null;
-  const parts = [];
-  let last = 0;
-  let match;
-  URL_REGEX.lastIndex = 0;
-  while ((match = URL_REGEX.exec(text)) !== null) {
-    if (match.index > last) parts.push(...textToNodes(text.slice(last, match.index), `pre-${match.index}`));
-    const url = match[0];
-    const href = url.startsWith('http') ? url : `https://${url}`;
-    parts.push(<a key={`url-${match.index}`} href={href} target="_blank" rel="noopener noreferrer" style={{ color: '#60A5FA', textDecoration: 'underline', wordBreak: 'break-all' }}>{url}</a>);
-    last = match.index + url.length;
-  }
-  if (last < text.length) parts.push(...textToNodes(text.slice(last), `post-${last}`));
-  return parts.length ? parts : null;
+  const lines = text.split('\n');
+  const result = [];
+  lines.forEach((line, lineIdx) => {
+    if (lineIdx > 0) result.push(<br key={`br-${lineIdx}`} />);
+    if (!line) return;
+    let last = 0;
+    let match;
+    WA_REGEX.lastIndex = 0;
+    while ((match = WA_REGEX.exec(line)) !== null) {
+      if (match.index > last) result.push(line.slice(last, match.index));
+      const token = match[0];
+      const key = `wa-${lineIdx}-${match.index}`;
+      if (token.startsWith('*') && token.endsWith('*')) {
+        result.push(<strong key={key} style={{ fontWeight: 700 }}>{token.slice(1, -1)}</strong>);
+      } else if (token.startsWith('_') && token.endsWith('_')) {
+        result.push(<em key={key}>{token.slice(1, -1)}</em>);
+      } else if (token.startsWith('~') && token.endsWith('~')) {
+        result.push(<del key={key}>{token.slice(1, -1)}</del>);
+      } else if (token.startsWith('`') && token.endsWith('`')) {
+        result.push(<code key={key} style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 3, padding: '0 3px', fontFamily: 'monospace', fontSize: '0.9em' }}>{token.slice(1, -1)}</code>);
+      } else {
+        const href = token.startsWith('http') ? token : `https://${token}`;
+        result.push(<a key={key} href={href} target="_blank" rel="noopener noreferrer" style={{ color: '#60A5FA', textDecoration: 'underline', wordBreak: 'break-all' }}>{token}</a>);
+      }
+      last = match.index + token.length;
+    }
+    if (last < line.length) result.push(line.slice(last));
+  });
+  return result.length ? result : null;
 }
 
 // ─── QUOTED MESSAGE HELPERS ────────────────────────────────────
@@ -1255,7 +1261,7 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onSta
         <div className={`lc-bubble ${isOut ? 'out' : 'in'}`}>
           {renderMedia()}
           {m.text && !m.mediaType?.includes('document') && (
-            <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{linkify(m.text)}</div>
+            <div style={{ wordBreak: 'break-word' }}>{formatWhatsApp(m.text)}</div>
           )}
         </div>
         {!isOut && translation && (
@@ -1500,6 +1506,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const scrollRef          = useRef(null);
   const lastScrolledConv   = useRef(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [realtimeStatus, setRealtimeStatus]    = useState('SUBSCRIBED');
+  const [waLastInbound, setWaLastInbound]      = useState(null); // null=checking, ''=>nenhuma, ISO=timestamp
+  const [waAlertDismissed, setWaAlertDismissed] = useState(false);
   const textareaRef    = useRef(null);
   const chanScrollRef  = useRef(null);
   const chatTargetRef  = useRef(sessionStorage.getItem('cd-chat-target'));
@@ -1767,6 +1776,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           }
           return { ...m, [convId]: [...convMsgs, { id: msg.id, from: isInbound ? 'in' : 'out', text, time, _ts: msg.created_at || new Date().toISOString(), mediaType, mediaUrl: msg.media_url || null, agentName: msg.sender_name || null, waMsgId: msg.whatsapp_msg_id || null, replyTo: msg.quoted_content || null }] };
         });
+        if (isInbound) setWaLastInbound(msg.created_at || new Date().toISOString());
         setConvs(prev => {
           const idx = prev.findIndex(c => c.id === convId);
           if (idx === -1) {
@@ -1823,8 +1833,27 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         };
         if (msg.media_url || msg.reactions !== undefined) setMessages(convMsgs2);
       })
-      .subscribe();
+      .subscribe((status) => { setRealtimeStatus(status); });
     return () => { supabase.removeChannel(channel); };
+  }, [selectedInstance]);
+
+  // Health check: detecta ausência de mensagens inbound (Evolution API desconectada)
+  useEffect(() => {
+    if (!selectedInstance) { setWaLastInbound(null); setWaAlertDismissed(false); return; }
+    setWaAlertDismissed(false);
+    const timer = setTimeout(async () => {
+      try {
+        const { data: inst } = await supabase.from('evolution_instances').select('id').eq('instance_name', selectedInstance).single();
+        if (!inst) return;
+        const { data: convRows } = await supabase.from('conversations').select('id').eq('instance_id', inst.id).limit(300);
+        const cids = (convRows || []).map(r => r.id);
+        if (!cids.length) { setWaLastInbound(''); return; }
+        const { data } = await supabase.from('messages').select('created_at').eq('direction', 'inbound')
+          .in('conversation_id', cids.slice(0, 200)).order('created_at', { ascending: false }).limit(1).maybeSingle();
+        setWaLastInbound(data?.created_at ?? '');
+      } catch { /* silencioso */ }
+    }, 2500);
+    return () => clearTimeout(timer);
   }, [selectedInstance]);
 
   // Realtime para mensagens de canal interno
@@ -1857,7 +1886,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   useEffect(() => {
     if (activeId?.startsWith('chan-')) {
       const chanId = convs.find(c => c.id === activeId)?.chanId;
-      if (chanId && !chanMsgs[chanId]?.length) loadChanMsgs(chanId);
+      if (chanId) loadChanMsgs(chanId);
     }
   }, [activeId]);
 
@@ -3563,6 +3592,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                     }} />
                   )}
                   <span className="lc-protocol">#{active.id?.slice(-5) || '00000'}</span>
+                  <span title={realtimeStatus === 'SUBSCRIBED' ? 'Realtime conectado' : 'Realtime desconectado — atualize a página'} style={{ width: 7, height: 7, borderRadius: '50%', background: realtimeStatus === 'SUBSCRIBED' ? '#22C55E' : '#EF4444', flexShrink: 0, display: 'inline-block' }} />
                   {convStatus === 'finalizado' ? (
                     <button className="lc-action-btn" onClick={async () => { const { error } = await changeStatus('atendimento_aberto'); if (!error) { await insertEvent(activeId, 'reopened'); loadMsgs(activeId); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'atendimento_aberto', status_v2: 'in_progress' } : c)); } }} disabled={statusLoading}>
                       <Icon name="refresh" size={13} /> Reabrir
@@ -3615,6 +3645,25 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                   </div>
                 </div>
               )}
+
+              {/* Banner: Evolution API sem mensagens inbound */}
+              {(() => {
+                if (waAlertDismissed || waLastInbound === null || !usingRealData) return null;
+                const horasAtraso = waLastInbound
+                  ? Math.floor((Date.now() - new Date(waLastInbound).getTime()) / 3600000)
+                  : null;
+                if (waLastInbound !== '' && horasAtraso < 3) return null;
+                const msg = waLastInbound === ''
+                  ? 'Sem mensagens de clientes registradas — verifique a conexão WhatsApp'
+                  : `Sem mensagens de clientes há ${horasAtraso}h — verifique a conexão WhatsApp`;
+                return (
+                  <div style={{ padding: '7px 12px', background: 'rgba(234,179,8,0.1)', borderLeft: '3px solid #EAB308', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#FDE68A', flexShrink: 0 }}>
+                    <span>⚠️</span>
+                    <span style={{ flex: 1 }}>{msg}</span>
+                    <button onClick={() => setWaAlertDismissed(true)} style={{ background: 'none', border: 'none', color: '#FDE68A', cursor: 'pointer', padding: '0 4px', fontSize: 16, lineHeight: 1 }}>×</button>
+                  </div>
+                );
+              })()}
 
               {/* BRENO suggestion banner */}
               {brenoSuggestion && (

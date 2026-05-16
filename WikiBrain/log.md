@@ -1,5 +1,8 @@
 # Wiki Log
 
+## [2026-05-16 10:00] session | formatação WhatsApp no chat ao vivo
+Touched: none
+
 ## [2026-05-15 24:00] session | BomDia RLS fix + 3 formatos + envio grupos + config agente
 Touched: none
 
@@ -231,4 +234,6 @@ Touched: none
 Touched: none
 
 ## [2026-05-15 08:30] session | V2-5 DELI COO Digital entregue e validada
+Touched: none
+## [2026-05-16 03:15] session | bom-dia fixes: download, grupos, realtime, artTab
 Touched: none
