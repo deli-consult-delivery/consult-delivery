@@ -719,10 +719,10 @@ async function upsertGroup({ tenantId, jid, groupName, overwriteName = true }: {
       { onConflict: 'tenant_id,evolution_jid', ignoreDuplicates: !overwriteName }
     )
     .select('id')
-    .single();
+    .maybeSingle();
 
   if (error || !data) {
-    console.error('[WEBHOOK] upsertGroup upsert falhou | msg:', error?.message, '| code:', error?.code, '| details:', error?.details, '| hint:', error?.hint, '| tenantId:', tenantId, '| jid:', jid);
+    if (error) console.error('[WEBHOOK] upsertGroup upsert falhou | msg:', error?.message, '| code:', error?.code, '| details:', error?.details, '| hint:', error?.hint, '| tenantId:', tenantId, '| jid:', jid);
     const { data: existing, error: fetchErr } = await supabase
       .from('whatsapp_groups')
       .select('id')
