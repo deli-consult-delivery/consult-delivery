@@ -113,10 +113,35 @@
           }
         ]
       }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"C:/Users/Consult Delivery/consult-delivery/.claude/hooks/gsd-pre-compact.cjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "matcher": "auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"C:/Users/Consult Delivery/consult-delivery/.claude/hooks/gsd-post-compact.cjs\"",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   },
   "autoCompactEnabled": true,
   "worktree": {
     "bgIsolation": "none"
-  }
+  },
+  "autoCompactWindow": 140000
 }
