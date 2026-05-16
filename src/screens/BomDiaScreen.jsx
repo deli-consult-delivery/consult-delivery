@@ -385,10 +385,19 @@ function AgentMessage({ run, tenantDbId, isLast }) {
     setSending(true); setSendResult(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      // Buscar nome do usuário logado para assinatura
+      const { data: { user } } = await supabase.auth.getUser();
+      const senderName = user?.user_metadata?.full_name
+        || user?.user_metadata?.name
+        || user?.email?.split('@')[0]
+        || 'Consult Delivery';
+      const signedCaption = caption
+        ? `${caption}\n\n-- Enviado por ${senderName}`
+        : `-- Enviado por ${senderName}`;
       const r = await fetch(`${BRIDGE_URL}/agents/bom-dia/send-groups`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ tenant_id: tenantDbId, group_jids: [...selGroups], image_url: imageUrl, caption }),
+        body: JSON.stringify({ tenant_id: tenantDbId, group_jids: [...selGroups], image_url: imageUrl, caption: signedCaption }),
       });
       setSendResult(await r.json());
     } catch (e) { setSendResult({ error: e.message }); }
@@ -827,9 +836,12 @@ function ProfilePanel({ onOpenPromptModal, agentCfg, setAgentCfg, tenantDbId }) 
 }
 
 // ── NewPostModal ──────────────────────────────────────────────────────────────
-function NewPostModal({ onClose, onGenerate, onSuccess, generating, genError }) {
+function NewPostModal({ onClose, onGenerate, onSuccess, generating, genError, initialForm }) {
   const [step, setStep] = useState(1);
-  const [form, setForm] = useState({ dayChips: [], theme: '', brief: '', formats: { feed: true, story: true } });
+  const [form, setForm] = useState(() => initialForm
+    ? { dayChips: initialForm.dayChips || [], theme: initialForm.theme || '', brief: initialForm.brief || '', formats: initialForm.formats || { feed: true, story: true } }
+    : { dayChips: [], theme: '', brief: '', formats: { feed: true, story: true } }
+  );
   const submittedRef = useRef(false);
 
   const DAYS = ['Seg','Ter','Qua','Qui','Sex','Sáb'];
@@ -1085,6 +1097,75 @@ function PromptMestreModal({ onClose }) {
   );
 }
 
+// ── Histórico de solicitações (localStorage) ──────────────────────────────────
+const REQUESTS_KEY = 'bom-dia-requests';
+const MAX_REQUESTS = 20;
+
+function loadRequests() {
+  try { return JSON.parse(localStorage.getItem(REQUESTS_KEY) || '[]'); }
+  catch { return []; }
+}
+
+function saveRequest(form) {
+  const DAY_INDEX = { 'Seg': 1, 'Ter': 2, 'Qua': 3, 'Qui': 4, 'Sex': 5, 'Sáb': 6 };
+  const weekday = form.dayChips?.length ? form.dayChips.join(', ') : null;
+  const fmtLabel = (form.formats?.feed && form.formats?.story) ? 'Feed + Story'
+    : form.formats?.feed ? 'Feed' : form.formats?.story ? 'Story' : '';
+  const parts = [weekday, form.theme?.trim(), fmtLabel].filter(Boolean);
+  const label = parts.join(' · ') || 'Postagem manual';
+  const entry = {
+    id:         Date.now().toString(),
+    created_at: new Date().toISOString(),
+    weekday,
+    weekday_index: form.dayChips?.length === 1 ? DAY_INDEX[form.dayChips[0]] : undefined,
+    theme:      form.theme?.trim() || '',
+    brief:      form.brief?.trim() || '',
+    formats:    { feed: !!form.formats?.feed, story: !!form.formats?.story },
+    dayChips:   form.dayChips || [],
+    label,
+  };
+  const prev = loadRequests();
+  const updated = [entry, ...prev].slice(0, MAX_REQUESTS);
+  localStorage.setItem(REQUESTS_KEY, JSON.stringify(updated));
+  return updated;
+}
+
+// ── RequestHistoryPanel ───────────────────────────────────────────────────────
+function RequestHistoryPanel({ requests, onReutilizar }) {
+  if (requests.length === 0) return null;
+  return (
+    <div style={{ marginTop: 24, paddingTop: 20, borderTop: `1px solid ${BORDER}` }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 12 }}>
+        Histórico de Solicitações
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {requests.map(req => (
+          <div
+            key={req.id}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.02)', border: `1px solid ${BORDER}` }}
+          >
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.78)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {req.label}
+              </div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', marginTop: 2 }}>
+                {new Date(req.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                {req.brief && <span style={{ marginLeft: 6, opacity: 0.7 }}>· {req.brief.slice(0, 40)}{req.brief.length > 40 ? '…' : ''}</span>}
+              </div>
+            </div>
+            <button
+              onClick={() => onReutilizar(req)}
+              style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer', background: `${R}14`, border: `1px solid ${R}33`, color: R, whiteSpace: 'nowrap', flexShrink: 0 }}
+            >
+              Reutilizar
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Main BomDiaScreen ─────────────────────────────────────────────────────────
 export default function BomDiaScreen({ tenantDbId, userId }) {
   const [runs,        setRuns]        = useState([]);
@@ -1097,6 +1178,8 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
   const [showProfile, setShowProfile] = useState(true);
   const [composer,    setComposer]    = useState('');
   const [agentCfg,    setAgentCfg]    = useState({ memory: '', instructions: '' });
+  const [requests,    setRequests]    = useState(() => loadRequests());
+  const [reutilizarForm, setReutilizarForm] = useState(null);
   const pendingRef = useRef(null);
   const listEndRef = useRef(null);
 
@@ -1148,18 +1231,38 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
   const handleGenerate = async (form) => {
     setGenError('');
     setGenerating(true);
+    // Salvar solicitação no histórico
+    setRequests(saveRequest(form));
     try {
       const { data: { session } } = await supabase.auth.getSession();
+
+      // Calcular weekday_override a partir dos chips selecionados
+      // DAYS = ['Seg','Ter','Qua','Qui','Sex','Sáb'] → índices 1-6
+      const DAY_INDEX = { 'Seg': 1, 'Ter': 2, 'Qua': 3, 'Qui': 4, 'Sex': 5, 'Sáb': 6 };
+      const weekdayOverride = form?.dayChips?.length === 1
+        ? DAY_INDEX[form.dayChips[0]]
+        : undefined;
+
+      // Calcular formats string
+      const hasFeedFmt  = form?.formats?.feed;
+      const hasStoryFmt = form?.formats?.story;
+      let formatsStr;
+      if (hasFeedFmt && hasStoryFmt) formatsStr = 'both';
+      else if (hasFeedFmt)           formatsStr = 'feed';
+      else if (hasStoryFmt)          formatsStr = 'story';
+
       const r = await fetch(`${BRIDGE_URL}/agents/bom-dia-gerar-imagem/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
         body: JSON.stringify({
           tenant_id: tenantDbId,
           payload: {
-            triggered_by: userId,
-            custom_theme: form?.theme?.trim() || undefined,
-            custom_brief: form?.brief?.trim() || undefined,
-            force_new:    true,
+            triggered_by:     userId,
+            custom_theme:     form?.theme?.trim() || undefined,
+            custom_brief:     form?.brief?.trim() || undefined,
+            formats:          formatsStr,
+            weekday_override: weekdayOverride,
+            force_new:        true,
           },
         }),
       });
@@ -1274,6 +1377,18 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
               isLast={i === arr.length - 1}
             />
           ))}
+          <RequestHistoryPanel
+            requests={requests}
+            onReutilizar={(req) => {
+              setReutilizarForm({
+                dayChips: req.dayChips || [],
+                theme:    req.theme   || '',
+                brief:    req.brief   || '',
+                formats:  req.formats || { feed: true, story: true },
+              });
+              setShowNewPost(true);
+            }}
+          />
           <div ref={listEndRef} style={{ height: 80 }} />
         </div>
 
@@ -1308,11 +1423,12 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
       {/* Modals */}
       {showNewPost && (
         <NewPostModal
-          onClose={() => setShowNewPost(false)}
+          onClose={() => { setShowNewPost(false); setReutilizarForm(null); }}
           onGenerate={handleGenerate}
           onSuccess={fetchRuns}
           generating={generating}
           genError={genError}
+          initialForm={reutilizarForm}
         />
       )}
       {showPrompt && (

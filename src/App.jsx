@@ -255,7 +255,7 @@ export default function App() {
         {route === 'breno'    && <BrenoScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'sofia'    && <SofiaScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'vera'     && <VeraScreen  tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'bom-dia'  && <BomDiaScreen tenantDbId={tenantDbId} />}
+        {route === 'bom-dia'  && <BomDiaScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'settings'  && <SettingsScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} onTenantChange={async (newSlug) => {
           if (newSlug) {
             setTenant(newSlug);
