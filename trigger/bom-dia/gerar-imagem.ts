@@ -9,6 +9,9 @@ import { logAgentRun } from "../_shared/audit";
 const InputSchema = z.object({
   tenant_id:    z.string().uuid().optional(),
   triggered_by: z.string().uuid().optional(),
+  custom_theme: z.string().optional(), // tema fornecido manualmente pelo usuário
+  custom_brief: z.string().optional(), // contexto adicional fornecido pelo usuário
+  force_new:    z.boolean().optional(), // ignora idempotência e gera nova arte
 });
 
 const ClaudeOutputSchema = z.object({
@@ -174,28 +177,41 @@ async function uploadToStorage(imageData: string, storagePath: string): Promise<
 // ─── Lógica principal (compartilhada entre on-demand e agendamentos) ──────────
 
 async function executar(input: Input, runId: string): Promise<Output> {
-  const { dateStr, weekday, dayName, theme, isSat } = getSPDate();
+  const { dateStr, weekday, dayName, theme: autoTheme, isSat } = getSPDate();
 
-  logger.info("bom-dia-gerar-imagem iniciado", { dateStr, dayName, theme });
+  // Tema efetivo: custom_theme tem prioridade sobre o automático por dia da semana
+  const isManual = !!(input.custom_theme || input.custom_brief || input.force_new);
+  const theme    = input.custom_theme?.trim() || autoTheme;
 
-  // 1. Idempotência: verificar se já existe run bem-sucedido hoje
+  logger.info("bom-dia-gerar-imagem iniciado", { dateStr, dayName, theme, isManual });
+
   const sb = getSupabase();
-  const { data: existing } = await sb
-    .from("agent_runs")
-    .select("output")
-    .eq("agent_id", "bom-dia")
-    .eq("status", "success")
-    .gte("created_at", new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString())
-    .limit(1)
-    .maybeSingle();
 
-  if (existing?.output && (existing.output as Record<string, unknown>).date === dateStr) {
-    logger.info("bom-dia: run de hoje já existe, retornando cache", { dateStr });
-    return OutputSchema.parse(existing.output);
+  // 1. Idempotência — pula se for geração manual (force_new, tema ou brief customizados)
+  if (!isManual) {
+    const { data: existing } = await sb
+      .from("agent_runs")
+      .select("output")
+      .eq("agent_id", "bom-dia")
+      .eq("status", "success")
+      .gte("created_at", new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString())
+      .limit(1)
+      .maybeSingle();
+
+    if (existing?.output && (existing.output as Record<string, unknown>).date === dateStr) {
+      logger.info("bom-dia: run de hoje já existe, retornando cache", { dateStr });
+      return OutputSchema.parse(existing.output);
+    }
+  } else {
+    logger.info("bom-dia: geração manual — idempotência ignorada", {
+      force_new:    input.force_new,
+      custom_theme: input.custom_theme,
+      custom_brief: input.custom_brief,
+    });
   }
 
-  // Domingo não está no calendário
-  if (weekday === 0) {
+  // Domingo não está no calendário (exceto se tema customizado fornecido)
+  if (weekday === 0 && !input.custom_theme) {
     throw new Error("Domingo não está no calendário do Bom Dia (seg–sáb)");
   }
 
@@ -205,6 +221,10 @@ async function executar(input: Input, runId: string): Promise<Output> {
   const hoursLine = isSat
     ? "🕗 Atendimento Consult Delivery: 08:00–12:00"
     : "🕘 Atendimento Consult Delivery: 09:00–12:00 | 13:00–18:00 (intervalo de almoço das 12:00 às 13:00)";
+
+  const briefLine = input.custom_brief?.trim()
+    ? `\nContexto adicional: ${input.custom_brief.trim()}`
+    : "";
 
   const claudeResp = await anthropic.messages.create({
     model:      "claude-sonnet-4-6",
@@ -226,7 +246,7 @@ Regras:
       content: `Dia: ${dayName}
 Tema: ${theme}
 Data: ${dateStr}
-Horários para a legenda: ${hoursLine}
+Horários para a legenda: ${hoursLine}${briefLine}
 
 Gere:
 1. "dalle_prompt": prompt em inglês detalhado para Recraft — arte motivacional para donos de delivery. OBRIGATÓRIO: dark deep navy blue background (hex #0a1628 ou similar), vibrant red and orange energetic accents exclusively (NO other accent colors), delivery-themed elements (routes, packages, growth arrows, speed lines), Consult Delivery rocket logo bottom-left corner, professional high-contrast composition with space for bold Portuguese text center-stage. A mesma arte será gerada em dois formatos: landscape 16:9 (1200×630, Feed social media) e portrait 9:16 (1080×1920, Stories). NÃO mencione pixel, resolução ou proporção no prompt.
