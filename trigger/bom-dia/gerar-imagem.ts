@@ -21,8 +21,8 @@ const ClaudeOutputSchema = z.object({
 const OutputSchema = z.object({
   caption:           z.string(),
   img_landscape_url: z.string().url().optional(), // legado — runs antigos
-  img_group_url:     z.string().url(),            // 4:5  · 1080×1350 · WhatsApp grupo
-  img_portrait_url:  z.string().url(),            // 9:16 · 1080×1920 · Stories Instagram
+  img_group_url:     z.string().url(),            // 16:9 · 1200×630  · Feed (Facebook/Instagram/WhatsApp link)
+  img_portrait_url:  z.string().url(),            // 9:16 · 1080×1920 · Stories Instagram + Status WhatsApp
   theme:             z.string(),
   date:              z.string(),
 });
@@ -229,7 +229,7 @@ Data: ${dateStr}
 Horários para a legenda: ${hoursLine}
 
 Gere:
-1. "dalle_prompt": prompt em inglês detalhado para DALL-E 3 — arte motivacional para donos de delivery. OBRIGATÓRIO: dark deep navy blue background (hex #0a1628 ou similar), vibrant red and orange energetic accents exclusively (NO other accent colors), delivery-themed elements (routes, packages, growth arrows, speed lines), Consult Delivery rocket logo bottom-left corner, professional high-contrast composition with space for bold Portuguese text center-stage, optimized for WhatsApp sharing. NÃO mencione pixel, resolução ou proporção.
+1. "dalle_prompt": prompt em inglês detalhado para Recraft — arte motivacional para donos de delivery. OBRIGATÓRIO: dark deep navy blue background (hex #0a1628 ou similar), vibrant red and orange energetic accents exclusively (NO other accent colors), delivery-themed elements (routes, packages, growth arrows, speed lines), Consult Delivery rocket logo bottom-left corner, professional high-contrast composition with space for bold Portuguese text center-stage. A mesma arte será gerada em dois formatos: landscape 16:9 (1200×630, Feed social media) e portrait 9:16 (1080×1920, Stories). NÃO mencione pixel, resolução ou proporção no prompt.
 2. "text_on_image": texto curto em PT-BR (máx 7 palavras) para aparecer NA arte — conectado ao tema "${theme}", direto e impactante.
 3. "caption": legenda completa em PT-BR para WhatsApp: (a) emoji temático + "Bom dia da equipe Consult Delivery!" + frase motivacional original sobre "${theme}" conectada à rotina de delivery, (b) linha com os horários exatamente como fornecidos acima, (c) frase curta de disponibilidade da equipe. Sem hashtags. Parágrafos curtos.
 4. "theme": o tema do dia em PT-BR (resumido, ex: "foco e persistência").
@@ -254,12 +254,12 @@ Retorne JSON: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme
   });
 
   // 3. Gerar duas imagens em paralelo via OpenRouter (Recraft V4.1 Utility)
-  const fullPrompt = `${claudeOut.dalle_prompt}. Prominent bold white/light text center-stage: "${claudeOut.text_on_image}" in Portuguese. MANDATORY BRAND RULES: background color exactly #0a1628 (deep navy blue) — NO variation allowed, accent colors strictly #B70C00 (red) and #FF6B35 (orange) ONLY — no other hues, Consult Delivery rocket logo bottom-left corner, white text only, maximum contrast. CONSISTENCY RULE: both the 4:5 and 9:16 versions must use the exact same scene, lighting, color palette, and composition — only the crop/framing differs.`;
+  const fullPrompt = `${claudeOut.dalle_prompt}. Prominent bold white/light text center-stage: "${claudeOut.text_on_image}" in Portuguese. MANDATORY BRAND RULES: background color exactly #0a1628 (deep navy blue) — NO variation allowed, accent colors strictly #B70C00 (red) and #FF6B35 (orange) ONLY — no other hues, Consult Delivery rocket logo bottom-left corner, white text only, maximum contrast. CONSISTENCY RULE: the 16:9 (landscape Feed 1200×630) and 9:16 (portrait Story 1080×1920) versions must use the exact same scene, lighting, color palette, and composition — only the crop/framing differs.`;
 
-  logger.info("bom-dia: gerando 2 formatos (4:5 grupo WA · 9:16 Stories) via Recraft V4.1");
+  logger.info("bom-dia: gerando 2 formatos (16:9 Feed 1200×630 · 9:16 Story 1080×1920) via Recraft V4.1");
 
   const [groupTempUrl, portraitTempUrl] = await Promise.all([
-    generateImage(fullPrompt, "4:5"),
+    generateImage(fullPrompt, "16:9"),
     generateImage(fullPrompt, "9:16"),
   ]);
 

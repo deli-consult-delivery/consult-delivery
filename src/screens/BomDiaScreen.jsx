@@ -354,8 +354,8 @@ function AgentMessage({ run, tenantDbId, isLast }) {
 
   const chips = [
     { label: copied ? '✓ Copiado' : 'Copiar',   onClick: handleCopy,                                  disabled: false              },
-    { label: dlState.group   ? '…' : '↓ Feed PNG',   onClick: () => handleDownload('group'),    disabled: !hasFeed  },
-    { label: dlState.portrait? '…' : '↓ Story PNG', onClick: () => handleDownload('portrait'), disabled: !hasStory },
+    { label: dlState.group   ? '…' : '↓ Feed PNG (16:9)',  onClick: () => handleDownload('group'),    disabled: !hasFeed  },
+    { label: dlState.portrait? '…' : '↓ Story PNG (9:16)', onClick: () => handleDownload('portrait'), disabled: !hasStory },
     { label: '↺ Restaurar',                       onClick: () => setCaption(out.caption ?? ''),         disabled: caption === (out.caption ?? '') },
     { label: '📤 Enviar nos grupos',               onClick: handleOpenSend,                              disabled: false              },
   ];
@@ -391,7 +391,7 @@ function AgentMessage({ run, tenantDbId, isLast }) {
               <div role="tablist" style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
                 {hasFeed && (
                   <button role="tab" aria-selected={artTab === 'feed'} onClick={() => setArtTab('feed')} style={{ padding: '4px 11px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: `1px solid ${artTab === 'feed' ? R : BORDER}`, background: artTab === 'feed' ? `${R}18` : 'transparent', color: artTab === 'feed' ? R : 'rgba(255,255,255,0.38)' }}>
-                    Feed <span style={{ opacity: 0.6, fontWeight: 400 }}>4:5</span>
+                    Feed <span style={{ opacity: 0.6, fontWeight: 400 }}>16:9</span>
                   </button>
                 )}
                 {hasStory && (
@@ -407,19 +407,19 @@ function AgentMessage({ run, tenantDbId, isLast }) {
               </div>
 
               {artTab !== 'both' ? (
-                <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: 10, overflow: 'hidden', display: 'inline-block', maxWidth: artTab === 'story' ? 160 : 240 }}>
+                <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: 10, overflow: 'hidden', display: 'inline-block', maxWidth: artTab === 'story' ? 160 : 320 }}>
                   <img
                     src={artTab === 'story' ? portraitUrl : groupUrl}
-                    alt={artTab === 'story' ? 'Story 9:16' : 'Feed 4:5'}
-                    style={{ width: '100%', display: 'block', aspectRatio: artTab === 'story' ? '9/16' : '4/5', objectFit: 'cover' }}
+                    alt={artTab === 'story' ? 'Story 9:16' : 'Feed 16:9'}
+                    style={{ width: '100%', display: 'block', aspectRatio: artTab === 'story' ? '9/16' : '16/9', objectFit: 'cover' }}
                   />
                 </div>
               ) : (
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: 10, overflow: 'hidden', width: 190 }}>
-                    <img src={groupUrl} alt="Feed 4:5" style={{ width: '100%', display: 'block', aspectRatio: '4/5', objectFit: 'cover' }} />
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: 10, overflow: 'hidden', width: 250 }}>
+                    <img src={groupUrl} alt="Feed 16:9" style={{ width: '100%', display: 'block', aspectRatio: '16/9', objectFit: 'cover' }} />
                   </div>
-                  <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: 10, overflow: 'hidden', width: 112 }}>
+                  <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: 10, overflow: 'hidden', width: 80 }}>
                     <img src={portraitUrl} alt="Story 9:16" style={{ width: '100%', display: 'block', aspectRatio: '9/16', objectFit: 'cover' }} />
                   </div>
                 </div>
