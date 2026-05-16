@@ -32,25 +32,26 @@ function formatTime(isoStr) {
   return new Date(isoStr).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
-async function downloadAsJpeg(url, filename) {
+async function downloadFile(url, filename) {
   try {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
-    const canvas = document.createElement('canvas');
-    canvas.width  = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    canvas.getContext('2d').drawImage(img, 0, 0);
-    await new Promise(res => {
-      canvas.toBlob(blob => {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = filename;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-        res();
-      }, 'image/jpeg', 0.93);
-    });
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers = session?.access_token
+      ? { Authorization: `Bearer ${session.access_token}` }
+      : {};
+    const res = await fetch(url, { headers });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    const ext  = blob.type.includes('webp') ? '.webp'
+               : blob.type.includes('png')  ? '.png'
+               : '.jpg';
+    const base = filename.replace(/\.\w+$/, '');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = base + ext;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
   } catch {
     window.open(url, '_blank');
   }
@@ -277,18 +278,17 @@ function AgentMessage({ run, tenantDbId, isLast }) {
   };
 
   const handleDownload = async (key) => {
-    const fmt = FORMATS.find(f => f.key === key);
-    const url  = key === 'group' ? groupUrl : portraitUrl;
+    const url = key === 'group' ? groupUrl : portraitUrl;
     if (!url) return;
     setDlState(s => ({ ...s, [key]: true }));
-    await downloadAsJpeg(url, `bom-dia-${out.date ?? 'arte'}-${key}.jpg`);
+    await downloadFile(url, `bom-dia-${out.date ?? 'arte'}-${key}.jpg`);
     setDlState(s => ({ ...s, [key]: false }));
   };
 
   const handleOpenSend = () => {
     if (!tenantDbId) return;
-    supabase.from('whatsapp_groups').select('id,group_jid,nome')
-      .eq('tenant_id', tenantDbId).eq('ativo', true).order('nome')
+    supabase.from('whatsapp_groups').select('id,evolution_jid,group_name')
+      .eq('tenant_id', tenantDbId).eq('ativo', true).order('group_name')
       .then(({ data }) => setGroups(data || []));
     setSendResult(null);
     setSendOpen(v => !v);
@@ -439,13 +439,18 @@ function AgentMessage({ run, tenantDbId, isLast }) {
               </div>
 
               {groups.length === 0
-                ? <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.28)', marginBottom: 12 }}>Nenhum grupo cadastrado para este tenant.</div>
+                ? <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 12, lineHeight: 1.6 }}>
+                    Nenhum grupo cadastrado.<br />
+                    <span style={{ color: 'rgba(255,255,255,0.28)' }}>Cadastre grupos em </span>
+                    <strong style={{ color: R }}>Grupos WhatsApp</strong>
+                    <span style={{ color: 'rgba(255,255,255,0.28)' }}> no menu lateral e sincronize via Evolution API.</span>
+                  </div>
                 : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 12 }}>
                     {groups.map(g => (
-                      <label key={g.group_jid} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', background: selGroups.has(g.group_jid) ? `${R}10` : 'rgba(255,255,255,0.02)', border: `1px solid ${selGroups.has(g.group_jid) ? R + '33' : BORDER}` }}>
-                        <input type="checkbox" checked={selGroups.has(g.group_jid)} onChange={() => toggleGroup(g.group_jid)} style={{ accentColor: R, width: 14, height: 14 }} />
-                        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', flex: 1 }}>{g.nome || g.group_jid}</span>
+                      <label key={g.evolution_jid} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', background: selGroups.has(g.evolution_jid) ? `${R}10` : 'rgba(255,255,255,0.02)', border: `1px solid ${selGroups.has(g.evolution_jid) ? R + '33' : BORDER}` }}>
+                        <input type="checkbox" checked={selGroups.has(g.evolution_jid)} onChange={() => toggleGroup(g.evolution_jid)} style={{ accentColor: R, width: 14, height: 14 }} />
+                        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', flex: 1 }}>{g.group_name || g.evolution_jid}</span>
                       </label>
                     ))}
                   </div>
