@@ -346,10 +346,43 @@ function AgentMessage({ run, tenantDbId, isLast }) {
   const [selGroups,  setSelGroups] = useState(new Set());
   const [sendFmt,    setSendFmt]   = useState('group');
   const [sending,    setSending]   = useState(false);
-  const [sendResult, setSendResult] = useState(null);
+  const [sendResult,      setSendResult]      = useState(null);
+  const [feedback,        setFeedback]        = useState(null); // 'thumbs_up' | 'thumbs_down' | null
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
 
   const hasFeed  = !!groupUrl;
   const hasStory = !!portraitUrl;
+
+  // Carrega voto existente ao montar
+  useEffect(() => {
+    if (!tenantDbId) return;
+    supabase.from('bom_dia_feedback')
+      .select('vote')
+      .eq('run_id', run.id)
+      .eq('tenant_id', tenantDbId)
+      .maybeSingle()
+      .then(({ data }) => { if (data) setFeedback(data.vote); });
+  }, [run.id, tenantDbId]);
+
+  const handleFeedback = async (vote) => {
+    if (!tenantDbId || feedbackLoading) return;
+    setFeedbackLoading(true);
+    const newVote = feedback === vote ? null : vote;
+    try {
+      if (newVote) {
+        await supabase.from('bom_dia_feedback').upsert(
+          { run_id: run.id, tenant_id: tenantDbId, vote: newVote },
+          { onConflict: 'run_id,tenant_id' }
+        );
+      } else {
+        await supabase.from('bom_dia_feedback').delete()
+          .eq('run_id', run.id).eq('tenant_id', tenantDbId);
+      }
+      setFeedback(newVote);
+    } finally {
+      setFeedbackLoading(false);
+    }
+  };
 
   const handleCopy = () => {
     navigator.clipboard.writeText(caption).then(() => {
@@ -531,6 +564,37 @@ function AgentMessage({ run, tenantDbId, isLast }) {
             ))}
           </div>
 
+          {/* Feedback (👍 / 👎) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 10 }}>
+            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.22)', marginRight: 4 }}>Feedback:</span>
+            {[
+              { vote: 'thumbs_up',   emoji: '👍', label: 'Boa geração' },
+              { vote: 'thumbs_down', emoji: '👎', label: 'Pode melhorar' },
+            ].map(({ vote, emoji, label }) => (
+              <button
+                key={vote}
+                onClick={() => handleFeedback(vote)}
+                disabled={feedbackLoading}
+                title={label}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: 30, height: 26, borderRadius: 8, fontSize: 14,
+                  cursor: feedbackLoading ? 'default' : 'pointer',
+                  border: `1px solid ${feedback === vote ? R + '55' : BORDER}`,
+                  background: feedback === vote ? `${R}18` : 'rgba(255,255,255,0.03)',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {emoji}
+              </button>
+            ))}
+            {feedback && (
+              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginLeft: 4 }}>
+                {feedback === 'thumbs_up' ? '· Boa geração!' : '· Pode melhorar'}
+              </span>
+            )}
+          </div>
+
           {/* Image lightbox */}
           {previewImg && (
             <ImageLightbox src={previewImg.src} alt={previewImg.alt} onClose={() => setPreviewImg(null)} />
@@ -657,7 +721,7 @@ function ProfilePanel({ onOpenPromptModal, agentCfg, setAgentCfg, tenantDbId }) 
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, overflow: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ flex: 1, overflow: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
 
         {/* INSTRUÇÕES */}
         {tab === 'instrucoes' && (<>

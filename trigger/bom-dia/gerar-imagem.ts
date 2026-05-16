@@ -307,7 +307,46 @@ async function executar(input: Input, runId: string): Promise<Output> {
     throw new Error("Domingo não está no calendário do Bom Dia (seg–sáb)");
   }
 
-  // 2. Claude gera prompt DALL-E + legenda completa
+  // 2. Ler memória e instruções do agente salvas pelo usuário
+  let agentMemory = "";
+  let agentInstructions = "";
+  if (input.tenant_id) {
+    const { data: cfgRow } = await sb
+      .from("tenant_agent_config")
+      .select("config")
+      .eq("tenant_id", input.tenant_id)
+      .eq("agent_id", "bom-dia")
+      .maybeSingle();
+    agentMemory       = (cfgRow?.config as Record<string, string> | null)?.memory       ?? "";
+    agentInstructions = (cfgRow?.config as Record<string, string> | null)?.instructions ?? "";
+  }
+
+  // 2b. Ler feedbacks recentes para orientar a geração
+  let feedbackContext = "";
+  if (input.tenant_id) {
+    const { data: feedbacks } = await sb
+      .from("bom_dia_feedback")
+      .select("vote")
+      .eq("tenant_id", input.tenant_id)
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    if (feedbacks && feedbacks.length > 0) {
+      const positivos = feedbacks.filter((f) => f.vote === "thumbs_up").length;
+      const negativos = feedbacks.filter((f) => f.vote === "thumbs_down").length;
+      feedbackContext = `\n\nFeedback acumulado das últimas ${feedbacks.length} postagens avaliadas: ${positivos} positivo(s) 👍, ${negativos} negativo(s) 👎. ${negativos > positivos ? "Varie mais a composição, elementos visuais e estilo para melhorar." : "Continue no estilo atual — está sendo bem recebido."}`;
+    }
+  }
+
+  const memoryBlock = agentMemory.trim()
+    ? `\n\nMemória do agente (instruções salvas pelo usuário):\n${agentMemory.trim()}`
+    : "";
+
+  const instructionsBlock = agentInstructions.trim()
+    ? `\n\nInstruções personalizadas:\n${agentInstructions.trim()}`
+    : "";
+
+  // 3. Claude gera prompt DALL-E + legenda completa
   const anthropic = new Anthropic();
 
   const hoursLine = isSat
@@ -333,7 +372,7 @@ Regras:
 - Texto NA ARTE: PT-BR, máx 7 palavras, impactante, conectado à realidade de delivery
 - Legenda: PT-BR, sem hashtags, tom motivacional e próximo
 - Prompt de imagem: sempre em inglês (melhora qualidade)
-- Retorne SOMENTE JSON válido, sem texto extra`,
+- Retorne SOMENTE JSON válido, sem texto extra${memoryBlock}${instructionsBlock}${feedbackContext}`,
     messages: [{
       role:    "user",
       content: `Dia: ${dayName}
@@ -402,7 +441,7 @@ Retorne JSON: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme
     formats,
   });
 
-  // 5. Audit log
+  // 6. Audit log
   await logAgentRun({
     runId,
     agentSlug:   "bom-dia",
