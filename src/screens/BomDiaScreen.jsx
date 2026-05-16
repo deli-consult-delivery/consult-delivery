@@ -34,11 +34,7 @@ function formatTime(isoStr) {
 
 async function downloadFile(url, filename) {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    const headers = session?.access_token
-      ? { Authorization: `Bearer ${session.access_token}` }
-      : {};
-    const res = await fetch(url, { headers });
+    const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const blob = await res.blob();
     const ext  = blob.type.includes('webp') ? '.webp'
@@ -252,10 +248,50 @@ function StatusBadge({ status }) {
   );
 }
 
+// ── Group helpers ─────────────────────────────────────────────────────────────
+const GROUP_COLORS = ['#B70C00', '#7C3AED', '#2563EB', '#0F766E', '#B45309'];
+
+function groupInitials(name) {
+  if (!name) return '?';
+  return name.replace(/[^a-zA-ZÀ-ÿ0-9\s]/g, '').trim()
+    .split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?';
+}
+
+function formatGroupName(g) {
+  if (g.group_name) return g.group_name;
+  const jid = g.evolution_jid || '';
+  const raw = jid.replace(/@.*$/, '');
+  if (!raw) return 'Grupo';
+  if (raw.length >= 10) {
+    return `+${raw.slice(0, 2)} (${raw.slice(2, 4)}) ${raw.slice(4, 9)}-${raw.slice(9)}`;
+  }
+  return raw;
+}
+
+function GroupAvatar({ g, size = 28 }) {
+  const name = formatGroupName(g);
+  const hash = name.split('').reduce((h, c) => h + c.charCodeAt(0), 0);
+  const bg   = GROUP_COLORS[hash % GROUP_COLORS.length];
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%', flexShrink: 0,
+      background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: size * 0.38, fontWeight: 700, color: '#fff',
+      fontFamily: "'Oswald', sans-serif",
+    }}>
+      {groupInitials(g.group_name)}
+    </div>
+  );
+}
+
 // ── AgentMessage ──────────────────────────────────────────────────────────────
 function AgentMessage({ run, tenantDbId, isLast }) {
   const out = run.output ?? {};
-  const [artTab,     setArtTab]    = useState('feed');
+  const groupUrl    = out.img_group_url || out.img_landscape_url;
+  const portraitUrl = out.img_portrait_url;
+  const [artTab,     setArtTab]    = useState(() =>
+    groupUrl && portraitUrl ? 'both' : portraitUrl ? 'story' : 'feed'
+  );
   const [caption,    setCaption]   = useState(out.caption ?? '');
   const [copied,     setCopied]    = useState(false);
   const [dlState,    setDlState]   = useState({});
@@ -266,10 +302,8 @@ function AgentMessage({ run, tenantDbId, isLast }) {
   const [sending,    setSending]   = useState(false);
   const [sendResult, setSendResult] = useState(null);
 
-  const groupUrl    = out.img_group_url || out.img_landscape_url;
-  const portraitUrl = out.img_portrait_url;
-  const hasFeed     = !!groupUrl;
-  const hasStory    = !!portraitUrl;
+  const hasFeed  = !!groupUrl;
+  const hasStory = !!portraitUrl;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(caption).then(() => {
@@ -448,9 +482,10 @@ function AgentMessage({ run, tenantDbId, isLast }) {
                 : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 12 }}>
                     {groups.map(g => (
-                      <label key={g.evolution_jid} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', background: selGroups.has(g.evolution_jid) ? `${R}10` : 'rgba(255,255,255,0.02)', border: `1px solid ${selGroups.has(g.evolution_jid) ? R + '33' : BORDER}` }}>
+                      <label key={g.evolution_jid} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', background: selGroups.has(g.evolution_jid) ? `${R}10` : 'rgba(255,255,255,0.02)', border: `1px solid ${selGroups.has(g.evolution_jid) ? R + '33' : BORDER}` }}>
                         <input type="checkbox" checked={selGroups.has(g.evolution_jid)} onChange={() => toggleGroup(g.evolution_jid)} style={{ accentColor: R, width: 14, height: 14 }} />
-                        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', flex: 1 }}>{g.group_name || g.evolution_jid}</span>
+                        <GroupAvatar g={g} size={28} />
+                        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formatGroupName(g)}</span>
                       </label>
                     ))}
                   </div>
@@ -724,7 +759,7 @@ function ProfilePanel({ onOpenPromptModal, agentCfg, setAgentCfg, tenantDbId }) 
 }
 
 // ── NewPostModal ──────────────────────────────────────────────────────────────
-function NewPostModal({ onClose, onGenerate, generating, genError }) {
+function NewPostModal({ onClose, onGenerate, onSuccess, generating, genError }) {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({ dayChips: [], theme: '', brief: '', formats: { feed: true, story: true } });
   const submittedRef = useRef(false);
@@ -872,10 +907,10 @@ function NewPostModal({ onClose, onGenerate, generating, genError }) {
             <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 6 }}>Arte gerada com sucesso!</div>
             <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginBottom: 24 }}>A postagem está disponível no histórico.</div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-              <button onClick={onClose} style={{ padding: '9px 16px', borderRadius: 7, fontSize: 13, cursor: 'pointer', background: 'transparent', border: `1px solid ${BORDER}`, color: 'rgba(255,255,255,0.55)' }}>
+              <button onClick={() => { onSuccess?.(); onClose(); }} style={{ padding: '9px 16px', borderRadius: 7, fontSize: 13, cursor: 'pointer', background: 'transparent', border: `1px solid ${BORDER}`, color: 'rgba(255,255,255,0.55)' }}>
                 Ver depois
               </button>
-              <button onClick={onClose} style={{ padding: '9px 16px', borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: 'pointer', background: R, color: '#fff', border: 'none' }}>
+              <button onClick={() => { onSuccess?.(); onClose(); }} style={{ padding: '9px 16px', borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: 'pointer', background: R, color: '#fff', border: 'none' }}>
                 Abrir nova postagem
               </button>
             </div>
@@ -1030,7 +1065,7 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'agent_runs' }, (payload) => {
         const run = payload.new;
         if (run.agent_id !== 'bom-dia') return;
-        if (!pendingRef.current || run.trigger_dev_run_id !== pendingRef.current) return;
+        if (pendingRef.current && run.trigger_dev_run_id !== pendingRef.current) return;
         if (run.status === 'success' && (run.output?.img_group_url || run.output?.img_landscape_url)) {
           setRuns(prev => [run, ...prev].slice(0, 15));
           setGenerating(false);
@@ -1199,6 +1234,7 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
         <NewPostModal
           onClose={() => setShowNewPost(false)}
           onGenerate={handleGenerate}
+          onSuccess={fetchRuns}
           generating={generating}
           genError={genError}
         />
