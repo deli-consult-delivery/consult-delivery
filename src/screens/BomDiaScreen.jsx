@@ -290,7 +290,7 @@ function GroupAvatar({ g, size = 28 }) {
 // ── AgentMessage ──────────────────────────────────────────────────────────────
 function AgentMessage({ run, tenantDbId, isLast }) {
   const out = run.output ?? {};
-  const groupUrl    = out.img_group_url || out.img_landscape_url;
+  const groupUrl    = out.img_group_url;
   const portraitUrl = out.img_portrait_url;
   const [artTab,     setArtTab]    = useState(() =>
     groupUrl && portraitUrl ? 'both' : portraitUrl ? 'story' : 'feed'

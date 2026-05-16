@@ -254,7 +254,7 @@ Retorne JSON: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme
   });
 
   // 3. Gerar duas imagens em paralelo via OpenRouter (Recraft V4.1 Utility)
-  const fullPrompt = `${claudeOut.dalle_prompt}. Prominent bold white/light text center-stage: "${claudeOut.text_on_image}" in Portuguese. MANDATORY BRAND RULES: deep navy blue background (#0a1628), red and orange accents ONLY, Consult Delivery rocket logo bottom-left, no competing colors, maximum contrast.`;
+  const fullPrompt = `${claudeOut.dalle_prompt}. Prominent bold white/light text center-stage: "${claudeOut.text_on_image}" in Portuguese. MANDATORY BRAND RULES: background color exactly #0a1628 (deep navy blue) — NO variation allowed, accent colors strictly #B70C00 (red) and #FF6B35 (orange) ONLY — no other hues, Consult Delivery rocket logo bottom-left corner, white text only, maximum contrast. CONSISTENCY RULE: both the 4:5 and 9:16 versions must use the exact same scene, lighting, color palette, and composition — only the crop/framing differs.`;
 
   logger.info("bom-dia: gerando 2 formatos (4:5 grupo WA · 9:16 Stories) via Recraft V4.1");
 
