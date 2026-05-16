@@ -378,7 +378,7 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
 
   if (convId) {
     const inQuoted = await buildQuotedContent();
-    const { data: savedMsg } = await supabase
+    const { data: savedMsg, error: saveErr } = await supabase
       .from('messages')
       .upsert({
         tenant_id:       tenantId,
@@ -394,6 +394,7 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
       }, { onConflict: 'whatsapp_msg_id', ignoreDuplicates: true })
       .select('id')
       .single();
+    if (saveErr) console.error('[WEBHOOK] falha ao salvar mensagem inbound em messages:', saveErr.message);
 
     if (isMedia && savedMsg) {
       fetchMedia({ inst, instance, msgData, isPtt, isAudio, isImage, isVideo, isDocument, savedMsgId: savedMsg.id });
