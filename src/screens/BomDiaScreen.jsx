@@ -1042,7 +1042,7 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
     setGenerating(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const r = await fetch(`${BRIDGE_URL}/agents/bom-dia/run`, {
+      const r = await fetch(`${BRIDGE_URL}/agents/bom-dia-gerar-imagem/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
         body: JSON.stringify({ tenant_id: tenantDbId, payload: { triggered_by: userId, theme: form?.theme, brief: form?.brief } }),
