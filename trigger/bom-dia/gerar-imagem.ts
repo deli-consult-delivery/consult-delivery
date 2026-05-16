@@ -68,12 +68,16 @@ function getSPDate() {
 
 // ─── Helper: gerar imagem via OpenRouter (Recraft V4.1 Utility) ──────────────
 
-async function generateImage(prompt: string, aspectRatio: "16:9" | "9:16" | "4:5"): Promise<string> {
+async function generateImage(prompt: string, format: "group" | "portrait"): Promise<string> {
+  // aspect_ratio é ignorado pelo OpenRouter/Recraft — usar size com px explícito
+  // group = landscape 16:9 (1820×1024), portrait = 9:16 (1024×1820)
+  const size = format === "group" ? "1820x1024" : "1024x1820";
   const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
   if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY não configurado no Trigger.dev");
 
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
+      logger.info("bom-dia: recraft request", { format, size, attempt, promptLength: prompt.length });
       const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -83,9 +87,9 @@ async function generateImage(prompt: string, aspectRatio: "16:9" | "9:16" | "4:5
           "X-Title":       "Consult Delivery Bom Dia",
         },
         body: JSON.stringify({
-          model:        "recraft/recraft-v4.1-utility",
-          messages:     [{ role: "user", content: prompt }],
-          aspect_ratio: aspectRatio,
+          model:    "recraft/recraft-v4.1-utility",
+          messages: [{ role: "user", content: prompt }],
+          size,
         }),
         signal: AbortSignal.timeout(90_000),
       });
@@ -134,7 +138,8 @@ async function generateImage(prompt: string, aspectRatio: "16:9" | "9:16" | "4:5
       return url;
     } catch (err) {
       logger.warn(`bom-dia: tentativa ${attempt}/3 geração falhou`, {
-        aspectRatio,
+        format,
+        size,
         error: (err as Error).message,
       });
       if (attempt === 3) throw err;
@@ -144,21 +149,95 @@ async function generateImage(prompt: string, aspectRatio: "16:9" | "9:16" | "4:5
   throw new Error("generateImage: esgotou retentativas");
 }
 
+// ─── Helper: parse de dimensões inline (sem deps externas) ───────────────────
+
+function parseImageDimensions(buf: Buffer): { width: number; height: number } | null {
+  if (buf.length < 8) return null;
+  // PNG
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) {
+    if (buf.length < 24) return null;
+    return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+  }
+  // JPEG
+  if (buf[0] === 0xFF && buf[1] === 0xD8) {
+    let offset = 2;
+    while (offset < buf.length - 8) {
+      if (buf[offset] !== 0xFF) break;
+      const marker = buf[offset + 1];
+      const len    = buf.readUInt16BE(offset + 2);
+      if (marker >= 0xC0 && marker <= 0xC3) {
+        return { height: buf.readUInt16BE(offset + 5), width: buf.readUInt16BE(offset + 7) };
+      }
+      offset += 2 + len;
+    }
+    return null;
+  }
+  // WebP VP8X (formato mais comum retornado pelo Recraft)
+  if (
+    buf.length >= 30 &&
+    buf.toString("ascii", 0, 4)  === "RIFF" &&
+    buf.toString("ascii", 8, 12) === "WEBP"
+  ) {
+    const chunkId = buf.toString("ascii", 12, 16);
+    if (chunkId === "VP8X") {
+      return {
+        width:  (buf[24] | (buf[25] << 8) | (buf[26] << 16)) + 1,
+        height: (buf[27] | (buf[28] << 8) | (buf[29] << 16)) + 1,
+      };
+    }
+    // VP8L (lossless)
+    if (chunkId === "VP8L" && buf.length >= 25 && buf[20] === 0x2F) {
+      const b = buf.readUInt32LE(21);
+      return { width: (b & 0x3FFF) + 1, height: ((b >> 14) & 0x3FFF) + 1 };
+    }
+  }
+  return null;
+}
+
 // ─── Helper: download + upload para Supabase Storage ─────────────────────────
 
-async function uploadToStorage(imageData: string, storagePath: string): Promise<string> {
+async function uploadToStorage(
+  imageData:      string,
+  storagePath:    string,
+  expectedFormat: "group" | "portrait",
+): Promise<string> {
   let buffer: Buffer;
   let contentType = "image/webp";
 
   if (imageData.startsWith("data:")) {
     const commaIdx = imageData.indexOf(",");
-    const meta     = imageData.slice(5, commaIdx);           // e.g. "image/webp;base64"
-    contentType    = meta.split(";")[0];                     // e.g. "image/webp"
+    const meta     = imageData.slice(5, commaIdx);
+    contentType    = meta.split(";")[0];
     buffer         = Buffer.from(imageData.slice(commaIdx + 1), "base64");
   } else {
     const imgResp = await fetch(imageData, { signal: AbortSignal.timeout(30_000) });
     if (!imgResp.ok) throw new Error(`Falha ao baixar imagem: ${imgResp.status}`);
     buffer = Buffer.from(await imgResp.arrayBuffer());
+  }
+
+  // Valida orientação — detecta quando Recraft ignorou o parâmetro size
+  const dims = parseImageDimensions(buffer);
+  logger.info("bom-dia: recraft response dims", {
+    format: expectedFormat,
+    dims,
+    bytes:  buffer.length,
+    storagePath,
+  });
+  if (dims) {
+    const isPortrait   = dims.height > dims.width;
+    const wantsPortrait = expectedFormat === "portrait";
+    if (wantsPortrait && !isPortrait) {
+      throw new Error(
+        `Dimensões incorretas para portrait: esperado height>width, recebido ${dims.width}×${dims.height}. ` +
+        `Recraft ignorou o parâmetro size="1024x1820".`
+      );
+    }
+    if (!wantsPortrait && isPortrait) {
+      throw new Error(
+        `Dimensões incorretas para group: esperado width>height, recebido ${dims.width}×${dims.height}. ` +
+        `Recraft ignorou o parâmetro size="1820x1024".`
+      );
+    }
   }
 
   const sb = getSupabase();
@@ -171,6 +250,7 @@ async function uploadToStorage(imageData: string, storagePath: string): Promise<
   if (error) throw new Error(`Supabase Storage upload falhou: ${error.message}`);
 
   const { data: { publicUrl } } = sb.storage.from("public").getPublicUrl(storagePath);
+  logger.info("bom-dia: supabase upload result", { storagePath, dims, bytes: buffer.length });
   return publicUrl;
 }
 
@@ -223,7 +303,7 @@ async function executar(input: Input, runId: string): Promise<Output> {
     : "🕘 Atendimento Consult Delivery: 09:00–12:00 | 13:00–18:00 (intervalo de almoço das 12:00 às 13:00)";
 
   const briefLine = input.custom_brief?.trim()
-    ? `\nContexto adicional: ${input.custom_brief.trim()}`
+    ? `\nContexto adicional (PRIORIDADE sobre paleta padrão): ${input.custom_brief.trim()}`
     : "";
 
   const claudeResp = await anthropic.messages.create({
@@ -274,21 +354,24 @@ Retorne JSON: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme
   });
 
   // 3. Gerar duas imagens em paralelo via OpenRouter (Recraft V4.1 Utility)
-  const fullPrompt = `${claudeOut.dalle_prompt}. Prominent bold white/light text center-stage: "${claudeOut.text_on_image}" in Portuguese. MANDATORY BRAND RULES: background color exactly #0a1628 (deep navy blue) — NO variation allowed, accent colors strictly #B70C00 (red) and #FF6B35 (orange) ONLY — no other hues, Consult Delivery rocket logo bottom-left corner, white text only, maximum contrast. CONSISTENCY RULE: the 16:9 (landscape Feed 1200×630) and 9:16 (portrait Story 1080×1920) versions must use the exact same scene, lighting, color palette, and composition — only the crop/framing differs.`;
+  // Com custom_brief: brief assume controle criativo, sem override de paleta obrigatória
+  const fullPrompt = input.custom_brief?.trim()
+    ? `${claudeOut.dalle_prompt}. ${input.custom_brief.trim()}. Prominent bold white/light text center-stage: "${claudeOut.text_on_image}" in Portuguese. Consult Delivery rocket logo bottom-left corner. High contrast, professional composition.`
+    : `${claudeOut.dalle_prompt}. Prominent bold white/light text center-stage: "${claudeOut.text_on_image}" in Portuguese. MANDATORY BRAND RULES: background color exactly #0a1628 (deep navy blue) — NO variation allowed, accent colors strictly #B70C00 (red) and #FF6B35 (orange) ONLY — no other hues, Consult Delivery rocket logo bottom-left corner, white text only, maximum contrast. CONSISTENCY RULE: the 16:9 (landscape Feed 1200×630) and 9:16 (portrait Story 1080×1920) versions must use the exact same scene, lighting, color palette, and composition — only the crop/framing differs.`;
 
   logger.info("bom-dia: gerando 2 formatos (16:9 Feed 1200×630 · 9:16 Story 1080×1920) via Recraft V4.1");
 
   const [groupTempUrl, portraitTempUrl] = await Promise.all([
-    generateImage(fullPrompt, "16:9"),
-    generateImage(fullPrompt, "9:16"),
+    generateImage(fullPrompt, "group"),
+    generateImage(fullPrompt, "portrait"),
   ]);
 
   // 4. Download + upload permanente no Supabase Storage
   logger.info("bom-dia: fazendo upload para Supabase Storage (2 formatos)");
 
   const [imgGroupUrl, imgPortraitUrl] = await Promise.all([
-    uploadToStorage(groupTempUrl,    `bom-dia/${dateStr}-group.webp`),
-    uploadToStorage(portraitTempUrl, `bom-dia/${dateStr}-portrait.webp`),
+    uploadToStorage(groupTempUrl,    `bom-dia/${dateStr}-group.webp`,   "group"),
+    uploadToStorage(portraitTempUrl, `bom-dia/${dateStr}-portrait.webp`, "portrait"),
   ]);
 
   const output: Output = OutputSchema.parse({

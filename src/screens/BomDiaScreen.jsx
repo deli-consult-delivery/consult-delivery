@@ -96,11 +96,11 @@ REGRAS DE CONTEÚDO:
 - Máximo 12 palavras no título da arte
 
 FORMATO DE SAÍDA:
-1. Arte Feed 1080×1350 (4:5) para WhatsApp
+1. Arte Feed 1200×630 (16:9) para WhatsApp
 2. Arte Story 1080×1920 (9:16) para Instagram
 3. Legenda em markdown com emojis moderados`,
   pode: [
-    'Criar imagens em 2 formatos (Feed 4:5 e Story 9:16)',
+    'Criar imagens em 2 formatos (Feed 16:9 e Story 9:16)',
     'Adaptar tom e tema ao dia da semana',
     'Usar referências do mercado de delivery',
     'Gerar legenda com até 300 caracteres',
@@ -727,7 +727,7 @@ function ProfilePanel({ onOpenPromptModal, agentCfg, setAgentCfg, tenantDbId }) 
         {/* HABILIDADES */}
         {tab === 'habilidades' && [
           { group: 'Consult Delivery', tools: ['Supabase (leitura/escrita)', 'Bridge Server (envio WA)', 'agent_runs (histórico)']       },
-          { group: 'Geração de Imagem', tools: ['Recraft v3 · Feed 4:5', 'Recraft v3 · Story 9:16', 'Overlay de logo PNG']              },
+          { group: 'Geração de Imagem', tools: ['Recraft V4.1 · Feed 16:9', 'Recraft V4.1 · Story 9:16', 'Overlay de logo PNG']              },
           { group: 'Pesquisa Externa',  tools: ['Busca na web (Anthropic)', 'Calendário de temas (Drive)', 'GitHub (changelog)']         },
         ].map(({ group, tools }) => (
           <div key={group} style={{ background: 'rgba(0,0,0,0.3)', border: `1px solid ${BORDER}`, borderRadius: 10, padding: 14 }}>
@@ -765,7 +765,7 @@ function ProfilePanel({ onOpenPromptModal, agentCfg, setAgentCfg, tenantDbId }) 
             {sectionTitle('Modelo & Stack')}
             <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', lineHeight: 1.85 }}>
               claude-sonnet-4-6<br />
-              Recraft v3 · Trigger.dev cloud<br />
+              Recraft V4.1 · Trigger.dev cloud<br />
               Supabase Storage (webp → jpeg)<br />
               Bridge Server 3001 (VPS)
             </div>
@@ -908,7 +908,7 @@ function NewPostModal({ onClose, onGenerate, onSuccess, generating, genError }) 
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Formatos</div>
               <div style={{ display: 'flex', gap: 14 }}>
-                {[{ key: 'feed', label: 'Feed 4:5' }, { key: 'story', label: 'Story 9:16' }].map(({ key, label }) => (
+                {[{ key: 'feed', label: 'Feed 16:9' }, { key: 'story', label: 'Story 9:16' }].map(({ key, label }) => (
                   <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
                     <input type="checkbox" checked={form.formats[key]} onChange={() => setForm(f => ({ ...f, formats: { ...f.formats, [key]: !f.formats[key] } }))} style={{ accentColor: R, width: 15, height: 15 }} />
                     {label}
@@ -1036,7 +1036,7 @@ function PromptMestreModal({ onClose }) {
           {tab === 'overview' && (
             <div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
-                {[['Versão', MOCK_PROMPT.version], ['Tamanho', MOCK_PROMPT.size], ['Feed', '1080×1350 · 4:5'], ['Story', '1080×1920 · 9:16']].map(([l, v]) => (
+                {[['Versão', MOCK_PROMPT.version], ['Tamanho', MOCK_PROMPT.size], ['Feed', '1200×630 · 16:9'], ['Story', '1080×1920 · 9:16']].map(([l, v]) => (
                   <div key={l} style={{ background: 'rgba(0,0,0,0.35)', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '10px 12px' }}>
                     <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>{l}</div>
                     <div style={{ fontSize: 14, color: '#fff', fontWeight: 700 }}>{v}</div>
