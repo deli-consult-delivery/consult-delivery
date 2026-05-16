@@ -719,45 +719,30 @@ function ProfilePanel({ onOpenPromptModal, agentCfg, setAgentCfg, tenantDbId }) 
 }
 
 // ── NewPostModal ──────────────────────────────────────────────────────────────
-const GEN_STAGES = [
-  'Lendo calendário de temas…',
-  'Gerando variações de headline…',
-  'Criando arte Feed (4:5)…',
-  'Criando arte Story (9:16)…',
-  'Aplicando logo e identidade visual…',
-  'Escrevendo legenda…',
-];
-
-function NewPostModal({ onClose, onGenerate }) {
-  const [step,     setStep]     = useState(1);
-  const [stageIdx, setStageIdx] = useState(0);
-  const [form,     setForm]     = useState({ dayChips: [], theme: '', brief: '', formats: { feed: true, story: true } });
+function NewPostModal({ onClose, onGenerate, generating, genError }) {
+  const [step, setStep] = useState(1);
+  const [form, setForm] = useState({ dayChips: [], theme: '', brief: '', formats: { feed: true, story: true } });
+  const submittedRef = useRef(false);
 
   const DAYS = ['Seg','Ter','Qua','Qui','Sex','Sáb'];
 
   useEffect(() => {
-    const handler = (e) => { if (e.key === 'Escape' && step !== 2) onClose(); };
+    const handler = (e) => { if (e.key === 'Escape' && step === 1) onClose(); };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, [onClose, step]);
 
+  // Avança para "Pronto!" quando a geração real terminar com sucesso
   useEffect(() => {
-    if (step !== 2) return;
-    let i = 0;
-    const iv = setInterval(() => {
-      i++;
-      setStageIdx(i);
-      if (i >= GEN_STAGES.length) {
-        clearInterval(iv);
-        setTimeout(() => setStep(3), 600);
-      }
-    }, 1600);
-    return () => clearInterval(iv);
-  }, [step]);
+    if (!submittedRef.current) return;
+    if (step === 2 && !generating && !genError) {
+      setStep(3);
+    }
+  }, [generating, genError, step]);
 
   const handleSubmit = () => {
+    submittedRef.current = true;
     setStep(2);
-    setStageIdx(0);
     onGenerate(form);
   };
 
@@ -829,19 +814,47 @@ function NewPostModal({ onClose, onGenerate }) {
           </div>
         )}
 
-        {/* Step 2 */}
+        {/* Step 2 — loading real */}
         {step === 2 && (
-          <div style={{ textAlign: 'center', padding: '16px 0' }}>
-            <div style={{ fontSize: 44, marginBottom: 20, lineHeight: 1 }}>🚀</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 9, maxWidth: 300, margin: '0 auto', textAlign: 'left' }}>
-              {GEN_STAGES.map((stage, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, opacity: i <= stageIdx ? 1 : 0.2, transition: 'opacity 0.4s' }}>
-                  <div style={{ width: 14, height: 14, borderRadius: '50%', flexShrink: 0, background: i < stageIdx ? R : i === stageIdx ? `${R}55` : BORDER, border: i === stageIdx ? `1.5px solid ${R}` : 'none', transition: 'background 0.4s' }} />
-                  <span style={{ fontSize: 13, color: i <= stageIdx ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.25)' }}>{stage}</span>
-                  {i < stageIdx && <span style={{ marginLeft: 'auto', fontSize: 11, color: R }}>✓</span>}
+          <div style={{ textAlign: 'center', padding: '24px 0 16px' }}>
+            {genError ? (
+              <>
+                <div style={{ fontSize: 32, marginBottom: 14 }}>⚠️</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#fca5a5', marginBottom: 8 }}>Erro na geração</div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginBottom: 20, maxWidth: 320, margin: '0 auto 20px' }}>{genError}</div>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                  <button onClick={onClose} style={{ padding: '9px 16px', borderRadius: 7, fontSize: 13, cursor: 'pointer', background: 'transparent', border: `1px solid ${BORDER}`, color: 'rgba(255,255,255,0.55)' }}>
+                    Fechar
+                  </button>
+                  <button onClick={() => { submittedRef.current = true; onGenerate(form); }} style={{ padding: '9px 16px', borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: 'pointer', background: R, color: '#fff', border: 'none' }}>
+                    Tentar novamente
+                  </button>
                 </div>
-              ))}
-            </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 44, marginBottom: 20, lineHeight: 1 }}>🚀</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#fff', marginBottom: 8 }}>Gerando arte…</div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.38)', marginBottom: 20 }}>
+                  Claude cria o tema · Recraft renderiza Feed + Story · ~1–2 min
+                </div>
+                <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                  {[0,1,2].map(i => (
+                    <div key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: R, opacity: 0.9, animation: `pulse${i} 1.2s ${i * 0.4}s ease-in-out infinite` }} />
+                  ))}
+                </div>
+                <style>{`
+                  @keyframes pulse0 { 0%,100%{opacity:.25;transform:scale(.8)} 50%{opacity:1;transform:scale(1.1)} }
+                  @keyframes pulse1 { 0%,100%{opacity:.25;transform:scale(.8)} 50%{opacity:1;transform:scale(1.1)} }
+                  @keyframes pulse2 { 0%,100%{opacity:.25;transform:scale(.8)} 50%{opacity:1;transform:scale(1.1)} }
+                `}</style>
+                <div style={{ marginTop: 20 }}>
+                  <button onClick={onClose} style={{ padding: '7px 14px', borderRadius: 7, fontSize: 12, cursor: 'pointer', background: 'transparent', border: `1px solid ${BORDER}`, color: 'rgba(255,255,255,0.38)' }}>
+                    Fechar e aguardar em segundo plano
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -1181,6 +1194,8 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
         <NewPostModal
           onClose={() => setShowNewPost(false)}
           onGenerate={handleGenerate}
+          generating={generating}
+          genError={genError}
         />
       )}
       {showPrompt && (
