@@ -37,6 +37,7 @@ const NAV_GROUPS = [
     items: [
       { id: 'campanhas',       icon: 'megaphone', label: 'Campanhas' },
       { id: 'drafts-pendentes', icon: 'paper',    label: 'Disparos'  },
+      { id: 'bom-dia',         icon: 'sparkles',  label: 'Bom Dia'   },
     ],
   },
   {
