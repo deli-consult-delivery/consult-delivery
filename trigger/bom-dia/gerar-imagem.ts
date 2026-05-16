@@ -229,19 +229,16 @@ async function uploadToStorage(
     storagePath,
   });
   if (dims) {
-    const isPortrait   = dims.height > dims.width;
+    const isPortrait    = dims.height > dims.width;
+    const isSquare      = dims.height === dims.width;
     const wantsPortrait = expectedFormat === "portrait";
     if (wantsPortrait && !isPortrait) {
-      throw new Error(
-        `Dimensões incorretas para portrait: esperado height>width, recebido ${dims.width}×${dims.height}. ` +
-        `Recraft ignorou o parâmetro size="1024x1820".`
-      );
-    }
-    if (!wantsPortrait && isPortrait) {
-      throw new Error(
-        `Dimensões incorretas para group: esperado width>height, recebido ${dims.width}×${dims.height}. ` +
-        `Recraft ignorou o parâmetro size="1820x1024".`
-      );
+      // Recraft ignorou size — aceitar assim mesmo (evita derrubar o run)
+      logger.warn("bom-dia: portrait retornou orientação errada — continuando", {
+        dims, size: wantsPortrait ? "1024x1820" : "1820x1024", isSquare,
+      });
+    } else if (!wantsPortrait && isPortrait) {
+      logger.warn("bom-dia: group retornou orientação errada — continuando", { dims });
     }
   }
 
