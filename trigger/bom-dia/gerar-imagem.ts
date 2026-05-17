@@ -36,17 +36,90 @@ const OutputSchema = z.object({
 type Input  = z.infer<typeof InputSchema>;
 type Output = z.infer<typeof OutputSchema>;
 
-// ─── Tema por dia da semana ───────────────────────────────────────────────────
+// ─── Calendários editoriais ───────────────────────────────────────────────────
 
-const THEMES: Record<number, string> = {
-  1: "energia para começar a semana",
-  2: "foco e persistência",
-  3: "metade da semana – ânimo",
-  4: "crescimento e superação",
-  5: "celebração da semana",
-  6: "reflexão e preparação",
-  0: "descanso e recarga",
-};
+type WeeklyCalendar = { id: string; themes: Record<number, string> };
+
+const CALENDARS: WeeklyCalendar[] = [
+  {
+    id: "A",
+    themes: {
+      1: "planejamento da semana",
+      2: "cardápio e ficha técnica",
+      3: "atendimento e tempo de entrega",
+      4: "marketing e campanhas",
+      5: "análise de números",
+      6: "time, processo e descanso",
+    },
+  },
+  {
+    id: "B",
+    themes: {
+      1: "atrair (visibilidade no iFood)",
+      2: "converter (cardápio que vende)",
+      3: "encantar (experiência de entrega)",
+      4: "reter (fidelização e CRM)",
+      5: "faturar (ticket médio e upsell)",
+      6: "refletir e ajustar",
+    },
+  },
+  {
+    id: "C",
+    themes: {
+      1: "produto (cardápio e ficha técnica)",
+      2: "preço (margem, taxa, ticket)",
+      3: "praça (iFood, próprio, WhatsApp)",
+      4: "promoção (anúncio, cupom, gatilho)",
+      5: "pessoas (equipe, atendimento, motoboy)",
+      6: "pausa estratégica",
+    },
+  },
+  {
+    id: "D",
+    themes: {
+      1: "mentalidade de crescimento",
+      2: "disciplina operacional",
+      3: "coragem pra mudar o que não funciona",
+      4: "visão de futuro (tendências)",
+      5: "gratidão e resultados",
+      6: "descanso ativo",
+    },
+  },
+  {
+    id: "E",
+    themes: {
+      1: "o que aprendi semana passada",
+      2: "um erro comum no delivery",
+      3: "um acerto que vale copiar",
+      4: "uma tendência que está chegando",
+      5: "um número que diz a verdade",
+      6: "uma pergunta pra refletir",
+    },
+  },
+  {
+    id: "F",
+    themes: {
+      1: "defina a meta da semana",
+      2: "revise seu cardápio",
+      3: "olhe seu PMV e taxa de cancelamento",
+      4: "teste uma novidade no app",
+      5: "reconheça quem vendeu mais",
+      6: "tire o dia pra cuidar de você",
+    },
+  },
+];
+
+function getCalendar(calendarId: string | undefined, dateStr: string): WeeklyCalendar {
+  if (calendarId && calendarId !== "auto") {
+    return CALENDARS.find(c => c.id === calendarId) ?? CALENDARS[0];
+  }
+  // Auto: rotate by ISO week number
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  const jan1 = new Date(y, 0, 1);
+  const weekNum = Math.ceil(((date.getTime() - jan1.getTime()) / 86_400_000 + jan1.getDay() + 1) / 7);
+  return CALENDARS[weekNum % CALENDARS.length];
+}
 
 const DAY_NAMES: Record<number, string> = {
   0: "Domingo",    1: "Segunda-feira", 2: "Terça-feira",
@@ -64,7 +137,6 @@ function getSPDate() {
     dateStr,
     weekday,
     dayName: DAY_NAMES[weekday],
-    theme:   THEMES[weekday] ?? "motivação",
     isSat:   weekday === 6,
   };
 }
@@ -266,16 +338,11 @@ async function executar(input: Input, runId: string): Promise<Output> {
   // weekday_override permite ao formulário sobrescrever o dia detectado automaticamente
   const weekday = input.weekday_override ?? spDate.weekday;
   const dayName = DAY_NAMES[weekday] ?? spDate.dayName;
-  const autoTheme = THEMES[weekday] ?? "motivação";
   const isSat   = weekday === 6;
   const dateStr = spDate.dateStr;
 
-  // Tema efetivo: custom_theme tem prioridade sobre o automático por dia da semana
   const isManual = !!(input.custom_theme || input.custom_brief || input.force_new || input.weekday_override !== undefined);
-  const theme    = input.custom_theme?.trim() || autoTheme;
   const formats  = input.formats ?? "both";
-
-  logger.info("bom-dia-gerar-imagem iniciado", { dateStr, dayName, theme, isManual });
 
   const sb = getSupabase();
 
@@ -307,9 +374,10 @@ async function executar(input: Input, runId: string): Promise<Output> {
     throw new Error("Domingo não está no calendário do Bom Dia (seg–sáb)");
   }
 
-  // 2. Ler memória e instruções do agente salvas pelo usuário
+  // 2. Ler memória, instruções e calendário do agente salvas pelo usuário
   let agentMemory = "";
   let agentInstructions = "";
+  let calendarId = "auto";
   if (input.tenant_id) {
     const { data: cfgRow } = await sb
       .from("tenant_agent_config")
@@ -317,9 +385,17 @@ async function executar(input: Input, runId: string): Promise<Output> {
       .eq("tenant_id", input.tenant_id)
       .eq("agent_id", "bom-dia")
       .maybeSingle();
-    agentMemory       = (cfgRow?.config as Record<string, string> | null)?.memory       ?? "";
-    agentInstructions = (cfgRow?.config as Record<string, string> | null)?.instructions ?? "";
+    const cfg = cfgRow?.config as Record<string, string> | null;
+    agentMemory       = cfg?.memory       ?? "";
+    agentInstructions = cfg?.instructions ?? "";
+    calendarId        = cfg?.calendar_id  ?? "auto";
   }
+
+  // Tema efetivo: custom_theme tem prioridade sobre o calendário selecionado
+  const autoTheme = getCalendar(calendarId, dateStr).themes[weekday] ?? "motivação";
+  const theme     = input.custom_theme?.trim() || autoTheme;
+
+  logger.info("bom-dia-gerar-imagem iniciado", { dateStr, dayName, theme, calendarId, isManual });
 
   // 2b. Ler feedbacks recentes para orientar a geração
   let feedbackContext = "";
