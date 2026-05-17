@@ -712,6 +712,59 @@ app.post('/agents/bom-dia/send-groups', requireJwt, async (req, res) => {
   res.json(results);
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// GET /whatsapp/groups — Lista grupos WhatsApp via Evolution API
+// ════════════════════════════════════════════════════════════════════════════
+app.get('/whatsapp/groups', requireJwt, async (req, res) => {
+  const { tenant_id } = req.query;
+
+  if (!SUPABASE_SERVICE_KEY)
+    return res.status(503).json({ error: 'SUPABASE_SERVICE_KEY não configurado' });
+
+  let inst;
+  try {
+    inst = await supabaseSelect('evolution_instances', { tenant_id });
+  } catch (err) {
+    return res.status(500).json({ error: 'erro ao buscar instância Evolution', detail: err.message });
+  }
+
+  if (!inst) {
+    try {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/evolution_instances?ativo=eq.true&select=evolution_url,api_key,instance_name&limit=1`,
+        { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }
+      );
+      const rows = await r.json();
+      inst = rows?.[0] ?? null;
+    } catch {}
+  }
+
+  if (!inst)
+    return res.status(404).json({ error: 'nenhuma instância Evolution configurada' });
+
+  try {
+    const r = await fetch(
+      `${inst.evolution_url}/group/fetchAllGroups/${inst.instance_name}?getParticipants=false`,
+      {
+        headers: { apikey: inst.api_key },
+        signal: AbortSignal.timeout(15_000),
+      }
+    );
+    if (!r.ok) throw new Error(`Evolution ${r.status}: ${(await r.text()).slice(0, 200)}`);
+    const data = await r.json();
+    const groups = (Array.isArray(data) ? data : []).map(g => ({
+      jid:         g.id,
+      name:        g.subject || g.id,
+      picture_url: g.pictureUrl ?? null,
+    }));
+    console.log(`[whatsapp/groups] ${groups.length} grupo(s) retornados`);
+    res.json({ groups });
+  } catch (err) {
+    console.error('[whatsapp/groups] erro:', err.message);
+    res.status(500).json({ error: 'erro ao buscar grupos', detail: err.message });
+  }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[bridge] ouvindo em 0.0.0.0:${PORT}`);
   console.log(`[bridge] SUPABASE_URL:          ${SUPABASE_URL           ? '✓' : '✗'}`);

@@ -466,9 +466,14 @@ Headline: font condensada bold sem serifa (Oswald/Inter ExtraBold), branca #FFFF
 Sublinha: font regular, cinza #6E6E6E ou branco 80%.
 SEM emoji no design. SEM itálico. SEM glow. SEM contorno duplo.
 
-═══ COMPOSIÇÃO ═══
-STORY 9:16 (vertical): headline no topo-esquerdo · cena isométrica na parte inferior · área reservada logo canto inferior direito.
-FEED 16:9 (landscape): cena isométrica à esquerda · headline+sublinha à direita · logo canto inferior direito.
+═══ COMPOSIÇÃO E LOGO (OBRIGATÓRIO) ═══
+TODA arte deve incluir o logotipo da Consult Delivery no canto inferior direito:
+  • Foguete estilizado em vermelho #B70C00 com chamas brancas, fundo transparente (sem caixa)
+  • Texto "Consult Delivery" em fonte condensada bold branca ao lado do foguete
+  • Tamanho: ~10% da largura total — visível mas discreto
+
+STORY 9:16 (vertical): headline no topo-esquerdo · cena isométrica na parte inferior · logo Consult Delivery (foguete vermelho + texto branco) no canto inferior direito.
+FEED 16:9 (landscape): cena isométrica à esquerda · headline+sublinha à direita · logo Consult Delivery (foguete vermelho + texto branco) no canto inferior direito.
 
 ═══ LEGENDA WHATSAPP (4 blocos, PT-BR) ═══
 Estrutura FIXA — 4 blocos separados por linha em branco:
@@ -494,7 +499,7 @@ Gere JSON com exatamente 4 campos:
    - 4–6 isometric mockups from approved list: [matte black tablet displaying delivery order dashboard with red bar charts and R$ values | black smartphone with delivery app showing red CTA button and order card | matte black cardboard delivery box with white/red rocket logo stamp | spiral notebook with handwritten checklist and red circle highlights | small gray metallic gear | black document clipboard/folder]
    - Subtle wi-fi/signal wave lines crossing the top (white and red, 20–40% opacity, curved, thin ~1px)
    - Circuit trace paths from bottom-left corner, small white node dots at intersections (red, 30–60% opacity)
-   - Clean reserved area at bottom-right corner for logo overlay (no design elements there)
+   - Bottom-right corner: Consult Delivery logo — a red rocket #B70C00 with white flame details beside bold white text "Consult Delivery" in condensed sans-serif, logo ~10% of canvas width, no box or background around it
    - Bold white condensed sans-serif headline text area related to: "${theme}"
    - Color palette STRICTLY: #0D0D0D, #050505, #B70C00, #8A0900, #FFFFFF, #6E6E6E — NO other colors
    - NO people, hands, faces, mascots, real food, balloons, flags, confetti, neon, anime, cartoon, watercolor
@@ -536,7 +541,7 @@ Retorne: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme":"..
 
   // 4. Prompts de texto puro — Recraft respeita size com texto (multimodal quebra)
   // Headline e área de logo são adicionados como sufixo ao prompt gerado pelo Claude
-  const textSuffix = `Bold white condensed headline text center-stage (Title Case, no glow, no italic): "${claudeOut.text_on_image}". Clean empty reserved area at bottom-right corner for Consult Delivery logo overlay.`;
+  const textSuffix = `Bold white condensed headline text center-stage (Title Case, no glow, no italic): "${claudeOut.text_on_image}". Bottom-right corner: Consult Delivery logo — red rocket #B70C00 with white flame trails beside bold white text "Consult Delivery" in condensed sans-serif, ~10% canvas width, no box/background around logo.`;
   const feedPrompt     = `${claudeOut.dalle_prompt}. Horizontal landscape composition, mockups on left half, headline text area on right half. ${textSuffix}`;
   const portraitPrompt = `${claudeOut.dalle_prompt}. Vertical portrait composition, headline text at top-left, isometric mockups in lower portion. ${textSuffix}`;
 

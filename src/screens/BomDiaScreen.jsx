@@ -373,19 +373,23 @@ function groupInitials(name) {
 
 function formatGroupName(g) {
   if (g.group_name) return g.group_name;
-  const jid = g.evolution_jid || '';
-  const raw = jid.replace(/@.*$/, '');
-  if (!raw) return 'Grupo';
-  if (raw.length >= 10) {
-    return `+${raw.slice(0, 2)} (${raw.slice(2, 4)}) ${raw.slice(4, 9)}-${raw.slice(9)}`;
-  }
-  return raw;
+  return 'Grupo';
 }
 
 function GroupAvatar({ g, size = 28 }) {
   const name = formatGroupName(g);
   const hash = name.split('').reduce((h, c) => h + c.charCodeAt(0), 0);
   const bg   = GROUP_COLORS[hash % GROUP_COLORS.length];
+  if (g.picture_url) {
+    return (
+      <img
+        src={g.picture_url}
+        alt={name}
+        style={{ width: size, height: size, borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }}
+        onError={e => { e.currentTarget.style.display = 'none'; }}
+      />
+    );
+  }
   return (
     <div style={{
       width: size, height: size, borderRadius: '50%', flexShrink: 0,
@@ -393,7 +397,7 @@ function GroupAvatar({ g, size = 28 }) {
       fontSize: size * 0.38, fontWeight: 700, color: '#fff',
       fontFamily: "'Oswald', sans-serif",
     }}>
-      {groupInitials(g.group_name)}
+      {groupInitials(name)}
     </div>
   );
 }
@@ -467,13 +471,35 @@ function AgentMessage({ run, tenantDbId, isLast }) {
     setDlState(s => ({ ...s, [key]: false }));
   };
 
-  const handleOpenSend = () => {
+  const handleOpenSend = async () => {
     if (!tenantDbId) return;
-    supabase.from('whatsapp_groups').select('id,evolution_jid,group_name')
-      .eq('tenant_id', tenantDbId).eq('ativo', true).order('group_name')
-      .then(({ data }) => setGroups(data || []));
     setSendResult(null);
     setSendOpen(v => !v);
+    const { data: dbGroups } = await supabase
+      .from('whatsapp_groups').select('id,evolution_jid,group_name')
+      .eq('tenant_id', tenantDbId).eq('ativo', true).order('group_name');
+    const rows = dbGroups || [];
+    const needsNames = rows.some(g => !g.group_name);
+    if (needsNames) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const r = await fetch(
+          `${BRIDGE_URL}/whatsapp/groups?tenant_id=${tenantDbId}`,
+          { headers: { Authorization: `Bearer ${session?.access_token}` } }
+        );
+        if (r.ok) {
+          const { groups: evoGroups = [] } = await r.json();
+          const nameMap = Object.fromEntries(evoGroups.map(g => [g.jid, g]));
+          setGroups(rows.map(row => ({
+            ...row,
+            group_name:  row.group_name  || nameMap[row.evolution_jid]?.name        || null,
+            picture_url: row.picture_url ?? nameMap[row.evolution_jid]?.picture_url ?? null,
+          })));
+          return;
+        }
+      } catch {}
+    }
+    setGroups(rows);
   };
 
   const toggleGroup = (jid) => setSelGroups(prev => {
@@ -1356,6 +1382,13 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
   }, []);
 
   useEffect(() => { fetchRuns(); }, [fetchRuns]);
+
+  // Scroll to newest post on initial load
+  useEffect(() => {
+    if (!loading && runs.length > 0) {
+      listEndRef.current?.scrollIntoView({ behavior: 'instant' });
+    }
+  }, [loading]);
 
   // ── Fetch agent config ──────────────────────────────────────────────────────
   useEffect(() => {
