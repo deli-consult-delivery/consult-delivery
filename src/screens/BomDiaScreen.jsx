@@ -434,10 +434,6 @@ function AgentMessage({ run, tenantDbId, isLast }) {
     if (!tenantDbId) return;
     setSendResult(null);
     setSendOpen(v => !v);
-    const { data: dbGroups } = await supabase
-      .from('whatsapp_groups').select('id,evolution_jid,group_name,picture_url')
-      .eq('tenant_id', tenantDbId).eq('ativo', true).order('group_name');
-    const rows = dbGroups || [];
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const r = await fetch(
@@ -446,16 +442,19 @@ function AgentMessage({ run, tenantDbId, isLast }) {
       );
       if (r.ok) {
         const { groups: evoGroups = [] } = await r.json();
-        const nameMap = Object.fromEntries(evoGroups.map(g => [g.jid, g]));
-        setGroups(rows.map(row => ({
-          ...row,
-          group_name:  nameMap[row.evolution_jid]?.name        || row.group_name  || row.evolution_jid,
-          picture_url: nameMap[row.evolution_jid]?.picture_url ?? row.picture_url ?? null,
+        setGroups(evoGroups.map(g => ({
+          evolution_jid: g.jid,
+          group_name:    g.name || g.jid,
+          picture_url:   g.picture_url ?? null,
         })));
         return;
       }
     } catch {}
-    setGroups(rows);
+    // fallback: tabela local
+    const { data: dbGroups } = await supabase
+      .from('whatsapp_groups').select('id,evolution_jid,group_name,picture_url')
+      .eq('tenant_id', tenantDbId).eq('ativo', true).order('group_name');
+    setGroups(dbGroups || []);
   };
 
   const toggleGroup = (jid) => setSelGroups(prev => {
