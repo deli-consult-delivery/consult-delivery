@@ -148,7 +148,7 @@ type MsgContent = string | Array<Record<string, unknown>>;
 async function generateImage(content: MsgContent, format: "group" | "portrait"): Promise<string> {
   // aspect_ratio é ignorado pelo OpenRouter/Recraft — usar size com px explícito
   // group = Feed 1800×630, portrait = 9:16 Story 1024×1820
-  const size = format === "group" ? "1920x1080" : "1080x1920";
+  const size = format === "group" ? "1920x1080" : "1024x1820";
   const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
   if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY não configurado no Trigger.dev");
 
