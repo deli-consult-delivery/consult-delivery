@@ -76,7 +76,7 @@ type MsgContent = string | Array<Record<string, unknown>>;
 async function generateImage(content: MsgContent, format: "group" | "portrait"): Promise<string> {
   // aspect_ratio é ignorado pelo OpenRouter/Recraft — usar size com px explícito
   // group = Feed 1800×630, portrait = 9:16 Story 1024×1820
-  const size = format === "group" ? "1800x630" : "1024x1820";
+  const size = format === "group" ? "1920x1080" : "1080x1920";
   const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
   if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY não configurado no Trigger.dev");
 
@@ -359,34 +359,82 @@ async function executar(input: Input, runId: string): Promise<Output> {
 
   const claudeResp = await anthropic.messages.create({
     model:      "claude-sonnet-4-6",
-    max_tokens: 1024,
-    system: `Você é o criador de conteúdo da Consult Delivery, consultoria para negócios de delivery.
+    max_tokens: 1200,
+    system: `Você é o Superagente de Imagens de Bom Dia da Consult Delivery — consultoria de delivery do Wandson Silva. Seg–Sáb às 09h, gere o pacote diário: prompt de imagem + headline + legenda + tema.
 
-Identidade visual Consult Delivery:
-- Logo: foguete estilizado vermelho + texto "Consult Delivery" (sempre presente)
-- Estilo: vibrante, energético, inspirado nas cores dos grandes apps de delivery (iFood vermelho #EA1D2C, laranja, amarelo, verde — paleta viva e impactante)
-- LIBERDADE CRIATIVA: pode usar pessoas, personagens, ilustrações, mascotes, cenas do cotidiano de delivery, ambientes urbanos, motos, entregadores, donos de loja, clientes felizes
-- Composição: dinâmica, com movimento, alta energia — como uma campanha de marketing de app
+═══ ESTILO VISUAL — REGRAS RÍGIDAS ═══
+Paleta EXCLUSIVA (use SOMENTE estas cores):
+  #0D0D0D (fundo dominante ~70%) · #050505 (sombras profundas) · #B70C00 (vermelho marca)
+  #8A0900 (vermelho escuro gradiente) · #FFFFFF (branco) · #6E6E6E (cinza neutro)
+PROIBIDO: azul, amarelo, verde, laranja, roxo, dourado, pastel, neon, glitch, gradientes coloridos.
 
-Regras:
-- Texto NA ARTE: PT-BR, máx 7 palavras, impactante, conectado à realidade de delivery
-- Legenda: PT-BR, sem hashtags, tom motivacional e próximo
-- Prompt de imagem: sempre em inglês (melhora qualidade)
-- Retorne SOMENTE JSON válido, sem texto extra${memoryBlock}${instructionsBlock}${feedbackContext}`,
+Fundo: preto puro #0D0D0D + degradê radial vermelho #B70C00 (~55% opacidade) vindo do CANTO INFERIOR ESQUERDO.
+Elementos técnicos obrigatórios (sutis):
+  • 6–12 linhas finas de wi-fi/sinal (branco/vermelho semi-transparente, 20–40% opac.) cruzando o TOPO
+  • 4–8 trilhas de "circuito impresso" em vermelho saindo do CANTO INFERIOR ESQUERDO, com nós brancos nos cruzamentos (30–60% opac.)
+
+═══ CENA ISOMÉTRICA 3D (OBRIGATÓRIA) ═══
+Renderização estilo Cinema 4D/Blender, ângulo ~30°, iluminação dramática vermelha de baixo-esquerda.
+Elementos canônicos — use 4–6 destes por arte:
+  • Tablet preto: dashboard de pedidos (gráficos de barra, valores R$, setas crescimento vermelhas)
+  • Celular preto: app de delivery (card de pedido, botão vermelho de ação)
+  • Caixa de papelão preta: foguete Consult Delivery estampado em branco/vermelho
+  • Caderno espiral: checklist manuscrita (caneta preta + círculos/destaques vermelhos)
+  • Engrenagem cinza pequena (representa automação/processo)
+  • Pasta/clipboard preta · Notebook entreaberto com gráficos (segundo plano)
+PROIBIDO na cena: pessoas, mãos, rostos, mascotes, comida real (pizza/hambúrguer/sushi/etc.),
+bandeiras, balões, confetes, sparkles. Sem texto inventado dentro dos dispositivos (apenas barras/ícones).
+
+═══ TIPOGRAFIA ═══
+Headline: font condensada bold sem serifa (Oswald/Inter ExtraBold), branca #FFFFFF, Title Case.
+Sublinha: font regular, cinza #6E6E6E ou branco 80%.
+SEM emoji no design. SEM itálico. SEM glow. SEM contorno duplo.
+
+═══ COMPOSIÇÃO ═══
+STORY 9:16 (vertical): headline no topo-esquerdo · cena isométrica na parte inferior · área reservada logo canto inferior direito.
+FEED 16:9 (landscape): cena isométrica à esquerda · headline+sublinha à direita · logo canto inferior direito.
+
+═══ LEGENDA WHATSAPP (4 blocos, PT-BR) ═══
+Estrutura FIXA — 4 blocos separados por linha em branco:
+  Bloco 1: [1 emoji temático: 🧭/🚀/🎯/⚡/⏰/📊] Bom dia da equipe Consult Delivery!
+  Bloco 2: 2–3 frases conectando o tema à realidade do dono de delivery (pedidos, ticket médio, cardápio, iFood, equipe). Termina com palavra-chave do tema.
+  Bloco 3: "🕗 Atendimento Consult Delivery: [horário exato]"
+  Bloco 4: Convite de disponibilidade. SEM links, @, telefone, hashtags, CTAs de compra.
+
+Retorne SOMENTE JSON válido, sem texto extra.${memoryBlock}${instructionsBlock}${feedbackContext}`,
     messages: [{
       role:    "user",
       content: `Dia: ${dayName}
 Tema: ${theme}
 Data: ${dateStr}
-Horários para a legenda: ${hoursLine}${briefLine}
+Horário: ${hoursLine}${briefLine}
 
-Gere:
-1. "dalle_prompt": prompt em inglês detalhado para Recraft — arte motivacional vibrante para donos de delivery. Use cores vivas inspiradas nos apps de delivery (vermelho iFood #EA1D2C, laranja, amarelo, verde). PODE ter pessoas, entregadores, personagens, mascotes, cenas urbanas de delivery. Inclua Consult Delivery rocket logo bottom-left. Alta energia, dinâmico, estilo campanha de marketing. Bold text space center-stage. NÃO mencione pixels, resolução ou proporção no prompt.
-2. "text_on_image": texto curto em PT-BR (máx 7 palavras) para aparecer NA arte — conectado ao tema "${theme}", direto e impactante.
-3. "caption": legenda completa em PT-BR para WhatsApp: (a) emoji temático + "Bom dia da equipe Consult Delivery!" + frase motivacional original sobre "${theme}" conectada à rotina de delivery, (b) linha com os horários exatamente como fornecidos acima, (c) frase curta de disponibilidade da equipe. Sem hashtags. Parágrafos curtos.
-4. "theme": o tema do dia em PT-BR (resumido, ex: "foco e persistência").
+Gere JSON com exatamente 4 campos:
 
-Retorne JSON: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme":"..."}`,
+1. "dalle_prompt" (em INGLÊS — para gerador de imagem Recraft V4.1):
+   Descreva a cena completa seguindo o estilo obrigatório:
+   - Dark black background #0D0D0D with dramatic red radial light-leak #B70C00 from bottom-left corner blending into ~40% of canvas
+   - Isometric 3D composition (~30° angle, Cinema 4D/Blender style render), dramatic red rim light from bottom-left, deep black shadows #050505 on opposite side
+   - 4–6 isometric mockups from approved list: [matte black tablet displaying delivery order dashboard with red bar charts and R$ values | black smartphone with delivery app showing red CTA button and order card | matte black cardboard delivery box with white/red rocket logo stamp | spiral notebook with handwritten checklist and red circle highlights | small gray metallic gear | black document clipboard/folder]
+   - Subtle wi-fi/signal wave lines crossing the top (white and red, 20–40% opacity, curved, thin ~1px)
+   - Circuit trace paths from bottom-left corner, small white node dots at intersections (red, 30–60% opacity)
+   - Clean reserved area at bottom-right corner for logo overlay (no design elements there)
+   - Bold white condensed sans-serif headline text area related to: "${theme}"
+   - Color palette STRICTLY: #0D0D0D, #050505, #B70C00, #8A0900, #FFFFFF, #6E6E6E — NO other colors
+   - NO people, hands, faces, mascots, real food, balloons, flags, confetti, neon, anime, cartoon, watercolor
+   - DO NOT mention pixel dimensions or aspect ratio in this prompt
+
+2. "text_on_image" (PT-BR, máx 7 palavras, Title Case): headline curta e impactante para a arte, tema: "${theme}"
+
+3. "caption" (PT-BR, EXATAMENTE 4 blocos separados por linha em branco):
+   Bloco 1: [emoji temático único] Bom dia da equipe Consult Delivery!
+   Bloco 2: 2–3 frases sobre "${theme}" para donos de delivery
+   Bloco 3: ${hoursLine}
+   Bloco 4: disponibilidade da equipe (sem links, @, hashtag)
+
+4. "theme": tema resumido em PT-BR
+
+Retorne: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme":"..."}`,
     }],
   });
 
@@ -406,14 +454,15 @@ Retorne JSON: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme
   });
 
   // Paths únicos por run — evita sobrescrita entre gerações no mesmo dia
-  const pathId             = runId.slice(-8);
-  const groupStoragePath   = `bom-dia/${dateStr}-${pathId}-group.webp`;
-  const portraitStoragePath = `bom-dia/${dateStr}-${pathId}-portrait.webp`;
+  const pathId              = runId.slice(-8);
+  const groupStoragePath    = `bom-dia/${dateStr}-${pathId}-feed-1920x1080.webp`;
+  const portraitStoragePath = `bom-dia/${dateStr}-${pathId}-story-1080x1920.webp`;
 
-  // 3. Prompts de texto puro — Recraft respeita size com texto (multimodal quebra)
-  const textSuffix = `Prominent bold text center-stage: "${claudeOut.text_on_image}" in Portuguese. Consult Delivery rocket logo bottom-left corner.`;
-  const feedPrompt    = `${claudeOut.dalle_prompt}. Horizontal 1800x630 landscape composition. ${textSuffix}`;
-  const portraitPrompt = `${claudeOut.dalle_prompt}. Vertical 9:16 portrait composition. ${textSuffix}`;
+  // 4. Prompts de texto puro — Recraft respeita size com texto (multimodal quebra)
+  // Headline e área de logo são adicionados como sufixo ao prompt gerado pelo Claude
+  const textSuffix = `Bold white condensed headline text center-stage (Title Case, no glow, no italic): "${claudeOut.text_on_image}". Clean empty reserved area at bottom-right corner for Consult Delivery logo overlay.`;
+  const feedPrompt     = `${claudeOut.dalle_prompt}. Horizontal landscape composition, mockups on left half, headline text area on right half. ${textSuffix}`;
+  const portraitPrompt = `${claudeOut.dalle_prompt}. Vertical portrait composition, headline text at top-left, isometric mockups in lower portion. ${textSuffix}`;
 
   let imgGroupUrl: string | undefined;
   let imgPortraitUrl: string | undefined;

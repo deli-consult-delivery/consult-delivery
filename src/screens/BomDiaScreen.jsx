@@ -52,7 +52,7 @@ async function downloadFile(url, filename) {
 
 // ── Image formats ─────────────────────────────────────────────────────────────
 const FORMATS = [
-  { key: 'group',    label: 'Feed',  sub: '16:9 · 1200×630',  ratio: '16/9', field: 'img_group_url'    },
+  { key: 'group',    label: 'Feed',  sub: '16:9 · 1920×1080', ratio: '16/9', field: 'img_group_url'    },
   { key: 'portrait', label: 'Story', sub: '9:16 · 1080×1920', ratio: '9/16', field: 'img_portrait_url' },
 ];
 
