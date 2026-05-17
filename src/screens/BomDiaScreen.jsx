@@ -1355,7 +1355,7 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
   const [centerTab,   setCenterTab]   = useState('editar');
   const [showNewPost, setShowNewPost] = useState(false);
   const [showPrompt,  setShowPrompt]  = useState(false);
-  const [showProfile, setShowProfile] = useState(true);
+  const [showProfile, setShowProfile] = useState(() => window.innerWidth > 768);
   const [composer,    setComposer]    = useState('');
   const [agentCfg,    setAgentCfg]    = useState({ memory: '', instructions: '', calendar_id: 'auto' });
   const [requests,    setRequests]    = useState(() => loadRequests());

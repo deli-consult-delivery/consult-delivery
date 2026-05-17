@@ -1158,6 +1158,10 @@ input, textarea { font-family: inherit; }
 
   /* ── CRM ──────────────────────────────────── */
   .crm-stat-strip { grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; }
+
+  /* ── BomDia screen ────────────────────────── */
+  /* Profile panel oculto por padrão (controlado por showProfile state); quando aberto, empilha */
+  .livechat { flex-direction: column !important; }
 }
 
 /* ─── TWEAKS PANEL ────────────────────────────────────────── */
