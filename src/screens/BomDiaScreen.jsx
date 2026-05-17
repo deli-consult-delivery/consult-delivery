@@ -488,29 +488,26 @@ function AgentMessage({ run, tenantDbId, isLast }) {
     setSendResult(null);
     setSendOpen(v => !v);
     const { data: dbGroups } = await supabase
-      .from('whatsapp_groups').select('id,evolution_jid,group_name')
+      .from('whatsapp_groups').select('id,evolution_jid,group_name,picture_url')
       .eq('tenant_id', tenantDbId).eq('ativo', true).order('group_name');
     const rows = dbGroups || [];
-    const needsNames = rows.some(g => !g.group_name);
-    if (needsNames) {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const r = await fetch(
-          `${BRIDGE_URL}/whatsapp/groups?tenant_id=${tenantDbId}`,
-          { headers: { Authorization: `Bearer ${session?.access_token}` } }
-        );
-        if (r.ok) {
-          const { groups: evoGroups = [] } = await r.json();
-          const nameMap = Object.fromEntries(evoGroups.map(g => [g.jid, g]));
-          setGroups(rows.map(row => ({
-            ...row,
-            group_name:  row.group_name  || nameMap[row.evolution_jid]?.name        || null,
-            picture_url: row.picture_url ?? nameMap[row.evolution_jid]?.picture_url ?? null,
-          })));
-          return;
-        }
-      } catch {}
-    }
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch(
+        `${BRIDGE_URL}/whatsapp/groups?tenant_id=${tenantDbId}`,
+        { headers: { Authorization: `Bearer ${session?.access_token}` } }
+      );
+      if (r.ok) {
+        const { groups: evoGroups = [] } = await r.json();
+        const nameMap = Object.fromEntries(evoGroups.map(g => [g.jid, g]));
+        setGroups(rows.map(row => ({
+          ...row,
+          group_name:  nameMap[row.evolution_jid]?.name        || row.group_name  || row.evolution_jid,
+          picture_url: nameMap[row.evolution_jid]?.picture_url ?? row.picture_url ?? null,
+        })));
+        return;
+      }
+    } catch {}
     setGroups(rows);
   };
 
@@ -1438,12 +1435,6 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
 
   useEffect(() => { fetchRuns(); }, [fetchRuns]);
 
-  // Scroll to newest post on initial load
-  useEffect(() => {
-    if (!loading && runs.length > 0) {
-      listEndRef.current?.scrollIntoView({ behavior: 'instant' });
-    }
-  }, [loading]);
 
   // ── Fetch agent config ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -1613,7 +1604,7 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
             </div>
           )}
 
-          {[...runs].reverse().map((run, i, arr) => (
+          {runs.map((run, i, arr) => (
             <AgentMessage
               key={run.id}
               run={run}
