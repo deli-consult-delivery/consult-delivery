@@ -287,59 +287,6 @@ function AgentDot({ name, size = 28 }) {
   );
 }
 
-// ── SubSidebar ────────────────────────────────────────────────────────────────
-function SubSidebar() {
-  return (
-    <div style={{
-      width: 260, flexShrink: 0, background: BG2,
-      borderRight: `1px solid ${BORDER}`,
-      display: 'flex', flexDirection: 'column', overflow: 'hidden',
-    }}>
-      <div style={{ padding: '18px 16px 10px', borderBottom: `1px solid ${BORDER}` }}>
-        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase' }}>
-          Superagentes
-        </div>
-      </div>
-      <div style={{ flex: 1, overflow: 'auto', padding: '8px 8px' }}>
-        {MOCK_AGENTS.map(agent => (
-          <div
-            key={agent.id}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '9px 10px', borderRadius: 8, marginBottom: 2,
-              cursor: agent.active ? 'default' : 'not-allowed',
-              background: agent.active ? `${R}12` : 'transparent',
-              border: `1px solid ${agent.active ? R + '33' : 'transparent'}`,
-              opacity: agent.active ? 1 : 0.4,
-            }}
-          >
-            {agent.active ? <BomDiaAvatar size={28} /> : <AgentDot name={agent.name} size={28} />}
-            <div style={{ minWidth: 0 }}>
-              <div style={{
-                fontSize: 12, fontWeight: 700,
-                color: agent.active ? '#fff' : 'rgba(255,255,255,0.45)',
-                fontFamily: "'Oswald', sans-serif",
-                textTransform: 'uppercase', letterSpacing: 0.5,
-              }}>
-                {agent.name}
-              </div>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.28)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {agent.role}
-              </div>
-            </div>
-            {agent.active && (
-              <div style={{ width: 6, height: 6, borderRadius: '50%', background: R, marginLeft: 'auto', flexShrink: 0 }} />
-            )}
-          </div>
-        ))}
-      </div>
-      <div style={{ padding: '10px 16px', borderTop: `1px solid ${BORDER}` }}>
-        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.22)' }}>7 agentes · 1 ativo</div>
-      </div>
-    </div>
-  );
-}
-
 // ── Status badge ──────────────────────────────────────────────────────────────
 const STATUS_CFG = {
   success:   { bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.3)', color: '#6ee7b7', label: 'Publicado' },
@@ -1526,9 +1473,6 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
       className="livechat"
       style={{ display: 'flex', height: '100%', background: BG, overflow: 'hidden' }}
     >
-      {/* Left: sub-sidebar */}
-      <SubSidebar />
-
       {/* Center: chat area */}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
