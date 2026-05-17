@@ -1,6 +1,36 @@
 # Wiki Log
 
+## [2026-05-17 17:00] session | feedback comment panel + agent context enrichment
+Touched: none
+
+## [2026-05-17 16:00] session | SSH VPS + deploy bridge-server GET /whatsapp/groups
+Touched: none
+
+## [2026-05-17 00:00] session | bom-dia: nomes de grupos, scroll e logo
+Touched: none
+
+## [2026-05-16 17:00] session | bom-dia: feedback 👍👎 + memória agente + overflow fix
+Touched: none
+
+## [2026-05-16 22:00] session | bom-dia: feed 1800x630, criatividade, formulário completo, histórico
+Touched: none
+
+## [2026-05-16 21:15] session | fix bom-dia: story orientação 9:16 via prompt texto puro
+Touched: none
+
+## [2026-05-16 20:30] session | fix bom-dia: cores marca + storage único + story referência
+Touched: none
+
+## [2026-05-16 19:30] session | fix bom-dia: portrait, custom_brief, labels
+Touched: none
+
 ## [2026-05-16 10:00] session | formatação WhatsApp no chat ao vivo
+Touched: none
+
+## [2026-05-16 18:00] session | fix 406 webhook grupos + config autonomia Claude Code
+Touched: none
+
+## [2026-05-16 13:30] session | diagnóstico Evolution API desconectada + health check banner
 Touched: none
 
 ## [2026-05-15 24:00] session | BomDia RLS fix + 3 formatos + envio grupos + config agente
@@ -236,4 +266,17 @@ Touched: none
 ## [2026-05-15 08:30] session | V2-5 DELI COO Digital entregue e validada
 Touched: none
 ## [2026-05-16 03:15] session | bom-dia fixes: download, grupos, realtime, artTab
+Touched: none
+## [2026-05-16 10:22] session | fix chat caption formatting
+Touched: none
+
+## [2026-05-16 11:05] session | fix bom-dia preview zoom download
+Touched: none
+
+## [2026-05-16 15:30] session | fix webhook inbound messages não salvos em messages
+Touched: none
+
+## [2026-05-16 14:36] session | fix TypeScript .catch + GSD hooks config
+Touched: none
+## [2026-05-17 11:25] session | config: deploy sem prompt + Stop hook tsc
 Touched: none

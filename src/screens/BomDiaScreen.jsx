@@ -422,6 +422,9 @@ function AgentMessage({ run, tenantDbId, isLast }) {
   const [sendResult,      setSendResult]      = useState(null);
   const [feedback,        setFeedback]        = useState(null); // 'thumbs_up' | 'thumbs_down' | null
   const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackOpen,    setFeedbackOpen]    = useState(false);
+  const [feedbackComment, setFeedbackComment] = useState('');
+  const [pendingVote,     setPendingVote]     = useState(null);
 
   const hasFeed  = !!groupUrl;
   const hasStory = !!portraitUrl;
@@ -430,28 +433,37 @@ function AgentMessage({ run, tenantDbId, isLast }) {
   useEffect(() => {
     if (!tenantDbId) return;
     supabase.from('bom_dia_feedback')
-      .select('vote')
+      .select('vote, comment')
       .eq('run_id', run.id)
       .eq('tenant_id', tenantDbId)
       .maybeSingle()
       .then(({ data }) => { if (data) setFeedback(data.vote); });
   }, [run.id, tenantDbId]);
 
-  const handleFeedback = async (vote) => {
+  const handleFeedback = (vote) => {
     if (!tenantDbId || feedbackLoading) return;
+    if (feedback === vote) { doSaveFeedback(null, ''); return; }
+    setPendingVote(vote);
+    setFeedbackComment('');
+    setFeedbackOpen(true);
+  };
+
+  const doSaveFeedback = async (vote, comment) => {
+    setFeedbackOpen(false);
     setFeedbackLoading(true);
-    const newVote = feedback === vote ? null : vote;
     try {
-      if (newVote) {
+      if (vote) {
         await supabase.from('bom_dia_feedback').upsert(
-          { run_id: run.id, tenant_id: tenantDbId, vote: newVote },
+          { run_id: run.id, tenant_id: tenantDbId, vote, comment: comment?.trim() || null },
           { onConflict: 'run_id,tenant_id' }
         );
       } else {
         await supabase.from('bom_dia_feedback').delete()
           .eq('run_id', run.id).eq('tenant_id', tenantDbId);
       }
-      setFeedback(newVote);
+      setFeedback(vote);
+      setPendingVote(null);
+      setFeedbackComment('');
     } finally {
       setFeedbackLoading(false);
     }
@@ -689,6 +701,49 @@ function AgentMessage({ run, tenantDbId, isLast }) {
               </span>
             )}
           </div>
+
+          {/* Painel de comentário de feedback */}
+          {feedbackOpen && pendingVote && (
+            <div style={{
+              marginTop: 10, padding: '10px 12px',
+              background: 'rgba(255,255,255,0.04)',
+              border: `1px solid ${R}33`,
+              borderRadius: 10,
+            }}>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>
+                {pendingVote === 'thumbs_down' ? '💬 O que pode melhorar? (opcional)' : '💬 O que ficou bom? (opcional)'}
+              </div>
+              <textarea
+                autoFocus
+                value={feedbackComment}
+                onChange={e => setFeedbackComment(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSaveFeedback(pendingVote, feedbackComment); } }}
+                placeholder={pendingVote === 'thumbs_down' ? 'Ex: cores muito escuras, texto pequeno…' : 'Ex: boa composição, tema certeiro…'}
+                rows={2}
+                style={{
+                  width: '100%', background: 'rgba(255,255,255,0.06)',
+                  border: `1px solid ${BORDER}`, borderRadius: 7,
+                  color: 'white', fontSize: 12, padding: '7px 10px',
+                  resize: 'none', outline: 'none', fontFamily: 'inherit',
+                  boxSizing: 'border-box',
+                }}
+              />
+              <div style={{ display: 'flex', gap: 6, marginTop: 7, justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => { setFeedbackOpen(false); setPendingVote(null); }}
+                  style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: `1px solid ${BORDER}`, background: 'transparent', color: 'rgba(255,255,255,0.5)', cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => doSaveFeedback(pendingVote, feedbackComment)}
+                  style={{ fontSize: 11, padding: '4px 12px', borderRadius: 6, border: 'none', background: R, color: 'white', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  Enviar
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Image lightbox */}
           {previewImg && (

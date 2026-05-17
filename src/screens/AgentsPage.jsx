@@ -3,6 +3,7 @@ import Icon from '../components/Icon.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
 import { TENANTS } from '../data.js';
 import { supabase } from '../lib/supabase.js';
+import BomDiaScreen from './BomDiaScreen.jsx';
 
 // ─── Agentes conhecidos (metadados estáticos) ──────────────────
 const AGENT_META = {
@@ -302,10 +303,11 @@ const RunPanel = ({ prompt, onClose, tenant }) => {
 // ─── Sub-sidebar IA ───────────────────────────────────────────
 const AISidebar = ({ onPick, current, agentStats, recentRuns, loadingRuns }) => {
   const items = [
-    { id: 'create', icon: 'plus',    label: 'Criar agente' },
-    { id: 'all',    icon: 'bot',     label: 'Todos os agentes', count: Object.keys(agentStats).length || null },
-    { id: 'mine',   icon: 'star',    label: 'Meus agentes',     count: 3 },
-    { id: 'log',    icon: 'refresh', label: 'Atividade' },
+    { id: 'create',   icon: 'plus',    label: 'Criar agente' },
+    { id: 'all',      icon: 'bot',     label: 'Todos os agentes', count: Object.keys(agentStats).length || null },
+    { id: 'mine',     icon: 'star',    label: 'Meus agentes',     count: 3 },
+    { id: 'log',      icon: 'refresh', label: 'Atividade' },
+    { id: 'bom-dia',  icon: 'sun',     label: 'Bom Dia' },
   ];
 
   // Agentes com ao menos 1 run, ordenados por last_run_at desc (para sidebar)
@@ -412,6 +414,7 @@ const AgentsHub = ({ tenant, tenantDbId, userId }) => {
   const [prompt, setPrompt] = uSAg('');
   const [running, setRunning] = uSAg(null);
   const [sbActive, setSbActive] = uSAg('create');
+  const [activeAgentScreen, setActiveAgentScreen] = uSAg(null);
 
   // ── Dados reais do Supabase ────────────────────────────────
   const [recentRuns, setRecentRuns] = uSAg([]);
@@ -549,7 +552,13 @@ const AgentsHub = ({ tenant, tenantDbId, userId }) => {
     setRunning(prompt);
   };
 
+  const handleSbPick = (it) => {
+    if (it.id === 'bom-dia') { setActiveAgentScreen('bom-dia'); return; }
+    setSbActive(it.id);
+  };
+
   const runTemplate = (sa) => {
+    if (sa.id === 'bom-dia') { setActiveAgentScreen('bom-dia'); return; }
     const exemplos = {
       lara: 'Crie a campanha de hoje pra Pizzaria do João baseado no que vendeu mais essa semana',
       max:  'Audite o cardápio do iFood e me diga o que tá ruim',
@@ -570,7 +579,7 @@ const AgentsHub = ({ tenant, tenantDbId, userId }) => {
     <div className="agents-hub">
       <AISidebar
         current={sbActive}
-        onPick={(it) => setSbActive(it.id)}
+        onPick={handleSbPick}
         agentStats={agentStats}
         recentRuns={recentRuns}
         loadingRuns={loadingRuns}
@@ -689,6 +698,40 @@ const AgentsHub = ({ tenant, tenantDbId, userId }) => {
             onClose={() => { setRunning(null); setPrompt(''); }}
             tenant={tenant}
           />
+        )}
+
+        {activeAgentScreen === 'bom-dia' && (
+          <div style={{
+            position: 'absolute', inset: 0, zIndex: 20,
+            background: '#0E0E0E',
+            display: 'flex', flexDirection: 'column',
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '8px 16px',
+              borderBottom: '1px solid rgba(255,255,255,0.07)',
+              background: 'rgba(255,255,255,0.02)',
+              flexShrink: 0,
+            }}>
+              <button
+                onClick={() => setActiveAgentScreen(null)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  color: 'rgba(255,255,255,0.55)', fontSize: 12,
+                  padding: '4px 8px', borderRadius: 6,
+                }}
+              >
+                <Icon name="chevleft" size={13}/> Hub
+              </button>
+              <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: 13 }}>/</span>
+              <span style={{ color: 'white', fontSize: 12, fontWeight: 600 }}>Bom Dia</span>
+            </div>
+            <div style={{ flex: 1, overflow: 'auto' }}>
+              <BomDiaScreen tenantDbId={tenantDbId} userId={userId} />
+            </div>
+          </div>
         )}
       </div>
     </div>

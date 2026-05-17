@@ -402,7 +402,7 @@ async function executar(input: Input, runId: string): Promise<Output> {
   if (input.tenant_id) {
     const { data: feedbacks } = await sb
       .from("bom_dia_feedback")
-      .select("vote")
+      .select("vote, comment")
       .eq("tenant_id", input.tenant_id)
       .order("created_at", { ascending: false })
       .limit(10);
@@ -410,7 +410,21 @@ async function executar(input: Input, runId: string): Promise<Output> {
     if (feedbacks && feedbacks.length > 0) {
       const positivos = feedbacks.filter((f) => f.vote === "thumbs_up").length;
       const negativos = feedbacks.filter((f) => f.vote === "thumbs_down").length;
-      feedbackContext = `\n\nFeedback acumulado das últimas ${feedbacks.length} postagens avaliadas: ${positivos} positivo(s) 👍, ${negativos} negativo(s) 👎. ${negativos > positivos ? "Varie mais a composição, elementos visuais e estilo para melhorar." : "Continue no estilo atual — está sendo bem recebido."}`;
+      const criticas = feedbacks
+        .filter((f) => f.vote === "thumbs_down" && f.comment)
+        .map((f) => `"${f.comment}"`)
+        .join(", ");
+      const elogios = feedbacks
+        .filter((f) => f.vote === "thumbs_up" && f.comment)
+        .map((f) => `"${f.comment}"`)
+        .join(", ");
+
+      feedbackContext = `\n\nFeedback acumulado das últimas ${feedbacks.length} postagens avaliadas: ${positivos} positivo(s) 👍, ${negativos} negativo(s) 👎.`;
+      if (criticas) feedbackContext += ` Críticas recebidas: ${criticas} — aplique essas correções diretamente na arte.`;
+      if (elogios)  feedbackContext += ` Elogios recebidos: ${elogios} — mantenha esses elementos.`;
+      feedbackContext += negativos > positivos
+        ? " Varie mais a composição, elementos visuais e estilo para melhorar."
+        : " Continue no estilo atual — está sendo bem recebido.";
     }
   }
 
