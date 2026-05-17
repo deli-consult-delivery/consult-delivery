@@ -753,6 +753,10 @@ input, textarea { font-family: inherit; }
   .topbar-search      { display: none !important; }
   .topbar-tenant      { display: none !important; }
 
+  /* No mobile o hamburguer deve ser sempre acessível — mesmo na rota chat */
+  .app-shell--notopbar .topbar { display: flex !important; }
+  .app-shell--notopbar { --topbar-h: 56px !important; }
+
   /* Modais cabem na tela */
   .modal-mobile-full { width: min(440px, 95vw) !important; max-height: 90vh; overflow-y: auto; }
 }
