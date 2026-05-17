@@ -1373,7 +1373,7 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
       .order('created_at', { ascending: false })
       .limit(15)
       .then(({ data }) => {
-        const valid = (data || []).filter(r => r.output?.img_group_url || r.output?.img_landscape_url);
+        const valid = (data || []).filter(r => r.output?.img_group_url || r.output?.img_landscape_url || r.output?.img_portrait_url);
         setRuns(valid);
         setLoading(false);
       });
@@ -1398,9 +1398,13 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
         const run = payload.new;
         if (run.agent_id !== 'bom-dia') return;
         if (pendingRef.current && run.trigger_dev_run_id !== pendingRef.current) return;
-        if (run.status === 'success' && (run.output?.img_group_url || run.output?.img_landscape_url)) {
+        if (run.status === 'success' && (run.output?.img_group_url || run.output?.img_landscape_url || run.output?.img_portrait_url)) {
           setRuns(prev => [run, ...prev].slice(0, 15));
           setGenerating(false);
+          pendingRef.current = null;
+        } else if (run.status === 'failed' && pendingRef.current) {
+          setGenerating(false);
+          setGenError('Falha ao gerar imagem. Tente novamente.');
           pendingRef.current = null;
         }
       })

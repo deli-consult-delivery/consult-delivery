@@ -570,10 +570,22 @@ Retorne: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme":"..
   }
 
   if (formats === "story" || formats === "both") {
-    logger.info("bom-dia: gerando Story 9:16 via Recraft V4.1");
-    const portraitTempUrl = await generateImage(portraitPrompt, "portrait");
-    logger.info("bom-dia: upload Story para Supabase Storage");
-    imgPortraitUrl = await uploadToStorage(portraitTempUrl, portraitStoragePath, "portrait");
+    if (formats === "both") {
+      // Portrait is optional when feed already succeeded — don't fail the whole run
+      try {
+        logger.info("bom-dia: gerando Story 9:16 via Recraft V4.1");
+        const portraitTempUrl = await generateImage(portraitPrompt, "portrait");
+        logger.info("bom-dia: upload Story para Supabase Storage");
+        imgPortraitUrl = await uploadToStorage(portraitTempUrl, portraitStoragePath, "portrait");
+      } catch (portraitErr) {
+        logger.warn("bom-dia: story generation failed, continuing with feed only", { error: (portraitErr as Error).message });
+      }
+    } else {
+      logger.info("bom-dia: gerando Story 9:16 via Recraft V4.1");
+      const portraitTempUrl = await generateImage(portraitPrompt, "portrait");
+      logger.info("bom-dia: upload Story para Supabase Storage");
+      imgPortraitUrl = await uploadToStorage(portraitTempUrl, portraitStoragePath, "portrait");
+    }
   }
 
   const output: Output = OutputSchema.parse({
