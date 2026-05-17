@@ -67,14 +67,83 @@ const MOCK_AGENTS = [
   { id: 'vera',    name: 'VERA',    role: 'BI & Relatórios',        active: false },
 ];
 
-const MOCK_CALENDAR = [
-  { day: 'Seg', theme: 'Motivação de início de semana' },
-  { day: 'Ter', theme: 'Dica de gestão para delivery' },
-  { day: 'Qua', theme: 'Cases de sucesso' },
-  { day: 'Qui', theme: 'Inovação e tecnologia' },
-  { day: 'Sex', theme: 'Celebração de resultados' },
-  { day: 'Sáb', theme: 'Reflexão e descanso' },
+const CALENDARS = [
+  {
+    id: 'A', label: 'A — Operação Afiada', sub: 'rotina prática',
+    days: [
+      { day: 'Seg', theme: 'Planejamento da semana' },
+      { day: 'Ter', theme: 'Cardápio e ficha técnica' },
+      { day: 'Qua', theme: 'Atendimento e tempo de entrega' },
+      { day: 'Qui', theme: 'Marketing e campanhas' },
+      { day: 'Sex', theme: 'Análise de números' },
+      { day: 'Sáb', theme: 'Time, processo e descanso' },
+    ],
+  },
+  {
+    id: 'B', label: 'B — Funil do Delivery', sub: 'jornada do cliente',
+    days: [
+      { day: 'Seg', theme: 'Atrair (visibilidade no iFood)' },
+      { day: 'Ter', theme: 'Converter (cardápio que vende)' },
+      { day: 'Qua', theme: 'Encantar (experiência de entrega)' },
+      { day: 'Qui', theme: 'Reter (fidelização e CRM)' },
+      { day: 'Sex', theme: 'Faturar (ticket médio e upsell)' },
+      { day: 'Sáb', theme: 'Refletir e ajustar' },
+    ],
+  },
+  {
+    id: 'C', label: 'C — Os 4 P\'s', sub: 'adaptado ao delivery',
+    days: [
+      { day: 'Seg', theme: 'Produto (cardápio e ficha técnica)' },
+      { day: 'Ter', theme: 'Preço (margem, taxa, ticket)' },
+      { day: 'Qua', theme: 'Praça (iFood, próprio, WhatsApp)' },
+      { day: 'Qui', theme: 'Promoção (anúncio, cupom, gatilho)' },
+      { day: 'Sex', theme: 'Pessoas (equipe, atendimento, motoboy)' },
+      { day: 'Sáb', theme: 'Pausa estratégica' },
+    ],
+  },
+  {
+    id: 'D', label: 'D — Mentalidade do Dono', sub: 'tom inspiracional',
+    days: [
+      { day: 'Seg', theme: 'Mentalidade de crescimento' },
+      { day: 'Ter', theme: 'Disciplina operacional' },
+      { day: 'Qua', theme: 'Coragem pra mudar o que não funciona' },
+      { day: 'Qui', theme: 'Visão de futuro (tendências)' },
+      { day: 'Sex', theme: 'Gratidão e resultados' },
+      { day: 'Sáb', theme: 'Descanso ativo' },
+    ],
+  },
+  {
+    id: 'E', label: 'E — Diário de Erros e Acertos', sub: 'formato relato',
+    days: [
+      { day: 'Seg', theme: 'O que aprendi semana passada' },
+      { day: 'Ter', theme: 'Um erro comum no delivery' },
+      { day: 'Qua', theme: 'Um acerto que vale copiar' },
+      { day: 'Qui', theme: 'Uma tendência que está chegando' },
+      { day: 'Sex', theme: 'Um número que diz a verdade' },
+      { day: 'Sáb', theme: 'Uma pergunta pra refletir' },
+    ],
+  },
+  {
+    id: 'F', label: 'F — Gestor 5 Estrelas', sub: 'formato checklist',
+    days: [
+      { day: 'Seg', theme: 'Defina a meta da semana' },
+      { day: 'Ter', theme: 'Revise seu cardápio' },
+      { day: 'Qua', theme: 'Olhe seu PMV e taxa de cancelamento' },
+      { day: 'Qui', theme: 'Teste uma novidade no app' },
+      { day: 'Sex', theme: 'Reconheça quem vendeu mais' },
+      { day: 'Sáb', theme: 'Tire o dia pra cuidar de você' },
+    ],
+  },
 ];
+
+function getAutoCalendar(dateStr) {
+  if (!dateStr) return CALENDARS[0];
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const jan1 = new Date(y, 0, 1);
+  const weekNum = Math.ceil(((date - jan1) / 86400000 + jan1.getDay() + 1) / 7);
+  return CALENDARS[weekNum % CALENDARS.length];
+}
 
 const MOCK_PROMPT = {
   version: 'v1',
@@ -754,14 +823,37 @@ function ProfilePanel({ onOpenPromptModal, agentCfg, setAgentCfg, tenantDbId }) 
 
           {card(<>
             {sectionTitle('Calendário de Temas')}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {MOCK_CALENDAR.map(c => (
-                <div key={c.day} style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: R, width: 22, flexShrink: 0, textTransform: 'uppercase' }}>{c.day}</span>
-                  <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{c.theme}</span>
+            {(() => {
+              const selected = agentCfg.calendar_id ?? 'auto';
+              const activeCal = selected === 'auto'
+                ? getAutoCalendar(new Date().toISOString().split('T')[0])
+                : CALENDARS.find(c => c.id === selected) ?? CALENDARS[0];
+              return (<>
+                <select
+                  value={selected}
+                  onChange={e => setAgentCfg(c => ({ ...c, calendar_id: e.target.value }))}
+                  style={{ width: '100%', marginBottom: 10, padding: '6px 8px', borderRadius: 6, background: 'rgba(0,0,0,0.35)', border: `1px solid ${BORDER}`, color: 'rgba(255,255,255,0.8)', fontSize: 11, fontFamily: 'inherit', cursor: 'pointer', outline: 'none' }}
+                >
+                  <option value="auto">Auto — rotação semanal</option>
+                  {CALENDARS.map(cal => (
+                    <option key={cal.id} value={cal.id}>{cal.label}</option>
+                  ))}
+                </select>
+                {selected === 'auto' && (
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginBottom: 8 }}>
+                    Esta semana: {activeCal.label}
+                  </div>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {activeCal.days.map(c => (
+                    <div key={c.day} style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: R, width: 22, flexShrink: 0, textTransform: 'uppercase' }}>{c.day}</span>
+                      <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{c.theme}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </>);
+            })()}
           </>)}
 
           {card(<>
@@ -1241,7 +1333,7 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
   const [showPrompt,  setShowPrompt]  = useState(false);
   const [showProfile, setShowProfile] = useState(true);
   const [composer,    setComposer]    = useState('');
-  const [agentCfg,    setAgentCfg]    = useState({ memory: '', instructions: '' });
+  const [agentCfg,    setAgentCfg]    = useState({ memory: '', instructions: '', calendar_id: 'auto' });
   const [requests,    setRequests]    = useState(() => loadRequests());
   const [reutilizarForm, setReutilizarForm] = useState(null);
   const pendingRef = useRef(null);
@@ -1270,7 +1362,7 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
     if (!tenantDbId) return;
     supabase.from('tenant_agent_config').select('config').eq('tenant_id', tenantDbId).eq('agent_id', 'bom-dia').maybeSingle()
       .then(({ data }) => {
-        if (data?.config) setAgentCfg({ memory: data.config.memory ?? '', instructions: data.config.instructions ?? '' });
+        if (data?.config) setAgentCfg({ memory: data.config.memory ?? '', instructions: data.config.instructions ?? '', calendar_id: data.config.calendar_id ?? 'auto' });
       });
   }, [tenantDbId]);
 
