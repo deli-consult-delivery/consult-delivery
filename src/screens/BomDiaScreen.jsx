@@ -1076,14 +1076,20 @@ function NewPostModal({ onClose, onGenerate, onSuccess, generating, genError, in
         {step === 1 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
             <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Dia da semana</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: form.dayChips.length === 0 ? R : 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: 1 }}>Dia da semana</div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: R }}>*</div>
+              </div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {DAYS.map(d => (
-                  <button key={d} onClick={() => setForm(f => ({ ...f, dayChips: f.dayChips.includes(d) ? f.dayChips.filter(x => x !== d) : [...f.dayChips, d] }))} style={{ ...pill(d), border: `1px solid ${form.dayChips.includes(d) ? R : BORDER}`, background: form.dayChips.includes(d) ? `${R}18` : 'transparent', color: form.dayChips.includes(d) ? R : 'rgba(255,255,255,0.45)' }}>
+                  <button key={d} onClick={() => setForm(f => ({ ...f, dayChips: f.dayChips.includes(d) ? [] : [d] }))} style={{ ...pill(d), border: `1px solid ${form.dayChips.includes(d) ? R : BORDER}`, background: form.dayChips.includes(d) ? `${R}18` : 'transparent', color: form.dayChips.includes(d) ? R : 'rgba(255,255,255,0.45)' }}>
                     {d}
                   </button>
                 ))}
               </div>
+              {form.dayChips.length === 0 && (
+                <div style={{ fontSize: 11, color: `${R}99`, marginTop: 6 }}>Selecione um dia para continuar</div>
+              )}
             </div>
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Tema / Tom</div>
@@ -1104,7 +1110,11 @@ function NewPostModal({ onClose, onGenerate, onSuccess, generating, genError, in
                 ))}
               </div>
             </div>
-            <button onClick={handleSubmit} style={{ padding: '12px 20px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', background: R, color: '#fff', border: 'none', fontFamily: "'Oswald', sans-serif", textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <button
+              onClick={handleSubmit}
+              disabled={form.dayChips.length === 0}
+              style={{ padding: '12px 20px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: form.dayChips.length === 0 ? 'not-allowed' : 'pointer', background: form.dayChips.length === 0 ? 'rgba(183,12,0,0.3)' : R, color: form.dayChips.length === 0 ? 'rgba(255,255,255,0.3)' : '#fff', border: 'none', fontFamily: "'Oswald', sans-serif", textTransform: 'uppercase', letterSpacing: 0.5, transition: 'background 0.15s, color 0.15s' }}
+            >
               Gerar postagem
             </button>
           </div>

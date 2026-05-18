@@ -684,7 +684,7 @@ Gere JSON com exatamente 4 campos:
    - ${palette.rimLight}
    ${sceneElementsInstruction}
    - Today's lighting mood: ${dailyTone.lighting}
-   - Supporting isometric mockups from approved list (use as secondary props if they fit the scene): [matte black tablet displaying delivery order dashboard with accent-color bar charts and R$ values | black smartphone with delivery app showing accent-color CTA button and order card | matte black cardboard delivery box with white/accent rocket logo stamp | spiral notebook with handwritten checklist and accent-color highlights | small gray metallic gear | black document clipboard/folder]
+   - Supporting isometric mockups from approved list (use 2–4 that fit the scene's theme): [matte black tablet displaying delivery order dashboard with accent-color bar charts and R$ values | black smartphone with delivery app showing accent-color CTA button and order card | matte black cardboard delivery box with white/accent rocket logo stamp | spiral notebook with handwritten checklist and accent-color highlights | small gray metallic gear | black document clipboard/folder | isometric delivery motorcycle (matte black, accent-color details, no rider) | insulated delivery backpack/bag (dark, branded with accent stripe) | simplified isometric city block skyline silhouette (dark buildings, accent window lights, small and in background) | isometric restaurant storefront (dark facade, neon-free, accent-color signage, small scale) | isometric food tray with covered dish (dark matte, restaurant service style)]
    - Subtle wi-fi/signal wave lines crossing the top (white and accent color, 20–40% opacity, curved, thin ~1px)
    - Circuit trace paths from bottom-left corner, small white node dots at intersections (accent color, 30–60% opacity)
    - Bottom-right corner: Consult Delivery logo — a red rocket #B70C00 with white flame details beside bold white text "Consult Delivery" in condensed sans-serif, logo ~10% of canvas width, no box or background around it
@@ -730,15 +730,15 @@ Retorne: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme":"..
   // 4. Prompts de texto puro — Recraft respeita size com texto (multimodal quebra)
   // Headline e área de logo são adicionados como sufixo ao prompt gerado pelo Claude
   const textSuffix = `Bold white condensed headline text center-stage (Title Case, no glow, no italic): "${claudeOut.text_on_image}". Bottom-right corner: Consult Delivery logo — red rocket #B70C00 with white flame trails beside bold white text "Consult Delivery" in condensed sans-serif, ~10% canvas width, no box/background around logo.`;
-  const feedPrompt     = `${claudeOut.dalle_prompt}. Horizontal landscape composition, mockups on left half, headline text area on right half. ${textSuffix}`;
-  const portraitPrompt = `${claudeOut.dalle_prompt}. Vertical portrait composition, headline text at top-left, isometric mockups in lower portion. ${textSuffix}`;
+  // Same base prompt for both formats — only the API size parameter changes orientation
+  const sharedPrompt = `${claudeOut.dalle_prompt}. ${textSuffix}`;
 
   let imgGroupUrl: string | undefined;
   let imgPortraitUrl: string | undefined;
 
   if (formats === "feed" || formats === "both") {
     logger.info("bom-dia: gerando Feed 1800×630 via Recraft V4.1");
-    const groupTempUrl = await generateImage(feedPrompt, "group");
+    const groupTempUrl = await generateImage(sharedPrompt, "group");
     logger.info("bom-dia: upload Feed para Supabase Storage");
     imgGroupUrl = await uploadToStorage(groupTempUrl, groupStoragePath, "group");
   }
@@ -748,7 +748,7 @@ Retorne: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme":"..
       // Portrait is optional when feed already succeeded — don't fail the whole run
       try {
         logger.info("bom-dia: gerando Story 9:16 via Recraft V4.1");
-        const portraitTempUrl = await generateImage(portraitPrompt, "portrait");
+        const portraitTempUrl = await generateImage(sharedPrompt, "portrait");
         logger.info("bom-dia: upload Story para Supabase Storage");
         imgPortraitUrl = await uploadToStorage(portraitTempUrl, portraitStoragePath, "portrait");
       } catch (portraitErr) {
@@ -756,7 +756,7 @@ Retorne: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme":"..
       }
     } else {
       logger.info("bom-dia: gerando Story 9:16 via Recraft V4.1");
-      const portraitTempUrl = await generateImage(portraitPrompt, "portrait");
+      const portraitTempUrl = await generateImage(sharedPrompt, "portrait");
       logger.info("bom-dia: upload Story para Supabase Storage");
       imgPortraitUrl = await uploadToStorage(portraitTempUrl, portraitStoragePath, "portrait");
     }
