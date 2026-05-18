@@ -38,3 +38,6 @@ backup_*.sql
 WikiBrain/
 Plataforma Consult Delivery-handoff*/
 _handoff_extracted/
+
+# Backups de arquivos editados (geral)
+*.bak
