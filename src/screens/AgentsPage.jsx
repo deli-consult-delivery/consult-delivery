@@ -302,6 +302,7 @@ const RunPanel = ({ prompt, onClose, tenant }) => {
 
 // ─── Sub-sidebar IA ───────────────────────────────────────────
 const AISidebar = ({ onPick, current, agentStats, recentRuns, loadingRuns }) => {
+  const [collapsed, setCollapsed] = uSAg(false);
   const items = [
     { id: 'create',   icon: 'plus',    label: 'Criar agente' },
     { id: 'all',      icon: 'bot',     label: 'Todos os agentes', count: Object.keys(agentStats).length || null },
@@ -317,12 +318,14 @@ const AISidebar = ({ onPick, current, agentStats, recentRuns, loadingRuns }) => 
     .slice(0, 2);
 
   return (
-    <aside className="ai-sidebar">
+    <aside className={`ai-sidebar${collapsed ? ' collapsed' : ''}`}>
       <div className="ai-sb-head">
         <span style={{ fontSize: 13, fontWeight: 700, color: 'white', letterSpacing: 0.3 }}>
           IA · DELI Hub
         </span>
-        <button className="ai-sb-collapse"><Icon name="chevleft" size={14}/></button>
+        <button className="ai-sb-collapse" onClick={() => setCollapsed(c => !c)}>
+          <Icon name={collapsed ? 'arrowright' : 'chevleft'} size={14}/>
+        </button>
       </div>
 
       <button className="ai-sb-cta" onClick={() => onPick({ id: 'ask' })}>
@@ -420,6 +423,7 @@ const AgentsHub = ({ tenant, tenantDbId, userId }) => {
   const [recentRuns, setRecentRuns] = uSAg([]);
   const [agentStats, setAgentStats] = uSAg({});
   const [loadingRuns, setLoadingRuns] = uSAg(true);
+  const [showAllRuns, setShowAllRuns] = uSAg(false);
 
   const tenantName = TENANTS.find(t => t.id === tenant)?.name || '';
 
@@ -651,16 +655,24 @@ const AgentsHub = ({ tenant, tenantDbId, userId }) => {
             </>
           )}
 
-          {/* Histórico de runs recentes (sempre visível, abaixo dos cards) */}
+          {/* Histórico de runs recentes (colapsável, abaixo dos cards) */}
           {!loadingRuns && recentRuns.length > 0 && (
             <div style={{ marginTop: 24, width: '100%', maxWidth: 700 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.4)', letterSpacing: 1, marginBottom: 8, textTransform: 'uppercase' }}>
                 Últimas execuções
               </div>
               <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-                {recentRuns.map((r) => (
+                {(showAllRuns ? recentRuns : recentRuns.slice(0, 3)).map((r) => (
                   <RunItem key={r.id} run={r}/>
                 ))}
+                {recentRuns.length > 3 && (
+                  <button
+                    onClick={() => setShowAllRuns(s => !s)}
+                    style={{ width: '100%', padding: '8px 14px', background: 'transparent', color: 'rgba(255,255,255,0.4)', fontSize: 11, borderTop: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer', textAlign: 'left' }}
+                  >
+                    {showAllRuns ? '↑ Ver menos' : `↓ Ver mais ${recentRuns.length - 3} execuções`}
+                  </button>
+                )}
               </div>
             </div>
           )}
