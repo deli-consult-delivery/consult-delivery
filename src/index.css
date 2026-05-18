@@ -1641,7 +1641,7 @@ input, textarea { font-family: inherit; }
 .ai-sb-credits-fill { height: 100%; background: linear-gradient(90deg, var(--cora-green, #34d399), var(--hub-cyan, #06b6d4)); border-radius: 2px; }
 
 .hub-stage {
-  position: relative; overflow: hidden;
+  position: relative; overflow: hidden; height: 100%;
   background:
     radial-gradient(60% 50% at 50% 30%, rgba(183,12,0,0.18) 0%, transparent 70%),
     radial-gradient(40% 40% at 70% 70%, rgba(168,85,247,0.12) 0%, transparent 70%),
@@ -1680,9 +1680,9 @@ input, textarea { font-family: inherit; }
 .hub-pill.primary { background: white; color: var(--black); border-color: white; }
 .hub-pill.primary:hover { background: #f3f3f3; }
 .hub-center {
-  position: relative; z-index: 2; flex: 1;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 0 32px 32px; max-width: 920px; margin: 0 auto; width: 100%; overflow-y: auto;
+  position: relative; z-index: 2; flex: 1; min-height: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  padding: 48px 32px 48px; max-width: 920px; margin: 0 auto; width: 100%; overflow-y: auto;
 }
 .hub-brand { display: flex; align-items: center; gap: 18px; margin-bottom: 12px; }
 .hub-brand-icon { width: 56px; height: auto; filter: drop-shadow(0 8px 24px rgba(183,12,0,0.5)); }
