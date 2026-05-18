@@ -416,8 +416,10 @@ function AgentMessage({ run, tenantDbId, isLast }) {
     }
   };
 
+  const TEAM_SIGNATURE = '\n\n_Equipe Consult Delivery_ 🚀';
+
   const handleCopy = () => {
-    navigator.clipboard.writeText(caption).then(() => {
+    navigator.clipboard.writeText(caption + TEAM_SIGNATURE).then(() => {
       setCopied(true); setTimeout(() => setCopied(false), 2000);
     });
   };
@@ -468,15 +470,9 @@ function AgentMessage({ run, tenantDbId, isLast }) {
     setSending(true); setSendResult(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      // Buscar nome do usuário logado para assinatura
-      const { data: { user } } = await supabase.auth.getUser();
-      const senderName = user?.user_metadata?.full_name
-        || user?.user_metadata?.name
-        || user?.email?.split('@')[0]
-        || 'Consult Delivery';
       const signedCaption = caption
-        ? `${caption}\n\n-- Enviado por ${senderName}`
-        : `-- Enviado por ${senderName}`;
+        ? `${caption}${TEAM_SIGNATURE}`
+        : TEAM_SIGNATURE;
       const r = await fetch(`${BRIDGE_URL}/agents/bom-dia/send-groups`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },

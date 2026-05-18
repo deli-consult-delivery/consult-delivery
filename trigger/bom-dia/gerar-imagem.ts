@@ -126,6 +126,102 @@ const DAY_NAMES: Record<number, string> = {
   3: "Quarta-feira", 4: "Quinta-feira", 5: "Sexta-feira", 6: "Sábado",
 };
 
+// ─── Mapa de tons por dia da semana ──────────────────────────────────────────
+
+const DAILY_TONE: Record<number, { mood: string; elements: string; lighting: string }> = {
+  0: {
+    mood:     "celebration — the week was conquered, next cycle starts strong",
+    elements: "trophy, upward completion bars, celebration light effects",
+    lighting: "festive general glow, triumphant light particles",
+  },
+  1: {
+    mood:     "Monday morning energy — rhythm and discipline to start the week",
+    elements: "delivery rider motorcycle silhouette in motion blur, floating delivery boxes with motion trails, upward arrows",
+    lighting: "diagonal red light rays from the left side cutting across the composition",
+  },
+  2: {
+    mood:     "focused and consistent — maintaining rhythm through disciplined execution",
+    elements: "dark delivery dashboard with red bar charts and metrics, upward arrows, order list panels",
+    lighting: "central red glow, dark deep background, tight vignette",
+  },
+  3: {
+    mood:     "midweek evolution — halfway through, stronger than the start",
+    elements: "smartphone with growing delivery graph, upward trending chart, progress indicators",
+    lighting: "subtle blue-tinted radial glow with red accent points (only day with secondary accent)",
+  },
+  4: {
+    mood:     "refinement and growth — small adjustments leading to big results",
+    elements: "dashboard with delivery metrics, checkmark boxes, performance indicators, clipboard",
+    lighting: "red spotlight over the dashboard, high contrast dramatic shadows",
+  },
+  5: {
+    mood:     "discipline becomes results — strong close, opening a better next week",
+    elements: "tall bar charts at peak, horizontal motion light trails, full delivery dashboard",
+    lighting: "vibrant horizontal red light trails across the composition",
+  },
+  6: {
+    mood:     "strategic reflection — analyzing what worked, planning what comes next",
+    elements: "spiral notebook with checklist, tablet with weekly review, small gear for process/automation",
+    lighting: "soft illumination, less saturated, contemplative atmosphere",
+  },
+};
+
+// ─── Biblioteca de frases por dia da semana ──────────────────────────────────
+
+type PhrasePair = { main: string; sub?: string };
+
+const PHRASE_LIBRARY: Record<number, PhrasePair[]> = {
+  0: [
+    { main: "Seu delivery venceu mais uma semana" },
+    { main: "Semana fechada, próxima já chega forte" },
+    { main: "Comemora hoje, amanhã o ciclo recomeça" },
+  ],
+  1: [
+    { main: "Organize cedo, venda com ritmo",          sub: "Segunda-feira: energia para começar a semana" },
+    { main: "Comece com clareza, termine com lucro" },
+    { main: "Plano na mão, motoboy na rua" },
+    { main: "Semana forte no delivery" },
+    { main: "Primeira virada da semana começa agora" },
+  ],
+  2: [
+    { main: "Foco hoje, resultado constante" },
+    { main: "Disciplina vira resultado no delivery" },
+    { main: "Constância é o segredo do pedido recorrente" },
+    { main: "Cada turno é uma chance de melhorar" },
+  ],
+  3: [
+    { main: "Quarta firme, delivery em evolução" },
+    { main: "Ânimo no meio, delivery no topo" },
+    { main: "Metade da semana, dobro da intenção" },
+    { main: "Ritmo de quarta é ritmo de quem cresce" },
+  ],
+  4: [
+    { main: "Cresça em cada ajuste",                   sub: "Quinta de evolução no delivery" },
+    { main: "Pequenos ajustes, grandes pedidos" },
+    { main: "Refine hoje, fature amanhã" },
+    { main: "Cresça um pedido por vez" },
+  ],
+  5: [
+    { main: "Sexta de virada, fim de semana de meta" },
+    { main: "Fechamento forte abre semana melhor" },
+    { main: "Disciplina vira resultado no delivery" },
+  ],
+  6: [
+    { main: "Revisar hoje, vender melhor",              sub: "Revisar o ciclo, preparar o próximo" },
+    { main: "Analise o que rodou, planeje o que vem" },
+    { main: "O melhor delivery começa no caderno" },
+  ],
+};
+
+function selectPhrase(weekday: number, dateStr: string): PhrasePair {
+  const phrases = PHRASE_LIBRARY[weekday] ?? PHRASE_LIBRARY[1];
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date    = new Date(y, m - 1, d);
+  const jan1    = new Date(y, 0, 1);
+  const weekNum = Math.ceil(((date.getTime() - jan1.getTime()) / 86_400_000 + jan1.getDay() + 1) / 7);
+  return phrases[weekNum % phrases.length];
+}
+
 // ─── Helper: data no fuso de São Paulo (UTC-3, sem DST desde 2020) ───────────
 
 function getSPDate() {
@@ -392,8 +488,10 @@ async function executar(input: Input, runId: string): Promise<Output> {
   }
 
   // Tema efetivo: custom_theme tem prioridade sobre o calendário selecionado
-  const autoTheme = getCalendar(calendarId, dateStr).themes[weekday] ?? "motivação";
-  const theme     = input.custom_theme?.trim() || autoTheme;
+  const autoTheme      = getCalendar(calendarId, dateStr).themes[weekday] ?? "motivação";
+  const theme          = input.custom_theme?.trim() || autoTheme;
+  const selectedPhrase = input.custom_theme ? null : selectPhrase(weekday, dateStr);
+  const dailyTone      = DAILY_TONE[weekday] ?? DAILY_TONE[1];
 
   logger.info("bom-dia-gerar-imagem iniciado", { dateStr, dayName, theme, calendarId, isManual });
 
@@ -502,7 +600,10 @@ Retorne SOMENTE JSON válido, sem texto extra.${memoryBlock}${instructionsBlock}
       content: `Dia: ${dayName}
 Tema: ${theme}
 Data: ${dateStr}
-Horário: ${hoursLine}${briefLine}
+Horário: ${hoursLine}${briefLine}${selectedPhrase ? `\nFrase do dia (headline base — use ou adapte): "${selectedPhrase.main}"${selectedPhrase.sub ? `\nSubtítulo sugerido: "${selectedPhrase.sub}"` : ""}` : ""}
+Tom do dia: ${dailyTone.mood}
+Elementos visuais do dia: ${dailyTone.elements}
+Iluminação do dia: ${dailyTone.lighting}
 
 Gere JSON com exatamente 4 campos:
 
@@ -510,7 +611,9 @@ Gere JSON com exatamente 4 campos:
    Descreva a cena completa seguindo o estilo obrigatório:
    - Dark black background #0D0D0D with dramatic red radial light-leak #B70C00 from bottom-left corner blending into ~40% of canvas
    - Isometric 3D composition (~30° angle, Cinema 4D/Blender style render), dramatic red rim light from bottom-left, deep black shadows #050505 on opposite side
-   - 4–6 isometric mockups from approved list: [matte black tablet displaying delivery order dashboard with red bar charts and R$ values | black smartphone with delivery app showing red CTA button and order card | matte black cardboard delivery box with white/red rocket logo stamp | spiral notebook with handwritten checklist and red circle highlights | small gray metallic gear | black document clipboard/folder]
+   - Today's featured scene elements (prioritize these): ${dailyTone.elements}
+   - Today's lighting mood: ${dailyTone.lighting}
+   - Supporting isometric mockups from approved list: [matte black tablet displaying delivery order dashboard with red bar charts and R$ values | black smartphone with delivery app showing red CTA button and order card | matte black cardboard delivery box with white/red rocket logo stamp | spiral notebook with handwritten checklist and red circle highlights | small gray metallic gear | black document clipboard/folder]
    - Subtle wi-fi/signal wave lines crossing the top (white and red, 20–40% opacity, curved, thin ~1px)
    - Circuit trace paths from bottom-left corner, small white node dots at intersections (red, 30–60% opacity)
    - Bottom-right corner: Consult Delivery logo — a red rocket #B70C00 with white flame details beside bold white text "Consult Delivery" in condensed sans-serif, logo ~10% of canvas width, no box or background around it
@@ -519,13 +622,13 @@ Gere JSON com exatamente 4 campos:
    - NO people, hands, faces, mascots, real food, balloons, flags, confetti, neon, anime, cartoon, watercolor
    - DO NOT mention pixel dimensions or aspect ratio in this prompt
 
-2. "text_on_image" (PT-BR, máx 7 palavras, Title Case): headline curta e impactante para a arte, tema: "${theme}"
+2. "text_on_image" (PT-BR, máx 7 palavras, Title Case): ${selectedPhrase ? `use ou adapte esta frase como headline: "${selectedPhrase.main}"` : `headline curta e impactante para a arte, tema: "${theme}"`}
 
 3. "caption" (PT-BR, EXATAMENTE 4 blocos separados por linha em branco):
    Bloco 1: [emoji temático único] Bom dia da equipe Consult Delivery!
-   Bloco 2: 2–3 frases sobre "${theme}" para donos de delivery
+   Bloco 2: 2–3 frases sobre "${theme}" para donos de restaurante/delivery — NUNCA mencione o dia da semana pelo nome (o cliente pode trabalhar qualquer dia da semana) — NÃO repita "Consult Delivery" neste bloco nem em nenhum outro; o nome aparece apenas no Bloco 1
    Bloco 3: ${hoursLine}
-   Bloco 4: disponibilidade da equipe (sem links, @, hashtag)
+   Bloco 4: disponibilidade da equipe — NÃO repita "Consult Delivery" aqui (sem links, @, hashtag)
 
 4. "theme": tema resumido em PT-BR
 
