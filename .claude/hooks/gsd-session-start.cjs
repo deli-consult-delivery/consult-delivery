@@ -3,14 +3,14 @@
 const fs = require('fs');
 const path = require('path');
 
-const planningDir = path.join(__dirname, '..', '..', '.planning');
+const planningDir = path.join(__dirname, '..', '..', '.planning', 'phases');
 if (!fs.existsSync(planningDir)) process.exit(0);
 
 let activePhase = null;
 try {
-  const entries = fs.readdirSync(planningDir)
-    .filter(f => f.startsWith('phase-'))
-    .map(f => ({ name: f, mtime: fs.statSync(path.join(planningDir, f)).mtime }))
+  const entries = fs.readdirSync(planningDir, { withFileTypes: true })
+    .filter(d => d.isDirectory())
+    .map(d => ({ name: d.name, mtime: fs.statSync(path.join(planningDir, d.name)).mtime }))
     .sort((a, b) => b.mtime - a.mtime);
   if (entries.length > 0) activePhase = entries[0].name;
 } catch (_) {}
