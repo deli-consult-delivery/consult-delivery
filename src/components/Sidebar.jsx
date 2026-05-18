@@ -21,15 +21,7 @@ const NAV_GROUPS = [
   {
     label: 'Agentes IA',
     items: [
-      { id: 'agents',        icon: 'bot',      label: 'Painel Agentes'    },
-      { id: 'analise-ifood', icon: 'chart',    label: 'Análise iFood'     },
-      { id: 'cora',          icon: 'dollar',   label: 'CORA · Cobrança',  pulse: true },
-      { id: 'lara',          icon: 'sparkles', label: 'LARA · Marketing', pulse: true },
-      { id: 'max',           icon: 'bot',      label: 'MAX · Suporte',    pulse: true },
-      { id: 'nova',          icon: 'sparkles', label: 'NOVA · Automação', pulse: true },
-      { id: 'breno',         icon: 'chat',     label: 'BRENO · Atend.',   pulse: true },
-      { id: 'sofia',         icon: 'sparkles', label: 'SOFIA · SDR',      pulse: true },
-      { id: 'vera',          icon: 'chart',    label: 'VERA · BI',         pulse: true },
+      { id: 'agents', icon: 'bot', label: 'Painel Agentes' },
     ],
   },
   {
