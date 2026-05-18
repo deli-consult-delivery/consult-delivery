@@ -84,7 +84,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"C:/Users/Consult Delivery/consult-delivery/.claude/hooks/typecheck.cjs\"",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/typecheck.cjs\"",
             "timeout": 35
           }
         ]
@@ -94,7 +94,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"C:/Users/Consult Delivery/consult-delivery/.claude/hooks/gsd-commit-hint.cjs\"",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/gsd-commit-hint.cjs\"",
             "timeout": 3,
             "async": true
           }
@@ -106,7 +106,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"C:/Users/Consult Delivery/consult-delivery/.claude/hooks/gsd-session-start.cjs\"",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/gsd-session-start.cjs\"",
             "timeout": 5
           }
         ]
@@ -118,7 +118,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"C:/Users/Consult Delivery/consult-delivery/.claude/hooks/gsd-pre-compact.cjs\"",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/gsd-pre-compact.cjs\"",
             "timeout": 10
           }
         ]
@@ -130,7 +130,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"C:/Users/Consult Delivery/consult-delivery/.claude/hooks/gsd-post-compact.cjs\"",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/gsd-post-compact.cjs\"",
             "timeout": 10
           }
         ]
@@ -141,7 +141,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"C:/Users/Consult Delivery/consult-delivery/.claude/hooks/typecheck-stop.cjs\"",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/typecheck-stop.cjs\"",
             "timeout": 60,
             "statusMessage": "Verificando TypeScript antes de concluir..."
           }
