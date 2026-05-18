@@ -18,11 +18,11 @@ const recentCommit = safeExec('git log --oneline -3');
 // Detecta fase GSD ativa
 let activePhase = '';
 try {
-  const planningDir = path.join(projectDir, '.planning');
+  const planningDir = path.join(projectDir, '.planning', 'phases');
   if (fs.existsSync(planningDir)) {
-    const phases = fs.readdirSync(planningDir)
-      .filter(f => f.startsWith('phase-'))
-      .map(f => ({ name: f, mtime: fs.statSync(path.join(planningDir, f)).mtime }))
+    const phases = fs.readdirSync(planningDir, { withFileTypes: true })
+      .filter(d => d.isDirectory())
+      .map(d => ({ name: d.name, mtime: fs.statSync(path.join(planningDir, d.name)).mtime }))
       .sort((a, b) => b.mtime - a.mtime);
     if (phases.length > 0) activePhase = phases[0].name;
   }
