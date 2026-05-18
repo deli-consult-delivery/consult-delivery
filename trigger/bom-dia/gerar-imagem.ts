@@ -222,6 +222,64 @@ function selectPhrase(weekday: number, dateStr: string): PhrasePair {
   return phrases[weekNum % phrases.length];
 }
 
+// ─── Palette library — rotates to prevent visual fatigue ─────────────────────
+
+interface Palette {
+  name:        string;
+  background:  string; // DALL-E background description
+  rimLight:    string; // DALL-E rim light description
+  colors:      string; // strict color palette line for DALL-E
+}
+
+const PALETTE_LIBRARY: Palette[] = [
+  {
+    name:       "Consult Red",
+    background: "Dark black background #0D0D0D with dramatic red radial light-leak #B70C00 from bottom-left corner blending into ~40% of canvas",
+    rimLight:   "Isometric 3D composition (~30° angle, Cinema 4D/Blender style render), dramatic red rim light from bottom-left, deep black shadows #050505 on opposite side",
+    colors:     "Color palette STRICTLY: #0D0D0D, #050505, #B70C00, #8A0900, #FFFFFF, #6E6E6E — NO other colors",
+  },
+  {
+    name:       "iFood Coral",
+    background: "Very dark charcoal background #111111 with warm coral-red radial glow #EA1D2C from bottom-left blending into ~35% of canvas",
+    rimLight:   "Isometric 3D composition (~30° angle, Cinema 4D/Blender style render), coral-red rim light from bottom-left, near-black shadows #080808 on opposite side",
+    colors:     "Color palette STRICTLY: #111111, #080808, #EA1D2C, #B01020, #FFFFFF, #707070 — NO other colors",
+  },
+  {
+    name:       "Tech Blue",
+    background: "Deep navy background #080C14 with electric blue radial light-leak #1A6FD4 from bottom-left corner blending into ~40% of canvas",
+    rimLight:   "Isometric 3D composition (~30° angle, Cinema 4D/Blender style render), electric blue rim light from bottom-left, near-black shadows #04070D on opposite side",
+    colors:     "Color palette STRICTLY: #080C14, #04070D, #1A6FD4, #0F4F9E, #FFFFFF, #5A7FAA — NO other colors",
+  },
+  {
+    name:       "Finance Green",
+    background: "Dark slate background #0A0F0A with deep emerald radial glow #0D7A45 from bottom-left corner blending into ~35% of canvas",
+    rimLight:   "Isometric 3D composition (~30° angle, Cinema 4D/Blender style render), emerald rim light from bottom-left, near-black shadows #050905 on opposite side",
+    colors:     "Color palette STRICTLY: #0A0F0A, #050905, #0D7A45, #085C33, #FFFFFF, #4A7A5A — NO other colors",
+  },
+  {
+    name:       "Management Gold",
+    background: "Dark charcoal background #0E0C08 with warm amber radial light-leak #C47D00 from bottom-left corner blending into ~38% of canvas",
+    rimLight:   "Isometric 3D composition (~30° angle, Cinema 4D/Blender style render), amber-gold rim light from bottom-left, near-black shadows #080600 on opposite side",
+    colors:     "Color palette STRICTLY: #0E0C08, #080600, #C47D00, #935C00, #FFFFFF, #7A6A40 — NO other colors",
+  },
+  {
+    name:       "Delivery Purple",
+    background: "Very dark background #0C0812 with deep violet radial glow #6B21A8 from bottom-left corner blending into ~40% of canvas",
+    rimLight:   "Isometric 3D composition (~30° angle, Cinema 4D/Blender style render), violet rim light from bottom-left, near-black shadows #060408 on opposite side",
+    colors:     "Color palette STRICTLY: #0C0812, #060408, #6B21A8, #4E187D, #FFFFFF, #8A60AA — NO other colors",
+  },
+];
+
+function selectPalette(weekday: number, dateStr: string): Palette {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date    = new Date(y, m - 1, d);
+  const jan1    = new Date(y, 0, 1);
+  const weekNum = Math.ceil(((date.getTime() - jan1.getTime()) / 86_400_000 + jan1.getDay() + 1) / 7);
+  // rotate by week so each week feels different; always red on Mon/first day of cycle
+  const idx = (weekday + weekNum) % PALETTE_LIBRARY.length;
+  return PALETTE_LIBRARY[idx];
+}
+
 // ─── Helper: data no fuso de São Paulo (UTC-3, sem DST desde 2020) ───────────
 
 function getSPDate() {
@@ -492,6 +550,7 @@ async function executar(input: Input, runId: string): Promise<Output> {
   const theme          = input.custom_theme?.trim() || autoTheme;
   const selectedPhrase = input.custom_theme ? null : selectPhrase(weekday, dateStr);
   const dailyTone      = DAILY_TONE[weekday] ?? DAILY_TONE[1];
+  const palette        = selectPalette(weekday, dateStr);
 
   logger.info("bom-dia-gerar-imagem iniciado", { dateStr, dayName, theme, calendarId, isManual });
 
@@ -544,6 +603,18 @@ async function executar(input: Input, runId: string): Promise<Output> {
   const briefLine = input.custom_brief?.trim()
     ? `\nContexto adicional (PRIORIDADE — guia a criatividade): ${input.custom_brief.trim()}`
     : "";
+
+  // Quando há um brief manual, a cena descrita tem prioridade total sobre os elementos padrão.
+  // Se o brief descreve uma pessoa/personagem, a restrição "NO people" é substituída por uma
+  // instrução de ilustração estilizada — o cliente pediu aquela cena específica.
+  const sceneElementsInstruction = input.custom_brief
+    ? `- Primary scene (PRIORITY — follow the custom brief above): build the full composition around the described scene`
+    : `- Today's featured scene elements (prioritize these): ${dailyTone.elements}`;
+
+  const styleRestrictions = input.custom_brief
+    ? `- If the brief describes a person, character, or specific scene with humans: depict them as a clean stylized flat-vector or soft isometric 3D illustration (no photorealism, no hyper-detailed realistic faces — stylized/illustrated character is correct). The brief scene takes FULL priority.
+   - NO real food photography, balloons, flags, confetti, neon lights, watercolor texture, anime/manga style`
+    : `- NO people, hands, faces, mascots, real food, balloons, flags, confetti, neon, anime, cartoon, watercolor`;
 
   const claudeResp = await anthropic.messages.create({
     model:      "claude-sonnet-4-6",
@@ -609,17 +680,17 @@ Gere JSON com exatamente 4 campos:
 
 1. "dalle_prompt" (em INGLÊS — para gerador de imagem Recraft V4.1):
    Descreva a cena completa seguindo o estilo obrigatório:
-   - Dark black background #0D0D0D with dramatic red radial light-leak #B70C00 from bottom-left corner blending into ~40% of canvas
-   - Isometric 3D composition (~30° angle, Cinema 4D/Blender style render), dramatic red rim light from bottom-left, deep black shadows #050505 on opposite side
-   - Today's featured scene elements (prioritize these): ${dailyTone.elements}
+   - ${palette.background}
+   - ${palette.rimLight}
+   ${sceneElementsInstruction}
    - Today's lighting mood: ${dailyTone.lighting}
-   - Supporting isometric mockups from approved list: [matte black tablet displaying delivery order dashboard with red bar charts and R$ values | black smartphone with delivery app showing red CTA button and order card | matte black cardboard delivery box with white/red rocket logo stamp | spiral notebook with handwritten checklist and red circle highlights | small gray metallic gear | black document clipboard/folder]
-   - Subtle wi-fi/signal wave lines crossing the top (white and red, 20–40% opacity, curved, thin ~1px)
-   - Circuit trace paths from bottom-left corner, small white node dots at intersections (red, 30–60% opacity)
+   - Supporting isometric mockups from approved list (use as secondary props if they fit the scene): [matte black tablet displaying delivery order dashboard with accent-color bar charts and R$ values | black smartphone with delivery app showing accent-color CTA button and order card | matte black cardboard delivery box with white/accent rocket logo stamp | spiral notebook with handwritten checklist and accent-color highlights | small gray metallic gear | black document clipboard/folder]
+   - Subtle wi-fi/signal wave lines crossing the top (white and accent color, 20–40% opacity, curved, thin ~1px)
+   - Circuit trace paths from bottom-left corner, small white node dots at intersections (accent color, 30–60% opacity)
    - Bottom-right corner: Consult Delivery logo — a red rocket #B70C00 with white flame details beside bold white text "Consult Delivery" in condensed sans-serif, logo ~10% of canvas width, no box or background around it
    - Bold white condensed sans-serif headline text area related to: "${theme}"
-   - Color palette STRICTLY: #0D0D0D, #050505, #B70C00, #8A0900, #FFFFFF, #6E6E6E — NO other colors
-   - NO people, hands, faces, mascots, real food, balloons, flags, confetti, neon, anime, cartoon, watercolor
+   - ${palette.colors}
+   ${styleRestrictions}
    - DO NOT mention pixel dimensions or aspect ratio in this prompt
 
 2. "text_on_image" (PT-BR, máx 7 palavras, Title Case): ${selectedPhrase ? `use ou adapte esta frase como headline: "${selectedPhrase.main}"` : `headline curta e impactante para a arte, tema: "${theme}"`}
