@@ -46,7 +46,7 @@ Deploy: GitHub Actions → GitHub Pages
 Domínio: app.consultdelivery.com.br
 GitHub: github.com/deli-consult-delivery/consult-delivery
 
-OpenClaw: NÃO USADO — substituído por Claude Code + Trigger.dev (containers legacy podem permanecer na VPS porta 18789, mas não fazem parte do stack ativo)
+OpenClaw: NÃO USADO pelo consult-delivery — substituído por Claude Code + Trigger.dev. Containers na VPS porta 18789 hoje hospedam agentes da plataforma EvoNexus (POC, em avaliação).
 n8n: NÃO USADO — execução de tarefas é 100% Trigger.dev
 EvoNexus: EM AVALIAÇÃO (POC) — instalado em evonexus.evolutionfoundation.com.br (VPS), roda sobre Claude Code SDK; ainda não confirmado se entra na stack final
 
@@ -76,7 +76,7 @@ GitHub: github.com/deli-consult-delivery/consult-delivery
 
 Integrações validadas: Anthropic (SDK), Trigger.dev, Evolution, Google Drive, Asaas
 
-OpenClaw 2026.5.2: legacy — containers podem permanecer rodando na porta 18789, mas não há agente ativo dependendo dele. Não invocar, não estender.
+OpenClaw 2026.5.2: legacy no consult-delivery — containers seguem rodando na porta 18789 hospedando agentes da plataforma EvoNexus (POC, em avaliação). Nenhum agente do consult-delivery depende dele. Não invocar, não estender pelo consult-delivery.
 ⚠️  Todo agente novo vai em trigger/ (Trigger.dev) orquestrado via Claude Code.
 
 ====================================================
@@ -850,9 +850,10 @@ ORQUESTRADOR DE DESENVOLVIMENTO: Claude Code (CLI Anthropic)
 - Sessão remota: VPS systemd `claude-dev.service` — Claude Code roda 24/7 mesmo com PC desligado
 - Garante continuidade de fluxos de dev e automação sem depender da máquina local
 
-OPENCLAW: legacy — fora do stack ativo
-- Containers podem permanecer na VPS porta 18789, mas não há agente ativo dependendo dele
-- Não invocar, não estender, não criar agente novo nele
+OPENCLAW: legacy no consult-delivery — fora do stack ativo
+- Containers seguem rodando na VPS porta 18789 hospedando agentes da plataforma EvoNexus (POC, em avaliação)
+- Nenhum agente do consult-delivery depende dele
+- Não invocar, não estender, não criar agente novo nele pelo consult-delivery
 
 N8N: não usado — execução de tarefas é 100% Trigger.dev
 EVONEXUS: em avaliação (POC) — instalado em evonexus.evolutionfoundation.com.br, roda sobre Claude Code SDK. Não usar em produção até validação.
@@ -893,7 +894,7 @@ Lições aprendidas. Violar qualquer uma é defeito grave, não estilo.
    → Cada fase tem critério de aceite — não há "pulo".
 
 7. Não criar agente novo fora de trigger/ (Trigger.dev) orquestrado via Claude Code.
-   → OpenClaw é legacy: containers podem rodar, mas não invocar nem estender.
+   → OpenClaw é legacy no consult-delivery: containers seguem rodando hospedando agentes da EvoNexus (POC), mas não invocar nem estender pelo consult-delivery.
    → n8n não é usado: execução de tarefas é 100% Trigger.dev.
    → EvoNexus está em POC: não usar em produção até validação.
 
