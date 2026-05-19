@@ -14,6 +14,7 @@ import ReportsScreen from './screens/ReportsScreen.jsx';
 import SettingsScreen from './screens/SettingsScreen.jsx';
 import AgentsPage from './screens/AgentsPage.jsx';
 import CampanhasScreen from './screens/campanhas/CampanhasScreen.jsx';
+import LojasScreen from './screens/lojas/LojasScreen.jsx';
 import LaraScreen from './screens/LaraScreen.jsx';
 import DraftsPendentesScreen from './screens/DraftsPendentesScreen.jsx';
 import GruposScreen from './screens/GruposScreen.jsx';
@@ -245,6 +246,7 @@ export default function App() {
         {route === 'crm'             && <CRMScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={nav => setRoute(nav)} />}
         {route === 'reports'         && <ReportsScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'agents'           && <AgentsPage tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />}
+        {route === 'lojas'     && <LojasScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'campanhas' && <CampanhasScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'lara'      && <LaraScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'drafts-pendentes' && <DraftsPendentesScreen tenantId={tenantDbId} userId={session?.user?.id} />}

@@ -31,12 +31,15 @@ Loja como entidade central com workspace por loja e atribuição de consultores.
 
 ## 📦 O que entrega no fim desta onda
 
-- [ ] 4 migrations Supabase ALTER-only (zero DROP)
-- [ ] 8 endpoints Bridge Server
-- [ ] Tela `/lojas` (lista + filtros)
-- [ ] Tela `/lojas/:id` (workspace 5 abas, só "Métricas" funcional agora)
-- [ ] RBAC: papéis `consultor` e `consultor_senior` adicionados
-- [ ] Atribuição consultor ↔ loja
+- [x] 4 migrations Supabase ALTER-only (zero DROP) — aplicadas 19/05/2026
+- [x] 8 endpoints Bridge Server — implementados em bridge-server/index.js
+- [x] Tela `/lojas` (lista + filtros) — src/screens/lojas/LojasListView.jsx
+- [x] Modal "Nova loja" — src/screens/lojas/NovaLojaModal.jsx
+- [x] Tela `/lojas/:id` (workspace 5 abas) — src/screens/lojas/LojaWorkspace.jsx
+- [x] Modal "Atribuir consultor" — src/screens/lojas/AtribuirConsultorModal.jsx
+- [x] Router LojasScreen + Sidebar "Lojas" entry — App.jsx + Sidebar.jsx
+- [x] RBAC: papéis `consultor` e `consultor_senior` adicionados
+- [x] Atribuição consultor ↔ loja
 - [ ] Smoke test: criar 1 loja real, atribuir consultor, ver workspace, snapshot de métrica
 - [ ] **Bonus: módulo Campanhas para de quebrar** (colunas que ele espera passam a existir)
 
@@ -468,17 +471,20 @@ Começa pela Migration 01.
 
 ---
 
-## 📋 Próximas tarefas inalteradas (referência)
+## 📋 Status de todas as tarefas (19/05/2026)
 
-As Tarefas 3-10 do prompt original continuam valendo:
-- Tarefa 3: 8 endpoints Bridge Server
-- Tarefa 4: Tela /lojas (lista)
-- Tarefa 5: Modal "Nova loja"
-- Tarefa 6: Tela /lojas/:id (workspace 5 abas)
-- Tarefa 7: Atribuir consultor
-- Tarefa 8: Sidebar global "Lojas"
-- Tarefa 9: Documentação
-- Tarefa 10: Smoke test E2E
+| # | Tarefa | Status |
+|---|--------|--------|
+| 1 | Reconhecimento — ALTER-only strategy | ✅ |
+| 2 | 4 migrations Supabase | ✅ |
+| 3 | 8 endpoints Bridge Server | ✅ |
+| 4 | Tela /lojas (lista + filtros) | ✅ |
+| 5 | Modal "Nova loja" | ✅ |
+| 6 | Tela /lojas/:id workspace 5 abas | ✅ |
+| 7 | Modal "Atribuir consultor" | ✅ |
+| 8 | Sidebar "Lojas" + App.jsx route | ✅ |
+| 9 | Documentação | ✅ |
+| 10 | Smoke test E2E | ⏳ pendente |
 
 ---
 

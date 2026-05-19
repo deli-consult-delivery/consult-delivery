@@ -41,3 +41,11 @@ _handoff_extracted/
 
 # Backups de arquivos editados (geral)
 *.bak
+
+# Obsidian — estado de workspace (pessoal)
+WikiBrain/.obsidian/workspace.json
+WikiBrain/.obsidian/workspaces.json
+WikiBrain/.obsidian/workspace-mobile.json
+
+# Vídeos locais
+my-video/
