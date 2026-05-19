@@ -1964,8 +1964,10 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
   async function handleBulkFinalize() {
     if (!selectedConvIds.size || bulkLoading) return;
-    setBulkLoading(true);
     const ids = [...selectedConvIds];
+    const n = ids.length;
+    if (!window.confirm(`Finalizar ${n} conversa${n === 1 ? '' : 's'}?`)) return;
+    setBulkLoading(true);
     const payload = {
       status:    'finalizado',
       status_v2: 'closed',
@@ -2091,8 +2093,28 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       const { data: inst } = await supabase.from('evolution_instances').select('id').eq('instance_name', instanceName).single();
       if (!inst) return;
       const ACTIVE_STATUSES = ['aguardando', 'em_atendimento', 'atendimento_aberto', 'automacao', 'falha'];
-      const { data: rows } = await supabase.from('conversations').select('*').eq('instance_id', inst.id).in('status', ACTIVE_STATUSES).order('updated_at', { ascending: false }).limit(200);
-      if (!rows?.length) return;
+      const { data: activeRows } = await supabase.from('conversations').select('*').eq('instance_id', inst.id).in('status', ACTIVE_STATUSES).order('updated_at', { ascending: false }).limit(200);
+
+      // Finalizadas com mensagem do cliente nas últimas 48h → também devem aparecer
+      // (caso o time finalize manualmente uma conv que depois recebe resposta do cliente,
+      //  ou que foi finalizada com inbound recente sem o webhook reabrir a tempo)
+      const cutoff48h = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
+      const { data: recentInboundMsgs } = await supabase
+        .from('messages').select('conversation_id')
+        .eq('direction', 'inbound').gte('created_at', cutoff48h).limit(2000);
+      const recentInboundConvIds = [...new Set((recentInboundMsgs || []).map(m => m.conversation_id).filter(Boolean))];
+      let finalizadosRecentes = [];
+      if (recentInboundConvIds.length) {
+        const { data } = await supabase.from('conversations').select('*')
+          .eq('instance_id', inst.id)
+          .in('status', ['finalizado', 'archived'])
+          .in('id', recentInboundConvIds)
+          .order('updated_at', { ascending: false });
+        finalizadosRecentes = (data || []).map(r => ({ ...r, _recentInbound: true }));
+      }
+
+      const rows = [...(activeRows || []), ...finalizadosRecentes];
+      if (!rows.length) return;
       const seen = new Set();
       const uniqueRows = rows.filter(r => { if (seen.has(r.whatsapp_chat_id)) return false; seen.add(r.whatsapp_chat_id); return true; });
       const lastMsgResults = await Promise.all(uniqueRows.map(r => supabase.from('messages').select('conversation_id, content, body, direction, created_at, media_type').eq('conversation_id', r.id).order('created_at', { ascending: false }).limit(1).maybeSingle()));
@@ -2104,7 +2126,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         const lm    = lastMsgMap[c.id];
         const preview = lm ? (lm.media_type === 'image' ? '🖼 Imagem' : lm.media_type === 'video' ? '🎬 Vídeo' : lm.media_type === 'document' ? '📄 Documento' : lm.media_type?.includes('audio') ? '🎵 Áudio' : lm.content || lm.body || '') : '';
         const previewFrom = lm?.direction === 'inbound' ? 'in' : 'out';
-        return { id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null, type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id, preview, previewFrom, time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '', _sortTs: c.updated_at || '', unread: 0, online: false, messages: [], status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null, status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null, breno_paused: c.breno_paused || false, last_breno_handled_at: c.last_breno_handled_at || null };
+        return { id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null, type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id, preview, previewFrom, time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '', _sortTs: c.updated_at || '', unread: 0, online: false, messages: [], status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null, status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null, breno_paused: c.breno_paused || false, last_breno_handled_at: c.last_breno_handled_at || null, _recentInbound: c._recentInbound || false };
       });
       setConvs(prev => {
         const existingIds = new Set(prev.map(c => c.id));
@@ -2335,7 +2357,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         if (insertErr) console.error('Falha ao salvar mensagem no banco:', insertErr);
         await sendTextMessage(selectedInstance, active.whatsapp_chat_id, textToSend, waQuoted);
         // Equipe enviou → conversa vai para "Em aberto" (atendimento_aberto)
-        const canUpdateStatus = !['finalizado', 'falha', 'archived'].includes(convStatus);
+        // Inclui 'finalizado': se time está respondendo, conv não está mais finalizada
+        const canUpdateStatus = !['falha', 'archived'].includes(convStatus);
         if (canUpdateStatus) {
           const isFirstAssign = convStatus !== 'atendimento_aberto';
           await changeStatus('atendimento_aberto');
@@ -3021,8 +3044,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     if (tab === 'groups' && c.type !== 'group')    return false;
     if (tab === 'int'    && !(c.type === 'internal' || c.type === 'agent')) return false;
     if (isSearching) return true; // DB já filtrou por nome/telefone, só aplica tab
-    // Sem filtro ativo: oculta finalizadas e arquivadas por padrão
-    if (!statusFilter && !c.id.startsWith('chan-') && (c.status === 'finalizado' || c.status === 'archived')) return false;
+    // Sem filtro ativo: oculta finalizadas e arquivadas por padrão,
+    // EXCETO quando há mensagem inbound recente (cliente respondeu depois do finalize)
+    if (!statusFilter && !c.id.startsWith('chan-') && (c.status === 'finalizado' || c.status === 'archived') && !c._recentInbound) return false;
     if (!c.id.startsWith('chan-') && statusFilter) {
       const match = {
         nao_iniciado: (c.status || 'aguardando') === 'aguardando',
@@ -3125,6 +3149,17 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {currentUser && (
+            <>
+              <div title={`Logado como ${currentUser.email}`} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#f97316', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>
+                  {(currentUser.name || '?').slice(0, 2).toUpperCase()}
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'white' }}>{currentUser.name}</span>
+              </div>
+              <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.1)' }} />
+            </>
+          )}
           <button className="lc-ask-deli" onClick={() => setShowAiPanel(v => !v)}>
             <AgentAvatar id="deli" size={18} />
             <span className="lc-ask-deli-label">Faça uma pergunta</span>

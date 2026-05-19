@@ -289,11 +289,11 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
       fetchMedia({ inst, instance, msgData, isPtt, isAudio, isImage, isVideo, isDocument, savedMsgId: fmSavedMsg.id });
     }
     // Celular físico (DEDUP 1 e 2 não pegaram) → marca conversa como Automação
+    // (inclui finalizado: se alguém respondeu pelo celular, conv não está mais finalizada)
     if (fmSavedMsg) {
       await supabase.from('conversations')
         .update({ status: 'automacao', status_v2: 'automacao' })
-        .eq('id', fmConvId)
-        .neq('status', 'finalizado');
+        .eq('id', fmConvId);
     }
     return;
   }
