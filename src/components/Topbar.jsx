@@ -37,8 +37,10 @@ export default function Topbar({ route, tenant, setTenant, tenants, theme = 'cla
   const [openTenant, setOpenTenant] = useState(false);
   const [openNotif, setOpenNotif] = useState(false);
   const [openTheme, setOpenTheme] = useState(false);
+  const [openUser, setOpenUser] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount]     = useState(0);
+  const [currentUser, setCurrentUser]     = useState(null);
   const list = tenants ?? MOCK_TENANTS;
   const cur = list.find(t => t.id === tenant) ?? list[0];
 
@@ -55,6 +57,39 @@ export default function Topbar({ route, tenant, setTenant, tenants, theme = 'cla
     const channel = subscribeToNotifications(tenantId, userId, load);
     return () => supabase.removeChannel(channel);
   }, [tenantId, userId]);
+
+  useEffect(() => {
+    if (!userId) { setCurrentUser(null); return; }
+    let alive = true;
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!alive || !user) return;
+        const [{ data: profile }, { data: member }] = await Promise.all([
+          supabase.from('profiles').select('full_name, avatar_url').eq('id', user.id).maybeSingle(),
+          supabase.from('tenant_members').select('display_name, role').eq('user_id', user.id).maybeSingle(),
+        ]);
+        if (!alive) return;
+        setCurrentUser({
+          id:     user.id,
+          email:  user.email,
+          name:   member?.display_name || profile?.full_name || user.email?.split('@')[0] || 'Usuário',
+          avatar: profile?.avatar_url || null,
+          role:   member?.role || null,
+        });
+      } catch { /* ignore */ }
+    })();
+    return () => { alive = false; };
+  }, [userId]);
+
+  async function handleLogout() {
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error('[Topbar] signOut', err);
+    }
+    setOpenUser(false);
+  }
 
   return (
     <header className="topbar">
@@ -248,7 +283,54 @@ export default function Topbar({ route, tenant, setTenant, tenants, theme = 'cla
         </div>
 
         <div style={{ width: 1, height: 28, background: 'var(--g-200)' }} />
-        <UserAvatar name="WS" size={36} src="/assets/wandson.jpg" />
+
+        {/* User menu */}
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={() => setOpenUser(v => !v)}
+            title={currentUser ? `${currentUser.name} (${currentUser.email})` : 'Conta'}
+            style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <UserAvatar
+              name={currentUser?.name || 'U'}
+              size={36}
+              src={currentUser?.avatar || undefined}
+            />
+            <Icon name="chevdown" size={12} />
+          </button>
+          {openUser && (
+            <div className="dropdown" style={{ right: 0, minWidth: 240 }} onMouseLeave={() => setOpenUser(false)}>
+              <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--g-100)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <UserAvatar
+                  name={currentUser?.name || 'U'}
+                  size={36}
+                  src={currentUser?.avatar || undefined}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--g-900)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {currentUser?.name || 'Usuário'}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--g-500)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {currentUser?.email || ''}
+                  </div>
+                  {currentUser?.role && (
+                    <div style={{ fontSize: 10, color: 'var(--g-500)', marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.4, fontWeight: 600 }}>
+                      {currentUser.role}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div
+                className="dropdown-item"
+                style={{ color: 'var(--red)', cursor: 'pointer' }}
+                onClick={handleLogout}
+              >
+                <Icon name="logout" size={14} />
+                Sair
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
