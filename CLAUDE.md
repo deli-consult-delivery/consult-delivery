@@ -47,7 +47,7 @@ GitHub: github.com/deli-consult-delivery/consult-delivery
 
 OpenClaw: NÃO USADO — substituído por Claude Code + Trigger.dev (containers legacy podem permanecer na VPS porta 18789, mas não fazem parte do stack ativo)
 n8n: NÃO USADO — execução de tarefas é 100% Trigger.dev
-EvoNexus: NÃO USADO — descartado em 07/05/2026
+EvoNexus: EM AVALIAÇÃO (POC) — instalado em evonexus.evolutionfoundation.com.br (VPS), roda sobre Claude Code SDK; ainda não confirmado se entra na stack final
 
 Bots Telegram ativos:
 - @DeliConsultBot — agente analista-ifood (consultoria de lojas)
@@ -849,7 +849,7 @@ OPENCLAW: legacy — fora do stack ativo
 - Não invocar, não estender, não criar agente novo nele
 
 N8N: não usado — execução de tarefas é 100% Trigger.dev
-EVONEXUS: descartado (decisão definitiva)
+EVONEXUS: em avaliação (POC) — instalado em evonexus.evolutionfoundation.com.br, roda sobre Claude Code SDK. Não usar em produção até validação.
 
 Arquivos-chave criados na Fase 0:
 - trigger.config.ts                          — config Trigger.dev
