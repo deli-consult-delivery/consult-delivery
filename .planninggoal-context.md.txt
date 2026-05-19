@@ -1,0 +1,54 @@
+Beleza, aqui vão 6 calendários alternativos — todos pensados pra Consult Delivery (dono de restaurante / delivery), prontos pra você mixar e plugar no agente.
+
+🅰️ Operação afiada (foco em rotina prática)
+
+Seg — Planejamento da semana
+Ter — Cardápio e ficha técnica
+Qua — Atendimento e tempo de entrega
+Qui — Marketing e campanhas
+Sex — Análise de números
+Sáb — Time, processo e descanso
+🅱️ Funil do delivery (jornada do cliente)
+
+Seg — Atrair (visibilidade no iFood)
+Ter — Converter (cardápio que vende)
+Qua — Encantar (experiência de entrega)
+Qui — Reter (fidelização e CRM)
+Sex — Faturar (ticket médio e upsell)
+Sáb — Refletir e ajustar
+🅲 Os 4 P's adaptados ao delivery
+
+Seg — Produto (cardápio e ficha técnica)
+Ter — Preço (margem, taxa, ticket)
+Qua — Praça (canais: iFood, próprio, WhatsApp)
+Qui — Promoção (anúncio, cupom, gatilho)
+Sex — Pessoas (equipe, atendimento, motoboy)
+Sáb — Pausa estratégica
+🅳 Mentalidade do dono (tom mais inspiracional)
+
+Seg — Mentalidade de crescimento
+Ter — Disciplina operacional
+Qua — Coragem pra mudar o que não funciona
+Qui — Visão de futuro (tendências)
+Sex — Gratidão e resultados
+Sáb — Descanso ativo
+🅴 Diário de erros e acertos (formato relato)
+
+Seg — O que aprendi semana passada
+Ter — Um erro comum no delivery
+Qua — Um acerto que vale copiar
+Qui — Uma tendência que está chegando
+Sex — Um número que diz a verdade
+Sáb — Uma pergunta pra refletir
+🅵 Rotina de gestor 5 estrelas (formato checklist)
+
+Seg — Defina a meta da semana
+Ter — Revise seu cardápio
+Qua — Olhe seu PMV e taxa de cancelamento
+Qui — Teste uma novidade no app
+Sex — Reconheça quem vendeu mais
+Sáb — Tire o dia pra cuidar de você
+Como rotacionar sem cansar a audiência
+Em vez de usar um único calendário fixo, rotacione a cada 2 semanas — semana ímpar usa Calendário 🅰️, semana par usa 🅱️, terceira semana 🅲 e assim por diante. O agente percebe o padrão pelo número da semana (week % 4) e mantém o estilo visual idêntico, mudando só o tema do dia. Resultado: a audiência sente variedade sem você ter que pensar a pauta toda vez.
+
+Se quiser, eu já incorporo esses 6 calendários direto no painel do agente (na aba Instruções → Calendário de temas, com um dropdown pra escolher qual rodar). Quer que eu faça?

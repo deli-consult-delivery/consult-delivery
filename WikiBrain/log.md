@@ -1,5 +1,26 @@
 # Wiki Log
 
+## [2026-05-18 02:00] session | agents-hub: sidebar collapse + runs limit
+Touched: none
+
+## [2026-05-18 01:00] session | bom-dia: palette rotation 6 temas + fixes legenda
+Touched: none
+
+## [2026-05-18 00:00] session | bom-dia: biblioteca de frases + mapa de tons + deploy 20260518.1
+Touched: none
+
+## [2026-05-17 21:00] session | mobile responsivo: AgentsHub, Cora, Dashboard, CRM
+Touched: none
+
+## [2026-05-17 20:00] session | bom-dia: portrait size fix 1024x1820 + deploy 20260517.5
+Touched: none
+
+## [2026-05-17 19:00] session | bom-dia: nomes grupos, foto perfil, latest-first
+Touched: none
+
+## [2026-05-17 18:00] session | agents hub Bom Dia embed + feedback comment + Trigger deploy
+Touched: none
+
 ## [2026-05-17 17:00] session | feedback comment panel + agent context enrichment
 Touched: none
 
