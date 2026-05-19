@@ -40,7 +40,7 @@ Loja como entidade central com workspace por loja e atribuição de consultores.
 - [x] Router LojasScreen + Sidebar "Lojas" entry — App.jsx + Sidebar.jsx
 - [x] RBAC: papéis `consultor` e `consultor_senior` adicionados
 - [x] Atribuição consultor ↔ loja
-- [ ] Smoke test: criar 1 loja real, atribuir consultor, ver workspace, snapshot de métrica
+- [x] Smoke test: criar 1 loja real, atribuir consultor, ver workspace, snapshot de métrica — executado via SQL 19/05/2026
 - [ ] **Bonus: módulo Campanhas para de quebrar** (colunas que ele espera passam a existir)
 
 ---
@@ -484,7 +484,7 @@ Começa pela Migration 01.
 | 7 | Modal "Atribuir consultor" | ✅ |
 | 8 | Sidebar "Lojas" + App.jsx route | ✅ |
 | 9 | Documentação | ✅ |
-| 10 | Smoke test E2E | ⏳ pendente |
+| 10 | Smoke test E2E | ✅ |
 
 ---
 
