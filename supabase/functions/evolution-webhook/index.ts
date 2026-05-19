@@ -409,8 +409,11 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
 
   // ── Bot: resposta automática fora do horário (somente PV, não grupos) ───────
 
+  // AWAIT (não fire-and-forget) — Deno Edge Runtime cancela tasks pendentes
+  // após Response retornar, e isso fazia o INSERT do bot nunca persistir,
+  // causando o bot a responder de novo na próxima mensagem do cliente.
   if (!isGroup && convId) {
-    checkAndSendBotResponse({ inst, tenantId, instance, chatId, convId }).catch(err => {
+    await checkAndSendBotResponse({ inst, tenantId, instance, chatId, convId }).catch(err => {
       console.warn('[BOT] checkAndSendBotResponse falhou (não crítico):', err.message);
     });
   }
@@ -945,19 +948,33 @@ async function checkAndSendBotResponse({ inst, tenantId, instance, chatId, convI
 
   if (isInsideHours) return; // dentro do horário → não responde
 
-  // Se respond_only_first, verifica se já enviamos bot hoje
+  // Guard atômico anti-race-condition (respond_only_first=true)
+  //
+  // Quando cliente envia 2+ msgs em < 1s, dois invokes paralelos passariam
+  // pelo SELECT de "já respondi hoje?" antes de qualquer INSERT commitar.
+  // PK (conversation_id, reply_date) garante que apenas UM ganha.
+  // Insert acontece ANTES do fetch para Evolution → mesmo se o worker for
+  // cancelado depois, o claim persistiu e bloqueia próximas tentativas.
+  let claimedDate: string | null = null;
   if (config.respond_only_first) {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const { data: existingBotMsg } = await supabase
-      .from('messages')
-      .select('id')
-      .eq('conversation_id', convId)
-      .eq('direction', 'outbound')
-      .eq('sender_name', 'Bot')
-      .gte('created_at', todayStart.toISOString())
-      .maybeSingle();
-    if (existingBotMsg) return;
+    const todayStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(now); // YYYY-MM-DD na TZ do tenant
+
+    const { error: claimErr } = await supabase
+      .from('bot_reply_log')
+      .insert({ conversation_id: convId, reply_date: todayStr, tenant_id: tenantId });
+
+    if (claimErr) {
+      // 23505 = unique_violation → outra instância já respondeu hoje
+      if (claimErr.code === '23505') {
+        console.log('[BOT] já respondido hoje, skip:', convId, todayStr);
+      } else {
+        console.warn('[BOT] erro ao claim bot_reply_log:', claimErr.code, claimErr.message);
+      }
+      return;
+    }
+    claimedDate = todayStr;
   }
 
   const botMessage = (config.message as string) || 'Estamos fora do horário de atendimento. Retornaremos em breve!';
@@ -971,8 +988,21 @@ async function checkAndSendBotResponse({ inst, tenantId, instance, chatId, convI
 
   if (!r.ok) {
     console.warn('[BOT] falha ao enviar resposta automática:', r.status, await r.text());
+    // Rollback do claim para permitir retry na próxima msg
+    if (claimedDate) {
+      await supabase.from('bot_reply_log')
+        .delete()
+        .eq('conversation_id', convId)
+        .eq('reply_date', claimedDate);
+    }
     return;
   }
+
+  // Captura ID retornado pelo Evolution → usado para dedupe do echo via webhook
+  // (onConflict='whatsapp_msg_id' impede duplicação quando a msg enviada volta
+  // pelo evento messages.upsert)
+  const sendData = await r.json().catch(() => null);
+  const sentMsgId = (sendData?.key?.id as string | undefined) ?? null;
 
   // Registra no banco como mensagem outbound do bot
   await supabase.from('messages').insert({
@@ -981,6 +1011,7 @@ async function checkAndSendBotResponse({ inst, tenantId, instance, chatId, convI
     direction:       'outbound',
     sender_name:     'Bot',
     content:         botMessage,
+    whatsapp_msg_id: sentMsgId,
     created_at:      new Date().toISOString(),
   });
 
