@@ -35,6 +35,7 @@ Módulos planejados:
 Frontend: React 18 + Vite + TailwindCSS
 Banco de dados: Supabase (auth + realtime + RLS multi-tenant)
 Orquestrador IA: Trigger.dev cloud (proj_slexhoelcjwgbopmbzzr) ← NOVO
+Orquestrador de desenvolvimento: Claude Code (CLI Anthropic) — Antigravity local + claude-dev.service systemd na VPS (dev 24/7) ← NOVO
 Runtime de agente: @anthropic-ai/sdk + web_search_20250305 ← NOVO
 Validação: Zod ← NOVO
 Bridge Server: Node.js/Express VPS porta 3001 (expandido)
@@ -45,9 +46,9 @@ Deploy: GitHub Actions → GitHub Pages
 Domínio: app.consultdelivery.com.br
 GitHub: github.com/deli-consult-delivery/consult-delivery
 
-OpenClaw: EM APOSENTADORIA — sai na Fase 4 após migrar todos os agentes
-n8n: NÃO USADO — decisão definitiva
-EvoNexus: NÃO USADO — descartado em 07/05/2026
+OpenClaw: NÃO USADO pelo consult-delivery — substituído por Claude Code + Trigger.dev. Containers na VPS porta 18789 hoje hospedam agentes da plataforma EvoNexus (POC, em avaliação).
+n8n: NÃO USADO — execução de tarefas é 100% Trigger.dev
+EvoNexus: EM AVALIAÇÃO (POC) — instalado em evonexus.evolutionfoundation.com.br (VPS), roda sobre Claude Code SDK; ainda não confirmado se entra na stack final
 
 Bots Telegram ativos:
 - @DeliConsultBot — agente analista-ifood (consultoria de lojas)
@@ -58,7 +59,8 @@ Bots Telegram ativos:
 
 React 18 + Vite + TailwindCSS + Supabase + Trigger.dev + @anthropic-ai/sdk + Zod + Bridge Server + Evolution API + Asaas + Infisical + GitHub Pages
 
-FORA DA STACK (não usar): n8n, EvoNexus, OpenClaw (aposentando Fase 4)
+FORA DA STACK (não usar): n8n, OpenClaw
+Em avaliação (POC, não usar em produção): EvoNexus
 
 ====================================================
 4. INFRAESTRUTURA EXISTENTE
@@ -74,8 +76,8 @@ GitHub: github.com/deli-consult-delivery/consult-delivery
 
 Integrações validadas: Anthropic (SDK), Trigger.dev, Evolution, Google Drive, Asaas
 
-OpenClaw 2026.5.2: AINDA ATIVO na porta 18789 — aposentando na Fase 4
-⚠️  Não criar novos agentes no OpenClaw. Novos agentes vão em trigger/
+OpenClaw 2026.5.2: legacy no consult-delivery — containers seguem rodando na porta 18789 hospedando agentes da plataforma EvoNexus (POC, em avaliação). Nenhum agente do consult-delivery depende dele. Não invocar, não estender pelo consult-delivery.
+⚠️  Todo agente novo vai em trigger/ (Trigger.dev) orquestrado via Claude Code.
 
 ====================================================
 5. AGENTES — IDENTIDADES
@@ -843,13 +845,18 @@ PADRÃO DE TASK (seguir sempre):
     }
   });
 
-OPENCLAW: em aposentadoria
-- Ainda roda na VPS porta 18789 para agentes legados
-- NÃO criar novos agentes no OpenClaw
-- Migração completa na Fase 4
+ORQUESTRADOR DE DESENVOLVIMENTO: Claude Code (CLI Anthropic)
+- Sessão local: terminal Antigravity (dev no PC do Wandson)
+- Sessão remota: VPS systemd `claude-dev.service` — Claude Code roda 24/7 mesmo com PC desligado
+- Garante continuidade de fluxos de dev e automação sem depender da máquina local
 
-N8N: não usado (decisão definitiva)
-EVONEXUS: descartado (decisão definitiva)
+OPENCLAW: legacy no consult-delivery — fora do stack ativo
+- Containers seguem rodando na VPS porta 18789 hospedando agentes da plataforma EvoNexus (POC, em avaliação)
+- Nenhum agente do consult-delivery depende dele
+- Não invocar, não estender, não criar agente novo nele pelo consult-delivery
+
+N8N: não usado — execução de tarefas é 100% Trigger.dev
+EVONEXUS: em avaliação (POC) — instalado em evonexus.evolutionfoundation.com.br, roda sobre Claude Code SDK. Não usar em produção até validação.
 
 Arquivos-chave criados na Fase 0:
 - trigger.config.ts                          — config Trigger.dev
@@ -886,8 +893,10 @@ Lições aprendidas. Violar qualquer uma é defeito grave, não estilo.
 6. Não pular validação intermediária entre fases.
    → Cada fase tem critério de aceite — não há "pulo".
 
-7. Não misturar n8n / OpenClaw novo / EvoNexus no novo stack.
-   → Decisão final, sem volta.
+7. Não criar agente novo fora de trigger/ (Trigger.dev) orquestrado via Claude Code.
+   → OpenClaw é legacy no consult-delivery: containers seguem rodando hospedando agentes da EvoNexus (POC), mas não invocar nem estender pelo consult-delivery.
+   → n8n não é usado: execução de tarefas é 100% Trigger.dev.
+   → EvoNexus está em POC: não usar em produção até validação.
 
 8. Não fazer commit direto em main.
    → Sempre branch feature/fase-X/nome, PR, merge.
