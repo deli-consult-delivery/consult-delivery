@@ -46,7 +46,7 @@ Domínio: app.consultdelivery.com.br
 GitHub: github.com/deli-consult-delivery/consult-delivery
 
 OpenClaw: NÃO USADO — substituído por Claude Code + Trigger.dev (containers legacy podem permanecer na VPS porta 18789, mas não fazem parte do stack ativo)
-n8n: NÃO USADO — decisão definitiva
+n8n: NÃO USADO — execução de tarefas é 100% Trigger.dev
 EvoNexus: NÃO USADO — descartado em 07/05/2026
 
 Bots Telegram ativos:
@@ -848,7 +848,7 @@ OPENCLAW: legacy — fora do stack ativo
 - Containers podem permanecer na VPS porta 18789, mas não há agente ativo dependendo dele
 - Não invocar, não estender, não criar agente novo nele
 
-N8N: não usado (decisão definitiva)
+N8N: não usado — execução de tarefas é 100% Trigger.dev
 EVONEXUS: descartado (decisão definitiva)
 
 Arquivos-chave criados na Fase 0:
