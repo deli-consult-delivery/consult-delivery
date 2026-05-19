@@ -45,7 +45,7 @@ Deploy: GitHub Actions → GitHub Pages
 Domínio: app.consultdelivery.com.br
 GitHub: github.com/deli-consult-delivery/consult-delivery
 
-OpenClaw: EM APOSENTADORIA — sai na Fase 4 após migrar todos os agentes
+OpenClaw: NÃO USADO — substituído por Claude Code + Trigger.dev (containers legacy podem permanecer na VPS porta 18789, mas não fazem parte do stack ativo)
 n8n: NÃO USADO — decisão definitiva
 EvoNexus: NÃO USADO — descartado em 07/05/2026
 
@@ -58,7 +58,8 @@ Bots Telegram ativos:
 
 React 18 + Vite + TailwindCSS + Supabase + Trigger.dev + @anthropic-ai/sdk + Zod + Bridge Server + Evolution API + Asaas + Infisical + GitHub Pages
 
-FORA DA STACK (não usar): n8n, EvoNexus, OpenClaw (aposentando Fase 4)
+FORA DA STACK (não usar): n8n, OpenClaw
+Em avaliação (POC, não usar em produção): EvoNexus
 
 ====================================================
 4. INFRAESTRUTURA EXISTENTE
@@ -74,8 +75,8 @@ GitHub: github.com/deli-consult-delivery/consult-delivery
 
 Integrações validadas: Anthropic (SDK), Trigger.dev, Evolution, Google Drive, Asaas
 
-OpenClaw 2026.5.2: AINDA ATIVO na porta 18789 — aposentando na Fase 4
-⚠️  Não criar novos agentes no OpenClaw. Novos agentes vão em trigger/
+OpenClaw 2026.5.2: legacy — containers podem permanecer rodando na porta 18789, mas não há agente ativo dependendo dele. Não invocar, não estender.
+⚠️  Todo agente novo vai em trigger/ (Trigger.dev) orquestrado via Claude Code.
 
 ====================================================
 5. AGENTES — IDENTIDADES
@@ -843,10 +844,9 @@ PADRÃO DE TASK (seguir sempre):
     }
   });
 
-OPENCLAW: em aposentadoria
-- Ainda roda na VPS porta 18789 para agentes legados
-- NÃO criar novos agentes no OpenClaw
-- Migração completa na Fase 4
+OPENCLAW: legacy — fora do stack ativo
+- Containers podem permanecer na VPS porta 18789, mas não há agente ativo dependendo dele
+- Não invocar, não estender, não criar agente novo nele
 
 N8N: não usado (decisão definitiva)
 EVONEXUS: descartado (decisão definitiva)
@@ -886,8 +886,10 @@ Lições aprendidas. Violar qualquer uma é defeito grave, não estilo.
 6. Não pular validação intermediária entre fases.
    → Cada fase tem critério de aceite — não há "pulo".
 
-7. Não misturar n8n / OpenClaw novo / EvoNexus no novo stack.
-   → Decisão final, sem volta.
+7. Não criar agente novo fora de trigger/ (Trigger.dev) orquestrado via Claude Code.
+   → OpenClaw é legacy: containers podem rodar, mas não invocar nem estender.
+   → n8n não é usado: execução de tarefas é 100% Trigger.dev.
+   → EvoNexus está em POC: não usar em produção até validação.
 
 8. Não fazer commit direto em main.
    → Sempre branch feature/fase-X/nome, PR, merge.
