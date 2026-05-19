@@ -4,21 +4,13 @@ description: Health check da VPS (claude-dev, docker, processos, disco, RAM)
 
 # /vps-health — Saúde da VPS
 
-Comando **read-only**. Coleta métricas da VPS `187.127.25.24` via SSH e formata como tabela.
+Comando **read-only**. Coleta métricas LOCAIS da VPS (a sessão dev roda na própria VPS — sem SSH) e formata como tabela.
 
-## Conexão
+## O que coletar (execução local direta)
 
-Use a chave SSH já configurada no `~/.ssh/config` ou:
-```bash
-ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 root@187.127.25.24 '<comando-remoto>'
-```
-
-## O que coletar (em UMA chamada SSH para economizar conexão)
-
-Monte um bloco shell remoto único:
+Rode o bloco abaixo localmente:
 
 ```bash
-ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 root@187.127.25.24 'bash -s' <<'REMOTE'
 echo "=== claude-dev.service ==="
 systemctl is-active claude-dev.service
 systemctl show claude-dev.service --property=ActiveEnterTimestamp,MainPID,MemoryCurrent,CPUUsageNSec --no-pager 2>&1 | head -10
@@ -46,7 +38,6 @@ free -h
 echo ""
 echo "=== Uptime ==="
 uptime
-REMOTE
 ```
 
 ## Formato de saída
@@ -75,7 +66,6 @@ Renderize cada seção como bloco markdown com tabela. Exemplo:
 
 ## Regras
 
-- **Não modifica nada na VPS** — só `systemctl is-active`/`show`/`docker ps`/`ps`/`df`/`free`/`uptime`.
+- **Não modifica nada** — só `systemctl is-active`/`show`/`docker ps`/`ps`/`df`/`free`/`uptime`.
 - Não pede confirmação.
-- Se SSH falhar (timeout, chave): mostra o erro bruto e encerra.
-- Se algum subcomando falhar dentro do bloco remoto: mostra `(falhou)` na seção e segue.
+- Se algum subcomando falhar: mostra `(falhou)` na seção e segue.

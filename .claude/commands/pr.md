@@ -50,8 +50,6 @@ git commit -m "$(cat <<'EOF'
 <tipo>: <título>
 
 <corpo opcional — só se houver contexto não-óbvio>
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
 )"
 ```

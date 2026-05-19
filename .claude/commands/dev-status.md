@@ -27,11 +27,11 @@ ls .planning/phases/ 2>/dev/null
 cat .planning/phases/_active 2>/dev/null || echo "(sem marcador de fase ativa)"
 ```
 
-### 3. Serviço Claude Code remoto (VPS)
+### 3. Serviço claude-dev.service (local)
+A sessão de dev roda na própria VPS, então o serviço é local — não use SSH.
 ```bash
-ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 root@187.127.25.24 \
-  "systemctl is-active claude-dev.service && systemctl show claude-dev.service --property=ActiveEnterTimestamp,MainPID,MemoryCurrent --no-pager" \
-  2>&1 || echo "(VPS unreachable)"
+systemctl is-active claude-dev.service 2>&1 || echo "(service not found)"
+systemctl show claude-dev.service --property=ActiveEnterTimestamp,MainPID,MemoryCurrent --no-pager 2>&1
 ```
 
 ### 4. Processos locais relevantes (Node/Python/dev servers)
@@ -55,7 +55,7 @@ Exiba um bloco markdown assim:
 - Fase ativa: <nome ou "nenhuma">
 
 **Serviços**
-- claude-dev.service (VPS): <active | inactive | unreachable>
+- claude-dev.service: <active | inactive | not-found>
 
 **Processos locais**
 - <pid> <etime> <cmd>
