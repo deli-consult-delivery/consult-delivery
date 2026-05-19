@@ -35,6 +35,7 @@ Módulos planejados:
 Frontend: React 18 + Vite + TailwindCSS
 Banco de dados: Supabase (auth + realtime + RLS multi-tenant)
 Orquestrador IA: Trigger.dev cloud (proj_slexhoelcjwgbopmbzzr) ← NOVO
+Orquestrador de desenvolvimento: Claude Code (CLI Anthropic) — Antigravity local + claude-dev.service systemd na VPS (dev 24/7) ← NOVO
 Runtime de agente: @anthropic-ai/sdk + web_search_20250305 ← NOVO
 Validação: Zod ← NOVO
 Bridge Server: Node.js/Express VPS porta 3001 (expandido)
@@ -843,6 +844,11 @@ PADRÃO DE TASK (seguir sempre):
       return OutputSchema.parse(result);
     }
   });
+
+ORQUESTRADOR DE DESENVOLVIMENTO: Claude Code (CLI Anthropic)
+- Sessão local: terminal Antigravity (dev no PC do Wandson)
+- Sessão remota: VPS systemd `claude-dev.service` — Claude Code roda 24/7 mesmo com PC desligado
+- Garante continuidade de fluxos de dev e automação sem depender da máquina local
 
 OPENCLAW: legacy — fora do stack ativo
 - Containers podem permanecer na VPS porta 18789, mas não há agente ativo dependendo dele
