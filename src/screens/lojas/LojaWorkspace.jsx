@@ -298,13 +298,13 @@ function TabVisaoGeral({ loja, lojaId }) {
 
   return (
     <div>
-      {stats != null && stats.total > 0 && (
+      {stats != null && (stats.totais?.total ?? 0) > 0 && (
         <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
           {[
-            { label: 'Total de tarefas', value: stats.total, color: '#6b7280' },
-            { label: 'Concluídas', value: stats.por_status?.concluida || 0, color: '#10b981' },
-            { label: 'Em execução', value: (stats.por_status?.em_execucao || 0) + (stats.por_status?.aguardando_validacao || 0), color: '#f97316' },
-            { label: 'Pendentes', value: (stats.total || 0) - (stats.por_status?.concluida || 0) - (stats.por_status?.cancelada || 0) - (stats.por_status?.em_execucao || 0) - (stats.por_status?.aguardando_validacao || 0), color: '#f59e0b' },
+            { label: 'Total de tarefas', value: stats.totais?.total || 0, color: '#6b7280' },
+            { label: 'Concluídas', value: stats.totais?.por_status?.concluida || 0, color: '#10b981' },
+            { label: 'Em execução', value: (stats.totais?.por_status?.em_execucao || 0) + (stats.totais?.por_status?.aguardando_validacao || 0), color: '#f97316' },
+            { label: 'Pendentes', value: (stats.totais?.total || 0) - (stats.totais?.por_status?.concluida || 0) - (stats.totais?.por_status?.cancelada || 0) - (stats.totais?.por_status?.em_execucao || 0) - (stats.totais?.por_status?.aguardando_validacao || 0), color: '#f59e0b' },
           ].map(s => (
             <div key={s.label} style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 10, padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 2 }}>
               <span style={{ fontSize: 11, color: '#6b7280' }}>{s.label}</span>
@@ -464,8 +464,11 @@ function TabTarefas({ lojaId }) {
   const [statusFilter, setStatusFilter] = useState('');
   const [expanded, setExpanded]       = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
-  const [showForm, setShowForm]       = useState(false);
-  const [detailId, setDetailId]       = useState(null);
+  const [showForm, setShowForm]           = useState(false);
+  const [detailId, setDetailId]           = useState(null);
+  const [showRelatorio, setShowRelatorio] = useState(false);
+  const [relatorioData, setRelatorioData] = useState(null);
+  const [loadingRelatorio, setLoadingRelatorio] = useState(false);
 
   useEffect(() => { loadTarefas(); }, [lojaId]);
 
@@ -514,6 +517,19 @@ function TabTarefas({ lojaId }) {
     }
   }
 
+  async function openRelatorio() {
+    setLoadingRelatorio(true);
+    try {
+      const data = await bridgeFetch(`/api/tarefas/loja/${lojaId}/relatorio`);
+      setRelatorioData(data);
+      setShowRelatorio(true);
+    } catch (err) {
+      alert('Erro ao gerar relatório: ' + err.message);
+    } finally {
+      setLoadingRelatorio(false);
+    }
+  }
+
   const filtradas = statusFilter
     ? tarefas.filter(t => t.status === statusFilter)
     : tarefas;
@@ -540,6 +556,13 @@ function TabTarefas({ lojaId }) {
           {filtradas.length} tarefa{filtradas.length !== 1 ? 's' : ''}
         </span>
         <div style={{ flex: 1 }} />
+        <button
+          onClick={openRelatorio}
+          disabled={loadingRelatorio}
+          style={{ background: '#2a2a2a', border: '1px solid #3a3a3a', color: '#9ca3af', padding: '8px 14px', borderRadius: 8, cursor: loadingRelatorio ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, opacity: loadingRelatorio ? 0.6 : 1 }}
+        >
+          {loadingRelatorio ? 'Gerando…' : 'Gerar relatório'}
+        </button>
         <button
           onClick={() => setShowForm(true)}
           style={{ background: '#B70C00', border: 'none', color: '#fff', padding: '8px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}
@@ -681,6 +704,12 @@ function TabTarefas({ lojaId }) {
           onRefresh={loadTarefas}
         />
       )}
+      {showRelatorio && relatorioData && (
+        <RelatorioModal
+          relatorio={relatorioData}
+          onClose={() => { setShowRelatorio(false); setRelatorioData(null); }}
+        />
+      )}
     </div>
   );
 }
@@ -699,6 +728,150 @@ function TarefaActionBtn({ label, color, loading, onClick }) {
     >
       {loading ? 'Aguarde…' : label}
     </button>
+  );
+}
+
+function RelatorioModal({ relatorio, onClose }) {
+  const { loja, gerado_em, totais, tarefas } = relatorio;
+  const total     = totais?.total ?? 0;
+  const concluidas = totais?.por_status?.concluida || 0;
+  const quickWins  = totais?.por_prioridade?.quick_win || 0;
+  const empty      = total === 0;
+
+  const dataFormatada = new Date(gerado_em).toLocaleString('pt-BR', { dateStyle: 'long', timeStyle: 'short' });
+
+  const BLOCOS_ORDER = ['identidade', 'cardapio', 'operacao', 'avaliacoes', 'marketing', 'suporte'];
+  const byBloco = {};
+  for (const t of (tarefas || [])) {
+    (byBloco[t.bloco] = byBloco[t.bloco] || []).push(t);
+  }
+
+  function handleCopy() {
+    const md = buildMarkdown(relatorio);
+    navigator.clipboard.writeText(md)
+      .then(() => alert('Markdown copiado para a área de transferência.'))
+      .catch(() => alert('Não foi possível acessar a área de transferência.'));
+  }
+
+  function handlePDF() {
+    const md = buildMarkdown(relatorio);
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Relatório — ${loja.nome || loja.id}</title>
+<style>
+  body{font-family:Arial,sans-serif;max-width:820px;margin:40px auto;color:#111;line-height:1.65;font-size:13px}
+  h1{font-size:20px;margin-bottom:4px}h2{font-size:15px;margin-top:26px;border-bottom:1px solid #ccc;padding-bottom:4px}
+  p{margin:3px 0}strong{font-weight:600}
+</style></head><body>${markdownToHtml(md)}</body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) { alert('Permita pop-ups para gerar o PDF.'); return; }
+    w.document.write(html);
+    w.document.close();
+    setTimeout(() => w.print(), 400);
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: '#000b', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9200, padding: 20 }}>
+      <div style={{ background: '#141414', border: '1px solid #2a2a2a', borderRadius: 14, width: '100%', maxWidth: 720, maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}>
+
+        {/* Header */}
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #2a2a2a', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#fff' }}>
+              Relatório — {loja.nome || loja.id}
+            </h3>
+            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 3 }}>Gerado em {dataFormatada}</div>
+            <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 6, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <span><strong style={{ color: '#fff' }}>{total}</strong> tarefas</span>
+              <span style={{ color: '#4b5563' }}>·</span>
+              <span><strong style={{ color: '#10b981' }}>{concluidas}</strong> concluídas</span>
+              <span style={{ color: '#4b5563' }}>·</span>
+              <span><strong style={{ color: '#10b981' }}>{quickWins}</strong> quick wins</span>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: 4, flexShrink: 0 }}>
+            <Icon name="x" size={16} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+          {empty ? (
+            <div style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', padding: '48px 0' }}>
+              Sem tarefas cadastradas.
+            </div>
+          ) : (
+            BLOCOS_ORDER.filter(b => byBloco[b]?.length).map(bloco => (
+              <div key={bloco} style={{ marginBottom: 24 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid #2a2a2a' }}>
+                  {BLOCO_LABEL[bloco]}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {byBloco[bloco].map((t, i) => {
+                    const sc = STATUS_TAREFA_COLOR[t.status] || '#6b7280';
+                    const pc = PRIORIDADE_COLOR[t.prioridade] || '#6b7280';
+                    return (
+                      <div key={t.id} style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, padding: '12px 14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: '#6b7280' }}>{i + 1}.</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: '#fff', flex: 1, minWidth: 0 }}>{t.titulo}</span>
+                          <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 20, background: sc + '20', color: sc, flexShrink: 0 }}>
+                            {STATUS_TAREFA_LABEL[t.status] || t.status}
+                          </span>
+                          <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 20, background: pc + '20', color: pc, flexShrink: 0 }}>
+                            {PRIORIDADE_LABEL[t.prioridade] || t.prioridade}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                          <div style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.5 }}>
+                            <strong style={{ color: '#6b7280' }}>Situação:</strong> {t.situacao}
+                          </div>
+                          <div style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.5 }}>
+                            <strong style={{ color: '#6b7280' }}>O que será feito:</strong> {t.o_que_sera_feito}
+                          </div>
+                          {t.por_que_importa && (
+                            <div style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.5 }}>
+                              <strong style={{ color: '#6b7280' }}>Por que importa:</strong> {t.por_que_importa}
+                            </div>
+                          )}
+                          {t.prazo_estimado && (
+                            <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>Prazo: {t.prazo_estimado}</div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '12px 20px', borderTop: '1px solid #2a2a2a', display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+          <button
+            onClick={handleCopy}
+            disabled={empty}
+            style={{ background: '#2a2a2a', border: 'none', color: empty ? '#4b5563' : '#9ca3af', padding: '8px 14px', borderRadius: 8, cursor: empty ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600 }}
+          >
+            Copiar markdown
+          </button>
+          <button
+            onClick={handlePDF}
+            disabled={empty}
+            style={{ background: '#2a2a2a', border: 'none', color: empty ? '#4b5563' : '#9ca3af', padding: '8px 14px', borderRadius: 8, cursor: empty ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600 }}
+          >
+            Baixar PDF
+          </button>
+          <button
+            disabled
+            title="Disponível na Onda 04"
+            style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', color: '#374151', padding: '8px 14px', borderRadius: 8, cursor: 'not-allowed', fontSize: 13, fontWeight: 600 }}
+          >
+            Enviar via WhatsApp
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -983,6 +1156,47 @@ function DetailField({ label, value }) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function buildMarkdown(relatorio) {
+  const { loja, gerado_em, totais, tarefas } = relatorio;
+  const dataFormatada = new Date(gerado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+  const linhas = [
+    `# Relatório de Tarefas — ${loja.nome || loja.id}`,
+    `**Gerado em:** ${dataFormatada}`,
+    `**Total:** ${totais?.total ?? 0} · **Concluídas:** ${totais?.por_status?.concluida || 0} · **Quick Wins:** ${totais?.por_prioridade?.quick_win || 0}`,
+    '',
+  ];
+  const BLOCOS_ORDER = ['identidade', 'cardapio', 'operacao', 'avaliacoes', 'marketing', 'suporte'];
+  const byBloco = {};
+  for (const t of (tarefas || [])) {
+    (byBloco[t.bloco] = byBloco[t.bloco] || []).push(t);
+  }
+  for (const bloco of BLOCOS_ORDER) {
+    if (!byBloco[bloco]?.length) continue;
+    linhas.push(`## ${BLOCO_LABEL[bloco] || bloco}`);
+    byBloco[bloco].forEach((t, i) => {
+      linhas.push(`**${i + 1}. ${t.titulo}**`);
+      linhas.push(`Status: ${STATUS_TAREFA_LABEL[t.status] || t.status} · Prioridade: ${PRIORIDADE_LABEL[t.prioridade] || t.prioridade}`);
+      linhas.push(`**Situação:** ${t.situacao}`);
+      linhas.push(`**O que será feito:** ${t.o_que_sera_feito}`);
+      if (t.por_que_importa) linhas.push(`**Por que importa:** ${t.por_que_importa}`);
+      if (t.prazo_estimado)  linhas.push(`Prazo: ${t.prazo_estimado}`);
+      linhas.push('');
+    });
+  }
+  return linhas.join('\n');
+}
+
+function markdownToHtml(md) {
+  return md
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n{2,}/g, '</p><p>')
+    .replace(/\n/g, '<br>')
+    .replace(/^/, '<p>').replace(/$/, '</p>');
+}
 
 function Field({ label, width, children }) {
   return (
