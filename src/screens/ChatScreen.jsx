@@ -2800,9 +2800,13 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     reader.onloadend = async () => {
       const base64 = reader.result.split(',')[1];
       setSending(true);
-      try { await sendMediaMessage(selectedInstance, active.whatsapp_chat_id, base64, mediaType, file.type, '', file.name); }
-      catch (err) { console.error('Falha ao enviar mídia:', err); }
-      finally { setSending(false); }
+      try {
+        const r = await sendMediaMessage(selectedInstance, active.whatsapp_chat_id, base64, mediaType, file.type, '', file.name);
+        console.log('[MEDIA-FILE] Evolution OK:', r);
+      } catch (err) {
+        console.error('[MEDIA-FILE] Falha ao enviar mídia:', err);
+        alert(`Falha ao enviar mídia para ${active.name || active.whatsapp_chat_id}:\n${err.message}`);
+      } finally { setSending(false); }
     };
     reader.readAsDataURL(file);
   };
@@ -2883,9 +2887,13 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     reader.onloadend = async () => {
       const base64 = reader.result.split(',')[1];
       setSending(true);
-      try { await sendMediaMessage(selectedInstance, active.whatsapp_chat_id, base64, 'image', f.type, caption, f.name || 'imagem.png'); }
-      catch (err) { console.error('Falha ao enviar imagem colada:', err); }
-      finally { setSending(false); URL.revokeObjectURL(previewUrl); }
+      try {
+        const r = await sendMediaMessage(selectedInstance, active.whatsapp_chat_id, base64, 'image', f.type, caption, f.name || 'imagem.png');
+        console.log('[PASTE-IMG] Evolution OK:', r, 'caption enviado:', JSON.stringify(caption));
+      } catch (err) {
+        console.error('[PASTE-IMG] Falha ao enviar imagem:', err);
+        alert(`Falha ao enviar imagem para ${active.name || active.whatsapp_chat_id}:\n${err.message}`);
+      } finally { setSending(false); URL.revokeObjectURL(previewUrl); }
     };
     reader.readAsDataURL(f);
   };
