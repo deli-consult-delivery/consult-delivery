@@ -280,3 +280,8 @@ Touched: none
 Touched: none
 ## [2026-05-17 11:25] session | config: deploy sem prompt + Stop hook tsc
 Touched: none
+
+## [2026-05-20] PR #54 mergeado SEM teste visual do modal RelatorioModal
+- Decisão: Wandson assumiu risco, mergeou direto
+- Pendência: testar visualmente quando voltar (loja real, clicar Gerar relatório, validar modal/botões)
+- Se quebrar: hotfix em branch nova, não regredir
