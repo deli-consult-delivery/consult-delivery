@@ -3913,6 +3913,12 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
               {/* Composer */}
               <footer className="lc-composer-bar" style={{ position: 'relative' }}>
+                {convStatus === 'finalizado' && (
+                  <div style={{ background: 'rgba(251,191,36,0.12)', borderTop: '2px solid rgba(251,191,36,0.5)', padding: '6px 14px', fontSize: 11, color: '#FCD34D', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span>⚠️</span>
+                    <span>Conversa <strong>finalizada</strong> — ao enviar, ela será reaberta automaticamente.</span>
+                  </div>
+                )}
                 {/* Popovers */}
                 {showSlash && (
                   <div className="lc-popover lc-slash">
