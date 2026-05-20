@@ -1098,6 +1098,7 @@ function ForwardModal({ msg, convs, currentConvId, onClose, onForward }) {
 
   const handleSend = () => {
     const targets = allTargets.filter(c => selected.has(c.id));
+    alert(`[FORWARD MODAL] botão clicado — selected=${selected.size}, targets=${targets.length}, allTargets=${allTargets.length}`);
     console.log('[FORWARD MODAL] botão clicado', { selectedSize: selected.size, targetsFound: targets.length, allTargetsCount: allTargets.length });
     if (targets.length) onForward(targets);
   };
@@ -2668,6 +2669,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   };
 
   const handleForward = async (targetConvs) => {
+    alert(`[FORWARD] handleForward CHAMADO — targets=${targetConvs?.length}, hasMsg=${!!forwardMsg}, instance=${selectedInstance}`);
     console.log('[FORWARD] handleForward CHAMADO', { targetCount: targetConvs?.length, hasMsg: !!forwardMsg, selectedInstance });
     const msg = forwardMsg;
     setForwardMsg(null);
