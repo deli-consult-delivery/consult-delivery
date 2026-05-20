@@ -120,6 +120,17 @@ const RelatorioQuerySchema = z.object({
   data_fim:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
+// POST /api/tarefas/:id/prints — body (frontend faz upload no Storage; aqui registra metadados)
+const CreatePrintSchema = z.object({
+  tipo:          z.enum(['antes', 'depois', 'outro']),
+  storage_path:  z.string().min(1),
+  url_publica:   z.string().url().optional().nullable(),
+  nome_arquivo:  z.string().min(1).max(255),
+  tamanho_bytes: z.number().int().positive().optional().nullable(),
+  mime_type:     z.string().optional().nullable(),
+  legenda:       z.string().max(500).optional().nullable(),
+});
+
 module.exports = {
   BLOCOS, STATUS_VALUES, PRIORIDADES, ACOES_APROVACAO,
   ListTarefasQuerySchema,
@@ -135,4 +146,5 @@ module.exports = {
   ListComentariosQuerySchema,
   CreateComentarioSchema,
   RelatorioQuerySchema,
+  CreatePrintSchema,
 };

@@ -12,6 +12,10 @@ const {
   IniciarExecucaoSchema,
   SubmeterValidacaoSchema,
   ConcluirSchema,
+  ListComentariosQuerySchema,
+  CreateComentarioSchema,
+  RelatorioQuerySchema,
+  CreatePrintSchema,
 } = require('../schemas/tarefas');
 
 // Factory: recebe helpers do index.js para evitar acoplamento circular
@@ -572,6 +576,189 @@ module.exports = function buildTarefasRouter({ requireJwt, sbFetch, assertLojaAc
       res.json({ ok: true, status: 'concluida' });
     } catch (err) {
       console.error('[api/tarefas/concluir POST]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  // GET /api/tarefas/loja/:lojaId/relatorio — contagens por status/bloco
+  // Acesso: qualquer membro do tenant com acesso à loja
+  // ════════════════════════════════════════════════════════════════════════
+  router.get('/tarefas/loja/:lojaId/relatorio', requireJwt, async (req, res) => {
+    const { lojaId } = req.params;
+
+    const query = validate(RelatorioQuerySchema, req.query, res);
+    if (!query) return;
+
+    const tenant_id = await assertLojaAccess(req, res, lojaId);
+    if (!tenant_id) return;
+
+    try {
+      const { data_inicio, data_fim } = query;
+
+      let qs = `tarefas_loja?loja_id=eq.${encodeURIComponent(lojaId)}&select=status,bloco,prioridade,created_at`;
+      if (data_inicio) qs += `&created_at=gte.${data_inicio}`;
+      if (data_fim)    qs += `&created_at=lte.${data_fim}T23:59:59`;
+
+      const tarefas = await sbFetch(qs);
+      const arr = Array.isArray(tarefas) ? tarefas : [];
+
+      const por_status = {};
+      const por_bloco = {};
+      const por_prioridade = {};
+
+      for (const t of arr) {
+        por_status[t.status]         = (por_status[t.status]         || 0) + 1;
+        por_bloco[t.bloco]           = (por_bloco[t.bloco]           || 0) + 1;
+        por_prioridade[t.prioridade] = (por_prioridade[t.prioridade] || 0) + 1;
+      }
+
+      console.log(`[api/tarefas/loja/relatorio GET] loja=${lojaId} total=${arr.length}`);
+      res.json({
+        loja_id: lojaId,
+        total:   arr.length,
+        por_status,
+        por_bloco,
+        por_prioridade,
+        periodo: { data_inicio: data_inicio ?? null, data_fim: data_fim ?? null },
+      });
+    } catch (err) {
+      console.error('[api/tarefas/loja/relatorio GET]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  // GET /api/tarefas/:id/comentarios — listar comentários de uma tarefa
+  // Acesso: qualquer membro do tenant com acesso à loja da tarefa
+  // ════════════════════════════════════════════════════════════════════════
+  router.get('/tarefas/:id/comentarios', requireJwt, async (req, res) => {
+    const { id } = req.params;
+
+    const query = validate(ListComentariosQuerySchema, req.query, res);
+    if (!query) return;
+
+    try {
+      const ctx = await fetchTarefaComAcesso(req, res, id);
+      if (!ctx) return;
+
+      const { limit, offset } = query;
+      const comentarios = await sbFetch(
+        `tarefa_comentarios?tarefa_id=eq.${encodeURIComponent(id)}&order=created_at.asc&select=*&limit=${limit}&offset=${offset}`
+      );
+      const arr = Array.isArray(comentarios) ? comentarios : [];
+
+      console.log(`[api/tarefas/:id/comentarios GET] tarefa=${id} count=${arr.length}`);
+      res.json({ comentarios: arr, limit, offset, has_more: arr.length === limit });
+    } catch (err) {
+      console.error('[api/tarefas/:id/comentarios GET]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  // POST /api/tarefas/:id/comentarios — criar comentário em tarefa
+  // Acesso: qualquer membro do tenant com acesso à loja da tarefa
+  // ════════════════════════════════════════════════════════════════════════
+  router.post('/tarefas/:id/comentarios', requireJwt, async (req, res) => {
+    const { id } = req.params;
+
+    const body = validate(CreateComentarioSchema, req.body, res);
+    if (!body) return;
+
+    try {
+      const ctx = await fetchTarefaComAcesso(req, res, id);
+      if (!ctx) return;
+      const { tenant_id } = ctx;
+
+      const comentario = await supabaseInsert('tarefa_comentarios', {
+        tarefa_id: id,
+        conteudo:  body.conteudo,
+        interno:   body.interno,
+        parent_id: body.parent_id ?? null,
+        print_id:  body.print_id  ?? null,
+        autor_id:  req.user.id,
+      });
+
+      await logAudit({
+        tenant_id,
+        user_id:  req.user.id,
+        action:   'comentario_criado',
+        resource: `tarefa_comentarios:${comentario.id}`,
+        metadata: { tarefa_id: id, interno: body.interno },
+      });
+
+      console.log(`[api/tarefas/:id/comentarios POST] tarefa=${id} comentario=${comentario.id}`);
+      res.status(201).json({ comentario });
+    } catch (err) {
+      console.error('[api/tarefas/:id/comentarios POST]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  // GET /api/tarefas/:id/prints — listar prints de uma tarefa
+  // Acesso: qualquer membro do tenant com acesso à loja da tarefa
+  // ════════════════════════════════════════════════════════════════════════
+  router.get('/tarefas/:id/prints', requireJwt, async (req, res) => {
+    const { id } = req.params;
+
+    try {
+      const ctx = await fetchTarefaComAcesso(req, res, id);
+      if (!ctx) return;
+
+      const prints = await sbFetch(
+        `tarefa_prints?tarefa_id=eq.${encodeURIComponent(id)}&order=created_at.asc&select=*`
+      );
+      const arr = Array.isArray(prints) ? prints : [];
+
+      console.log(`[api/tarefas/:id/prints GET] tarefa=${id} count=${arr.length}`);
+      res.json({ prints: arr });
+    } catch (err) {
+      console.error('[api/tarefas/:id/prints GET]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  // POST /api/tarefas/:id/prints — registrar metadados de print (upload feito no Storage pelo frontend)
+  // Acesso: qualquer membro do tenant com acesso à loja da tarefa
+  // ════════════════════════════════════════════════════════════════════════
+  router.post('/tarefas/:id/prints', requireJwt, async (req, res) => {
+    const { id } = req.params;
+
+    const body = validate(CreatePrintSchema, req.body, res);
+    if (!body) return;
+
+    try {
+      const ctx = await fetchTarefaComAcesso(req, res, id);
+      if (!ctx) return;
+      const { tenant_id } = ctx;
+
+      const print = await supabaseInsert('tarefa_prints', {
+        tarefa_id:     id,
+        tipo:          body.tipo,
+        storage_path:  body.storage_path,
+        url_publica:   body.url_publica   ?? null,
+        nome_arquivo:  body.nome_arquivo,
+        tamanho_bytes: body.tamanho_bytes ?? null,
+        mime_type:     body.mime_type     ?? null,
+        legenda:       body.legenda       ?? null,
+        enviado_por:   req.user.id,
+      });
+
+      await logAudit({
+        tenant_id,
+        user_id:  req.user.id,
+        action:   'print_registrado',
+        resource: `tarefa_prints:${print.id}`,
+        metadata: { tarefa_id: id, tipo: body.tipo, nome_arquivo: body.nome_arquivo },
+      });
+
+      console.log(`[api/tarefas/:id/prints POST] tarefa=${id} print=${print.id} tipo=${body.tipo}`);
+      res.status(201).json({ print });
+    } catch (err) {
+      console.error('[api/tarefas/:id/prints POST]', err.message);
       res.status(500).json({ error: err.message });
     }
   });
