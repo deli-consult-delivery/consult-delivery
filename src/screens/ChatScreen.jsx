@@ -3234,17 +3234,6 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {currentUser && (
-            <>
-              <div title={`Logado como ${currentUser.email}`} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#f97316', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>
-                  {(currentUser.name || '?').slice(0, 2).toUpperCase()}
-                </div>
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'white' }}>{currentUser.name}</span>
-              </div>
-              <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.1)' }} />
-            </>
-          )}
           <button className="lc-ask-deli" onClick={() => setShowAiPanel(v => !v)}>
             <AgentAvatar id="deli" size={18} />
             <span className="lc-ask-deli-label">Faça uma pergunta</span>
