@@ -361,8 +361,9 @@ function AgentMessage({ run, tenantDbId, isLast }) {
   const [copied,     setCopied]    = useState(false);
   const [dlState,    setDlState]   = useState({});
   const [previewImg, setPreviewImg] = useState(null);
-  const [sendOpen,   setSendOpen]  = useState(false);
-  const [groups,     setGroups]    = useState([]);
+  const [sendOpen,      setSendOpen]      = useState(false);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [groups,        setGroups]        = useState([]);
   const [selGroups,  setSelGroups] = useState(new Set());
   const [sendFmt,    setSendFmt]   = useState('group');
   const [sending,    setSending]   = useState(false);
@@ -434,29 +435,18 @@ function AgentMessage({ run, tenantDbId, isLast }) {
 
   const handleOpenSend = async () => {
     if (!tenantDbId) return;
+    if (sendOpen) { setSendOpen(false); return; }
+    setSendOpen(true);
     setSendResult(null);
-    setSendOpen(v => !v);
+    setGroupsLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const r = await fetch(
-        `${BRIDGE_URL}/whatsapp/groups?tenant_id=${tenantDbId}`,
-        { headers: { Authorization: `Bearer ${session?.access_token}` } }
-      );
-      if (r.ok) {
-        const { groups: evoGroups = [] } = await r.json();
-        setGroups(evoGroups.map(g => ({
-          evolution_jid: g.jid,
-          group_name:    g.name || g.jid,
-          picture_url:   g.picture_url ?? null,
-        })));
-        return;
-      }
-    } catch {}
-    // fallback: tabela local
-    const { data: dbGroups } = await supabase
-      .from('whatsapp_groups').select('id,evolution_jid,group_name,picture_url')
-      .eq('tenant_id', tenantDbId).eq('ativo', true).order('group_name');
-    setGroups(dbGroups || []);
+      const { data: dbGroups } = await supabase
+        .from('whatsapp_groups').select('id,evolution_jid,group_name,picture_url')
+        .eq('tenant_id', tenantDbId).eq('ativo', true).order('group_name');
+      setGroups(dbGroups || []);
+    } finally {
+      setGroupsLoading(false);
+    }
   };
 
   const toggleGroup = (jid) => setSelGroups(prev => {
@@ -702,7 +692,9 @@ function AgentMessage({ run, tenantDbId, isLast }) {
                 ))}
               </div>
 
-              {groups.length === 0
+              {groupsLoading
+                ? <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>Carregando grupos…</div>
+                : groups.length === 0
                 ? <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 12, lineHeight: 1.6 }}>
                     Nenhum grupo cadastrado.<br />
                     <span style={{ color: 'rgba(255,255,255,0.28)' }}>Cadastre grupos em </span>
