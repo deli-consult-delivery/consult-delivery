@@ -794,12 +794,26 @@ async function sbFetch(path, { method = 'GET', body, prefer, headers: xh = {} } 
   return r.json();
 }
 
+// Helper: verifica se req.user é membro do tenant_id solicitado
+async function assertTenantMember(req, res, tenant_id) {
+  const rows = await sbFetch(
+    `tenant_members?tenant_id=eq.${encodeURIComponent(tenant_id)}&user_id=eq.${encodeURIComponent(req.user.id)}&select=tenant_id&limit=1`
+  );
+  if (!rows?.length) {
+    res.status(403).json({ error: 'Acesso negado: usuário não é membro deste tenant' });
+    return false;
+  }
+  return true;
+}
+
 // GET /api/lojas  — lista com filtros e paginação
 app.get('/api/lojas', requireJwt, async (req, res) => {
   const { tenant_id, status, segmento, consultor_id, page = '0', limit: lim = '50' } = req.query;
   if (!tenant_id) return res.status(400).json({ error: 'tenant_id obrigatório' });
 
   try {
+    if (!await assertTenantMember(req, res, tenant_id)) return;
+
     let extraFilter = '';
     if (consultor_id) {
       const lcs = await sbFetch(
@@ -828,13 +842,22 @@ app.get('/api/lojas', requireJwt, async (req, res) => {
   }
 });
 
+// Helper: busca tenant_id de uma loja e valida membership do user
+async function assertLojaAccess(req, res, lojaId) {
+  const rows = await sbFetch(`lojas?id=eq.${encodeURIComponent(lojaId)}&select=tenant_id&limit=1`);
+  if (!rows?.length) { res.status(404).json({ error: 'loja não encontrada' }); return null; }
+  const { tenant_id } = rows[0];
+  if (!await assertTenantMember(req, res, tenant_id)) return null;
+  return tenant_id;
+}
+
 // GET /api/lojas/:id  — detalhe completo com consultores atribuídos
 app.get('/api/lojas/:id', requireJwt, async (req, res) => {
   const { id } = req.params;
   try {
-    const rows = await sbFetch(`lojas?id=eq.${encodeURIComponent(id)}&limit=1&select=*`);
-    if (!rows?.length) return res.status(404).json({ error: 'loja não encontrada' });
+    if (!await assertLojaAccess(req, res, id)) return;
 
+    const rows = await sbFetch(`lojas?id=eq.${encodeURIComponent(id)}&limit=1&select=*`);
     const consultores = await sbFetch(
       `loja_consultores?loja_id=eq.${encodeURIComponent(id)}&ativo=eq.true&select=id,user_id,papel,atribuido_em`
     );
@@ -856,16 +879,18 @@ app.post('/api/lojas', requireJwt, async (req, res) => {
   if (!tenant_id || !nome)
     return res.status(400).json({ error: 'tenant_id e nome são obrigatórios' });
 
-  const row = Object.fromEntries(
-    Object.entries({
-      tenant_id, nome, status: 'onboarding', created_by: req.user.id,
-      slug, segmento, posicionamento, ticket_medio, cidade, estado, nicho,
-      ifood_merchant_id, ifood_url, tipo, whatsapp, logo_url, observacoes,
-      tags, client_id, data_inicio_consultoria, data_fim_consultoria,
-    }).filter(([, v]) => v != null && v !== '')
-  );
-
   try {
+    if (!await assertTenantMember(req, res, tenant_id)) return;
+
+    const row = Object.fromEntries(
+      Object.entries({
+        tenant_id, nome, status: 'onboarding', created_by: req.user.id,
+        slug, segmento, posicionamento, ticket_medio, cidade, estado, nicho,
+        ifood_merchant_id, ifood_url, tipo, whatsapp, logo_url, observacoes,
+        tags, client_id, data_inicio_consultoria, data_fim_consultoria,
+      }).filter(([, v]) => v != null && v !== '')
+    );
+
     const data = await sbFetch('lojas', { method: 'POST', body: row });
     const loja = Array.isArray(data) ? data[0] : data;
     console.log(`[api/lojas POST] id=${loja?.id} nome="${nome}" tenant=${tenant_id}`);
@@ -892,6 +917,8 @@ app.patch('/api/lojas/:id', requireJwt, async (req, res) => {
     return res.status(400).json({ error: 'nenhum campo válido para atualizar' });
 
   try {
+    if (!await assertLojaAccess(req, res, id)) return;
+
     const data = await sbFetch(`lojas?id=eq.${encodeURIComponent(id)}`, {
       method: 'PATCH', body: updates,
     });
@@ -909,6 +936,8 @@ app.patch('/api/lojas/:id', requireJwt, async (req, res) => {
 app.get('/api/lojas/:id/consultores', requireJwt, async (req, res) => {
   const { id } = req.params;
   try {
+    if (!await assertLojaAccess(req, res, id)) return;
+
     const consultores = await sbFetch(
       `loja_consultores?loja_id=eq.${encodeURIComponent(id)}&select=id,user_id,papel,ativo,atribuido_em,atribuido_por`
     );
@@ -926,6 +955,8 @@ app.post('/api/lojas/:id/consultores', requireJwt, async (req, res) => {
   if (!user_id) return res.status(400).json({ error: 'user_id obrigatório' });
 
   try {
+    if (!await assertLojaAccess(req, res, id)) return;
+
     const data = await sbFetch('loja_consultores', {
       method: 'POST',
       body: { loja_id: id, user_id, papel, atribuido_por: req.user.id, ativo: true },
@@ -944,6 +975,8 @@ app.post('/api/lojas/:id/consultores', requireJwt, async (req, res) => {
 app.delete('/api/lojas/:id/consultores/:userId', requireJwt, async (req, res) => {
   const { id, userId } = req.params;
   try {
+    if (!await assertLojaAccess(req, res, id)) return;
+
     await sbFetch(
       `loja_consultores?loja_id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(userId)}`,
       { method: 'PATCH', body: { ativo: false } }
@@ -980,6 +1013,8 @@ app.post('/api/lojas/:id/metricas', requireJwt, async (req, res) => {
   };
 
   try {
+    if (!await assertLojaAccess(req, res, id)) return;
+
     const result = await sbFetch('loja_metricas_snapshot', {
       method: 'POST',
       body: row,
