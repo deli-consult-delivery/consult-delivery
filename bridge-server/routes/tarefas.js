@@ -581,7 +581,7 @@ module.exports = function buildTarefasRouter({ requireJwt, sbFetch, assertLojaAc
   });
 
   // ════════════════════════════════════════════════════════════════════════
-  // GET /api/tarefas/loja/:lojaId/relatorio — contagens por status/bloco
+  // GET /api/tarefas/loja/:lojaId/relatorio — relatório completo por loja
   // Acesso: qualquer membro do tenant com acesso à loja
   // ════════════════════════════════════════════════════════════════════════
   router.get('/tarefas/loja/:lojaId/relatorio', requireJwt, async (req, res) => {
@@ -596,7 +596,14 @@ module.exports = function buildTarefasRouter({ requireJwt, sbFetch, assertLojaAc
     try {
       const { data_inicio, data_fim } = query;
 
-      let qs = `tarefas_loja?loja_id=eq.${encodeURIComponent(lojaId)}&select=status,bloco,prioridade,created_at`;
+      const lojas = await sbFetch(
+        `lojas?id=eq.${encodeURIComponent(lojaId)}&select=id,nome,cidade,segmento&limit=1`
+      );
+      const loja = lojas?.[0] ?? { id: lojaId, nome: null, cidade: null, segmento: null };
+
+      let qs = `tarefas_loja?loja_id=eq.${encodeURIComponent(lojaId)}`
+             + `&select=id,bloco,ordem_no_bloco,titulo,situacao,o_que_sera_feito,por_que_importa,status,prioridade,prazo_estimado,concluida_em`
+             + `&order=bloco.asc,ordem_no_bloco.asc`;
       if (data_inicio) qs += `&created_at=gte.${data_inicio}`;
       if (data_fim)    qs += `&created_at=lte.${data_fim}T23:59:59`;
 
@@ -615,12 +622,23 @@ module.exports = function buildTarefasRouter({ requireJwt, sbFetch, assertLojaAc
 
       console.log(`[api/tarefas/loja/relatorio GET] loja=${lojaId} total=${arr.length}`);
       res.json({
-        loja_id: lojaId,
-        total:   arr.length,
-        por_status,
-        por_bloco,
-        por_prioridade,
-        periodo: { data_inicio: data_inicio ?? null, data_fim: data_fim ?? null },
+        loja:      { id: loja.id, nome: loja.nome, cidade: loja.cidade, segmento: loja.segmento },
+        gerado_em: new Date().toISOString(),
+        totais: { total: arr.length, por_status, por_bloco, por_prioridade },
+        periodo:   { data_inicio: data_inicio ?? null, data_fim: data_fim ?? null },
+        tarefas:   arr.map(t => ({
+          id:               t.id,
+          bloco:            t.bloco,
+          ordem_no_bloco:   t.ordem_no_bloco,
+          titulo:           t.titulo,
+          situacao:         t.situacao,
+          o_que_sera_feito: t.o_que_sera_feito,
+          por_que_importa:  t.por_que_importa,
+          status:           t.status,
+          prioridade:       t.prioridade,
+          prazo_estimado:   t.prazo_estimado,
+          concluida_em:     t.concluida_em,
+        })),
       });
     } catch (err) {
       console.error('[api/tarefas/loja/relatorio GET]', err.message);
