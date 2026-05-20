@@ -440,10 +440,13 @@ function AgentMessage({ run, tenantDbId, isLast }) {
     setSendResult(null);
     setGroupsLoading(true);
     try {
-      const { data: dbGroups } = await supabase
-        .from('whatsapp_groups').select('id,evolution_jid,group_name,picture_url')
+      const { data: dbGroups, error } = await supabase
+        .from('whatsapp_groups').select('id,evolution_jid,group_name')
         .eq('tenant_id', tenantDbId).eq('ativo', true).order('group_name');
+      if (error) console.error('[BomDia] groups query error:', error);
       setGroups(dbGroups || []);
+    } catch (e) {
+      console.error('[BomDia] groups fetch error:', e);
     } finally {
       setGroupsLoading(false);
     }
