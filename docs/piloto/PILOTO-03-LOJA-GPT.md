@@ -105,11 +105,11 @@ CREATE TABLE IF NOT EXISTS loja_gpt_messages (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   conversation_id uuid NOT NULL REFERENCES loja_gpt_conversations(id) ON DELETE CASCADE,
   
-  role text NOT NULL CHECK (role IN ('user','assistant','system','tool')),
+  role text NOT NULL CHECK (role IN ('user','assistant','tool')),
   conteudo text NOT NULL,
   
   -- Citações e contexto usado
-  fontes_consultadas jsonb DEFAULT '[]', -- array de {tipo, arquivo, trecho}
+  fontes_consultadas jsonb NOT NULL DEFAULT '[]', -- array de {tipo, arquivo, trecho}
   contexto_loja_snapshot jsonb,           -- snapshot do contexto no momento
   
   -- Custo
@@ -117,10 +117,10 @@ CREATE TABLE IF NOT EXISTS loja_gpt_messages (
   tokens_output integer,
   custo_usd numeric(10,6),
   duracao_ms integer,
+  modelo text,
   
   -- Audit
-  agent_run_id uuid REFERENCES agent_runs(id),
-  autor_user_id uuid REFERENCES auth.users(id), -- se user
+  autor_user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL, -- se user
   
   created_at timestamptz DEFAULT now()
 );
@@ -143,6 +143,12 @@ CREATE POLICY "Ver mensagens via conversation"
 
 COMMIT;
 ```
+
+> **Histórico de decisões (2026-05-21):**
+> - `agent_run_id` removido — pode voltar em migration futura se precisar cruzar com `agent_runs`. Não bloqueia Loja-GPT v1.
+> - `modelo` adicionado — necessário pra rastreamento de custo por modelo (claude-sonnet-4-6 vs outros).
+> - `'system'` removido do CHECK — Anthropic API trata system como parâmetro separado, não como mensagem gravada.
+> - `NOT NULL` e `ON DELETE SET NULL` explícitos — hardening defensivo.
 
 ---
 
