@@ -962,4 +962,37 @@ chatter) — skip the wiki update. Just append the log line.
 - `/wiki-brain lint` — health-check the wiki
 - `/wiki-brain rebuild` — force a Graphify rebuild
 - `/wiki-brain doctor` — verify install
+
+================================================================================
+
+====================================================
+20. MANDATO DE QA — VERIFICAÇÃO OBRIGATÓRIA PÓS-FIX
+====================================================
+
+Todo fix ou feature deployado em produção EXIGE verificação antes de "feito".
+Nunca declarar sucesso apenas porque o build passou ou o push foi feito.
+
+FLUXO OBRIGATÓRIO após git push:
+  1. Aguardar ~3 minutos (GitHub Actions → GitHub Pages)
+  2. Rodar verificação rápida:  bash scripts/qa-run.sh --no-build
+  3. Confirmar bundle de produção atualizado: curl -s https://app.consultdelivery.com.br/ | grep -o '"[^"]*\.js"' | head -1
+  4. Validar feature em prod abrindo URL ou consultando Supabase via MCP
+
+ANTES DE INVESTIGAR QUALQUER BUG:
+  Consultar scripts/qa-knowledge.md — lista de bugs já resolvidos e padrões de teste.
+  Isso evita reinvestigar a mesma causa raiz.
+
+APÓS RESOLVER UM BUG:
+  Atualizar scripts/qa-knowledge.md com nova entrada em ## Casos Resolvidos.
+  Formato: [data] Feature — Sintoma / Causa raiz / Fix / Lição.
+  Esse arquivo é o aprendizado acumulado do QA Agent — deve crescer a cada sessão.
+
+PADRÕES DE BUG CONHECIDOS (ver qa-knowledge.md para detalhes):
+  P1 — Colunas inexistentes em .select() Supabase → erro silenciado, data = null
+  P2 — Build local não reflete produção → verificar bundle hash
+  P3 — Evolution API fetchAllGroups → lenta/instável, usar Supabase como fonte primária
+  P4 — RLS bloqueando query → verificar políticas via pg_policies
+
+Arquivo de padrões: scripts/qa-knowledge.md
+Runner automatizado:  scripts/qa-run.sh
 - `/recall` — show last 5 activities + read linked pages
