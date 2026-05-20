@@ -8,6 +8,10 @@ const {
   UpdateTarefaSchema,
   EnviarAprovacaoSchema,
   AprovarSchema,
+  RejeitarSchema,
+  IniciarExecucaoSchema,
+  SubmeterValidacaoSchema,
+  ConcluirSchema,
 } = require('../schemas/tarefas');
 
 // Factory: recebe helpers do index.js para evitar acoplamento circular
@@ -382,6 +386,192 @@ module.exports = function buildTarefasRouter({ requireJwt, sbFetch, assertLojaAc
       res.json({ ok: true, status: 'aprovada' });
     } catch (err) {
       console.error('[api/tarefas/aprovar POST]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  // POST /api/tarefas/:id/rejeitar — aguardando_aprovacao → rejeitada
+  // ════════════════════════════════════════════════════════════════════════
+  router.post('/tarefas/:id/rejeitar', requireJwt, async (req, res) => {
+    const { id } = req.params;
+
+    const body = validate(RejeitarSchema, req.body, res);
+    if (!body) return;
+
+    try {
+      const ctx = await fetchTarefaComAcesso(req, res, id);
+      if (!ctx) return;
+      const { tarefa, tenant_id } = ctx;
+
+      if (tarefa.status !== 'aguardando_aprovacao') {
+        return res.status(422).json({
+          error: `Status '${tarefa.status}' não permite rejeição`,
+        });
+      }
+
+      await patchTarefa(id, { status: 'rejeitada' });
+
+      await supabaseInsert('tarefa_aprovacoes', {
+        tarefa_id: id,
+        acao:      'rejeitada',
+        autor_id:  req.user.id,
+        nota:      body.nota,
+      });
+
+      await logAudit({
+        tenant_id,
+        user_id:  req.user.id,
+        action:   'tarefa_rejeitada',
+        resource: `tarefas_loja:${id}`,
+        metadata: { nota: body.nota },
+      });
+
+      console.log(`[api/tarefas/rejeitar POST] id=${id}`);
+      res.json({ ok: true, status: 'rejeitada' });
+    } catch (err) {
+      console.error('[api/tarefas/rejeitar POST]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  // POST /api/tarefas/:id/iniciar-execucao — aprovada → em_execucao
+  // ════════════════════════════════════════════════════════════════════════
+  router.post('/tarefas/:id/iniciar-execucao', requireJwt, async (req, res) => {
+    const { id } = req.params;
+
+    const body = validate(IniciarExecucaoSchema, req.body, res);
+    if (!body) return;
+
+    try {
+      const ctx = await fetchTarefaComAcesso(req, res, id);
+      if (!ctx) return;
+      const { tarefa, tenant_id } = ctx;
+
+      if (tarefa.status !== 'aprovada') {
+        return res.status(422).json({
+          error: `Status '${tarefa.status}' não permite iniciar execução`,
+        });
+      }
+
+      await patchTarefa(id, {
+        status:       'em_execucao',
+        executada_em: new Date().toISOString(),
+      });
+
+      await supabaseInsert('tarefa_aprovacoes', {
+        tarefa_id: id,
+        acao:      'iniciou_execucao',
+        autor_id:  req.user.id,
+        nota:      body.nota ?? null,
+      });
+
+      await logAudit({
+        tenant_id,
+        user_id:  req.user.id,
+        action:   'tarefa_execucao_iniciada',
+        resource: `tarefas_loja:${id}`,
+        metadata: {},
+      });
+
+      console.log(`[api/tarefas/iniciar-execucao POST] id=${id}`);
+      res.json({ ok: true, status: 'em_execucao' });
+    } catch (err) {
+      console.error('[api/tarefas/iniciar-execucao POST]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  // POST /api/tarefas/:id/submeter-validacao — em_execucao → aguardando_validacao
+  // ════════════════════════════════════════════════════════════════════════
+  router.post('/tarefas/:id/submeter-validacao', requireJwt, async (req, res) => {
+    const { id } = req.params;
+
+    const body = validate(SubmeterValidacaoSchema, req.body, res);
+    if (!body) return;
+
+    try {
+      const ctx = await fetchTarefaComAcesso(req, res, id);
+      if (!ctx) return;
+      const { tarefa, tenant_id } = ctx;
+
+      if (tarefa.status !== 'em_execucao') {
+        return res.status(422).json({
+          error: `Status '${tarefa.status}' não permite submeter para validação`,
+        });
+      }
+
+      await patchTarefa(id, { status: 'aguardando_validacao' });
+
+      await supabaseInsert('tarefa_aprovacoes', {
+        tarefa_id: id,
+        acao:      'submeteu_validacao',
+        autor_id:  req.user.id,
+        nota:      body.nota ?? null,
+      });
+
+      await logAudit({
+        tenant_id,
+        user_id:  req.user.id,
+        action:   'tarefa_submetida_validacao',
+        resource: `tarefas_loja:${id}`,
+        metadata: {},
+      });
+
+      console.log(`[api/tarefas/submeter-validacao POST] id=${id}`);
+      res.json({ ok: true, status: 'aguardando_validacao' });
+    } catch (err) {
+      console.error('[api/tarefas/submeter-validacao POST]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  // POST /api/tarefas/:id/concluir — aguardando_validacao → concluida
+  // ════════════════════════════════════════════════════════════════════════
+  router.post('/tarefas/:id/concluir', requireJwt, async (req, res) => {
+    const { id } = req.params;
+
+    const body = validate(ConcluirSchema, req.body, res);
+    if (!body) return;
+
+    try {
+      const ctx = await fetchTarefaComAcesso(req, res, id);
+      if (!ctx) return;
+      const { tarefa, tenant_id } = ctx;
+
+      if (tarefa.status !== 'aguardando_validacao') {
+        return res.status(422).json({
+          error: `Status '${tarefa.status}' não permite concluir`,
+        });
+      }
+
+      await patchTarefa(id, {
+        status:       'concluida',
+        concluida_em: new Date().toISOString(),
+      });
+
+      await supabaseInsert('tarefa_aprovacoes', {
+        tarefa_id: id,
+        acao:      'concluiu',
+        autor_id:  req.user.id,
+        nota:      body.nota ?? null,
+      });
+
+      await logAudit({
+        tenant_id,
+        user_id:  req.user.id,
+        action:   'tarefa_concluida',
+        resource: `tarefas_loja:${id}`,
+        metadata: {},
+      });
+
+      console.log(`[api/tarefas/concluir POST] id=${id}`);
+      res.json({ ok: true, status: 'concluida' });
+    } catch (err) {
+      console.error('[api/tarefas/concluir POST]', err.message);
       res.status(500).json({ error: err.message });
     }
   });
