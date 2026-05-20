@@ -43,12 +43,20 @@ export async function sendMediaMessage(instanceName, to, media, mediaType, mimeT
   const body = { number: to, mediatype: mediaType, media, caption };
   if (mimeType)  body.mimetype  = mimeType;
   if (fileName)  body.fileName  = fileName;
+  console.log('[EVO] sendMedia →', instanceName, to, mediaType, `${media.length} chars b64`, `caption: "${caption}"`);
   const res = await fetch(`${EVO_URL}/message/sendMedia/${instanceName}`, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
   });
-  return res.json();
+  if (!res.ok) {
+    const errText = await res.text().catch(() => res.statusText);
+    console.error('[EVO] sendMedia FALHOU:', res.status, errText);
+    throw new Error(`Evolution sendMedia ${res.status}: ${errText}`);
+  }
+  const json = await res.json();
+  console.log('[EVO] sendMedia OK:', json?.key?.id, json?.status);
+  return json;
 }
 
 // Ler configuração atual do webhook (sem modificar)

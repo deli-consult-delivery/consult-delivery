@@ -2670,32 +2670,69 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     const msg = forwardMsg;
     setForwardMsg(null);
     if (!msg || !selectedInstance || !targetConvs?.length) return;
-    const jids = targetConvs.map(tc => tc.whatsapp_chat_id).filter(Boolean);
-    if (!jids.length) return;
+    const validTargets = targetConvs.filter(tc => tc.whatsapp_chat_id);
+    if (!validTargets.length) return;
+
+    // Persiste a mensagem encaminhada na conversa do destinatário com o
+    // whatsapp_msg_id retornado pela Evolution. A unique constraint em
+    // messages.whatsapp_msg_id (migration 20260516) dedup contra o echo do
+    // SEND_MESSAGE webhook — quem chegar primeiro vence, o outro vira no-op.
+    const persistForwarded = async (target, content, mediaType, mediaUrl, whatsappMsgId) => {
+      const row = {
+        tenant_id:       target.tenant_id || tenantDbId || null,
+        conversation_id: target.id,
+        direction:       'outbound',
+        content:         content || null,
+        sender_name:     currentUser?.name || null,
+        media_type:      mediaType || null,
+        media_url:       mediaUrl || null,
+        whatsapp_msg_id: whatsappMsgId || null,
+        created_at:      new Date().toISOString(),
+      };
+      // Se temos whatsappMsgId usa upsert (idempotente vs webhook echo);
+      // senão insert direto (sem onConflict porque NULLs não conflitam).
+      const q = whatsappMsgId
+        ? supabase.from('messages').upsert(row, { onConflict: 'whatsapp_msg_id', ignoreDuplicates: true })
+        : supabase.from('messages').insert(row);
+      const { error } = await q;
+      if (error) console.error('[FORWARD] persist falhou:', error, row);
+    };
+
     try {
-      if (msg.mediaType?.includes('audio')) {
-        if (msg.mediaUrl) {
-          const res = await fetch(msg.mediaUrl);
-          const blob = await res.blob();
+      if (msg.mediaType?.includes('audio') && msg.mediaUrl) {
+        const res = await fetch(msg.mediaUrl);
+        const blob = await res.blob();
+        const base64 = await new Promise((resolve, reject) => {
           const reader = new FileReader();
-          reader.onloadend = async () => {
-            const base64 = reader.result.split(',')[1];
-            await Promise.all(jids.map(jid => sendAudioMessage(selectedInstance, jid, base64)));
-          };
+          reader.onloadend = () => resolve(reader.result.split(',')[1]);
+          reader.onerror = reject;
           reader.readAsDataURL(blob);
-        }
+        });
+        await Promise.all(validTargets.map(async (target) => {
+          const r = await sendAudioMessage(selectedInstance, target.whatsapp_chat_id, base64);
+          await persistForwarded(target, null, 'audio', msg.mediaUrl, r?.key?.id ?? null);
+        }));
       } else if (msg.mediaType && msg.mediaUrl) {
         const res = await fetch(msg.mediaUrl);
         const blob = await res.blob();
-        const reader = new FileReader();
-        reader.onloadend = async () => {
-          const base64 = reader.result.split(',')[1];
-          const mime = blob.type || 'application/octet-stream';
-          await Promise.all(jids.map(jid => sendMediaMessage(selectedInstance, jid, base64, msg.mediaType, mime, msg.text || '', '')));
-        };
-        reader.readAsDataURL(blob);
+        const mime = blob.type || 'application/octet-stream';
+        const base64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result.split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        const caption = msg.text || '';
+        await Promise.all(validTargets.map(async (target) => {
+          const r = await sendMediaMessage(selectedInstance, target.whatsapp_chat_id, base64, msg.mediaType, mime, caption, '');
+          await persistForwarded(target, caption || null, msg.mediaType, msg.mediaUrl, r?.key?.id ?? null);
+        }));
       } else if (msg.text) {
-        await Promise.all(jids.map(jid => sendTextMessage(selectedInstance, jid, `↪️ ${msg.text}`)));
+        const forwardedText = `↪️ ${msg.text}`;
+        await Promise.all(validTargets.map(async (target) => {
+          const r = await sendTextMessage(selectedInstance, target.whatsapp_chat_id, forwardedText);
+          await persistForwarded(target, forwardedText, null, null, r?.key?.id ?? null);
+        }));
       }
     } catch (err) {
       console.error('Falha ao encaminhar:', err);
@@ -2763,9 +2800,13 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     reader.onloadend = async () => {
       const base64 = reader.result.split(',')[1];
       setSending(true);
-      try { await sendMediaMessage(selectedInstance, active.whatsapp_chat_id, base64, mediaType, file.type, '', file.name); }
-      catch (err) { console.error('Falha ao enviar mídia:', err); }
-      finally { setSending(false); }
+      try {
+        const r = await sendMediaMessage(selectedInstance, active.whatsapp_chat_id, base64, mediaType, file.type, '', file.name);
+        console.log('[MEDIA-FILE] Evolution OK:', r);
+      } catch (err) {
+        console.error('[MEDIA-FILE] Falha ao enviar mídia:', err);
+        alert(`Falha ao enviar mídia para ${active.name || active.whatsapp_chat_id}:\n${err.message}`);
+      } finally { setSending(false); }
     };
     reader.readAsDataURL(file);
   };
@@ -2846,9 +2887,13 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     reader.onloadend = async () => {
       const base64 = reader.result.split(',')[1];
       setSending(true);
-      try { await sendMediaMessage(selectedInstance, active.whatsapp_chat_id, base64, 'image', f.type, caption, f.name || 'imagem.png'); }
-      catch (err) { console.error('Falha ao enviar imagem colada:', err); }
-      finally { setSending(false); URL.revokeObjectURL(previewUrl); }
+      try {
+        const r = await sendMediaMessage(selectedInstance, active.whatsapp_chat_id, base64, 'image', f.type, caption, f.name || 'imagem.png');
+        console.log('[PASTE-IMG] Evolution OK:', r, 'caption enviado:', JSON.stringify(caption));
+      } catch (err) {
+        console.error('[PASTE-IMG] Falha ao enviar imagem:', err);
+        alert(`Falha ao enviar imagem para ${active.name || active.whatsapp_chat_id}:\n${err.message}`);
+      } finally { setSending(false); URL.revokeObjectURL(previewUrl); }
     };
     reader.readAsDataURL(f);
   };
