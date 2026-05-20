@@ -234,7 +234,7 @@ export default function LojaWorkspace({ tenantDbId, userId, go, lojaId }) {
         ))}
       </div>
 
-      {tab === 0 && <TabVisaoGeral loja={loja} />}
+      {tab === 0 && <TabVisaoGeral loja={loja} lojaId={lojaId} />}
       {tab === 1 && (
         <TabMetricas
           metricas={metricas}
@@ -268,7 +268,21 @@ export default function LojaWorkspace({ tenantDbId, userId, go, lojaId }) {
 
 // ── Tab sub-components ────────────────────────────────────────────────────────
 
-function TabVisaoGeral({ loja }) {
+function TabVisaoGeral({ loja, lojaId }) {
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(`${BRIDGE}/api/tarefas/loja/${lojaId}/relatorio`, {
+          headers: { Authorization: `Bearer ${session?.access_token}` },
+        });
+        if (res.ok) setStats(await res.json());
+      } catch {}
+    })();
+  }, [lojaId]);
+
   const rows = [
     ['Nome', loja.nome],
     ['Segmento', loja.segmento ? SEG_LABEL[loja.segmento] : null],
@@ -282,22 +296,39 @@ function TabVisaoGeral({ loja }) {
     ['Observações', loja.observacoes],
   ].filter(([, v]) => v);
 
-  if (!rows.length) {
-    return <div style={{ color: '#6b7280', fontSize: 14 }}>Nenhuma informação cadastrada.</div>;
-  }
-
   return (
-    <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 12, overflow: 'hidden' }}>
-      {rows.map(([label, value], i) => (
-        <div key={label} style={{ display: 'flex', gap: 16, padding: '12px 16px', borderTop: i > 0 ? '1px solid #1f1f1f' : undefined }}>
-          <div style={{ width: 160, flexShrink: 0, fontSize: 12, color: '#6b7280', paddingTop: 1 }}>{label}</div>
-          <div style={{ fontSize: 13, color: '#e5e7eb', wordBreak: 'break-word' }}>
-            {label === 'Link iFood'
-              ? <a href={value} target="_blank" rel="noreferrer" style={{ color: '#B70C00' }}>{value}</a>
-              : value}
-          </div>
+    <div>
+      {stats != null && stats.total > 0 && (
+        <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+          {[
+            { label: 'Total de tarefas', value: stats.total, color: '#6b7280' },
+            { label: 'Concluídas', value: stats.por_status?.concluida || 0, color: '#10b981' },
+            { label: 'Em execução', value: (stats.por_status?.em_execucao || 0) + (stats.por_status?.aguardando_validacao || 0), color: '#f97316' },
+            { label: 'Pendentes', value: (stats.total || 0) - (stats.por_status?.concluida || 0) - (stats.por_status?.cancelada || 0) - (stats.por_status?.em_execucao || 0) - (stats.por_status?.aguardando_validacao || 0), color: '#f59e0b' },
+          ].map(s => (
+            <div key={s.label} style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 10, padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{ fontSize: 11, color: '#6b7280' }}>{s.label}</span>
+              <span style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</span>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
+      {!rows.length ? (
+        <div style={{ color: '#6b7280', fontSize: 14 }}>Nenhuma informação cadastrada.</div>
+      ) : (
+        <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 12, overflow: 'hidden' }}>
+          {rows.map(([label, value], i) => (
+            <div key={label} style={{ display: 'flex', gap: 16, padding: '12px 16px', borderTop: i > 0 ? '1px solid #1f1f1f' : undefined }}>
+              <div style={{ width: 160, flexShrink: 0, fontSize: 12, color: '#6b7280', paddingTop: 1 }}>{label}</div>
+              <div style={{ fontSize: 13, color: '#e5e7eb', wordBreak: 'break-word' }}>
+                {label === 'Link iFood'
+                  ? <a href={value} target="_blank" rel="noreferrer" style={{ color: '#B70C00' }}>{value}</a>
+                  : value}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -434,6 +465,7 @@ function TabTarefas({ lojaId }) {
   const [expanded, setExpanded]       = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
   const [showForm, setShowForm]       = useState(false);
+  const [detailId, setDetailId]       = useState(null);
 
   useEffect(() => { loadTarefas(); }, [lojaId]);
 
@@ -568,7 +600,7 @@ function TabTarefas({ lojaId }) {
                       </div>
                     )}
                     {/* Lifecycle actions */}
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 4 }}>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 4, alignItems: 'center' }}>
                       {['rascunho', 'aguardando_envio', 'rejeitada'].includes(t.status) && (
                         <TarefaActionBtn
                           label="Enviar para aprovação"
@@ -619,6 +651,13 @@ function TabTarefas({ lojaId }) {
                           onClick={() => takeAction(t.id, 'concluir')}
                         />
                       )}
+                      <div style={{ flex: 1 }} />
+                      <button
+                        onClick={() => setDetailId(t.id)}
+                        style={{ background: 'none', border: 'none', color: '#B70C00', cursor: 'pointer', fontSize: 12, padding: 0, fontWeight: 600 }}
+                      >
+                        Ver detalhes →
+                      </button>
                     </div>
                   </div>
                 )}
@@ -633,6 +672,13 @@ function TabTarefas({ lojaId }) {
           lojaId={lojaId}
           onClose={() => setShowForm(false)}
           onSaved={() => { setShowForm(false); loadTarefas(); }}
+        />
+      )}
+      {detailId && (
+        <TarefaDetailModal
+          tarefaId={detailId}
+          onClose={() => setDetailId(null)}
+          onRefresh={loadTarefas}
         />
       )}
     </div>
@@ -749,6 +795,189 @@ function NovaTarefaOverlay({ lojaId, onClose, onSaved }) {
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+// ── TarefaDetailModal ─────────────────────────────────────────────────────────
+
+function TarefaDetailModal({ tarefaId, onClose, onRefresh }) {
+  const [data, setData]               = useState(null);
+  const [loading, setLoading]         = useState(true);
+  const [innerTab, setInnerTab]       = useState(0);
+  const [comentario, setComentario]   = useState('');
+  const [savingCmt, setSavingCmt]     = useState(false);
+
+  const INNER_TABS = ['Detalhes', 'Histórico', 'Comentários'];
+
+  async function bridgeFetch(path, options = {}) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch(`${BRIDGE}${path}`, {
+      ...options,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}`, ...options.headers },
+    });
+    if (!res.ok) { const b = await res.json().catch(() => ({ error: res.statusText })); throw new Error(b.error || res.statusText); }
+    return res.json();
+  }
+
+  async function load() {
+    setLoading(true);
+    try { setData(await bridgeFetch(`/api/tarefas/${tarefaId}`)); }
+    catch (err) { console.error('[detail]', err.message); }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => { load(); }, [tarefaId]);
+
+  async function addComment() {
+    if (!comentario.trim()) return;
+    setSavingCmt(true);
+    try {
+      await bridgeFetch(`/api/tarefas/${tarefaId}/comentarios`, {
+        method: 'POST',
+        body: JSON.stringify({ conteudo: comentario.trim(), interno: true }),
+      });
+      setComentario('');
+      load();
+    } catch (err) { alert('Erro: ' + err.message); }
+    finally { setSavingCmt(false); }
+  }
+
+  const t = data?.tarefa;
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: '#000b', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9100, padding: 20 }}>
+      <div style={{ background: '#141414', border: '1px solid #2a2a2a', borderRadius: 14, width: '100%', maxWidth: 640, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+        {/* Header */}
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid #2a2a2a', display: 'flex', alignItems: 'center', gap: 10 }}>
+          {t && (
+            <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: (STATUS_TAREFA_COLOR[t.status] || '#6b7280') + '20', color: STATUS_TAREFA_COLOR[t.status] || '#6b7280', flexShrink: 0 }}>
+              {STATUS_TAREFA_LABEL[t.status] || t.status}
+            </span>
+          )}
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {t?.titulo || 'Carregando…'}
+          </h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: 4, flexShrink: 0 }}>
+            <Icon name="x" size={16} />
+          </button>
+        </div>
+
+        {/* Inner tabs */}
+        <div style={{ display: 'flex', gap: 2, padding: '0 20px', borderBottom: '1px solid #2a2a2a' }}>
+          {INNER_TABS.map((label, i) => (
+            <button key={label} onClick={() => setInnerTab(i)} style={{
+              background: 'none', border: 'none', padding: '8px 12px', cursor: 'pointer',
+              fontSize: 12, fontWeight: innerTab === i ? 600 : 400,
+              color: innerTab === i ? '#fff' : '#6b7280',
+              borderBottom: innerTab === i ? '2px solid #B70C00' : '2px solid transparent',
+              marginBottom: -1,
+            }}>{label}</button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+          {loading && (
+            <div style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', padding: '40px 0' }}>Carregando…</div>
+          )}
+
+          {/* Detalhes */}
+          {!loading && t && innerTab === 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <InfoChip label="Bloco" value={BLOCO_LABEL[t.bloco] || t.bloco} />
+                <InfoChip label="Prioridade" value={PRIORIDADE_LABEL[t.prioridade]} color={PRIORIDADE_COLOR[t.prioridade]} />
+                {t.prazo_estimado && <InfoChip label="Prazo" value={t.prazo_estimado} />}
+                {t.concluida_em && <InfoChip label="Concluída em" value={new Date(t.concluida_em).toLocaleDateString('pt-BR')} color="#10b981" />}
+              </div>
+              <DetailField label="Situação atual" value={t.situacao} />
+              <DetailField label="O que será feito" value={t.o_que_sera_feito} />
+              {t.por_que_importa && <DetailField label="Por que importa" value={t.por_que_importa} />}
+              <div style={{ display: 'flex', gap: 10, paddingTop: 4 }}>
+                <span style={{ fontSize: 11, color: '#6b7280' }}>
+                  {t.comentarios_count} comentário{t.comentarios_count !== 1 ? 's' : ''} · {t.prints_count} print{t.prints_count !== 1 ? 's' : ''}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Histórico */}
+          {!loading && t && innerTab === 1 && (
+            <div>
+              {(!t.aprovacoes || t.aprovacoes.length === 0) ? (
+                <div style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', padding: '30px 0' }}>Nenhum registro no histórico.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                  {t.aprovacoes.map((a, i) => (
+                    <div key={a.id} style={{ display: 'flex', gap: 12, paddingBottom: 16 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#B70C00', flexShrink: 0, marginTop: 4 }} />
+                        {i < t.aprovacoes.length - 1 && <div style={{ width: 2, flex: 1, background: '#2a2a2a', minHeight: 12, marginTop: 4 }} />}
+                      </div>
+                      <div style={{ flex: 1, paddingBottom: 4 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#e5e7eb', textTransform: 'capitalize' }}>{(a.acao || '').replace(/_/g, ' ')}</div>
+                        {a.nota && <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4, lineHeight: 1.5 }}>{a.nota}</div>}
+                        <div style={{ fontSize: 11, color: '#4b5563', marginTop: 4 }}>{new Date(a.created_at).toLocaleString('pt-BR')}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Comentários */}
+          {!loading && t && innerTab === 2 && (
+            <div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                {(!t.comentarios || t.comentarios.length === 0) ? (
+                  <div style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', padding: '20px 0' }}>Nenhum comentário ainda.</div>
+                ) : t.comentarios.map(c => (
+                  <div key={c.id} style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, padding: '10px 12px' }}>
+                    <div style={{ fontSize: 13, color: '#e5e7eb', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{c.conteudo}</div>
+                    <div style={{ fontSize: 11, color: '#4b5563', marginTop: 6 }}>{new Date(c.created_at).toLocaleString('pt-BR')}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <textarea
+                  value={comentario}
+                  onChange={e => setComentario(e.target.value)}
+                  placeholder="Adicionar comentário interno…"
+                  rows={2}
+                  style={{ ...mini, flex: 1, resize: 'none' }}
+                />
+                <button
+                  onClick={addComment}
+                  disabled={savingCmt || !comentario.trim()}
+                  style={{ background: '#B70C00', border: 'none', color: '#fff', padding: '8px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, alignSelf: 'flex-end', opacity: savingCmt || !comentario.trim() ? 0.5 : 1, whiteSpace: 'nowrap' }}
+                >
+                  {savingCmt ? '…' : 'Enviar'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InfoChip({ label, value, color }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <span style={{ fontSize: 10, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: 600, color: color || '#e5e7eb' }}>{value}</span>
+    </div>
+  );
+}
+
+function DetailField({ label, value }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
+      <div style={{ fontSize: 13, color: '#e5e7eb', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{value}</div>
     </div>
   );
 }

@@ -1098,6 +1098,8 @@ function ForwardModal({ msg, convs, currentConvId, onClose, onForward }) {
 
   const handleSend = () => {
     const targets = allTargets.filter(c => selected.has(c.id));
+    alert(`[FORWARD MODAL] botão clicado — selected=${selected.size}, targets=${targets.length}, allTargets=${allTargets.length}`);
+    console.log('[FORWARD MODAL] botão clicado', { selectedSize: selected.size, targetsFound: targets.length, allTargetsCount: allTargets.length });
     if (targets.length) onForward(targets);
   };
 
@@ -2667,35 +2669,101 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   };
 
   const handleForward = async (targetConvs) => {
+    alert(`[FORWARD] handleForward CHAMADO — targets=${targetConvs?.length}, hasMsg=${!!forwardMsg}, instance=${selectedInstance}`);
+    console.log('[FORWARD] handleForward CHAMADO', { targetCount: targetConvs?.length, hasMsg: !!forwardMsg, selectedInstance });
     const msg = forwardMsg;
     setForwardMsg(null);
-    if (!msg || !selectedInstance || !targetConvs?.length) return;
-    const jids = targetConvs.map(tc => tc.whatsapp_chat_id).filter(Boolean);
-    if (!jids.length) return;
+    if (!msg || !selectedInstance || !targetConvs?.length) {
+      console.warn('[FORWARD] abortou cedo', { hasMsg: !!msg, hasInstance: !!selectedInstance, targetCount: targetConvs?.length });
+      return;
+    }
+    const validTargets = targetConvs.filter(tc => tc.whatsapp_chat_id);
+    if (!validTargets.length) return;
+
+    // Persiste a mensagem encaminhada na conversa do destinatário com o
+    // whatsapp_msg_id retornado pela Evolution. A unique constraint em
+    // messages.whatsapp_msg_id (migration 20260516) dedup contra o echo do
+    // SEND_MESSAGE webhook — quem chegar primeiro vence, o outro vira no-op.
+    const persistForwarded = async (target, content, mediaType, mediaUrl, whatsappMsgId) => {
+      const row = {
+        tenant_id:       target.tenant_id || tenantDbId || null,
+        conversation_id: target.id,
+        direction:       'outbound',
+        content:         content || null,
+        sender_name:     currentUser?.name || null,
+        media_type:      mediaType || null,
+        media_url:       mediaUrl || null,
+        whatsapp_msg_id: whatsappMsgId || null,
+        created_at:      new Date().toISOString(),
+      };
+      console.log('[FORWARD] persistindo', { target_id: target.id, target_name: target.name, whatsappMsgId, mediaType, hasContent: !!content });
+      try {
+        // Se temos whatsappMsgId usa upsert (idempotente vs webhook echo);
+        // senão insert direto (sem onConflict porque NULLs não conflitam).
+        const q = whatsappMsgId
+          ? supabase.from('messages').upsert(row, { onConflict: 'whatsapp_msg_id', ignoreDuplicates: true }).select()
+          : supabase.from('messages').insert(row).select();
+        const { data, error } = await q;
+        if (error) console.error('[FORWARD] ERRO supabase ao persistir:', error, 'row:', row);
+        else console.log('[FORWARD] OK persistido, rows:', data?.length, data);
+      } catch (err) {
+        console.error('[FORWARD] EXCEPTION ao persistir:', err);
+      }
+    };
+
     try {
-      if (msg.mediaType?.includes('audio')) {
-        if (msg.mediaUrl) {
-          const res = await fetch(msg.mediaUrl);
-          const blob = await res.blob();
+      if (msg.mediaType?.includes('audio') && msg.mediaUrl) {
+        const res = await fetch(msg.mediaUrl);
+        const blob = await res.blob();
+        const base64 = await new Promise((resolve, reject) => {
           const reader = new FileReader();
-          reader.onloadend = async () => {
-            const base64 = reader.result.split(',')[1];
-            await Promise.all(jids.map(jid => sendAudioMessage(selectedInstance, jid, base64)));
-          };
+          reader.onloadend = () => resolve(reader.result.split(',')[1]);
+          reader.onerror = reject;
           reader.readAsDataURL(blob);
-        }
+        });
+        await Promise.all(validTargets.map(async (target) => {
+          try {
+            console.log('[FORWARD] enviando áudio para', target.whatsapp_chat_id);
+            const r = await sendAudioMessage(selectedInstance, target.whatsapp_chat_id, base64);
+            console.log('[FORWARD] resposta Evolution (audio):', r);
+            await persistForwarded(target, null, 'audio', msg.mediaUrl, r?.key?.id ?? null);
+          } catch (err) {
+            console.error('[FORWARD] áudio falhou para', target.whatsapp_chat_id, err);
+          }
+        }));
       } else if (msg.mediaType && msg.mediaUrl) {
         const res = await fetch(msg.mediaUrl);
         const blob = await res.blob();
-        const reader = new FileReader();
-        reader.onloadend = async () => {
-          const base64 = reader.result.split(',')[1];
-          const mime = blob.type || 'application/octet-stream';
-          await Promise.all(jids.map(jid => sendMediaMessage(selectedInstance, jid, base64, msg.mediaType, mime, msg.text || '', '')));
-        };
-        reader.readAsDataURL(blob);
+        const mime = blob.type || 'application/octet-stream';
+        const base64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result.split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        const caption = msg.text || '';
+        await Promise.all(validTargets.map(async (target) => {
+          try {
+            console.log('[FORWARD] enviando mídia para', target.whatsapp_chat_id, 'tipo:', msg.mediaType);
+            const r = await sendMediaMessage(selectedInstance, target.whatsapp_chat_id, base64, msg.mediaType, mime, caption, '');
+            console.log('[FORWARD] resposta Evolution (media):', r);
+            await persistForwarded(target, caption || null, msg.mediaType, msg.mediaUrl, r?.key?.id ?? null);
+          } catch (err) {
+            console.error('[FORWARD] mídia falhou para', target.whatsapp_chat_id, err);
+          }
+        }));
       } else if (msg.text) {
-        await Promise.all(jids.map(jid => sendTextMessage(selectedInstance, jid, `↪️ ${msg.text}`)));
+        const forwardedText = `↪️ ${msg.text}`;
+        await Promise.all(validTargets.map(async (target) => {
+          try {
+            console.log('[FORWARD] enviando texto para', target.whatsapp_chat_id);
+            const r = await sendTextMessage(selectedInstance, target.whatsapp_chat_id, forwardedText);
+            console.log('[FORWARD] resposta Evolution:', r);
+            await persistForwarded(target, forwardedText, null, null, r?.key?.id ?? null);
+          } catch (err) {
+            console.error('[FORWARD] texto falhou para', target.whatsapp_chat_id, err);
+          }
+        }));
       }
     } catch (err) {
       console.error('Falha ao encaminhar:', err);
