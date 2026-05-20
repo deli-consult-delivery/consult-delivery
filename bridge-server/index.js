@@ -1029,6 +1029,14 @@ app.post('/api/lojas/:id/metricas', requireJwt, async (req, res) => {
   }
 });
 
+// ── PILOTO Onda 02 — Pipeline de Tarefas ────────────────────────────────────
+app.use('/api', require('./routes/tarefas')({
+  requireJwt,
+  sbFetch,
+  assertLojaAccess,
+  supabaseInsert,
+}));
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[bridge] ouvindo em 0.0.0.0:${PORT}`);
   console.log(`[bridge] SUPABASE_URL:          ${SUPABASE_URL           ? '✓' : '✗'}`);
@@ -1041,4 +1049,5 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`[bridge] ASAAS_WEBHOOK_SECRET:  ${ASAAS_WEBHOOK_SECRET   ? '✓' : '✗ /webhooks/asaas rejeitará tudo'}`);
   console.log(`[bridge] ANTHROPIC_API_KEY:     ${ANTHROPIC_API_KEY      ? '✓' : '✗ /chat/ai desativado'} model=${ANTHROPIC_MODEL}`);
   console.log(`[bridge] PILOTO lojas API:      GET|POST|PATCH /api/lojas, GET|POST|DELETE /api/lojas/:id/consultores, POST /api/lojas/:id/metricas`);
+  console.log(`[bridge] PILOTO Onda 02:        GET|POST /api/tarefas/loja/:id, GET /api/tarefas/:id`);
 });
