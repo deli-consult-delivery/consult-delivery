@@ -697,11 +697,32 @@ Lições aprendidas que viraram regra:
 
 ---
 
-## 14. CHANGELOG DESTE DOC
+## 14. TAREFAS POR LOJA — IMPLEMENTADAS (Piloto Onda 02)
+
+Implementado em 20/05/2026. Branch: `feature/piloto-02-pipeline-tarefas`.
+Documentação completa: [`docs/piloto/PILOTO-02-IMPLEMENTACAO.md`](docs/piloto/PILOTO-02-IMPLEMENTACAO.md)
+
+### O que existe
+
+- **5 tabelas Supabase:** `tarefas_loja`, `tarefa_aprovacoes`, `tarefa_prints`, `tarefa_comentarios`, `templates_tarefa`
+- **25 templates seedados** (padrão Uraka Burger, 6 blocos: identidade · cardápio · operação · avaliações · marketing · suporte)
+- **16 endpoints Bridge Server** em `bridge-server/routes/tarefas.js` — CRUD, ciclo de vida completo (9 estados), comentários, prints, relatório
+- **Frontend:** aba "Tarefas" em `/lojas/:id` — lista, NovaTarefaOverlay, TarefaDetailModal, RelatorioModal (markdown + PDF via window.print)
+- **TabVisaoGeral:** cards de totais de tarefas por status
+
+### Débitos pendentes
+- Storage policy de tenant (confia no Bridge — reforçar na Onda 03)
+- Kanban view não implementado (apenas lista)
+- Envio de relatório via WhatsApp (Onda 04)
+
+---
+
+## 15. CHANGELOG DESTE DOC
 
 | Versão | Data | Mudanças |
 |---|---|---|
 | 1.0 | 12/05/2026 | Documento inicial após reestruturação completa decidida no chat de 11-12/05 |
+| 1.1 | 20/05/2026 | Seção 14 adicionada — Tarefas por loja (Piloto Onda 02 implementada) |
 
 ---
 
