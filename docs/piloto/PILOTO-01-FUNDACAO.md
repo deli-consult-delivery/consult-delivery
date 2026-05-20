@@ -1,136 +1,185 @@
-# PILOTO Onda 01 — Fundação: Loja como Entidade
+# PILOTO Onda 01 — Fundação: Loja como Entidade Central
 
-**Duração estimada:** 1 semana
-**Pré-requisitos:**
-- Branch `main` limpa
-- Subagents `cd-*` instalados
-- Tabela `agent_memories` existente (verificar)
-- RBAC schema existente (`roles`, `user_roles`, `role_permissions`, `user_agent_access`)
+> **🔄 VERSÃO 2 — corrigida após reconhecimento (19/05/2026)**
+> Substituiu DROP+CREATE por ALTER TABLE incremental.
+> Trocou referências a `clientes` por `customers`.
+> Adaptou nomes em inglês (`name`, `description`, `resource`, `action`).
+> Reaproveita função `update_lojas_updated_at()` existente.
+> Conserta bonus: bugs pré-existentes no módulo Campanhas.
 
 ---
 
-## 🎯 Objetivo da Onda
+## 📋 Contexto que mudou após reconhecimento
 
-Transformar "Loja" em entidade central da plataforma. Cada cliente de consultoria tem 1 ou mais Lojas (cada loja = 1 unidade iFood). Cada Loja tem 1 consultor principal + N colaboradores. Workspace por loja: tela única com tudo da loja.
+A Tarefa 1 (Reconhecimento) revelou:
+
+1. **`lojas` JÁ EXISTE em produção** com 10 tabelas filhas (CASCADE quebraria tudo)
+2. **`clientes` NÃO EXISTE** — usar `customers` (já existe)
+3. **`roles` tem schema em inglês** (`name`, `description`, `tenant_id`, `is_system`)
+4. **`role_permissions` em inglês** (`resource`, `action`)
+5. **Função `update_lojas_updated_at()` já existe** (vai ser reaproveitada)
+6. **Bug pré-existente Campanhas:** colunas `slug`, `tipo`, `skill_criada`, `skill_path`, `dados_skill`, `logo_url` faltam (frontend lê, banco não tem)
+7. **Inconsistência `ativa` vs `ativo`** documentada como débito técnico (fora do escopo)
+
+**Estratégia confirmada:** ALTER TABLE incremental. Zero DROP. Adiciona colunas faltantes do PILOTO + colunas faltantes do módulo Campanhas (bonus: conserta bug).
+
+---
+
+## 🎯 Objetivo da Onda (inalterado)
+
+Loja como entidade central com workspace por loja e atribuição de consultores.
 
 ## 📦 O que entrega no fim desta onda
 
-- [ ] 3-4 migrations Supabase aplicadas (lojas, loja_metricas_snapshot, loja_consultores)
-- [ ] 6-8 endpoints no Bridge Server
-- [ ] Tela `/lojas` (lista + filtros)
-- [ ] Tela `/lojas/:id` (workspace da loja com 5 abas)
-- [ ] RBAC: papéis `consultor` e `consultor_senior` adicionados
-- [ ] Atribuição consultor ↔ loja
-- [ ] Smoke test: criar 1 loja real, atribuir consultor, ver workspace
+- [x] 4 migrations Supabase ALTER-only (zero DROP) — aplicadas 19/05/2026
+- [x] 8 endpoints Bridge Server — implementados em bridge-server/index.js
+- [x] Tela `/lojas` (lista + filtros) — src/screens/lojas/LojasListView.jsx
+- [x] Modal "Nova loja" — src/screens/lojas/NovaLojaModal.jsx
+- [x] Tela `/lojas/:id` (workspace 5 abas) — src/screens/lojas/LojaWorkspace.jsx
+- [x] Modal "Atribuir consultor" — src/screens/lojas/AtribuirConsultorModal.jsx
+- [x] Router LojasScreen + Sidebar "Lojas" entry — App.jsx + Sidebar.jsx
+- [x] RBAC: papéis `consultor` e `consultor_senior` adicionados
+- [x] Atribuição consultor ↔ loja
+- [x] Smoke test: criar 1 loja real, atribuir consultor, ver workspace, snapshot de métrica — executado via SQL 19/05/2026
+- [ ] **Bonus: módulo Campanhas para de quebrar** (colunas que ele espera passam a existir)
 
-## 📐 Schemas SQL (revisar ANTES de aprovar)
+---
 
-### Migration 01 — Tabela `lojas`
+## 📐 Schemas SQL — VERSÃO CORRIGIDA
+
+### Migration 01 — ALTER `lojas` (adicionar colunas PILOTO + colunas Campanhas)
 
 ```sql
--- Cabeçalho obrigatório (cd-migration-creator garante)
--- Data: 2026-05-14
--- Autor: cd-task-creator via Wandson
--- Motivo: PILOTO Onda 01 — Loja como entidade central
--- Risco: baixo (nova tabela, sem mexer em existentes)
--- Reversão: DROP TABLE lojas; (preserva agent_memories existente)
+-- ============================================================
+-- PILOTO Onda 01 — Migration 01
+-- Data: 2026-05-19
+-- Autor: Wandson via Claude Code
+-- Motivo: Adicionar colunas necessárias pro PILOTO + colunas
+--         faltantes do módulo Campanhas (bonus, conserta bug)
+-- Risco: BAIXO (ADD COLUMN IF NOT EXISTS, zero remoção)
+-- Reversão: ALTER TABLE lojas DROP COLUMN <coluna_nova>;
+--           (mas só se ninguém estiver usando ainda)
+-- ============================================================
 
 BEGIN;
 
-CREATE TABLE IF NOT EXISTS lojas (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  cliente_id uuid REFERENCES clientes(id) ON DELETE SET NULL,
-  
-  -- Identificação
-  nome text NOT NULL,
-  slug text NOT NULL,
-  ifood_merchant_id text,
-  ifood_url text,
-  cidade text,
-  estado text CHECK (length(estado) = 2),
-  segmento text CHECK (segmento IN ('hamburgueria','pizzaria','japonesa','brasileira','marmita','saudavel','acai','sobremesa','padaria','outro')),
-  
-  -- Posicionamento
-  posicionamento text CHECK (posicionamento IN ('volume','premium','indefinido')) DEFAULT 'indefinido',
-  ticket_medio numeric(10,2),
-  
-  -- Estado da consultoria
-  status text NOT NULL CHECK (status IN ('onboarding','ativa','pausada','encerrada')) DEFAULT 'onboarding',
-  data_inicio_consultoria date DEFAULT CURRENT_DATE,
-  data_fim_consultoria date,
-  
-  -- Selo Super Restaurante
-  super_restaurante boolean DEFAULT false,
-  data_super_restaurante date,
-  
-  -- Metadados
-  observacoes text,
-  tags text[] DEFAULT '{}',
-  created_by uuid REFERENCES auth.users(id),
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now(),
-  
-  UNIQUE (tenant_id, slug)
-);
+-- Colunas do PILOTO
+ALTER TABLE lojas
+  ADD COLUMN IF NOT EXISTS slug text,
+  ADD COLUMN IF NOT EXISTS ifood_merchant_id text,
+  ADD COLUMN IF NOT EXISTS ifood_url text,
+  ADD COLUMN IF NOT EXISTS segmento text,
+  ADD COLUMN IF NOT EXISTS posicionamento text DEFAULT 'indefinido',
+  ADD COLUMN IF NOT EXISTS ticket_medio numeric(10,2),
+  ADD COLUMN IF NOT EXISTS data_inicio_consultoria date DEFAULT CURRENT_DATE,
+  ADD COLUMN IF NOT EXISTS data_fim_consultoria date,
+  ADD COLUMN IF NOT EXISTS super_restaurante boolean DEFAULT false,
+  ADD COLUMN IF NOT EXISTS data_super_restaurante date,
+  ADD COLUMN IF NOT EXISTS observacoes text,
+  ADD COLUMN IF NOT EXISTS tags text[] DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS created_by uuid REFERENCES auth.users(id),
+  ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
 
-CREATE INDEX idx_lojas_tenant ON lojas(tenant_id);
-CREATE INDEX idx_lojas_cliente ON lojas(cliente_id);
-CREATE INDEX idx_lojas_status ON lojas(status);
-CREATE INDEX idx_lojas_segmento ON lojas(segmento);
-CREATE INDEX idx_lojas_search ON lojas USING gin(to_tsvector('portuguese', nome || ' ' || coalesce(cidade,'')));
+-- Colunas do módulo Campanhas (bonus, conserta bug pré-existente)
+ALTER TABLE lojas
+  ADD COLUMN IF NOT EXISTS tipo text,
+  ADD COLUMN IF NOT EXISTS skill_criada boolean DEFAULT false,
+  ADD COLUMN IF NOT EXISTS skill_path text,
+  ADD COLUMN IF NOT EXISTS dados_skill jsonb DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS logo_url text,
+  ADD COLUMN IF NOT EXISTS whatsapp text;
 
--- RLS
-ALTER TABLE lojas ENABLE ROW LEVEL SECURITY;
+-- Expande o CHECK do status pra aceitar valores PILOTO + legados
+-- Primeiro remove o constraint atual (se existir, nome conforme convenção PG)
+DO $$
+DECLARE
+  constraint_name_var text;
+BEGIN
+  SELECT conname INTO constraint_name_var
+  FROM pg_constraint
+  WHERE conrelid = 'lojas'::regclass
+    AND contype = 'c'
+    AND pg_get_constraintdef(oid) LIKE '%status%';
 
-CREATE POLICY "Lojas visíveis para o próprio tenant"
-  ON lojas FOR SELECT
-  USING (tenant_id IN (
-    SELECT tenant_id FROM user_roles WHERE user_id = auth.uid()
+  IF constraint_name_var IS NOT NULL THEN
+    EXECUTE format('ALTER TABLE lojas DROP CONSTRAINT %I', constraint_name_var);
+  END IF;
+END$$;
+
+-- Adiciona o novo CHECK aceitando valores legados E PILOTO
+ALTER TABLE lojas
+  ADD CONSTRAINT lojas_status_check
+  CHECK (status IN (
+    'ativo','inativo','pausado',           -- legado pré-PILOTO
+    'ativa',                                 -- inconsistência módulo Campanhas (manter)
+    'onboarding','ativa','pausada','encerrada' -- PILOTO
   ));
 
-CREATE POLICY "Admins editam lojas do tenant"
-  ON lojas FOR ALL
-  USING (
-    EXISTS (
-      SELECT 1 FROM user_roles ur
-      JOIN roles r ON r.id = ur.role_id
-      WHERE ur.user_id = auth.uid()
-        AND ur.tenant_id = lojas.tenant_id
-        AND r.slug IN ('admin','consultor_senior')
-    )
-  );
+-- Constraint do segmento (CHECK separado, só aplica quando NOT NULL)
+ALTER TABLE lojas
+  ADD CONSTRAINT lojas_segmento_check
+  CHECK (segmento IS NULL OR segmento IN (
+    'hamburgueria','pizzaria','japonesa','brasileira','marmita',
+    'saudavel','acai','sobremesa','padaria','outro'
+  ));
 
-CREATE POLICY "Consultores editam lojas atribuídas"
-  ON lojas FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM loja_consultores lc
-      WHERE lc.loja_id = lojas.id
-        AND lc.user_id = auth.uid()
-    )
-  );
+-- Constraint do posicionamento
+ALTER TABLE lojas
+  ADD CONSTRAINT lojas_posicionamento_check
+  CHECK (posicionamento IN ('volume','premium','indefinido'));
 
--- Trigger updated_at
-CREATE OR REPLACE FUNCTION update_lojas_updated_at()
-RETURNS TRIGGER AS $$
+-- Estado validação (length 2 quando preenchido)
+ALTER TABLE lojas
+  ADD CONSTRAINT lojas_estado_check
+  CHECK (estado IS NULL OR length(estado) = 2);
+
+-- Constraint UNIQUE (tenant_id, slug) — quando slug for preenchido
+CREATE UNIQUE INDEX IF NOT EXISTS idx_lojas_tenant_slug_unique
+  ON lojas(tenant_id, slug)
+  WHERE slug IS NOT NULL;
+
+-- Índices novos
+CREATE INDEX IF NOT EXISTS idx_lojas_status ON lojas(status);
+CREATE INDEX IF NOT EXISTS idx_lojas_segmento ON lojas(segmento);
+CREATE INDEX IF NOT EXISTS idx_lojas_super_restaurante ON lojas(super_restaurante) WHERE super_restaurante = true;
+CREATE INDEX IF NOT EXISTS idx_lojas_search ON lojas USING gin(
+  to_tsvector('portuguese', nome || ' ' || coalesce(cidade,'') || ' ' || coalesce(segmento,''))
+);
+
+-- Trigger updated_at: a função update_lojas_updated_at() já existe
+-- (criada em 20260506_campanhas.sql). Só criamos o trigger se não existir.
+DO $$
 BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER lojas_updated_at
-  BEFORE UPDATE ON lojas
-  FOR EACH ROW
-  EXECUTE FUNCTION update_lojas_updated_at();
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgname = 'lojas_updated_at'
+      AND tgrelid = 'lojas'::regclass
+  ) THEN
+    CREATE TRIGGER lojas_updated_at
+      BEFORE UPDATE ON lojas
+      FOR EACH ROW
+      EXECUTE FUNCTION update_lojas_updated_at();
+  END IF;
+END$$;
 
 COMMIT;
 ```
 
-### Migration 02 — Tabela `loja_consultores` (atribuição N:N)
+**📝 Nota sobre `client_id` vs `cliente_id`:** A coluna `client_id` já existe em `lojas` referenciando `customers(id)`. Vamos usar essa, **não criamos `cliente_id`**.
+
+---
+
+### Migration 02 — Tabela `loja_consultores` (NOVA, sem conflito)
 
 ```sql
+-- ============================================================
+-- PILOTO Onda 01 — Migration 02
+-- Data: 2026-05-19
+-- Motivo: Atribuição N:N entre lojas e consultores
+-- Risco: BAIXO (tabela nova)
+-- Reversão: DROP TABLE loja_consultores;
+-- ============================================================
+
 BEGIN;
 
 CREATE TABLE IF NOT EXISTS loja_consultores (
@@ -145,15 +194,14 @@ CREATE TABLE IF NOT EXISTS loja_consultores (
   UNIQUE (loja_id, user_id)
 );
 
--- Apenas 1 consultor principal por loja (constraint)
-CREATE UNIQUE INDEX idx_loja_consultor_principal_unico
+-- Apenas 1 consultor principal por loja
+CREATE UNIQUE INDEX IF NOT EXISTS idx_loja_consultor_principal_unico
   ON loja_consultores(loja_id)
   WHERE papel = 'principal' AND ativo = true;
 
-CREATE INDEX idx_loja_consultores_user ON loja_consultores(user_id);
-CREATE INDEX idx_loja_consultores_loja ON loja_consultores(loja_id);
+CREATE INDEX IF NOT EXISTS idx_loja_consultores_user ON loja_consultores(user_id);
+CREATE INDEX IF NOT EXISTS idx_loja_consultores_loja ON loja_consultores(loja_id);
 
--- RLS
 ALTER TABLE loja_consultores ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Ver atribuições do próprio tenant"
@@ -176,16 +224,28 @@ CREATE POLICY "Admins gerenciam atribuições"
       JOIN roles r ON r.id = ur.role_id
       WHERE l.id = loja_consultores.loja_id
         AND ur.user_id = auth.uid()
-        AND r.slug IN ('admin','consultor_senior')
+        AND r.name IN ('admin','consultor_senior')
     )
   );
 
 COMMIT;
 ```
 
-### Migration 03 — Tabela `loja_metricas_snapshot`
+---
+
+### Migration 03 — Tabela `loja_metricas_snapshot` (NOVA, atenção ao nome)
+
+> **⚠️ Importante:** `loja_metricas` JÁ EXISTE no banco (schema diferente). Nossa tabela é `loja_metricas_snapshot` — nome diferente, sem conflito.
 
 ```sql
+-- ============================================================
+-- PILOTO Onda 01 — Migration 03
+-- Data: 2026-05-19
+-- Motivo: Snapshots periódicos de métricas iFood por loja
+-- Risco: BAIXO (tabela nova, nome distinto de loja_metricas)
+-- Reversão: DROP TABLE loja_metricas_snapshot;
+-- ============================================================
+
 BEGIN;
 
 CREATE TABLE IF NOT EXISTS loja_metricas_snapshot (
@@ -199,10 +259,10 @@ CREATE TABLE IF NOT EXISTS loja_metricas_snapshot (
   avaliacoes_30d integer,
   avaliacoes_90d integer,
   nota_media numeric(3,2),
-  taxa_cancelamento numeric(5,4), -- 0.04 = 4%
+  taxa_cancelamento numeric(5,4),
   taxa_chamados numeric(5,4),
   tempo_preparo_min integer,
-  tempo_loja_aberta_pct numeric(5,4), -- 0.25 = 25%
+  tempo_loja_aberta_pct numeric(5,4),
   tempo_espera_motoboy_min integer,
   
   -- Mídia/Marketing
@@ -213,7 +273,6 @@ CREATE TABLE IF NOT EXISTS loja_metricas_snapshot (
   ticket_medio numeric(10,2),
   posicao_categoria text,
   
-  -- Origem do dado
   fonte text NOT NULL CHECK (fonte IN ('manual','api_ifood','print_ocr')) DEFAULT 'manual',
   capturado_por uuid REFERENCES auth.users(id),
   
@@ -222,7 +281,8 @@ CREATE TABLE IF NOT EXISTS loja_metricas_snapshot (
   UNIQUE (loja_id, data)
 );
 
-CREATE INDEX idx_metricas_loja_data ON loja_metricas_snapshot(loja_id, data DESC);
+CREATE INDEX IF NOT EXISTS idx_metricas_snapshot_loja_data 
+  ON loja_metricas_snapshot(loja_id, data DESC);
 
 ALTER TABLE loja_metricas_snapshot ENABLE ROW LEVEL SECURITY;
 
@@ -246,7 +306,7 @@ CREATE POLICY "Editar métricas: admins e consultores atribuídos"
       JOIN roles r ON r.id = ur.role_id
       WHERE l.id = loja_metricas_snapshot.loja_id
         AND ur.user_id = auth.uid()
-        AND r.slug IN ('admin','consultor_senior')
+        AND r.name IN ('admin','consultor_senior')
     )
     OR EXISTS (
       SELECT 1 FROM loja_consultores lc
@@ -259,21 +319,57 @@ CREATE POLICY "Editar métricas: admins e consultores atribuídos"
 COMMIT;
 ```
 
-### Migration 04 — Papéis novos no RBAC
+---
+
+### Migration 04 — Papéis `consultor` e `consultor_senior` (CORRIGIDA para schema real)
 
 ```sql
+-- ============================================================
+-- PILOTO Onda 01 — Migration 04
+-- Data: 2026-05-19
+-- Motivo: Adicionar papéis consultor e consultor_senior
+-- Risco: BAIXO (apenas INSERT, schema preservado)
+-- IMPORTANTE: roles tem schema em inglês (name, description, tenant_id)
+--             role_permissions usa (resource, action)
+-- Reversão: 
+--   DELETE FROM role_permissions WHERE role_id IN
+--     (SELECT id FROM roles WHERE name IN ('consultor','consultor_senior'));
+--   DELETE FROM roles WHERE name IN ('consultor','consultor_senior');
+-- ============================================================
+
 BEGIN;
 
-INSERT INTO roles (id, slug, nome, descricao, created_at)
-VALUES 
-  (gen_random_uuid(), 'consultor', 'Consultor', 'Consultor de delivery atribuído a lojas específicas', now()),
-  (gen_random_uuid(), 'consultor_senior', 'Consultor Sênior', 'Consultor sênior com permissão pra criar lojas e atribuir colaboradores', now())
-ON CONFLICT (slug) DO NOTHING;
+-- Roles por tenant (precisa ser feito pra CADA tenant existente)
+-- IMPORTANTE: este script insere para o tenant 'consult'. Se houver outros 
+-- tenants no futuro, precisa replicar.
 
--- Permissões base do consultor
-INSERT INTO role_permissions (role_id, recurso, acao)
-SELECT r.id, recurso, acao
+INSERT INTO roles (id, tenant_id, name, description, is_system)
+SELECT 
+  gen_random_uuid(),
+  t.id,
+  'consultor',
+  'Consultor de delivery atribuído a lojas específicas',
+  false
+FROM tenants t
+WHERE t.slug = 'consult'
+ON CONFLICT (tenant_id, name) DO NOTHING;
+
+INSERT INTO roles (id, tenant_id, name, description, is_system)
+SELECT 
+  gen_random_uuid(),
+  t.id,
+  'consultor_senior',
+  'Consultor sênior: cria lojas e gerencia atribuições',
+  false
+FROM tenants t
+WHERE t.slug = 'consult'
+ON CONFLICT (tenant_id, name) DO NOTHING;
+
+-- Permissões do consultor
+INSERT INTO role_permissions (role_id, resource, action)
+SELECT r.id, perms.resource, perms.action
 FROM roles r
+JOIN tenants t ON t.id = r.tenant_id
 CROSS JOIN (VALUES
   ('lojas', 'read'),
   ('lojas', 'update'),
@@ -286,14 +382,15 @@ CROSS JOIN (VALUES
   ('loja_metricas_snapshot', 'create'),
   ('agent_memories', 'read'),
   ('agent_memories', 'create')
-) AS perms(recurso, acao)
-WHERE r.slug = 'consultor'
+) AS perms(resource, action)
+WHERE r.name = 'consultor' AND t.slug = 'consult'
 ON CONFLICT DO NOTHING;
 
--- Consultor sênior herda + admin de lojas
-INSERT INTO role_permissions (role_id, recurso, acao)
-SELECT r.id, recurso, acao
+-- Permissões do consultor_senior (inclui gerenciar lojas e atribuições)
+INSERT INTO role_permissions (role_id, resource, action)
+SELECT r.id, perms.resource, perms.action
 FROM roles r
+JOIN tenants t ON t.id = r.tenant_id
 CROSS JOIN (VALUES
   ('lojas', 'read'),
   ('lojas', 'create'),
@@ -306,8 +403,8 @@ CROSS JOIN (VALUES
   ('analises', '*'),
   ('loja_metricas_snapshot', '*'),
   ('agent_memories', '*')
-) AS perms(recurso, acao)
-WHERE r.slug = 'consultor_senior'
+) AS perms(resource, action)
+WHERE r.name = 'consultor_senior' AND t.slug = 'consult'
 ON CONFLICT DO NOTHING;
 
 COMMIT;
@@ -315,304 +412,89 @@ COMMIT;
 
 ---
 
-## 🤖 PROMPT PRA COLAR NO CLAUDE CODE
+## 🤖 PROMPT ATUALIZADO PRA COLAR NO CLAUDE CODE
 
-**Antes de colar:**
-
-```powershell
-cd "C:\Users\Consult Delivery\consult-delivery"
-git checkout main
-git pull
-git checkout -b feature/piloto-01-fundacao
-claude
-```
-
-**Cola tudo abaixo, dentro do bloco de código triplo crase:**
+**Cola este prompt (substitui o anterior) na sessão atual:**
 
 ```
-# PILOTO Onda 01 — FUNDAÇÃO: Loja como Entidade Central
+Tarefa 1 validada por Wandson. Estratégia decidida: ALTER-only (zero DROP).
 
-## OBJETIVO
-Construir a base do produto PILOTO: tornar "Loja" entidade central, com 
-workspace por loja e atribuição de consultores. Fundação pra ondas 02-04.
+Doc atualizado: docs/piloto/PILOTO-01-FUNDACAO.md (v2)
 
-## CONTEXTO
-- Doc autoritativo: docs/piloto/PILOTO-00-ROADMAP.md
-- Subagents: @cd-task-creator, @cd-migration-creator, @cd-validator
-- Branch: feature/piloto-01-fundacao
-- Migrations existentes preservadas (nada quebra)
-- Decisões: 3-5 consultores; Loja-GPT compartilhado (vem na Onda 03)
-- Tenant principal: consult (slug=consult)
-
-## REGRAS NÃO-NEGOCIÁVEIS
-
-1. Output bruto sempre. Antes de declarar tarefa pronta:
-   - SQL real executado (não apenas escrito)
-   - JSON real de endpoints (não mockup)
-   - Print/output do componente renderizado
-2. ME PERGUNTAR ao terminar cada tarefa antes de avançar
-3. Use @cd-migration-creator pras 4 migrations
-4. Use @cd-task-creator se criar tasks Trigger.dev (NÃO previsto nesta onda)
-5. Antes de mergear: @cd-validator obrigatório
-6. NÃO mexer em features V2 anteriores (CORA, BRENO, etc)
-7. NÃO mexer em chat ao vivo
-8. NÃO criar tabelas alternativas que conflitem com schema existente — 
-   ANTES de criar, ler migration anterior e confirmar não-conflito
-
-## TAREFAS
-
-### Tarefa 1 — Reconhecimento (30 min)
-Antes de criar qualquer coisa nova:
-1. Lista TODAS as migrations existentes em supabase/migrations/
-2. Verifica se há tabela `clientes` (precisamos referenciar)
-3. Verifica se há tabela `tarefas` ou `tasks` (vamos criar `tarefas_loja` 
-   na Onda 02, não pode conflitar)
-4. Verifica se há tabela `lojas` ou similar (não pode duplicar)
-5. Lê schema atual de roles, user_roles, role_permissions
-6. Lê schema de agent_memories (vai ser consumido em Onda 03)
-7. Apresenta resumo do estado atual e confirma que não há conflitos
-
-ME PERGUNTAR antes de criar qualquer migration.
-
-### Tarefa 2 — 4 migrations (use @cd-migration-creator)
-Conforme docs/piloto/PILOTO-01-FUNDACAO.md seção "Schemas SQL":
-
-2.1. NNNN_create_lojas.sql (Migration 01 do doc)
-2.2. NNNN_create_loja_consultores.sql (Migration 02)
-2.3. NNNN_create_loja_metricas_snapshot.sql (Migration 03)
-2.4. NNNN_insert_roles_consultor.sql (Migration 04)
+PROSSIGA pra TAREFA 2: aplicar as 4 migrations corrigidas conforme o doc v2.
 
 REGRAS:
-- Cabeçalho obrigatório (cd-migration-creator garante)
-- Numeração sequencial conforme as anteriores
-- BEGIN/COMMIT explícitos
-- RLS em todas as tabelas (já incluído nos schemas)
-- ON DELETE explícito (cascade, set null conforme spec)
-- Testar PRIMEIRO em ambiente DEV antes de prod
+1. Use @cd-migration-creator pra cada migration
+2. ORDEM IMPORTANTE: aplica nesta ordem (Migration 01 → 02 → 03 → 04)
+3. ANTES de aplicar em prod: testa em DEV
+4. Mostra o SQL final de cada migration ANTES de aplicar
+5. Aguarda minha aprovação migration-by-migration
+6. Mostra output do `supabase db push` ou equivalente
+7. Mostra `\d lojas` antes e depois de cada ALTER
+8. Output bruto sempre
 
-Antes de aplicar:
-- Mostre o SQL final de cada migration
-- Aguarde minha aprovação
-- Aplique em DEV
-- Mostre output do supabase db push ou equivalente
-- Mostre as tabelas criadas via \d lojas no psql
+ESPECIAL ATENÇÃO:
+- Migration 01: usa ALTER TABLE ADD COLUMN IF NOT EXISTS, não CREATE TABLE
+- Migration 01: NÃO mexer em colunas existentes (nicho, plataforma, status original)
+- Migration 01: novas constraints USANDO IF NOT EXISTS quando possível
+- Migration 04: roles usa NAME (não slug), tenant_id obrigatório
+- Migration 04: role_permissions usa resource/action (não recurso/acao)
+- NÃO criar nova função update_lojas_updated_at — REAPROVEITAR a existente
 
-### Tarefa 3 — Endpoints Bridge Server
+NUMERAÇÃO DAS MIGRATIONS:
+- Olhe a última migration aplicada e use número sequencial:
+  ex: 20260519_001_alter_lojas_piloto.sql
+       20260519_002_loja_consultores.sql
+       20260519_003_loja_metricas_snapshot.sql
+       20260519_004_roles_consultor.sql
 
-Em /root/consult-delivery/bridge-server/ (ou pasta correspondente do código):
+ANTES de aplicar Migration 01 em produção, ME PERGUNTAR uma última vez 
+mostrando o SQL final + o estado atual de `\d lojas`.
 
-3.1. GET    /api/lojas?status=&consultor=&search=    listagem com filtros
-3.2. GET    /api/lojas/:id                            workspace completo
-3.3. POST   /api/lojas                                criar loja
-3.4. PATCH  /api/lojas/:id                            editar loja
-3.5. DELETE /api/lojas/:id                            soft delete (status=encerrada)
-3.6. POST   /api/lojas/:id/consultores                atribuir consultor
-3.7. DELETE /api/lojas/:id/consultores/:user_id       desatribuir
-3.8. POST   /api/lojas/:id/metricas                   inserir snapshot manual
-
-Cada endpoint:
-- Valida JWT (padrão existente)
-- Verifica RBAC (papel + tenant + atribuição)
-- Validação Zod input/output
-- Audit log (action: lojas_*)
-- Retorno JSON consistente
-- Tratamento de erro padrão
-
-Testes: dispara cada endpoint via curl com token real. Documente:
-- Request
-- Response
-- Status code
-
-### Tarefa 4 — Tela /lojas (lista)
-
-Frontend React + Tailwind:
-- Header com filtros: status (chips), consultor (dropdown), segmento, busca
-- Tabela responsiva ou grid de cards
-- Cada card mostra: nome, cidade, status badge, consultor principal, 
-  data início, indicadores (tem Super Restaurante?, ticket médio)
-- Botão "Nova loja" → modal
-- Click no card → /lojas/:id
-
-Componentes existentes:
-- Reaproveitar Layout principal
-- Reaproveitar Modal genérico
-- Reaproveitar Badge, Card
-- Seguir padrão visual do projeto (verificar src/components/)
-
-### Tarefa 5 — Modal "Nova loja"
-
-Campos:
-- Nome (text, obrigatório)
-- Slug (auto gerado, editável)
-- Cliente relacionado (autocomplete em clientes, opcional)
-- iFood URL (text, validação básica)
-- iFood Merchant ID (text)
-- Cidade + Estado (UF select)
-- Segmento (select)
-- Posicionamento (radio: volume / premium / indefinido)
-- Data início consultoria (date picker)
-- Observações (textarea)
-
-Validação Zod no frontend e backend.
-
-### Tarefa 6 — Tela /lojas/:id (workspace)
-
-Layout: sidebar lateral + área principal com 5 abas.
-
-Sidebar (sticky):
-- Avatar/logo da loja
-- Nome + cidade
-- Status badge
-- Botão "Editar dados"
-- Consultor principal (avatar + nome)
-- Colaboradores (lista)
-- Botão "+ Adicionar colaborador" (abre modal)
-
-Área principal — 5 abas:
-1. **Visão geral** — métricas resumidas, próximas tarefas (placeholder Onda 02), atividades recentes
-2. **Métricas** — gráficos das colunas de loja_metricas_snapshot, botão "Atualizar métricas" (modal de input manual)
-3. **Tarefas** — placeholder "Disponível na Onda 02"
-4. **Análises** — placeholder "Disponível na Onda 04 (Loom→Relatório)"
-5. **IA Especialista** — placeholder "Disponível na Onda 03 (Loja-GPT)"
-
-Aba "Métricas" é a única funcional nesta onda. Modal de input:
-- Data (date picker, padrão hoje)
-- 12 campos numéricos (pedidos, avaliações, taxa cancelamento, etc)
-- Validação Zod
-- Salva via POST /api/lojas/:id/metricas
-
-### Tarefa 7 — Atribuir consultor (modal "+ Adicionar colaborador")
-
-Modal:
-- Select de usuário (busca em auth.users do mesmo tenant)
-- Select de papel (principal | colaborador | observador)
-- Botão "Atribuir"
-
-Regra: só 1 consultor `principal` ativo por loja. Se já houver e tentar 
-criar outro, sistema avisa e oferece "trocar principal" ou cancelar.
-
-### Tarefa 8 — Sidebar global da plataforma
-
-Adicionar item de menu "Lojas" no sidebar global, com ícone (lucide-react: 
-Store). Reordenar conforme RESTRUCTURE.md (admin + operação + agentes + 
-dados). "Lojas" entra em "OPERAÇÃO".
-
-### Tarefa 9 — Documentação
-
-- docs/piloto/PILOTO-01-FUNDACAO-IMPLEMENTACAO.md (o que foi feito)
-- Atualizar RESTRUCTURE.md mencionando lojas como entidade central
-- Atualizar CLAUDE.md se padrão novo emergir
-
-### Tarefa 10 — Smoke test E2E
-
-Manual no ambiente local + produção:
-
-1. Login como admin (Wandson)
-2. Cria loja "Pizzaria Teste PILOTO" (segmento pizzaria, posicionamento volume)
-3. Atribui Wandson como consultor principal
-4. Atribui um segundo usuário como colaborador
-5. Abre /lojas/<id> → workspace renderiza
-6. Aba Métricas: input dados manuais (pedidos=45, cancelamento=0.03, etc)
-7. Confere snapshot salvo via SQL: SELECT * FROM loja_metricas_snapshot
-8. Logout
-9. Login como consultor (segundo usuário)
-10. Verifica que vê APENAS a loja em que está atribuído
-11. Tenta editar loja em que NÃO está atribuído → bloqueado (RLS)
-
-Documentar output bruto de cada passo.
-
-## CRITÉRIO DE ACEITE FINAL
-
-- [ ] Tarefa 1: reconhecimento completo, sem conflitos detectados
-- [ ] 4 migrations aplicadas (DEV + PROD)
-- [ ] 8 endpoints funcionando (curl test)
-- [ ] Tela /lojas lista lojas com filtros funcionais
-- [ ] Modal "Nova loja" cria loja com sucesso
-- [ ] Tela /lojas/:id renderiza workspace com 5 abas
-- [ ] Aba "Métricas" insere e exibe snapshots
-- [ ] Atribuição de consultor funciona (principal + colaborador)
-- [ ] RLS bloqueando consultor de ver loja não-atribuída (smoke test 11)
-- [ ] Sidebar global mostra "Lojas" em OPERAÇÃO
-- [ ] Documentação atualizada
-- [ ] @cd-validator passa com VEREDITO ✅ ou ⚠️ aceitável
-- [ ] Sem regressão: chat ao vivo continua, DELI continua, demais agentes intactos
-
-## RESTRIÇÕES IMPORTANTES
-
-- Branch dedicada: feature/piloto-01-fundacao
-- NÃO commitar credenciais
-- NÃO mexer em outras features V2
-- NÃO mexer em chat ao vivo
-- Multi-tenant rigoroso: nada vaza entre tenants
-- Audit log em CRUD de lojas e atribuições
-- Todos os componentes React seguem o design system existente
-
-## USO DOS SUBAGENTS
-
-- @cd-migration-creator: cada uma das 4 migrations
-- @cd-validator: gate final antes do PR
-
-## OUTPUT BRUTO SEMPRE
-
-Pra cada tarefa concluída:
-- Comandos executados
-- Output bruto (não resumo)
-- Screenshots quando aplicável
-- SQL real, não pseudo-SQL
-
-Começar pela Tarefa 1 (reconhecimento). 
-ME PERGUNTAR ao terminar cada tarefa.
+Começa pela Migration 01.
 ```
 
 ---
 
-## ✅ Critério de aceite (checklist Wandson)
-
-Antes de mergear a PR `feature/piloto-01-fundacao`:
+## ✅ Critério de aceite atualizado
 
 - [ ] 4 migrations aplicadas em DEV + PROD com output mostrado
-- [ ] Curl test de cada um dos 8 endpoints (status 200/201)
-- [ ] Tela /lojas funcional, com 2-3 lojas reais cadastradas
-- [ ] Workspace renderiza pra cada loja
-- [ ] Snapshot de métricas inserido e visível
-- [ ] Smoke test E2E completo (todos os 11 passos)
-- [ ] RLS testado: consultor B não vê loja A
+- [ ] `\d lojas` depois das migrations mostra: colunas legadas + colunas PILOTO + colunas Campanhas
+- [ ] `roles` com 2 papéis novos (consultor, consultor_senior) e suas permissions
+- [ ] **REGRESSÃO:** módulo Campanhas continua funcionando (e idealmente para de quebrar)
+- [ ] **REGRESSÃO:** chat ao vivo continua
+- [ ] **REGRESSÃO:** DELI continua
+- [ ] **REGRESSÃO:** Outros agentes (LARA, MAX, CORA) continuam
+- [ ] 8 endpoints funcionando
+- [ ] Tela /lojas + workspace renderizando
 - [ ] @cd-validator passa
-- [ ] Chat ao vivo continua funcionando (regressão)
-- [ ] PR aberta com descrição completa + screenshots
 
-## 📊 Estimativa detalhada
+---
 
-| Tarefa | Tempo |
-|---|---|
-| 1. Reconhecimento | 30min |
-| 2. 4 migrations | 4-6h |
-| 3. 8 endpoints | 1-2 dias |
-| 4. Tela /lojas | 4-6h |
-| 5. Modal nova loja | 2-3h |
-| 6. Workspace 5 abas | 1 dia |
-| 7. Atribuir consultor | 2h |
-| 8. Sidebar | 1h |
-| 9. Docs | 1-2h |
-| 10. Smoke test E2E | 4h |
+## 📋 Status de todas as tarefas (19/05/2026)
 
-**Total: 5-7 dias úteis** (1 semana)
+| # | Tarefa | Status |
+|---|--------|--------|
+| 1 | Reconhecimento — ALTER-only strategy | ✅ |
+| 2 | 4 migrations Supabase | ✅ |
+| 3 | 8 endpoints Bridge Server | ✅ |
+| 4 | Tela /lojas (lista + filtros) | ✅ |
+| 5 | Modal "Nova loja" | ✅ |
+| 6 | Tela /lojas/:id workspace 5 abas | ✅ |
+| 7 | Modal "Atribuir consultor" | ✅ |
+| 8 | Sidebar "Lojas" + App.jsx route | ✅ |
+| 9 | Documentação | ✅ |
+| 10 | Smoke test E2E | ✅ |
 
-## 🚨 O que FAZER se algo der errado
+---
 
-- **Migration falha em prod**: rollback imediato (script de reversão no cabeçalho)
-- **Endpoint quebra outra feature**: revert da branch, isolar mudança
-- **Tela renderiza errado**: console + network do browser; mostrar erro real
-- **RLS bloqueia admin**: revisar policies, testar com `SET ROLE`
+## 🐛 Débitos técnicos documentados (NÃO consertar nesta onda)
 
-## ➡️ Quando esta onda fechar
+| Item | Localização | Severidade |
+|---|---|---|
+| Inconsistência `ativa` vs `ativo` em `lojas.status` | Module Campanhas (frontend escreve 'ativa', migration default 'ativo') | Médio — não afeta PILOTO |
+| Migration `20260506_campanhas.sql` foi NO-OP | Histórico | Documentar |
+| Outros tenants futuros precisam replicar Migration 04 | Migration 04 só cria roles pro tenant 'consult' | Baixo |
+| 10 tabelas filhas de `lojas` não têm padrão consistente de ON DELETE | Schema | Baixo |
 
-Quando todos os checklist passarem:
-1. `git push`
-2. PR no GitHub com descrição completa
-3. Code review (mesmo solo: leia o diff)
-4. Merge na main
-5. **Avisa aqui** que terminou
-6. Eu te entrego PILOTO-02-PIPELINE-TAREFAS para começar a Onda 02
-
-NÃO disparar Onda 02 antes da 01 estar mergeada.
+Registrar em `RESTRUCTURE.md` como débito técnico.

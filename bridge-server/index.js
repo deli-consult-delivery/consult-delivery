@@ -34,7 +34,7 @@ app.use(express.json({ limit: '2mb', verify: (req, _res, buf) => { req.rawBody =
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Headers', 'Content-Type, x-bridge-secret, Authorization, x-internal-token, x-nexus-signature');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
@@ -765,6 +765,270 @@ app.get('/whatsapp/groups', requireJwt, async (req, res) => {
   }
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// LOJAS — PILOTO Onda 01
+// Endpoints: GET/POST/PATCH lojas, GET/POST/DELETE consultores, POST métricas
+// ════════════════════════════════════════════════════════════════════════════
+
+// Helper genérico: Supabase REST request com service role
+async function sbFetch(path, { method = 'GET', body, prefer, headers: xh = {} } = {}) {
+  if (!SUPABASE_SERVICE_KEY) throw new Error('SUPABASE_SERVICE_KEY não configurado');
+  const headers = {
+    'Content-Type': 'application/json',
+    apikey:         SUPABASE_SERVICE_KEY,
+    Authorization:  `Bearer ${SUPABASE_SERVICE_KEY}`,
+    ...xh,
+  };
+  if (prefer)                headers['Prefer'] = prefer;
+  else if (method !== 'GET') headers['Prefer'] = 'return=representation';
+
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    method,
+    headers,
+    ...(body !== undefined && { body: typeof body === 'string' ? body : JSON.stringify(body) }),
+  });
+  if (!r.ok) {
+    const txt = await r.text();
+    throw new Error(`Supabase ${r.status} [${method} ${path}]: ${txt}`);
+  }
+  return r.json();
+}
+
+// Helper: verifica se req.user é membro do tenant_id solicitado
+async function assertTenantMember(req, res, tenant_id) {
+  const rows = await sbFetch(
+    `tenant_members?tenant_id=eq.${encodeURIComponent(tenant_id)}&user_id=eq.${encodeURIComponent(req.user.id)}&select=tenant_id&limit=1`
+  );
+  if (!rows?.length) {
+    res.status(403).json({ error: 'Acesso negado: usuário não é membro deste tenant' });
+    return false;
+  }
+  return true;
+}
+
+// GET /api/lojas  — lista com filtros e paginação
+app.get('/api/lojas', requireJwt, async (req, res) => {
+  const { tenant_id, status, segmento, consultor_id, page = '0', limit: lim = '50' } = req.query;
+  if (!tenant_id) return res.status(400).json({ error: 'tenant_id obrigatório' });
+
+  try {
+    if (!await assertTenantMember(req, res, tenant_id)) return;
+
+    let extraFilter = '';
+    if (consultor_id) {
+      const lcs = await sbFetch(
+        `loja_consultores?user_id=eq.${encodeURIComponent(consultor_id)}&ativo=eq.true&select=loja_id`
+      );
+      const ids = (lcs || []).map(r => r.loja_id);
+      if (!ids.length) return res.json({ lojas: [], total: 0 });
+      extraFilter = `&id=in.(${ids.join(',')})`;
+    }
+
+    const pageNum   = Math.max(0, parseInt(page) || 0);
+    const limitNum  = Math.min(100, Math.max(1, parseInt(lim) || 50));
+    const offset    = pageNum * limitNum;
+    let qs = `tenant_id=eq.${encodeURIComponent(tenant_id)}&order=nome.asc&limit=${limitNum}&offset=${offset}`;
+    if (status)   qs += `&status=eq.${encodeURIComponent(status)}`;
+    if (segmento) qs += `&segmento=eq.${encodeURIComponent(segmento)}`;
+    qs += extraFilter;
+
+    const lojas = await sbFetch(
+      `lojas?${qs}&select=id,nome,slug,status,segmento,cidade,estado,posicionamento,ticket_medio,super_restaurante,logo_url,tags,client_id,created_at,updated_at`
+    );
+    res.json({ lojas: lojas || [], total: (lojas || []).length });
+  } catch (err) {
+    console.error('[api/lojas GET]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Helper: busca tenant_id de uma loja e valida membership do user
+async function assertLojaAccess(req, res, lojaId) {
+  const rows = await sbFetch(`lojas?id=eq.${encodeURIComponent(lojaId)}&select=tenant_id&limit=1`);
+  if (!rows?.length) { res.status(404).json({ error: 'loja não encontrada' }); return null; }
+  const { tenant_id } = rows[0];
+  if (!await assertTenantMember(req, res, tenant_id)) return null;
+  return tenant_id;
+}
+
+// GET /api/lojas/:id  — detalhe completo com consultores atribuídos
+app.get('/api/lojas/:id', requireJwt, async (req, res) => {
+  const { id } = req.params;
+  try {
+    if (!await assertLojaAccess(req, res, id)) return;
+
+    const rows = await sbFetch(`lojas?id=eq.${encodeURIComponent(id)}&limit=1&select=*`);
+    const consultores = await sbFetch(
+      `loja_consultores?loja_id=eq.${encodeURIComponent(id)}&ativo=eq.true&select=id,user_id,papel,atribuido_em`
+    );
+    res.json({ loja: { ...rows[0], consultores: consultores || [] } });
+  } catch (err) {
+    console.error('[api/lojas/:id GET]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/lojas  — criar nova loja
+app.post('/api/lojas', requireJwt, async (req, res) => {
+  const {
+    tenant_id, nome, slug, segmento, posicionamento, ticket_medio, cidade, estado,
+    nicho, ifood_merchant_id, ifood_url, tipo, whatsapp, logo_url, observacoes,
+    tags, client_id, data_inicio_consultoria, data_fim_consultoria,
+  } = req.body;
+
+  if (!tenant_id || !nome)
+    return res.status(400).json({ error: 'tenant_id e nome são obrigatórios' });
+
+  try {
+    if (!await assertTenantMember(req, res, tenant_id)) return;
+
+    const row = Object.fromEntries(
+      Object.entries({
+        tenant_id, nome, status: 'onboarding', created_by: req.user.id,
+        slug, segmento, posicionamento, ticket_medio, cidade, estado, nicho,
+        ifood_merchant_id, ifood_url, tipo, whatsapp, logo_url, observacoes,
+        tags, client_id, data_inicio_consultoria, data_fim_consultoria,
+      }).filter(([, v]) => v != null && v !== '')
+    );
+
+    const data = await sbFetch('lojas', { method: 'POST', body: row });
+    const loja = Array.isArray(data) ? data[0] : data;
+    console.log(`[api/lojas POST] id=${loja?.id} nome="${nome}" tenant=${tenant_id}`);
+    res.status(201).json({ loja });
+  } catch (err) {
+    console.error('[api/lojas POST]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/lojas/:id  — atualizar campos parciais da loja
+app.patch('/api/lojas/:id', requireJwt, async (req, res) => {
+  const { id } = req.params;
+  const EDITABLE = new Set([
+    'nome','slug','status','segmento','posicionamento','ticket_medio','cidade','estado',
+    'nicho','ifood_merchant_id','ifood_url','tipo','whatsapp','logo_url','observacoes',
+    'tags','client_id','data_inicio_consultoria','data_fim_consultoria',
+    'super_restaurante','data_super_restaurante','plataforma','metadata',
+  ]);
+  const updates = Object.fromEntries(
+    Object.entries(req.body).filter(([k]) => EDITABLE.has(k))
+  );
+  if (!Object.keys(updates).length)
+    return res.status(400).json({ error: 'nenhum campo válido para atualizar' });
+
+  try {
+    if (!await assertLojaAccess(req, res, id)) return;
+
+    const data = await sbFetch(`lojas?id=eq.${encodeURIComponent(id)}`, {
+      method: 'PATCH', body: updates,
+    });
+    const loja = Array.isArray(data) ? data[0] : data;
+    if (!loja) return res.status(404).json({ error: 'loja não encontrada' });
+    console.log(`[api/lojas PATCH] id=${id} campos=${Object.keys(updates).join(',')}`);
+    res.json({ loja });
+  } catch (err) {
+    console.error('[api/lojas/:id PATCH]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/lojas/:id/consultores  — listar consultores atribuídos
+app.get('/api/lojas/:id/consultores', requireJwt, async (req, res) => {
+  const { id } = req.params;
+  try {
+    if (!await assertLojaAccess(req, res, id)) return;
+
+    const consultores = await sbFetch(
+      `loja_consultores?loja_id=eq.${encodeURIComponent(id)}&select=id,user_id,papel,ativo,atribuido_em,atribuido_por`
+    );
+    res.json({ consultores: consultores || [] });
+  } catch (err) {
+    console.error('[api/lojas/:id/consultores GET]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/lojas/:id/consultores  — atribuir consultor à loja (upsert por papel)
+app.post('/api/lojas/:id/consultores', requireJwt, async (req, res) => {
+  const { id } = req.params;
+  const { user_id, papel = 'colaborador' } = req.body;
+  if (!user_id) return res.status(400).json({ error: 'user_id obrigatório' });
+
+  try {
+    if (!await assertLojaAccess(req, res, id)) return;
+
+    const data = await sbFetch('loja_consultores', {
+      method: 'POST',
+      body: { loja_id: id, user_id, papel, atribuido_por: req.user.id, ativo: true },
+      prefer: 'return=representation,resolution=merge-duplicates',
+    });
+    const atribuicao = Array.isArray(data) ? data[0] : data;
+    console.log(`[api/lojas/consultores POST] loja=${id} user=${user_id} papel=${papel}`);
+    res.status(201).json({ atribuicao });
+  } catch (err) {
+    console.error('[api/lojas/:id/consultores POST]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/lojas/:id/consultores/:userId  — remover consultor (soft delete)
+app.delete('/api/lojas/:id/consultores/:userId', requireJwt, async (req, res) => {
+  const { id, userId } = req.params;
+  try {
+    if (!await assertLojaAccess(req, res, id)) return;
+
+    await sbFetch(
+      `loja_consultores?loja_id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(userId)}`,
+      { method: 'PATCH', body: { ativo: false } }
+    );
+    console.log(`[api/lojas/consultores DELETE] loja=${id} user=${userId}`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[api/lojas/:id/consultores DELETE]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/lojas/:id/metricas  — criar/atualizar snapshot de métricas
+app.post('/api/lojas/:id/metricas', requireJwt, async (req, res) => {
+  const { id } = req.params;
+  const { data: dataField, ...rest } = req.body;
+  if (!dataField) return res.status(400).json({ error: 'data obrigatória (YYYY-MM-DD)' });
+
+  const METRIC_FIELDS = new Set([
+    'pedidos_30d','pedidos_90d','avaliacoes_30d','avaliacoes_90d',
+    'nota_media','taxa_cancelamento','taxa_chamados','tempo_preparo_min',
+    'tempo_loja_aberta_pct','tempo_espera_motoboy_min','invest_midia_30d',
+    'custo_por_pedido','ticket_medio','posicao_categoria','fonte',
+  ]);
+
+  const row = {
+    loja_id: id,
+    data: dataField,
+    fonte: rest.fonte || 'manual',
+    capturado_por: req.user.id,
+    ...Object.fromEntries(
+      Object.entries(rest).filter(([k, v]) => METRIC_FIELDS.has(k) && v != null)
+    ),
+  };
+
+  try {
+    if (!await assertLojaAccess(req, res, id)) return;
+
+    const result = await sbFetch('loja_metricas_snapshot', {
+      method: 'POST',
+      body: row,
+      prefer: 'return=representation,resolution=merge-duplicates',
+    });
+    const snapshot = Array.isArray(result) ? result[0] : result;
+    console.log(`[api/lojas/metricas POST] loja=${id} data=${dataField}`);
+    res.status(201).json({ snapshot });
+  } catch (err) {
+    console.error('[api/lojas/:id/metricas POST]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[bridge] ouvindo em 0.0.0.0:${PORT}`);
   console.log(`[bridge] SUPABASE_URL:          ${SUPABASE_URL           ? '✓' : '✗'}`);
@@ -776,4 +1040,5 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`[bridge] TRIGGER_SECRET_KEY:    ${TRIGGER_SECRET_KEY     ? '✓' : '✗ /agents/:slug/run desativado'}`);
   console.log(`[bridge] ASAAS_WEBHOOK_SECRET:  ${ASAAS_WEBHOOK_SECRET   ? '✓' : '✗ /webhooks/asaas rejeitará tudo'}`);
   console.log(`[bridge] ANTHROPIC_API_KEY:     ${ANTHROPIC_API_KEY      ? '✓' : '✗ /chat/ai desativado'} model=${ANTHROPIC_MODEL}`);
+  console.log(`[bridge] PILOTO lojas API:      GET|POST|PATCH /api/lojas, GET|POST|DELETE /api/lojas/:id/consultores, POST /api/lojas/:id/metricas`);
 });
