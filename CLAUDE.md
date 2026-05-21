@@ -1,8 +1,26 @@
 DOCUMENTO MESTRE - PLATAFORMA CONSULT DELIVERY v2.0
 ====================================================
 Data de aprovação: 23/04/2026
-Última revisão: 13/05/2026
+Última revisão: 21/05/2026
 Status: APROVADO - em execução (reestruturação Fase 0 concluída)
+
+====================================================
+0. MEMÓRIA PERSISTENTE — LER PRIMEIRO
+====================================================
+
+A pasta `memory/` na raiz do repo contém contexto acumulado de sessões anteriores.
+Funciona em qualquer máquina (local, VPS, CI) porque está commitada no git.
+
+REGRA: Ao iniciar qualquer sessão, ler os arquivos de `memory/` relevantes para
+a tarefa antes de investigar ou responder. Evita re-descobrir o que já se sabe.
+
+Arquivos disponíveis:
+- memory/vps-infra.md       — VPS, PM2, Bridge Server, dois repos
+- memory/bom-dia-feature.md — Feature BomDia completa, diagnóstico
+
+REGRA DE ESCRITA: Ao descobrir algo não-óbvio sobre infra, configuração ou
+decisões do projeto → atualizar o arquivo correto em memory/ e commitar.
+Não pedir permissão — só fazer e reportar o que foi salvo.
 
 ⚠️  DOC AUTORITATIVO: RESTRUCTURE.md (raiz do repo)
 Em caso de divergência entre este CLAUDE.md e o RESTRUCTURE.md,
