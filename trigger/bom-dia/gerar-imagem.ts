@@ -131,37 +131,37 @@ const DAY_NAMES: Record<number, string> = {
 const DAILY_TONE: Record<number, { mood: string; elements: string; lighting: string }> = {
   0: {
     mood:     "celebration — the week was conquered, next cycle starts strong",
-    elements: "trophy, upward completion bars, celebration light effects",
+    elements: "delivery rider raising helmet in victory, delivery boxes stacked with confetti-like motion lines, upward arrows",
     lighting: "festive general glow, triumphant light particles",
   },
   1: {
     mood:     "Monday morning energy — rhythm and discipline to start the week",
-    elements: "delivery rider motorcycle silhouette in motion blur, floating delivery boxes with motion trails, upward arrows",
+    elements: "delivery rider on motorcycle in motion blur through city street, thermal delivery bag in foreground, upward arrows",
     lighting: "diagonal red light rays from the left side cutting across the composition",
   },
   2: {
     mood:     "focused and consistent — maintaining rhythm through disciplined execution",
-    elements: "dark delivery dashboard with red bar charts and metrics, upward arrows, order list panels",
+    elements: "isometric city block with delivery scooter on route, red pin markers on street map, delivery box stack",
     lighting: "central red glow, dark deep background, tight vignette",
   },
   3: {
     mood:     "midweek evolution — halfway through, stronger than the start",
-    elements: "smartphone with growing delivery graph, upward trending chart, progress indicators",
+    elements: "motoboy isometric 3D on electric scooter mid-delivery, thermal bag logo visible, urban building silhouettes in background",
     lighting: "subtle blue-tinted radial glow with red accent points (only day with secondary accent)",
   },
   4: {
     mood:     "refinement and growth — small adjustments leading to big results",
-    elements: "dashboard with delivery metrics, checkmark boxes, performance indicators, clipboard",
-    lighting: "red spotlight over the dashboard, high contrast dramatic shadows",
+    elements: "delivery route map with multiple pins and dashed paths, restaurant storefront isometric, growing bar chart overlay",
+    lighting: "red spotlight from above, high contrast dramatic shadows",
   },
   5: {
     mood:     "discipline becomes results — strong close, opening a better next week",
-    elements: "tall bar charts at peak, horizontal motion light trails, full delivery dashboard",
+    elements: "delivery rider silhouette speeding through city street at dusk, horizontal motion light trails, delivery boxes with wings (motion effect)",
     lighting: "vibrant horizontal red light trails across the composition",
   },
   6: {
     mood:     "strategic reflection — analyzing what worked, planning what comes next",
-    elements: "spiral notebook with checklist, tablet with weekly review, small gear for process/automation",
+    elements: "bird-eye view isometric city map with delivery routes, small moto icons on route, growth arrow overlay",
     lighting: "soft illumination, less saturated, contemplative atmosphere",
   },
 };
@@ -354,21 +354,18 @@ function getSPDate() {
 }
 
 // ─── Helper: gerar imagem via OpenRouter (Recraft V4.1 Utility) ──────────────
+// Usa /images/generations (não /chat/completions) — honra o parâmetro size para portrait
 
-type MsgContent = string | Array<Record<string, unknown>>;
-
-async function generateImage(content: MsgContent, format: "group" | "portrait"): Promise<string> {
-  // Recraft sizes: 1820x1024 = landscape ~16:9 | 1024x1820 = portrait ~9:16
+async function generateImage(prompt: string, format: "group" | "portrait"): Promise<string> {
+  // Recraft sizes oficiais: 1820x1024 = landscape 16:9 | 1024x1820 = portrait 9:16
   const size = format === "group" ? "1820x1024" : "1024x1820";
   const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
   if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY não configurado no Trigger.dev");
 
-  const contentLen = typeof content === "string" ? content.length : JSON.stringify(content).length;
-
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      logger.info("bom-dia: recraft request", { format, size, attempt, contentLen });
-      const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      logger.info("bom-dia: recraft request", { format, size, attempt, promptLen: prompt.length });
+      const r = await fetch("https://openrouter.ai/api/v1/images/generations", {
         method: "POST",
         headers: {
           "Content-Type":  "application/json",
@@ -377,9 +374,10 @@ async function generateImage(content: MsgContent, format: "group" | "portrait"):
           "X-Title":       "Consult Delivery Bom Dia",
         },
         body: JSON.stringify({
-          model:    "recraft/recraft-v4.1-utility",
-          messages: [{ role: "user", content }],
+          model:  "recraft/recraft-v4.1-utility",
+          prompt,
           size,
+          n:      1,
         }),
         signal: AbortSignal.timeout(90_000),
       });
@@ -397,41 +395,22 @@ async function generateImage(content: MsgContent, format: "group" | "portrait"):
         throw new Error(`OpenRouter retornou resposta não-JSON: ${rawText.slice(0, 300)}`);
       }
 
-      // Recraft retorna imagem em message.images (não em message.content)
-      type MsgWithImages = {
-        content: unknown;
-        images?: Array<{ type: string; image_url?: { url: string } }>;
-      };
-      const choices = data.choices as Array<{ message: MsgWithImages }> | undefined;
-      const msg     = choices?.[0]?.message;
+      // images/generations response: { data: [{ url: "..." }] }
+      type ImgItem = { url?: string; b64_json?: string };
+      const imgData = (data.data as Array<ImgItem> | undefined)?.[0];
+      if (imgData?.url) return imgData.url;
+      if (imgData?.b64_json) return `data:image/png;base64,${imgData.b64_json}`;
 
-      let url: string | undefined;
+      // Fallback: chat/completions format (caso OpenRouter mude o response shape)
+      type MsgWithImages = { content: unknown; images?: Array<{ image_url?: { url: string } }> };
+      const msg = (data.choices as Array<{ message: MsgWithImages }> | undefined)?.[0]?.message;
+      if (msg?.images?.[0]?.image_url?.url) return msg.images[0].image_url.url;
+      if (typeof msg?.content === "string" && (msg.content as string).trim()) return (msg.content as string).trim();
 
-      // 1. message.images (Recraft via OpenRouter)
-      if (msg?.images?.[0]?.image_url?.url) {
-        url = msg.images[0].image_url.url;
-      }
-      // 2. message.content string
-      if (!url && typeof msg?.content === "string" && (msg.content as string).trim()) {
-        url = (msg.content as string).trim();
-      }
-      // 3. message.content array
-      if (!url && Array.isArray(msg?.content)) {
-        const block = (msg!.content as Array<Record<string, unknown>>).find(b => b.type === "image_url");
-        url = (block?.image_url as { url?: string } | undefined)?.url;
-      }
-      // 4. data[0].url (images API format)
-      const imgData = (data.data as Array<{ url?: string }> | undefined)?.[0];
-      if (!url && imgData?.url) url = imgData.url;
-
-      if (!url) throw new Error(`OpenRouter não retornou imagem. Preview: ${rawText.slice(0, 400)}`);
-      return url;
+      throw new Error(`OpenRouter não retornou imagem. Preview: ${rawText.slice(0, 400)}`);
     } catch (err) {
       logger.warn(`bom-dia: tentativa ${attempt}/3 geração falhou`, {
-        format,
-        size,
-        contentLen,
-        error: (err as Error).message,
+        format, size, error: (err as Error).message,
       });
       if (attempt === 3) throw err;
       await new Promise((r) => setTimeout(r, 3000 * attempt));
@@ -692,12 +671,21 @@ Estilo D — RESTAURANTE QUENTE: fundo escuro quente #1A0A00 com luz âmbar #D46
 
 Estilo E — ILUSTRAÇÃO COM PERSONAGEM: fundo escuro rico (marinho ou grafite) com ilustração flat-vector ou isométrica 3D vibrante. OBRIGATÓRIO incluir personagem central ilustrado (motoboy, chef, dono de loja). Headline branca.
 
-═══ BIBLIOTECA DE ELEMENTOS — VARIE, NÃO REPITA OS MESMOS 3 DIAS SEGUIDOS ═══
-Tecnologia: tablet com dashboard de pedidos (gráficos barra, R$), celular com app delivery, laptop com métricas
-Delivery & Logística: motoboy em motion blur (isométrico), bag térmica de delivery, caixa de papelão com logo foguete, moto isométrica, rota no mapa com pins
-Restaurante & Food: cardápio aberto estilizado, tábua de corte com formas geométricas, embalagem para viagem, copo descartável de café, talher isométrico, chapéu de chef 3D, balcão de atendimento isométrico, fogão industrial clean
-Financeiro & Crescimento: gráficos de barra crescentes 3D, setas de crescimento com motion trail, moedas empilhadas flat, recibo/ticket digital, cifrão R$ estilizado, funil de conversão
-Processo & Gestão: caderno espiral com checklist, engrenagem pequena cinza, relógio/cronômetro, calendário, pasta/clipboard, estrelas de avaliação, badge de meta atingida
+═══ BIBLIOTECA DE ELEMENTOS — VARIE, CATEGORIAS COM PRIORIDADE ═══
+
+PRIORIDADE 1 — Delivery & Logística (default da maioria dos dias):
+motoboy isométrico 3D em moto/scooter com bag térmica, bag de delivery com logo foguete, caixa de papelão delivery em movimento, rota de entrega com pins vermelhos no mapa, cidade isométrica vista de cima, moto estilizada 3/4, entregador na porta do cliente, scooter elétrica de delivery, rua urbana com sinalização estilizada, mapa de bairro com múltiplas rotas tracejadas
+
+PRIORIDADE 2 — Restaurante & Food:
+embalagem para viagem estilizada, chapéu de chef 3D, balcão de atendimento isométrico, cozinha profissional vista isométrica, copo descartável de café, fogão industrial clean, panela com vapor design flat
+
+PRIORIDADE 3 — Financeiro & Crescimento:
+gráficos de barra crescentes 3D, setas de crescimento com motion trail, moedas empilhadas flat, recibo/ticket digital, cifrão R$ estilizado, funil de conversão
+
+PRIORIDADE 4 — Tecnologia (USAR COM MODERAÇÃO — no máximo 1 item tech por imagem; nunca como elemento principal):
+tablet com dashboard de pedidos, celular com app delivery, laptop com métricas
+
+NUNCA combine mais de 1 item de tecnologia por imagem. Prefira sempre elementos físicos de delivery e cidade.
 
 ═══ TIPOGRAFIA ═══
 Headline: font condensada bold sem serifa (Oswald/Inter ExtraBold), Title Case. Estilo B: preta/vermelha. Demais: branca.
@@ -706,11 +694,11 @@ SEM emoji no design. SEM itálico. SEM glow excessivo. SEM contorno duplo.
 ═══ LOGO CONSULT DELIVERY (OBRIGATÓRIO em TODOS os estilos) ═══
 Canto inferior direito: foguete vermelho #B70C00 + chamas brancas + texto "Consult Delivery" condensado bold branco (~10% da largura total). Sem caixa ao redor (Estilo B: pode ter fundo vermelho pequeno para contraste).
 
-═══ LEGENDA WHATSAPP (PT-BR, 4 blocos, linha em branco entre cada) ═══
-Bloco 1: [1 emoji temático] Bom dia da equipe Consult Delivery!
-Bloco 2: 2–3 frases sobre o tema para donos de delivery — NUNCA mencione dia da semana pelo nome; NÃO repita "Consult Delivery" aqui nem nos demais blocos
-Bloco 3: horário de atendimento exato (fornecido no input)
-Bloco 4: disponibilidade da equipe — SEM links, @, hashtag, CTA de compra
+═══ LEGENDA WHATSAPP (PT-BR, COMPACTA — máx 3 linhas, lida num segundo) ═══
+Linha 1: [1 emoji temático] + 1 frase direta e impactante sobre o tema (máx 12 palavras) — NÃO repita "Consult Delivery"; NUNCA mencione dia da semana
+[linha em branco]
+Linha 2: horário resumido + 1 frase curtíssima de disponibilidade (ex: "🕘 Seg–Sex 09h–18h | Sáb 08h–12h • Equipe pronta!")
+SEM links, SEM @, SEM hashtag, SEM CTA de compra
 
 Retorne SOMENTE JSON válido, sem texto extra.${memoryBlock}${instructionsBlock}${feedbackContext}`,
     messages: [{
@@ -730,7 +718,7 @@ Gere JSON com exatamente 4 campos:
    Siga RIGOROSAMENTE o Estilo ${visualStyle.id}. Estrutura obrigatória:
    - Background: ${visualStyle.bgDesc}
    - Lighting: ${dailyTone.lighting} adapted to Style ${visualStyle.id}
-   ${customBriefInstruction ? `- ${customBriefInstruction}` : `- Scene elements (choose 4–6 VARIED items from the library that match theme "${theme}" and Style ${visualStyle.id}): combine items from different categories — tech devices, delivery/logistics, restaurant, financial/growth, process/management`}
+   ${customBriefInstruction ? `- ${customBriefInstruction}` : `- Scene elements (PRIORITY ORDER — choose 3–5 items): first pick from Delivery & Logistics (motoboy, moto, city, delivery bag, route map), then Restaurant/Food if theme calls for it, then Financial/Growth; MAXIMUM 1 tech device (tablet/phone/laptop) per image — only if no physical delivery element fits`}
    ${peopleRule}
    - Logo (MANDATORY): bottom-right corner — red rocket #B70C00 with white flame trails beside bold white text "Consult Delivery" in condensed sans-serif, ~10% canvas width, no box/background
    - Headline text on image: ${headlineColorRule} (Title Case, max 7 words, no glow, no italic): related to "${theme}"
@@ -740,11 +728,11 @@ Gere JSON com exatamente 4 campos:
 
 2. "text_on_image" (PT-BR, máx 7 palavras, Title Case): ${selectedPhrase ? `use ou adapte: "${selectedPhrase.main}"` : `headline curta e impactante para o tema: "${theme}"`}
 
-3. "caption" (PT-BR, EXATAMENTE 4 blocos separados por linha em branco):
-   Bloco 1: [emoji temático único] Bom dia da equipe Consult Delivery!
-   Bloco 2: 2–3 frases sobre "${theme}" para donos de restaurante/delivery — NUNCA mencione dia da semana; NÃO repita "Consult Delivery"
-   Bloco 3: ${hoursLine}
-   Bloco 4: disponibilidade da equipe — sem links, @, hashtag
+3. "caption" (PT-BR, COMPACTA — apenas 2 seções separadas por 1 linha em branco):
+   Seção 1: [emoji temático único] + 1 frase direta e impactante sobre "${theme}" (máx 12 palavras) — NÃO mencione dia da semana; NÃO escreva "Consult Delivery"
+   [linha em branco]
+   Seção 2: horário resumido + frase curtíssima de disponibilidade — exemplo: "🕘 Seg–Sex 09h–18h | Sáb 08h–12h • Equipe à disposição!"
+   — sem links, @, hashtag, CTA
 
 4. "theme": tema resumido em PT-BR
 
