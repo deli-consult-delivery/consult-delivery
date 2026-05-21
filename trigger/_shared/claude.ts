@@ -1,7 +1,21 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 
-const client = new Anthropic();
+// Lazy singleton: new Anthropic() só é chamado quando getAnthropic() é invocado
+// dentro de uma task (runtime). Nunca no import — evita crash do worker Trigger.dev.
+let _anthropic: Anthropic | null = null;
+
+export function getAnthropic(): Anthropic {
+  if (!_anthropic) {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      throw new Error(
+        "ANTHROPIC_API_KEY é obrigatória para tasks Trigger.dev"
+      );
+    }
+    _anthropic = new Anthropic();
+  }
+  return _anthropic;
+}
 
 interface RunClaudeOptions<T extends z.ZodTypeAny> {
   systemPrompt: string;
@@ -27,6 +41,7 @@ export async function runClaudeWithWebSearch<T extends z.ZodTypeAny>({
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
+      const client = getAnthropic();
       const response = await client.messages.create({
         model: "claude-sonnet-4-6",
         max_tokens: 8096,
