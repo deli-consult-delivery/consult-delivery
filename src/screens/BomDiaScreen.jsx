@@ -361,8 +361,12 @@ function AgentMessage({ run, tenantDbId, isLast }) {
   const [copied,     setCopied]    = useState(false);
   const [dlState,    setDlState]   = useState({});
   const [previewImg, setPreviewImg] = useState(null);
-  const [sendOpen,   setSendOpen]  = useState(false);
-  const [groups,     setGroups]    = useState([]);
+  const [sendOpen,      setSendOpen]      = useState(false);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [groups,        setGroups]        = useState([]);
+  const [allGroups,     setAllGroups]     = useState([]);
+  const [manageMode,    setManageMode]    = useState(false);
+  const [togglingJid,   setTogglingJid]   = useState(null);
   const [selGroups,  setSelGroups] = useState(new Set());
   const [sendFmt,    setSendFmt]   = useState('group');
   const [sending,    setSending]   = useState(false);
@@ -434,29 +438,49 @@ function AgentMessage({ run, tenantDbId, isLast }) {
 
   const handleOpenSend = async () => {
     if (!tenantDbId) return;
+    if (sendOpen) { setSendOpen(false); setManageMode(false); return; }
+    setSendOpen(true);
     setSendResult(null);
-    setSendOpen(v => !v);
+    setManageMode(false);
+    setGroupsLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const r = await fetch(
-        `${BRIDGE_URL}/whatsapp/groups?tenant_id=${tenantDbId}`,
-        { headers: { Authorization: `Bearer ${session?.access_token}` } }
-      );
-      if (r.ok) {
-        const { groups: evoGroups = [] } = await r.json();
-        setGroups(evoGroups.map(g => ({
-          evolution_jid: g.jid,
-          group_name:    g.name || g.jid,
-          picture_url:   g.picture_url ?? null,
-        })));
-        return;
+      const { data: dbGroups, error } = await supabase
+        .from('whatsapp_groups').select('id,evolution_jid,group_name,bom_dia_ativo')
+        .eq('tenant_id', tenantDbId).eq('ativo', true).order('group_name');
+      if (error) console.error('[BomDia] groups query error:', error);
+      const all = dbGroups || [];
+      setAllGroups(all);
+      const active = all.filter(g => g.bom_dia_ativo);
+      setGroups(active);
+      setSelGroups(new Set(active.map(g => g.evolution_jid)));
+    } catch (e) {
+      console.error('[BomDia] groups fetch error:', e);
+    } finally {
+      setGroupsLoading(false);
+    }
+  };
+
+  const handleToggleBomDia = async (group) => {
+    if (togglingJid) return;
+    setTogglingJid(group.evolution_jid);
+    const newVal = !group.bom_dia_ativo;
+    try {
+      const { error } = await supabase
+        .from('whatsapp_groups').update({ bom_dia_ativo: newVal }).eq('id', group.id);
+      if (error) throw error;
+      setAllGroups(prev => prev.map(g => g.evolution_jid === group.evolution_jid ? { ...g, bom_dia_ativo: newVal } : g));
+      if (newVal) {
+        setGroups(prev => [...prev, { ...group, bom_dia_ativo: true }].sort((a, b) => a.group_name.localeCompare(b.group_name)));
+        setSelGroups(prev => new Set([...prev, group.evolution_jid]));
+      } else {
+        setGroups(prev => prev.filter(g => g.evolution_jid !== group.evolution_jid));
+        setSelGroups(prev => { const s = new Set(prev); s.delete(group.evolution_jid); return s; });
       }
-    } catch {}
-    // fallback: tabela local
-    const { data: dbGroups } = await supabase
-      .from('whatsapp_groups').select('id,evolution_jid,group_name,picture_url')
-      .eq('tenant_id', tenantDbId).eq('ativo', true).order('group_name');
-    setGroups(dbGroups || []);
+    } catch (e) {
+      console.error('[BomDia] toggle bom_dia_ativo error:', e);
+    } finally {
+      setTogglingJid(null);
+    }
   };
 
   const toggleGroup = (jid) => setSelGroups(prev => {
@@ -692,50 +716,102 @@ function AgentMessage({ run, tenantDbId, isLast }) {
           {/* Send panel */}
           {sendOpen && (
             <div style={{ marginTop: 14, background: `${R}07`, border: `1px solid ${R}2a`, borderRadius: 10, padding: 16 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: R, marginBottom: 12 }}>Enviar nos grupos WhatsApp</div>
-
-              <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-                {FORMATS.filter(f => f.key === 'group' ? hasFeed : hasStory).map(f => (
-                  <button key={f.key} onClick={() => setSendFmt(f.key)} style={{ padding: '4px 10px', borderRadius: 5, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: `1px solid ${sendFmt === f.key ? R : BORDER}`, background: sendFmt === f.key ? `${R}22` : 'transparent', color: sendFmt === f.key ? R : 'rgba(255,255,255,0.45)' }}>
-                    {f.label}
-                  </button>
-                ))}
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: R }}>
+                  {manageMode ? 'Gerenciar grupos BomDia' : 'Enviar nos grupos WhatsApp'}
+                </div>
+                <button
+                  onClick={() => setManageMode(m => !m)}
+                  style={{ fontSize: 11, padding: '2px 8px', borderRadius: 5, cursor: 'pointer', border: `1px solid ${manageMode ? R : BORDER}`, background: manageMode ? `${R}22` : 'transparent', color: manageMode ? R : 'rgba(255,255,255,0.4)' }}
+                >
+                  {manageMode ? '← Voltar' : 'Gerenciar'}
+                </button>
               </div>
 
-              {groups.length === 0
-                ? <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 12, lineHeight: 1.6 }}>
-                    Nenhum grupo cadastrado.<br />
-                    <span style={{ color: 'rgba(255,255,255,0.28)' }}>Cadastre grupos em </span>
-                    <strong style={{ color: R }}>Grupos WhatsApp</strong>
-                    <span style={{ color: 'rgba(255,255,255,0.28)' }}> no menu lateral e sincronize via Evolution API.</span>
+              {/* Manage mode: toggles para bom_dia_ativo */}
+              {manageMode ? (
+                <div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 10, lineHeight: 1.5 }}>
+                    Grupos marcados recebem o BomDia automático e ficam pré-selecionados no envio manual.
                   </div>
-                : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 12 }}>
-                    {groups.map(g => (
-                      <label key={g.evolution_jid} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', background: selGroups.has(g.evolution_jid) ? `${R}10` : 'rgba(255,255,255,0.02)', border: `1px solid ${selGroups.has(g.evolution_jid) ? R + '33' : BORDER}` }}>
-                        <input type="checkbox" checked={selGroups.has(g.evolution_jid)} onChange={() => toggleGroup(g.evolution_jid)} style={{ accentColor: R, width: 14, height: 14 }} />
-                        <GroupAvatar g={g} size={28} />
-                        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formatGroupName(g)}</span>
-                      </label>
+                  {groupsLoading
+                    ? <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>Carregando…</div>
+                    : allGroups.length === 0
+                    ? <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>Nenhum grupo cadastrado.</div>
+                    : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 280, overflowY: 'auto' }}>
+                        {allGroups.map(g => {
+                          const on = g.bom_dia_ativo;
+                          const busy = togglingJid === g.evolution_jid;
+                          return (
+                            <div key={g.evolution_jid} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 6, background: on ? `${R}10` : 'rgba(255,255,255,0.02)', border: `1px solid ${on ? R + '33' : BORDER}` }}>
+                              <GroupAvatar g={g} size={26} />
+                              <span style={{ fontSize: 12, color: on ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.5)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formatGroupName(g)}</span>
+                              <button
+                                onClick={() => handleToggleBomDia(g)}
+                                disabled={busy}
+                                style={{ flexShrink: 0, width: 36, height: 20, borderRadius: 10, border: 'none', cursor: busy ? 'default' : 'pointer', background: on ? R : 'rgba(255,255,255,0.12)', position: 'relative', transition: 'background 0.2s', opacity: busy ? 0.5 : 1 }}
+                              >
+                                <div style={{ position: 'absolute', top: 2, left: on ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )
+                  }
+                </div>
+              ) : (
+                <>
+                  {/* Format selector */}
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                    {FORMATS.filter(f => f.key === 'group' ? hasFeed : hasStory).map(f => (
+                      <button key={f.key} onClick={() => setSendFmt(f.key)} style={{ padding: '4px 10px', borderRadius: 5, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: `1px solid ${sendFmt === f.key ? R : BORDER}`, background: sendFmt === f.key ? `${R}22` : 'transparent', color: sendFmt === f.key ? R : 'rgba(255,255,255,0.45)' }}>
+                        {f.label}
+                      </button>
                     ))}
                   </div>
-                )
-              }
 
-              {sendResult && (
-                <div style={{ marginBottom: 10, padding: '8px 12px', borderRadius: 6, fontSize: 12, background: sendResult.error ? 'rgba(220,38,38,0.1)' : 'rgba(16,185,129,0.08)', color: sendResult.error ? '#fca5a5' : '#6ee7b7' }}>
-                  {sendResult.error ? `Erro: ${sendResult.error}` : `✓ Enviado para ${sendResult.sent?.length ?? 0} grupo(s)${sendResult.failed?.length ? ` · ${sendResult.failed.length} falha(s)` : ''}`}
-                </div>
+                  {/* Group list (only bom_dia_ativo=true) */}
+                  {groupsLoading
+                    ? <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>Carregando grupos…</div>
+                    : groups.length === 0
+                    ? <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 12, lineHeight: 1.6 }}>
+                        Nenhum grupo ativo para BomDia.<br />
+                        <span style={{ color: 'rgba(255,255,255,0.28)' }}>Clique em </span>
+                        <strong style={{ color: R, cursor: 'pointer' }} onClick={() => setManageMode(true)}>Gerenciar</strong>
+                        <span style={{ color: 'rgba(255,255,255,0.28)' }}> para ativar grupos.</span>
+                      </div>
+                    : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 12, maxHeight: 280, overflowY: 'auto' }}>
+                        {groups.map(g => (
+                          <label key={g.evolution_jid} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', background: selGroups.has(g.evolution_jid) ? `${R}10` : 'rgba(255,255,255,0.02)', border: `1px solid ${selGroups.has(g.evolution_jid) ? R + '33' : BORDER}` }}>
+                            <input type="checkbox" checked={selGroups.has(g.evolution_jid)} onChange={() => toggleGroup(g.evolution_jid)} style={{ accentColor: R, width: 14, height: 14 }} />
+                            <GroupAvatar g={g} size={28} />
+                            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formatGroupName(g)}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )
+                  }
+
+                  {sendResult && (
+                    <div style={{ marginBottom: 10, padding: '8px 12px', borderRadius: 6, fontSize: 12, background: sendResult.error ? 'rgba(220,38,38,0.1)' : 'rgba(16,185,129,0.08)', color: sendResult.error ? '#fca5a5' : '#6ee7b7' }}>
+                      {sendResult.error ? `Erro: ${sendResult.error}` : `✓ Enviado para ${sendResult.sent?.length ?? 0} grupo(s)${sendResult.failed?.length ? ` · ${sendResult.failed.length} falha(s)` : ''}`}
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={handleSend} disabled={sending || !selGroups.size} style={{ padding: '7px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: (!selGroups.size || sending) ? 'default' : 'pointer', background: R, color: '#fff', border: 'none', opacity: (sending || !selGroups.size) ? 0.5 : 1 }}>
+                      {sending ? 'Enviando…' : `Enviar (${selGroups.size})`}
+                    </button>
+                    <button onClick={() => setSendOpen(false)} style={{ padding: '7px 12px', borderRadius: 7, fontSize: 12, cursor: 'pointer', background: 'transparent', border: `1px solid ${BORDER}`, color: 'rgba(255,255,255,0.45)' }}>
+                      Fechar
+                    </button>
+                  </div>
+                </>
               )}
-
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={handleSend} disabled={sending || !selGroups.size} style={{ padding: '7px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: (!selGroups.size || sending) ? 'default' : 'pointer', background: R, color: '#fff', border: 'none', opacity: (sending || !selGroups.size) ? 0.5 : 1 }}>
-                  {sending ? 'Enviando…' : `Enviar (${selGroups.size})`}
-                </button>
-                <button onClick={() => setSendOpen(false)} style={{ padding: '7px 12px', borderRadius: 7, fontSize: 12, cursor: 'pointer', background: 'transparent', border: `1px solid ${BORDER}`, color: 'rgba(255,255,255,0.45)' }}>
-                  Fechar
-                </button>
-              </div>
             </div>
           )}
         </div>
@@ -758,15 +834,16 @@ function Toggle({ checked, onChange, label }) {
 }
 
 // ── ProfilePanel ──────────────────────────────────────────────────────────────
-function ProfilePanel({ onOpenPromptModal, agentCfg, setAgentCfg, tenantDbId }) {
-  const [tab,       setTab]       = useState('instrucoes');
-  const [toggles,   setToggles]   = useState({ recente: true, preferencias: true, inteligencia: false });
-  const [memories,  setMemories]  = useState([
+function ProfilePanel({ onOpenPromptModal, agentCfg, setAgentCfg, tenantDbId, autoSendCfg, setAutoSendCfg }) {
+  const [tab,         setTab]         = useState('instrucoes');
+  const [toggles,     setToggles]     = useState({ recente: true, preferencias: true, inteligencia: false });
+  const [memories,    setMemories]    = useState([
     { id: 1, text: 'Tom mais descontraído às sextas-feiras', enabled: true  },
     { id: 2, text: 'Clientes da padaria preferem mensagens curtas', enabled: true  },
     { id: 3, text: 'Evitar frases com "bom dia" no início', enabled: false },
   ]);
-  const [savingCfg, setSavingCfg] = useState(false);
+  const [savingCfg,   setSavingCfg]   = useState(false);
+  const [savingSched, setSavingSched] = useState(false);
 
   const handleSaveCfg = async () => {
     if (!tenantDbId) return;
@@ -778,12 +855,23 @@ function ProfilePanel({ onOpenPromptModal, agentCfg, setAgentCfg, tenantDbId }) 
     setSavingCfg(false);
   };
 
+  const handleSaveSchedule = async () => {
+    if (!tenantDbId) return;
+    setSavingSched(true);
+    await supabase.from('bom_dia_config').upsert(
+      { tenant_id: tenantDbId, auto_send: autoSendCfg?.auto_send ?? false, updated_at: new Date().toISOString() },
+      { onConflict: 'tenant_id' }
+    );
+    setSavingSched(false);
+  };
+
   const TABS = [
-    { id: 'instrucoes', label: 'Instruções'  },
-    { id: 'empregos',   label: 'Empregos'    },
-    { id: 'habilidades',label: 'Habilidades' },
-    { id: 'infos',      label: 'Informações' },
-    { id: 'memoria',    label: 'Memória'     },
+    { id: 'instrucoes',  label: 'Instruções'  },
+    { id: 'agendamento', label: 'Agendamento' },
+    { id: 'empregos',    label: 'Empregos'    },
+    { id: 'habilidades', label: 'Habilidades' },
+    { id: 'infos',       label: 'Informações' },
+    { id: 'memoria',     label: 'Memória'     },
   ];
 
   const sectionTitle = (t) => (
@@ -887,6 +975,42 @@ function ProfilePanel({ onOpenPromptModal, agentCfg, setAgentCfg, tenantDbId }) 
             />
             <button onClick={handleSaveCfg} disabled={savingCfg} style={{ marginTop: 8, padding: '6px 12px', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', background: R, color: '#fff', border: 'none', opacity: savingCfg ? 0.6 : 1 }}>
               {savingCfg ? 'Salvando…' : 'Salvar'}
+            </button>
+          </>)}
+        </>)}
+
+        {/* AGENDAMENTO */}
+        {tab === 'agendamento' && (<>
+          {card(<>
+            {sectionTitle('Envio Automático')}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>Auto-envio</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
+                  Envia nos horários configurados abaixo
+                </div>
+              </div>
+              <Toggle
+                checked={autoSendCfg?.auto_send ?? false}
+                onChange={() => setAutoSendCfg(c => ({ ...c, auto_send: !c.auto_send }))}
+                label="Auto-envio BomDia"
+              />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16, padding: '10px 12px', background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: `1px solid ${BORDER}` }}>
+              {[
+                { label: 'Seg–Sex', time: '09:00 (BRT)', active: true  },
+                { label: 'Sábado',  time: '08:00 (BRT)', active: true  },
+                { label: 'Domingo', time: 'Sem envio',   active: false },
+                { label: 'Feriados nacionais', time: 'Sem envio', active: false },
+              ].map(({ label, time, active }) => (
+                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>{label}</span>
+                  <span style={{ fontSize: 12, fontWeight: active ? 700 : 400, color: active ? R : 'rgba(255,255,255,0.22)' }}>{time}</span>
+                </div>
+              ))}
+            </div>
+            <button onClick={handleSaveSchedule} disabled={savingSched} style={{ padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: savingSched ? 'default' : 'pointer', background: R, color: '#fff', border: 'none', opacity: savingSched ? 0.6 : 1 }}>
+              {savingSched ? 'Salvando…' : 'Salvar configuração'}
             </button>
           </>)}
         </>)}
@@ -1364,8 +1488,9 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
   const [showProfile, setShowProfile] = useState(() => window.innerWidth > 768);
   const [composer,    setComposer]    = useState('');
   const [agentCfg,    setAgentCfg]    = useState({ memory: '', instructions: '', calendar_id: 'auto' });
-  const [requests,    setRequests]    = useState(() => loadRequests());
+  const [requests,     setRequests]     = useState(() => loadRequests());
   const [reutilizarForm, setReutilizarForm] = useState(null);
+  const [autoSendCfg,  setAutoSendCfg]  = useState({ auto_send: false, hora_semana: '09:00', hora_sabado: '08:00' });
   const pendingRef = useRef(null);
   const listEndRef = useRef(null);
 
@@ -1394,6 +1519,10 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
     supabase.from('tenant_agent_config').select('config').eq('tenant_id', tenantDbId).eq('agent_id', 'bom-dia').maybeSingle()
       .then(({ data }) => {
         if (data?.config) setAgentCfg({ memory: data.config.memory ?? '', instructions: data.config.instructions ?? '', calendar_id: data.config.calendar_id ?? 'auto' });
+      });
+    supabase.from('bom_dia_config').select('auto_send,hora_semana,hora_sabado').eq('tenant_id', tenantDbId).maybeSingle()
+      .then(({ data }) => {
+        if (data) setAutoSendCfg({ auto_send: data.auto_send ?? false, hora_semana: data.hora_semana ?? '09:00', hora_sabado: data.hora_sabado ?? '08:00' });
       });
   }, [tenantDbId]);
 
@@ -1605,6 +1734,8 @@ export default function BomDiaScreen({ tenantDbId, userId }) {
           agentCfg={agentCfg}
           setAgentCfg={setAgentCfg}
           tenantDbId={tenantDbId}
+          autoSendCfg={autoSendCfg}
+          setAutoSendCfg={setAutoSendCfg}
         />
       )}
 

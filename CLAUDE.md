@@ -1,8 +1,26 @@
 DOCUMENTO MESTRE - PLATAFORMA CONSULT DELIVERY v2.0
 ====================================================
 Data de aprovação: 23/04/2026
-Última revisão: 13/05/2026
+Última revisão: 21/05/2026
 Status: APROVADO - em execução (reestruturação Fase 0 concluída)
+
+====================================================
+0. MEMÓRIA PERSISTENTE — LER PRIMEIRO
+====================================================
+
+A pasta `memory/` na raiz do repo contém contexto acumulado de sessões anteriores.
+Funciona em qualquer máquina (local, VPS, CI) porque está commitada no git.
+
+REGRA: Ao iniciar qualquer sessão, ler os arquivos de `memory/` relevantes para
+a tarefa antes de investigar ou responder. Evita re-descobrir o que já se sabe.
+
+Arquivos disponíveis:
+- memory/vps-infra.md       — VPS, PM2, Bridge Server, dois repos
+- memory/bom-dia-feature.md — Feature BomDia completa, diagnóstico
+
+REGRA DE ESCRITA: Ao descobrir algo não-óbvio sobre infra, configuração ou
+decisões do projeto → atualizar o arquivo correto em memory/ e commitar.
+Não pedir permissão — só fazer e reportar o que foi salvo.
 
 ⚠️  DOC AUTORITATIVO: RESTRUCTURE.md (raiz do repo)
 Em caso de divergência entre este CLAUDE.md e o RESTRUCTURE.md,
@@ -962,4 +980,37 @@ chatter) — skip the wiki update. Just append the log line.
 - `/wiki-brain lint` — health-check the wiki
 - `/wiki-brain rebuild` — force a Graphify rebuild
 - `/wiki-brain doctor` — verify install
+
+================================================================================
+
+====================================================
+20. MANDATO DE QA — VERIFICAÇÃO OBRIGATÓRIA PÓS-FIX
+====================================================
+
+Todo fix ou feature deployado em produção EXIGE verificação antes de "feito".
+Nunca declarar sucesso apenas porque o build passou ou o push foi feito.
+
+FLUXO OBRIGATÓRIO após git push:
+  1. Aguardar ~3 minutos (GitHub Actions → GitHub Pages)
+  2. Rodar verificação rápida:  bash scripts/qa-run.sh --no-build
+  3. Confirmar bundle de produção atualizado: curl -s https://app.consultdelivery.com.br/ | grep -o '"[^"]*\.js"' | head -1
+  4. Validar feature em prod abrindo URL ou consultando Supabase via MCP
+
+ANTES DE INVESTIGAR QUALQUER BUG:
+  Consultar scripts/qa-knowledge.md — lista de bugs já resolvidos e padrões de teste.
+  Isso evita reinvestigar a mesma causa raiz.
+
+APÓS RESOLVER UM BUG:
+  Atualizar scripts/qa-knowledge.md com nova entrada em ## Casos Resolvidos.
+  Formato: [data] Feature — Sintoma / Causa raiz / Fix / Lição.
+  Esse arquivo é o aprendizado acumulado do QA Agent — deve crescer a cada sessão.
+
+PADRÕES DE BUG CONHECIDOS (ver qa-knowledge.md para detalhes):
+  P1 — Colunas inexistentes em .select() Supabase → erro silenciado, data = null
+  P2 — Build local não reflete produção → verificar bundle hash
+  P3 — Evolution API fetchAllGroups → lenta/instável, usar Supabase como fonte primária
+  P4 — RLS bloqueando query → verificar políticas via pg_policies
+
+Arquivo de padrões: scripts/qa-knowledge.md
+Runner automatizado:  scripts/qa-run.sh
 - `/recall` — show last 5 activities + read linked pages

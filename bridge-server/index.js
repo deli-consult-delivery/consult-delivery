@@ -71,6 +71,17 @@ function requireInternalToken(req, res, next) {
   next();
 }
 
+// ── Middleware: JWT or internal token (para endpoints chamados por Trigger.dev) ─
+async function requireJwtOrInternal(req, res, next) {
+  const internalToken = req.headers['x-internal-token'];
+  if (internalToken) {
+    if (!INTERNAL_BRIDGE_TOKEN || internalToken !== INTERNAL_BRIDGE_TOKEN)
+      return res.status(401).json({ error: 'unauthorized' });
+    return next();
+  }
+  return requireJwt(req, res, next);
+}
+
 // ── Helper: Supabase REST write (service role) ────────────────────────────────
 async function supabaseSelect(table, filters = {}) {
   if (!SUPABASE_SERVICE_KEY) return null;
@@ -650,7 +661,7 @@ app.post('/webhooks/asaas', async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════
 // POST /agents/bom-dia/send-groups — Envia imagem + legenda para grupos WhatsApp
 // ════════════════════════════════════════════════════════════════════════════
-app.post('/agents/bom-dia/send-groups', requireJwt, async (req, res) => {
+app.post('/agents/bom-dia/send-groups', requireJwtOrInternal, async (req, res) => {
   const { group_jids = [], image_url, caption, tenant_id } = req.body;
 
   if (!group_jids.length || !image_url)

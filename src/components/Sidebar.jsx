@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import Icon from './Icon.jsx';
-import UserAvatar from './UserAvatar.jsx';
 
 const NAV_GROUPS = [
   {
@@ -127,15 +126,6 @@ export default function Sidebar({ route, setRoute, counts, isOpen }) {
           {NAV_ADMIN.map(item => (
             <SidebarItem key={item.id} item={item} route={route} setRoute={setRoute} expanded={expanded} />
           ))}
-          <div className="side-avatar-footer" title={expanded ? undefined : 'Wandson Silva — CEO'}>
-            <UserAvatar name="WS" size={28} src="/assets/wandson.jpg" />
-            {expanded && (
-              <div style={{ overflow: 'hidden' }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap' }}>Wandson Silva</div>
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap' }}>CEO · admin</div>
-              </div>
-            )}
-          </div>
           <button className="side-expand-btn" onClick={() => setExpanded(v => !v)} title={expanded ? 'Recolher menu' : 'Expandir menu'}>
             <Icon name={expanded ? 'chevleft' : 'arrowright'} size={14} />
           </button>

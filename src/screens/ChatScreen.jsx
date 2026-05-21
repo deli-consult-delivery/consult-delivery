@@ -1172,6 +1172,43 @@ function ForwardModal({ msg, convs, currentConvId, onClose, onForward }) {
   );
 }
 
+// ─── DELIVERY TICK (WhatsApp-style) ───────────────────────────
+// Evolution API status: 0=erro, 1=pendente, 2=servidor (✓), 3=entregue (✓✓), 4=lido (✓✓ azul), 5=played
+function DeliveryTick({ status }) {
+  if (status === 0) {
+    return (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-label="erro ao enviar">
+        <circle cx="12" cy="12" r="10" />
+        <line x1="12" y1="8" x2="12" y2="12" />
+        <line x1="12" y1="16" x2="12.01" y2="16" />
+      </svg>
+    );
+  }
+  if (status === null || status === undefined || status === 1) {
+    return (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-label="pendente">
+        <circle cx="12" cy="12" r="9" />
+        <polyline points="12 7 12 12 15 14" />
+      </svg>
+    );
+  }
+  const color = (status >= 4) ? '#53BDEB' : 'rgba(255,255,255,0.6)';
+  if (status === 2) {
+    return (
+      <svg width="14" height="12" viewBox="0 0 20 16" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-label="enviado">
+        <polyline points="4 8 8 12 16 4" />
+      </svg>
+    );
+  }
+  // 3 (entregue) ou 4/5 (lido)
+  return (
+    <svg width="16" height="12" viewBox="0 0 24 16" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-label={status >= 4 ? 'lido' : 'entregue'}>
+      <polyline points="3 8 7 12 15 4" />
+      <polyline points="9 12 13 16 21 8" />
+    </svg>
+  );
+}
+
 // ─── MESSAGE BUBBLE ────────────────────────────────────────────
 function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onStar, onDelete, onResumirMsg, onTraduzirMsg, onForward, translation }) {
   const isOut = m.from === 'out';
@@ -1352,7 +1389,7 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onSta
                 </svg>
               )}
               {m.time}
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34D399" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+              <DeliveryTick status={m.deliveryStatus} />
             </div>
           </>
         )}
@@ -1774,7 +1811,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             );
             if (tmpIdx !== -1) return { ...m, [convId]: convMsgs.map((ex, i) => i === tmpIdx ? { ...ex, id: msg.id, _ts: msg.created_at || ex._ts } : ex) };
           }
-          return { ...m, [convId]: [...convMsgs, { id: msg.id, from: isInbound ? 'in' : 'out', text, time, _ts: msg.created_at || new Date().toISOString(), mediaType, mediaUrl: msg.media_url || null, agentName: msg.sender_name || null, waMsgId: msg.whatsapp_msg_id || null, replyTo: msg.quoted_content || null }] };
+          return { ...m, [convId]: [...convMsgs, { id: msg.id, from: isInbound ? 'in' : 'out', text, time, _ts: msg.created_at || new Date().toISOString(), mediaType, mediaUrl: msg.media_url || null, agentName: msg.sender_name || null, waMsgId: msg.whatsapp_msg_id || null, replyTo: msg.quoted_content || null, deliveryStatus: msg.delivery_status ?? null }] };
         });
         if (isInbound) setWaLastInbound(msg.created_at || new Date().toISOString());
         setConvs(prev => {
@@ -1827,11 +1864,12 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             const patch = {};
             if (msg.media_url)  patch.mediaUrl  = msg.media_url;
             if (msg.reactions !== undefined) patch.reactions = msg.reactions || [];
+            if (msg.delivery_status !== undefined && msg.delivery_status !== null) patch.deliveryStatus = msg.delivery_status;
             return Object.keys(patch).length ? { ...ex, ...patch } : ex;
           });
           return { ...m2, [msg.conversation_id]: updated };
         };
-        if (msg.media_url || msg.reactions !== undefined) setMessages(convMsgs2);
+        if (msg.media_url || msg.reactions !== undefined || msg.delivery_status !== undefined) setMessages(convMsgs2);
       })
       .subscribe((status) => { setRealtimeStatus(status); });
     return () => { supabase.removeChannel(channel); };
@@ -2143,7 +2181,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   async function loadMsgs(convId) {
     try {
       const [{ data }, { data: evts }] = await Promise.all([
-        supabase.from('messages').select('id, direction, content, body, created_at, sender_name, media_url, media_type, whatsapp_msg_id, quoted_content, reactions').eq('conversation_id', convId).order('created_at', { ascending: false }).limit(MSG_PAGE),
+        supabase.from('messages').select('id, direction, content, body, created_at, sender_name, media_url, media_type, whatsapp_msg_id, quoted_content, reactions, delivery_status').eq('conversation_id', convId).order('created_at', { ascending: false }).limit(MSG_PAGE),
         supabase.from('conversation_events').select('id, event_type, actor_name, metadata, ts').eq('conversation_id', convId).order('ts', { ascending: true }),
       ]);
       const rows = data || [];
@@ -2155,6 +2193,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         mediaType: msg.media_type || null, mediaUrl: msg.media_url || null,
         agentName: msg.sender_name || null, waMsgId: msg.whatsapp_msg_id || null,
         replyTo: msg.quoted_content || null, reactions: msg.reactions || [],
+        deliveryStatus: msg.delivery_status ?? null,
       }));
       const SHOW_EVENT_TYPES = new Set(['created', 'assigned', 'closed', 'reopened']);
       // Dedup: trigger SQL + frontend podem inserir o mesmo evento; manter o com actor_name
@@ -2193,7 +2232,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     try {
       const { data } = await supabase
         .from('messages')
-        .select('id, direction, content, body, created_at, sender_name, media_url, media_type, whatsapp_msg_id, quoted_content, reactions')
+        .select('id, direction, content, body, created_at, sender_name, media_url, media_type, whatsapp_msg_id, quoted_content, reactions, delivery_status')
         .eq('conversation_id', convId)
         .lt('created_at', oldestTs)
         .order('created_at', { ascending: false })
@@ -2207,6 +2246,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         mediaType: msg.media_type || null, mediaUrl: msg.media_url || null,
         agentName: msg.sender_name || null, waMsgId: msg.whatsapp_msg_id || null,
         replyTo: msg.quoted_content || null, reactions: msg.reactions || [],
+        deliveryStatus: msg.delivery_status ?? null,
       }));
       if (olderMsgs.length > 0) {
         scrollAnchorRef.current = scrollRef.current?.scrollHeight || 0;
@@ -3194,17 +3234,6 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {currentUser && (
-            <>
-              <div title={`Logado como ${currentUser.email}`} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#f97316', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>
-                  {(currentUser.name || '?').slice(0, 2).toUpperCase()}
-                </div>
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'white' }}>{currentUser.name}</span>
-              </div>
-              <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.1)' }} />
-            </>
-          )}
           <button className="lc-ask-deli" onClick={() => setShowAiPanel(v => !v)}>
             <AgentAvatar id="deli" size={18} />
             <span className="lc-ask-deli-label">Faça uma pergunta</span>
@@ -3884,6 +3913,12 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
               {/* Composer */}
               <footer className="lc-composer-bar" style={{ position: 'relative' }}>
+                {convStatus === 'finalizado' && (
+                  <div style={{ background: 'rgba(251,191,36,0.12)', borderTop: '2px solid rgba(251,191,36,0.5)', padding: '6px 14px', fontSize: 11, color: '#FCD34D', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span>⚠️</span>
+                    <span>Conversa <strong>finalizada</strong> — ao enviar, ela será reaberta automaticamente.</span>
+                  </div>
+                )}
                 {/* Popovers */}
                 {showSlash && (
                   <div className="lc-popover lc-slash">
