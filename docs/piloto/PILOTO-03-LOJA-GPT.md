@@ -227,6 +227,7 @@ Input Zod:
   conversation_id: uuid (cria nova se null),
   loja_id: uuid,
   user_id: uuid,
+  tenant_id: uuid,
   pergunta: string
 }
 
