@@ -695,10 +695,11 @@ SEM emoji no design. SEM itálico. SEM glow excessivo. SEM contorno duplo.
 ═══ LOGO CONSULT DELIVERY (OBRIGATÓRIO em TODOS os estilos) ═══
 Canto inferior direito: foguete vermelho #B70C00 + chamas brancas + texto "Consult Delivery" condensado bold branco (~10% da largura total). Sem caixa ao redor (Estilo B: pode ter fundo vermelho pequeno para contraste).
 
-═══ LEGENDA WHATSAPP (PT-BR, COMPACTA — máx 3 linhas, lida num segundo) ═══
-Linha 1: [1 emoji temático] + 1 frase direta e impactante sobre o tema (máx 12 palavras) — NÃO repita "Consult Delivery"; NUNCA mencione dia da semana
+═══ LEGENDA WHATSAPP (PT-BR — máx 4 linhas, tom de bom dia ao cliente) ═══
+Linha 1: "Bom dia!" + [1 emoji] + frase curta e calorosa desejando bom dia relacionada ao tema (máx 10 palavras)
+Linha 2: frase mostrando que a Consult Delivery está à disposição para apoiar a operação do cliente (máx 12 palavras) — NÃO mencione dia da semana
 [linha em branco]
-Linha 2: horário resumido + 1 frase curtíssima de disponibilidade (ex: "🕘 Seg–Sex 09h–18h | Sáb 08h–12h • Equipe pronta!")
+Linha 3: horário de atendimento resumido (ex: "🕘 Seg–Sex 09h–18h | Sáb 08h–12h")
 SEM links, SEM @, SEM hashtag, SEM CTA de compra
 
 Retorne SOMENTE JSON válido, sem texto extra.${memoryBlock}${instructionsBlock}${feedbackContext}`,
@@ -729,11 +730,12 @@ Gere JSON com exatamente 4 campos:
 
 2. "text_on_image" (PT-BR, máx 7 palavras, Title Case): ${selectedPhrase ? `use ou adapte: "${selectedPhrase.main}"` : `headline curta e impactante para o tema: "${theme}"`}
 
-3. "caption" (PT-BR, COMPACTA — apenas 2 seções separadas por 1 linha em branco):
-   Seção 1: [emoji temático único] + 1 frase direta e impactante sobre "${theme}" (máx 12 palavras) — NÃO mencione dia da semana; NÃO escreva "Consult Delivery"
+3. "caption" (PT-BR — máx 4 linhas, tom de bom dia ao cliente):
+   Linha 1: "Bom dia!" + [1 emoji] + frase calorosa sobre "${theme}" desejando bom dia (máx 10 palavras)
+   Linha 2: frase mostrando que a Consult Delivery está à disposição para apoiar a operação do cliente hoje (máx 12 palavras)
    [linha em branco]
-   Seção 2: horário resumido + frase curtíssima de disponibilidade — exemplo: "🕘 Seg–Sex 09h–18h | Sáb 08h–12h • Equipe à disposição!"
-   — sem links, @, hashtag, CTA
+   Linha 3: horário de atendimento — ex: "🕘 Seg–Sex 09h–18h | Sáb 08h–12h"
+   — sem links, @, hashtag, CTA de compra, sem mencionar dia da semana
 
 4. "theme": tema resumido em PT-BR
 
