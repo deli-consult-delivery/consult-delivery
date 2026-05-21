@@ -294,7 +294,7 @@ const VISUAL_STYLE_LIBRARY: VisualStyle[] = [
   {
     id:            "A",
     name:          "Tech Escuro",
-    bgDesc:        "deep black background #0D0D0D with dramatic red radial light-leak #B70C00 from bottom-left corner (~55% opacity), isometric 3D Cinema 4D/Blender render style, dramatic red rim light from bottom-left, deep black shadows #050505",
+    bgDesc:        "deep solid black background #0D0D0D with dramatic red radial light-leak #B70C00 from bottom-left corner (~55% opacity), isometric 3D Cinema 4D/Blender render style, dramatic red rim light from bottom-left, deep black shadows #050505 — NO circuit board patterns, NO PCB dots, NO electronic circuit lines, NO microchip grid",
     allowPeople:   false,
     headlineColor: "white",
   },
@@ -676,8 +676,8 @@ Estilo E — ILUSTRAÇÃO COM PERSONAGEM: fundo escuro rico (marinho ou grafite)
 PRIORIDADE 1 — Delivery & Logística (default da maioria dos dias):
 motoboy isométrico 3D em moto/scooter com bag térmica, bag de delivery com logo foguete, caixa de papelão delivery em movimento, rota de entrega com pins vermelhos no mapa, cidade isométrica vista de cima, moto estilizada 3/4, entregador na porta do cliente, scooter elétrica de delivery, rua urbana com sinalização estilizada, mapa de bairro com múltiplas rotas tracejadas
 
-PRIORIDADE 2 — Restaurante & Food:
-embalagem para viagem estilizada, chapéu de chef 3D, balcão de atendimento isométrico, cozinha profissional vista isométrica, copo descartável de café, fogão industrial clean, panela com vapor design flat
+PRIORIDADE 2 — Restaurante & Food Service:
+embalagem para viagem estilizada, caixa de hambúrguer flat-vector, saco de papel kraft delivery, caixa de pizza isométrica, bandeja de pedido, chapéu de chef 3D, balcão de atendimento isométrico, cozinha profissional vista isométrica, copo descartável de café, fogão industrial clean, panela com vapor design flat, visor/fachada de restaurante estilizado, sacola de delivery com logo, prato isométrico estilizado
 
 PRIORIDADE 3 — Financeiro & Crescimento:
 gráficos de barra crescentes 3D, setas de crescimento com motion trail, moedas empilhadas flat, recibo/ticket digital, cifrão R$ estilizado, funil de conversão
@@ -723,7 +723,7 @@ Gere JSON com exatamente 4 campos:
    - Logo (MANDATORY): bottom-right corner — red rocket #B70C00 with white flame trails beside bold white text "Consult Delivery" in condensed sans-serif, ~10% canvas width, no box/background
    - Headline text on image: ${headlineColorRule} (Title Case, max 7 words, no glow, no italic): related to "${theme}"
    - ${palette.colors}
-   - NO real food photography (actual pizza/burger/sushi dishes), NO balloons, NO flags, NO confetti, NO neon signs, NO anime/manga, NO watercolor
+   - NO circuit boards, NO PCB patterns, NO electronic circuit dots or lines, NO microchip grid — NO real food photography (actual pizza/burger/sushi dishes), NO balloons, NO flags, NO confetti, NO neon signs, NO anime/manga, NO watercolor
    - DO NOT mention pixel dimensions or aspect ratio in this prompt
 
 2. "text_on_image" (PT-BR, máx 7 palavras, Title Case): ${selectedPhrase ? `use ou adapte: "${selectedPhrase.main}"` : `headline curta e impactante para o tema: "${theme}"`}
