@@ -321,7 +321,7 @@ async function enviarBomDia(runId: string, weekdayLabel: string): Promise<Output
 export const bomDiaEnvioAgendadoSemana = schedules.task({
   id:    "bom-dia-envio-agendado-semana",
   cron:  "0 12 * * 1-5",
-  retry: { maxAttempts: 2, minTimeoutInMs: 1000 },
+  retry: { maxAttempts: 5, minTimeoutInMs: 30_000, maxTimeoutInMs: 120_000, factor: 2 },
 
   run: async (_payload, { ctx }) => {
     logger.info("bom-dia-envio-agendado-semana: schedule disparada (seg–sex, 12h UTC)");
@@ -350,7 +350,7 @@ export const bomDiaEnvioAgendadoSemana = schedules.task({
 export const bomDiaEnvioAgendadoSabado = schedules.task({
   id:    "bom-dia-envio-agendado-sabado",
   cron:  "0 11 * * 6",
-  retry: { maxAttempts: 2, minTimeoutInMs: 1000 },
+  retry: { maxAttempts: 5, minTimeoutInMs: 30_000, maxTimeoutInMs: 120_000, factor: 2 },
 
   run: async (_payload, { ctx }) => {
     logger.info("bom-dia-envio-agendado-sabado: schedule disparada (sáb, 11h UTC)");
