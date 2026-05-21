@@ -236,7 +236,7 @@ async function enviarBomDia(runId: string, weekdayLabel: string): Promise<Output
         body: JSON.stringify({
           group_jids: groupJids,
           image_url:  imgGroupUrl,
-          caption:    caption ?? "",
+          caption:    `${caption ?? ""}\n\nEquipe Consult Delivery 🚀`,
           tenant_id:  tenantId,
         }),
         signal: AbortSignal.timeout(30_000),
