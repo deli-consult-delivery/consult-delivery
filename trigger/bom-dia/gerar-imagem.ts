@@ -280,6 +280,64 @@ function selectPalette(weekday: number, dateStr: string): Palette {
   return PALETTE_LIBRARY[idx];
 }
 
+// ─── Biblioteca de estilos visuais — rotaciona semanalmente ──────────────────
+
+interface VisualStyle {
+  id:            string;
+  name:          string;
+  bgDesc:        string;
+  allowPeople:   boolean;
+  headlineColor: "white" | "dark";
+}
+
+const VISUAL_STYLE_LIBRARY: VisualStyle[] = [
+  {
+    id:            "A",
+    name:          "Tech Escuro",
+    bgDesc:        "deep black background #0D0D0D with dramatic red radial light-leak #B70C00 from bottom-left corner (~55% opacity), isometric 3D Cinema 4D/Blender render style, dramatic red rim light from bottom-left, deep black shadows #050505",
+    allowPeople:   false,
+    headlineColor: "white",
+  },
+  {
+    id:            "B",
+    name:          "Minimalista Claro",
+    bgDesc:        "clean white #FFFFFF or very light gray #F4F4F4 background, large negative space, flat minimalist design, only red #B70C00 and dark #1A1A1A as accents — NO dark backgrounds, NO heavy gradients, NO circuit lines",
+    allowPeople:   false,
+    headlineColor: "dark",
+  },
+  {
+    id:            "C",
+    name:          "Mapa Urbano",
+    bgDesc:        "deep night-blue background #08122A with stylized city street map overlay (thin white and light-blue lines at 25–35% opacity), red location pin markers, dashed delivery route lines across the map, subtle city skyline silhouette at bottom horizon",
+    allowPeople:   false,
+    headlineColor: "white",
+  },
+  {
+    id:            "D",
+    name:          "Restaurante Quente",
+    bgDesc:        "warm dark background #1A0A00 with amber light #D4630A radiating from above-center like professional kitchen overhead lighting, subtle low-opacity wood grain or brick texture in background",
+    allowPeople:   false,
+    headlineColor: "white",
+  },
+  {
+    id:            "E",
+    name:          "Ilustração com Personagem",
+    bgDesc:        "rich dark background (deep navy or graphite #161820) with vibrant flat-vector or isometric 3D illustrated composition, colorful but cohesive palette — this style REQUIRES a central human character",
+    allowPeople:   true,
+    headlineColor: "white",
+  },
+];
+
+function selectVisualStyle(weekday: number, dateStr: string): VisualStyle {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date    = new Date(y, m - 1, d);
+  const jan1    = new Date(y, 0, 1);
+  const weekNum = Math.ceil(((date.getTime() - jan1.getTime()) / 86_400_000 + jan1.getDay() + 1) / 7);
+  // Offset differently from palette to avoid always pairing same style+palette
+  const idx = (weekday + weekNum * 2 + 1) % VISUAL_STYLE_LIBRARY.length;
+  return VISUAL_STYLE_LIBRARY[idx];
+}
+
 // ─── Helper: data no fuso de São Paulo (UTC-3, sem DST desde 2020) ───────────
 
 function getSPDate() {
@@ -300,9 +358,8 @@ function getSPDate() {
 type MsgContent = string | Array<Record<string, unknown>>;
 
 async function generateImage(content: MsgContent, format: "group" | "portrait"): Promise<string> {
-  // aspect_ratio é ignorado pelo OpenRouter/Recraft — usar size com px explícito
-  // group = Feed 1800×630, portrait = 9:16 Story 1024×1820
-  const size = format === "group" ? "1920x1080" : "1024x1820";
+  // Recraft sizes: 1820x1024 = landscape ~16:9 | 1024x1820 = portrait ~9:16
+  const size = format === "group" ? "1820x1024" : "1024x1820";
   const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
   if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY não configurado no Trigger.dev");
 
@@ -551,6 +608,7 @@ async function executar(input: Input, runId: string): Promise<Output> {
   const selectedPhrase = input.custom_theme ? null : selectPhrase(weekday, dateStr);
   const dailyTone      = DAILY_TONE[weekday] ?? DAILY_TONE[1];
   const palette        = selectPalette(weekday, dateStr);
+  const visualStyle    = selectVisualStyle(weekday, dateStr);
 
   logger.info("bom-dia-gerar-imagem iniciado", { dateStr, dayName, theme, calendarId, isManual });
 
@@ -604,66 +662,55 @@ async function executar(input: Input, runId: string): Promise<Output> {
     ? `\nContexto adicional (PRIORIDADE — guia a criatividade): ${input.custom_brief.trim()}`
     : "";
 
-  // Quando há um brief manual, a cena descrita tem prioridade total sobre os elementos padrão.
-  // Se o brief descreve uma pessoa/personagem, a restrição "NO people" é substituída por uma
-  // instrução de ilustração estilizada — o cliente pediu aquela cena específica.
-  const sceneElementsInstruction = input.custom_brief
-    ? `- Primary scene (PRIORITY — follow the custom brief above): build the full composition around the described scene`
-    : `- Today's featured scene elements (prioritize these): ${dailyTone.elements}`;
+  const customBriefInstruction = input.custom_brief?.trim()
+    ? `PRIORITY SCENE (override style defaults): ${input.custom_brief.trim()} — if this describes a person, depict as flat-vector or isometric 3D illustration, never photorealistic.`
+    : "";
 
-  const styleRestrictions = input.custom_brief
-    ? `- If the brief describes a person, character, or specific scene with humans: depict them as a clean stylized flat-vector or soft isometric 3D illustration (no photorealism, no hyper-detailed realistic faces — stylized/illustrated character is correct). The brief scene takes FULL priority.
-   - NO real food photography, balloons, flags, confetti, neon lights, watercolor texture, anime/manga style`
-    : `- NO people, hands, faces, mascots, real food, balloons, flags, confetti, neon, anime, cartoon, watercolor`;
+  const peopleRule = visualStyle.allowPeople
+    ? `- Central character (REQUIRED): one illustrated character — flat-vector or isometric 3D ONLY (no photorealistic faces). Options: delivery rider on motorcycle with bag, smiling restaurant owner holding tablet, chef in white coat, or customer receiving order box.`
+    : `- NO people, NO hands, NO faces, NO mascots`;
+
+  const headlineColorRule = visualStyle.headlineColor === "dark"
+    ? `bold dark #1A1A1A or red #B70C00 condensed headline text`
+    : `bold white #FFFFFF condensed headline text`;
 
   const claudeResp = await anthropic.messages.create({
     model:      "claude-sonnet-4-6",
-    max_tokens: 1200,
-    system: `Você é o Superagente de Imagens de Bom Dia da Consult Delivery — consultoria de delivery do Wandson Silva. Seg–Sáb às 09h, gere o pacote diário: prompt de imagem + headline + legenda + tema.
+    max_tokens: 1400,
+    system: `Você é o Superagente de Imagens de Bom Dia da Consult Delivery — consultoria de delivery do Wandson Silva. Gere diariamente: prompt de imagem (DALL-E/Recraft) + headline + legenda para WhatsApp.
 
-═══ ESTILO VISUAL — REGRAS RÍGIDAS ═══
-Paleta EXCLUSIVA (use SOMENTE estas cores):
-  #0D0D0D (fundo dominante ~70%) · #050505 (sombras profundas) · #B70C00 (vermelho marca)
-  #8A0900 (vermelho escuro gradiente) · #FFFFFF (branco) · #6E6E6E (cinza neutro)
-PROIBIDO: azul, amarelo, verde, laranja, roxo, dourado, pastel, neon, glitch, gradientes coloridos.
+═══ ESTILOS VISUAIS ═══
+O estilo do dia é indicado no input. Siga RIGOROSAMENTE o estilo indicado — não misture estilos.
 
-Fundo: preto puro #0D0D0D + degradê radial vermelho #B70C00 (~55% opacidade) vindo do CANTO INFERIOR ESQUERDO.
-Elementos técnicos obrigatórios (sutis):
-  • 6–12 linhas finas de wi-fi/sinal (branco/vermelho semi-transparente, 20–40% opac.) cruzando o TOPO
-  • 4–8 trilhas de "circuito impresso" em vermelho saindo do CANTO INFERIOR ESQUERDO, com nós brancos nos cruzamentos (30–60% opac.)
+Estilo A — TECH ESCURO: fundo preto #0D0D0D com degradê radial vermelho do canto inferior esquerdo. Cena isométrica 3D estilo Cinema 4D/Blender. Elementos tech + delivery. Headline branca.
 
-═══ CENA ISOMÉTRICA 3D (OBRIGATÓRIA) ═══
-Renderização estilo Cinema 4D/Blender, ângulo ~30°, iluminação dramática vermelha de baixo-esquerda.
-Elementos canônicos — use 4–6 destes por arte:
-  • Tablet preto: dashboard de pedidos (gráficos de barra, valores R$, setas crescimento vermelhas)
-  • Celular preto: app de delivery (card de pedido, botão vermelho de ação)
-  • Caixa de papelão preta: foguete Consult Delivery estampado em branco/vermelho
-  • Caderno espiral: checklist manuscrita (caneta preta + círculos/destaques vermelhos)
-  • Engrenagem cinza pequena (representa automação/processo)
-  • Pasta/clipboard preta · Notebook entreaberto com gráficos (segundo plano)
-PROIBIDO na cena: pessoas, mãos, rostos, mascotes, comida real (pizza/hambúrguer/sushi/etc.),
-bandeiras, balões, confetes, sparkles. Sem texto inventado dentro dos dispositivos (apenas barras/ícones).
+Estilo B — MINIMALISTA CLARO: fundo branco #FFFFFF ou cinza claro #F4F4F4, composição limpa com muito espaço negativo. Elementos flat simples. Headline preta #1A1A1A ou vermelha #B70C00. SEM fundo escuro, SEM gradientes pesados.
+
+Estilo C — MAPA URBANO: fundo azul noturno #08122A com mapa de ruas estilizado (linhas finas 25–35% opac), pins vermelhos, rotas tracejadas. Elementos de delivery sobrepostos ao mapa. Headline branca.
+
+Estilo D — RESTAURANTE QUENTE: fundo escuro quente #1A0A00 com luz âmbar #D4630A vinda de cima (cozinha profissional). Elementos de restaurante e food service. Headline branca.
+
+Estilo E — ILUSTRAÇÃO COM PERSONAGEM: fundo escuro rico (marinho ou grafite) com ilustração flat-vector ou isométrica 3D vibrante. OBRIGATÓRIO incluir personagem central ilustrado (motoboy, chef, dono de loja). Headline branca.
+
+═══ BIBLIOTECA DE ELEMENTOS — VARIE, NÃO REPITA OS MESMOS 3 DIAS SEGUIDOS ═══
+Tecnologia: tablet com dashboard de pedidos (gráficos barra, R$), celular com app delivery, laptop com métricas
+Delivery & Logística: motoboy em motion blur (isométrico), bag térmica de delivery, caixa de papelão com logo foguete, moto isométrica, rota no mapa com pins
+Restaurante & Food: cardápio aberto estilizado, tábua de corte com formas geométricas, embalagem para viagem, copo descartável de café, talher isométrico, chapéu de chef 3D, balcão de atendimento isométrico, fogão industrial clean
+Financeiro & Crescimento: gráficos de barra crescentes 3D, setas de crescimento com motion trail, moedas empilhadas flat, recibo/ticket digital, cifrão R$ estilizado, funil de conversão
+Processo & Gestão: caderno espiral com checklist, engrenagem pequena cinza, relógio/cronômetro, calendário, pasta/clipboard, estrelas de avaliação, badge de meta atingida
 
 ═══ TIPOGRAFIA ═══
-Headline: font condensada bold sem serifa (Oswald/Inter ExtraBold), branca #FFFFFF, Title Case.
-Sublinha: font regular, cinza #6E6E6E ou branco 80%.
-SEM emoji no design. SEM itálico. SEM glow. SEM contorno duplo.
+Headline: font condensada bold sem serifa (Oswald/Inter ExtraBold), Title Case. Estilo B: preta/vermelha. Demais: branca.
+SEM emoji no design. SEM itálico. SEM glow excessivo. SEM contorno duplo.
 
-═══ COMPOSIÇÃO E LOGO (OBRIGATÓRIO) ═══
-TODA arte deve incluir o logotipo da Consult Delivery no canto inferior direito:
-  • Foguete estilizado em vermelho #B70C00 com chamas brancas, fundo transparente (sem caixa)
-  • Texto "Consult Delivery" em fonte condensada bold branca ao lado do foguete
-  • Tamanho: ~10% da largura total — visível mas discreto
+═══ LOGO CONSULT DELIVERY (OBRIGATÓRIO em TODOS os estilos) ═══
+Canto inferior direito: foguete vermelho #B70C00 + chamas brancas + texto "Consult Delivery" condensado bold branco (~10% da largura total). Sem caixa ao redor (Estilo B: pode ter fundo vermelho pequeno para contraste).
 
-STORY 9:16 (vertical): headline no topo-esquerdo · cena isométrica na parte inferior · logo Consult Delivery (foguete vermelho + texto branco) no canto inferior direito.
-FEED 16:9 (landscape): cena isométrica à esquerda · headline+sublinha à direita · logo Consult Delivery (foguete vermelho + texto branco) no canto inferior direito.
-
-═══ LEGENDA WHATSAPP (4 blocos, PT-BR) ═══
-Estrutura FIXA — 4 blocos separados por linha em branco:
-  Bloco 1: [1 emoji temático: 🧭/🚀/🎯/⚡/⏰/📊] Bom dia da equipe Consult Delivery!
-  Bloco 2: 2–3 frases conectando o tema à realidade do dono de delivery (pedidos, ticket médio, cardápio, iFood, equipe). Termina com palavra-chave do tema.
-  Bloco 3: "🕗 Atendimento Consult Delivery: [horário exato]"
-  Bloco 4: Convite de disponibilidade. SEM links, @, telefone, hashtags, CTAs de compra.
+═══ LEGENDA WHATSAPP (PT-BR, 4 blocos, linha em branco entre cada) ═══
+Bloco 1: [1 emoji temático] Bom dia da equipe Consult Delivery!
+Bloco 2: 2–3 frases sobre o tema para donos de delivery — NUNCA mencione dia da semana pelo nome; NÃO repita "Consult Delivery" aqui nem nos demais blocos
+Bloco 3: horário de atendimento exato (fornecido no input)
+Bloco 4: disponibilidade da equipe — SEM links, @, hashtag, CTA de compra
 
 Retorne SOMENTE JSON válido, sem texto extra.${memoryBlock}${instructionsBlock}${feedbackContext}`,
     messages: [{
@@ -671,35 +718,33 @@ Retorne SOMENTE JSON válido, sem texto extra.${memoryBlock}${instructionsBlock}
       content: `Dia: ${dayName}
 Tema: ${theme}
 Data: ${dateStr}
+Estilo visual do dia: Estilo ${visualStyle.id} — ${visualStyle.name}
 Horário: ${hoursLine}${briefLine}${selectedPhrase ? `\nFrase do dia (headline base — use ou adapte): "${selectedPhrase.main}"${selectedPhrase.sub ? `\nSubtítulo sugerido: "${selectedPhrase.sub}"` : ""}` : ""}
 Tom do dia: ${dailyTone.mood}
-Elementos visuais do dia: ${dailyTone.elements}
+Elementos sugeridos para o dia: ${dailyTone.elements}
 Iluminação do dia: ${dailyTone.lighting}
 
 Gere JSON com exatamente 4 campos:
 
-1. "dalle_prompt" (em INGLÊS — para gerador de imagem Recraft V4.1):
-   Descreva a cena completa seguindo o estilo obrigatório:
-   - ${palette.background}
-   - ${palette.rimLight}
-   ${sceneElementsInstruction}
-   - Today's lighting mood: ${dailyTone.lighting}
-   - Supporting isometric mockups from approved list (use 2–4 that fit the scene's theme): [matte black tablet displaying delivery order dashboard with accent-color bar charts and R$ values | black smartphone with delivery app showing accent-color CTA button and order card | matte black cardboard delivery box with white/accent rocket logo stamp | spiral notebook with handwritten checklist and accent-color highlights | small gray metallic gear | black document clipboard/folder | isometric delivery motorcycle (matte black, accent-color details, no rider) | insulated delivery backpack/bag (dark, branded with accent stripe) | simplified isometric city block skyline silhouette (dark buildings, accent window lights, small and in background) | isometric restaurant storefront (dark facade, neon-free, accent-color signage, small scale) | isometric food tray with covered dish (dark matte, restaurant service style)]
-   - Subtle wi-fi/signal wave lines crossing the top (white and accent color, 20–40% opacity, curved, thin ~1px)
-   - Circuit trace paths from bottom-left corner, small white node dots at intersections (accent color, 30–60% opacity)
-   - Bottom-right corner: Consult Delivery logo — a red rocket #B70C00 with white flame details beside bold white text "Consult Delivery" in condensed sans-serif, logo ~10% of canvas width, no box or background around it
-   - Bold white condensed sans-serif headline text area related to: "${theme}"
+1. "dalle_prompt" (em INGLÊS — para gerador Recraft V4.1):
+   Siga RIGOROSAMENTE o Estilo ${visualStyle.id}. Estrutura obrigatória:
+   - Background: ${visualStyle.bgDesc}
+   - Lighting: ${dailyTone.lighting} adapted to Style ${visualStyle.id}
+   ${customBriefInstruction ? `- ${customBriefInstruction}` : `- Scene elements (choose 4–6 VARIED items from the library that match theme "${theme}" and Style ${visualStyle.id}): combine items from different categories — tech devices, delivery/logistics, restaurant, financial/growth, process/management`}
+   ${peopleRule}
+   - Logo (MANDATORY): bottom-right corner — red rocket #B70C00 with white flame trails beside bold white text "Consult Delivery" in condensed sans-serif, ~10% canvas width, no box/background
+   - Headline text on image: ${headlineColorRule} (Title Case, max 7 words, no glow, no italic): related to "${theme}"
    - ${palette.colors}
-   ${styleRestrictions}
+   - NO real food photography (actual pizza/burger/sushi dishes), NO balloons, NO flags, NO confetti, NO neon signs, NO anime/manga, NO watercolor
    - DO NOT mention pixel dimensions or aspect ratio in this prompt
 
-2. "text_on_image" (PT-BR, máx 7 palavras, Title Case): ${selectedPhrase ? `use ou adapte esta frase como headline: "${selectedPhrase.main}"` : `headline curta e impactante para a arte, tema: "${theme}"`}
+2. "text_on_image" (PT-BR, máx 7 palavras, Title Case): ${selectedPhrase ? `use ou adapte: "${selectedPhrase.main}"` : `headline curta e impactante para o tema: "${theme}"`}
 
 3. "caption" (PT-BR, EXATAMENTE 4 blocos separados por linha em branco):
    Bloco 1: [emoji temático único] Bom dia da equipe Consult Delivery!
-   Bloco 2: 2–3 frases sobre "${theme}" para donos de restaurante/delivery — NUNCA mencione o dia da semana pelo nome (o cliente pode trabalhar qualquer dia da semana) — NÃO repita "Consult Delivery" neste bloco nem em nenhum outro; o nome aparece apenas no Bloco 1
+   Bloco 2: 2–3 frases sobre "${theme}" para donos de restaurante/delivery — NUNCA mencione dia da semana; NÃO repita "Consult Delivery"
    Bloco 3: ${hoursLine}
-   Bloco 4: disponibilidade da equipe — NÃO repita "Consult Delivery" aqui (sem links, @, hashtag)
+   Bloco 4: disponibilidade da equipe — sem links, @, hashtag
 
 4. "theme": tema resumido em PT-BR
 
@@ -730,15 +775,20 @@ Retorne: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme":"..
   // 4. Prompts de texto puro — Recraft respeita size com texto (multimodal quebra)
   // Headline e área de logo são adicionados como sufixo ao prompt gerado pelo Claude
   const textSuffix = `Bold white condensed headline text center-stage (Title Case, no glow, no italic): "${claudeOut.text_on_image}". Bottom-right corner: Consult Delivery logo — red rocket #B70C00 with white flame trails beside bold white text "Consult Delivery" in condensed sans-serif, ~10% canvas width, no box/background around logo.`;
-  // Same base prompt for both formats — only the API size parameter changes orientation
-  const sharedPrompt = `${claudeOut.dalle_prompt}. ${textSuffix}`;
+
+  // Format-specific layout cues — critical for Recraft to compose correctly per orientation
+  const feedLayoutCue    = `HORIZONTAL LANDSCAPE 16:9 composition: main visual elements fill center and right side, wide panoramic layout, headline text zone on the left third.`;
+  const portraitLayoutCue = `VERTICAL PORTRAIT 9:16 composition: TALL narrow vertical format, headline text fills the TOP THIRD of the canvas, main visual scene fills the CENTER and BOTTOM two-thirds, narrow column layout optimized for mobile Story viewing.`;
+
+  const feedPrompt     = `${claudeOut.dalle_prompt}. ${feedLayoutCue} ${textSuffix}`;
+  const portraitPrompt = `${claudeOut.dalle_prompt}. ${portraitLayoutCue} ${textSuffix}`;
 
   let imgGroupUrl: string | undefined;
   let imgPortraitUrl: string | undefined;
 
   if (formats === "feed" || formats === "both") {
-    logger.info("bom-dia: gerando Feed 1800×630 via Recraft V4.1");
-    const groupTempUrl = await generateImage(sharedPrompt, "group");
+    logger.info("bom-dia: gerando Feed 16:9 via Recraft V4.1");
+    const groupTempUrl = await generateImage(feedPrompt, "group");
     logger.info("bom-dia: upload Feed para Supabase Storage");
     imgGroupUrl = await uploadToStorage(groupTempUrl, groupStoragePath, "group");
   }
@@ -748,7 +798,7 @@ Retorne: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme":"..
       // Portrait is optional when feed already succeeded — don't fail the whole run
       try {
         logger.info("bom-dia: gerando Story 9:16 via Recraft V4.1");
-        const portraitTempUrl = await generateImage(sharedPrompt, "portrait");
+        const portraitTempUrl = await generateImage(portraitPrompt, "portrait");
         logger.info("bom-dia: upload Story para Supabase Storage");
         imgPortraitUrl = await uploadToStorage(portraitTempUrl, portraitStoragePath, "portrait");
       } catch (portraitErr) {
@@ -756,7 +806,7 @@ Retorne: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme":"..
       }
     } else {
       logger.info("bom-dia: gerando Story 9:16 via Recraft V4.1");
-      const portraitTempUrl = await generateImage(sharedPrompt, "portrait");
+      const portraitTempUrl = await generateImage(portraitPrompt, "portrait");
       logger.info("bom-dia: upload Story para Supabase Storage");
       imgPortraitUrl = await uploadToStorage(portraitTempUrl, portraitStoragePath, "portrait");
     }
