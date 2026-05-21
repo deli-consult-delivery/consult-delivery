@@ -354,10 +354,12 @@ function getSPDate() {
 }
 
 // ─── Helper: gerar imagem via OpenRouter (Recraft V4.1 Utility) ──────────────
-// Usa /images/generations (não /chat/completions) — honra o parâmetro size para portrait
+// OpenRouter só expõe /chat/completions — /images/generations retorna 404.
+// O size é passado no body (alguns providers repassam ao Recraft).
+// Portrait é reforçado via prompt de layout mesmo que size seja ignorado.
 
 async function generateImage(prompt: string, format: "group" | "portrait"): Promise<string> {
-  // Recraft sizes oficiais: 1820x1024 = landscape 16:9 | 1024x1820 = portrait 9:16
+  // Recraft sizes: 1820x1024 = landscape 16:9 | 1024x1820 = portrait 9:16
   const size = format === "group" ? "1820x1024" : "1024x1820";
   const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
   if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY não configurado no Trigger.dev");
@@ -365,7 +367,7 @@ async function generateImage(prompt: string, format: "group" | "portrait"): Prom
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       logger.info("bom-dia: recraft request", { format, size, attempt, promptLen: prompt.length });
-      const r = await fetch("https://openrouter.ai/api/v1/images/generations", {
+      const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type":  "application/json",
@@ -374,10 +376,10 @@ async function generateImage(prompt: string, format: "group" | "portrait"): Prom
           "X-Title":       "Consult Delivery Bom Dia",
         },
         body: JSON.stringify({
-          model:  "recraft/recraft-v4.1-utility",
-          prompt,
+          model:    "recraft/recraft-v4.1-utility",
+          messages: [{ role: "user", content: prompt }],
           size,
-          n:      1,
+          n:        1,
         }),
         signal: AbortSignal.timeout(90_000),
       });
@@ -395,17 +397,16 @@ async function generateImage(prompt: string, format: "group" | "portrait"): Prom
         throw new Error(`OpenRouter retornou resposta não-JSON: ${rawText.slice(0, 300)}`);
       }
 
-      // images/generations response: { data: [{ url: "..." }] }
-      type ImgItem = { url?: string; b64_json?: string };
-      const imgData = (data.data as Array<ImgItem> | undefined)?.[0];
-      if (imgData?.url) return imgData.url;
-      if (imgData?.b64_json) return `data:image/png;base64,${imgData.b64_json}`;
-
-      // Fallback: chat/completions format (caso OpenRouter mude o response shape)
       type MsgWithImages = { content: unknown; images?: Array<{ image_url?: { url: string } }> };
       const msg = (data.choices as Array<{ message: MsgWithImages }> | undefined)?.[0]?.message;
       if (msg?.images?.[0]?.image_url?.url) return msg.images[0].image_url.url;
       if (typeof msg?.content === "string" && (msg.content as string).trim()) return (msg.content as string).trim();
+
+      // Fallback: formato images/generations caso OpenRouter adicione suporte
+      type ImgItem = { url?: string; b64_json?: string };
+      const imgData = (data.data as Array<ImgItem> | undefined)?.[0];
+      if (imgData?.url) return imgData.url;
+      if (imgData?.b64_json) return `data:image/png;base64,${imgData.b64_json}`;
 
       throw new Error(`OpenRouter não retornou imagem. Preview: ${rawText.slice(0, 400)}`);
     } catch (err) {
