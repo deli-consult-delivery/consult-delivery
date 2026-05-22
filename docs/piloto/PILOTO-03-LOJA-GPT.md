@@ -491,3 +491,39 @@ Após Pages deploy, screenshots confirmam:
 - Playwright/Cypress E2E test que clica numa conversa e verifica que mensagens renderizam
 - Manual checklist: "abrir app + clicar conversa + verificar render" como passo obrigatório do smoke
 - Validar render via screenshot diff automatizado
+
+---
+
+## Update — Decisões sobre Tech Debt arquitetural (2026-05-22, sessão pós-merge +2h)
+
+Após mapeamento dos tech debts #1 e #2 (CI/CD que sobrescreve deploys + branches VPS divergentes), **decisão do CEO de aceitar o comportamento atual**, sem aplicar fix arquitetural agora.
+
+### Tech Debt #1 (CI auto-deploy Trigger.dev)
+
+**Rebaixado de Alta → Aceitar.**
+
+Workflow `.github/workflows/deploy.yml` tem job `deploy-trigger` que roda `npx trigger.dev deploy --native-build-server` a cada push em main. Isso significa que validar feature branch via Trigger.dev deploy manual é sobrescrito quando feature é mergeada (CI re-deploya com versão de main).
+
+**Comportamento aceito porque:**
+- Toda Onda termina em merge → main, então o "Current" volta ao código correto naturalmente
+- Workaround durante validação: redeploy manual da feature após cada push em main
+- Wandson conhece esse fluxo, é decisão informada
+
+### Tech Debt #2 (branches VPS divergentes)
+
+**Rebaixado de Alta → Não-bloqueio.**
+
+Investigação mostrou que a "divergência de 24 commits" entre VPS e origin é **artefato do CI**, não trabalho órfão. O job `deploy-bridge` faz `git reset --hard origin/main` SEM trocar pra main primeiro — então a branch local (qualquer que seja) passa a apontar pra HEAD de main. Conteúdo está sempre sincronizado com main; só os ponteiros locais ficam confusos.
+
+**Comportamento aceito porque:**
+- Nenhum trabalho real se perde
+- Bridge na VPS sempre roda código de main
+- Confusão de branch só atrapalha quem faz checkout manual na VPS pra debug — raro
+
+### Cleanup aplicado
+
+- Branch `backup/vps-bomdia-encerramento-2026-05-22` deletada do origin (preservação desnecessária — commits já em main)
+
+### Implicação pra Onda 04
+
+Próximas Ondas seguem fluxo: feature branch → smoke local + manual Trigger.dev deploy → merge → CI re-aplica → validar render UI em produção (Tech Debt #15).
