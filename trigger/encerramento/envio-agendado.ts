@@ -211,7 +211,7 @@ async function enviarEncerramento(runId: string, weekdayLabel: string): Promise<
         body: JSON.stringify({
           group_jids: groupJids,
           image_url:  imgGroupUrl,
-          caption:    `${caption ?? ""}\n\nEquipe Consult Delivery 🚀`,
+          caption:    `${caption ?? ""}\n\nEquipe Consult Delivery 🚀\n\n*🤖 Mensagem automática*`,
           tenant_id:  tenantId,
         }),
         signal: AbortSignal.timeout(30_000),
