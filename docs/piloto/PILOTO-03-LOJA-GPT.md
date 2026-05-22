@@ -105,11 +105,11 @@ CREATE TABLE IF NOT EXISTS loja_gpt_messages (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   conversation_id uuid NOT NULL REFERENCES loja_gpt_conversations(id) ON DELETE CASCADE,
   
-  role text NOT NULL CHECK (role IN ('user','assistant','system','tool')),
+  role text NOT NULL CHECK (role IN ('user','assistant','tool')),
   conteudo text NOT NULL,
   
   -- Citações e contexto usado
-  fontes_consultadas jsonb DEFAULT '[]', -- array de {tipo, arquivo, trecho}
+  fontes_consultadas jsonb NOT NULL DEFAULT '[]', -- array de {tipo, arquivo, trecho}
   contexto_loja_snapshot jsonb,           -- snapshot do contexto no momento
   
   -- Custo
@@ -117,10 +117,10 @@ CREATE TABLE IF NOT EXISTS loja_gpt_messages (
   tokens_output integer,
   custo_usd numeric(10,6),
   duracao_ms integer,
+  modelo text,
   
   -- Audit
-  agent_run_id uuid REFERENCES agent_runs(id),
-  autor_user_id uuid REFERENCES auth.users(id), -- se user
+  autor_user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL, -- se user
   
   created_at timestamptz DEFAULT now()
 );
@@ -143,6 +143,12 @@ CREATE POLICY "Ver mensagens via conversation"
 
 COMMIT;
 ```
+
+> **Histórico de decisões (2026-05-21):**
+> - `agent_run_id` removido — pode voltar em migration futura se precisar cruzar com `agent_runs`. Não bloqueia Loja-GPT v1.
+> - `modelo` adicionado — necessário pra rastreamento de custo por modelo (claude-sonnet-4-6 vs outros).
+> - `'system'` removido do CHECK — Anthropic API trata system como parâmetro separado, não como mensagem gravada.
+> - `NOT NULL` e `ON DELETE SET NULL` explícitos — hardening defensivo.
 
 ---
 
@@ -221,6 +227,7 @@ Input Zod:
   conversation_id: uuid (cria nova se null),
   loja_id: uuid,
   user_id: uuid,
+  tenant_id: uuid,
   pergunta: string
 }
 
@@ -361,3 +368,83 @@ Começar Tarefa 1. ME PERGUNTAR ao terminar cada uma.
 | Custo Anthropic explodir | Limite max_tokens=2000, alertar se >$0.50/msg |
 | Loja-GPT alucinar | Sistema prompt rigoroso + obrigatoriedade de citar |
 | Citações inválidas | Validar [REF:...] no backend antes de retornar |
+
+---
+
+## Status Final — 2026-05-22
+
+**Onda 03 concluída.** Pipeline Loja-GPT validado end-to-end em produção.
+
+### Tarefas
+
+| # | Tarefa | Status | Hash |
+|---|---|---|---|
+| 1 | Reconhecimento | ✅ Done | — |
+| 2 | Migrations 01+02 | ✅ Done | `f33324d` + sync `641a2d1` |
+| 3 | Helper buildLojaContexto | ✅ Done | `1a3023d` |
+| 4 | Helper searchKnowledgeBase | ✅ Done | `ffb78e9` |
+| 4.5 | Refactor claude.ts lazy singleton | ✅ Done | `448fa3e` |
+| 5 | Task loja-gpt-responder (Trigger.dev) | ✅ Done | `fefbe69` |
+| 6 | 5 endpoints Bridge Server | ✅ Done | `cccc3b2` |
+| 7 | TabIaEspecialista (React) | ✅ Done | `59e5904` |
+| 8 | Indicador custo BRL | ✅ Done | `fc1ba87` |
+| 9 | System prompt | ✅ Done (dentro do `fefbe69`) | — |
+| 10 | Smoke E2E | ✅ Done | `bac1880` + `6014f7f` + `f8dd468` + `aa3e056` |
+
+### Smoke E2E — Resultados
+
+Executado contra loja **Varanda's Restaurante & Pizzaria** (`6a8c6978-8575-45a2-b971-00bd9a81c754`), tenant `consult`.
+
+- ✅ GET conversations — 200, lista vazia inicial
+- ✅ POST conversation — 201, persistido em `loja_gpt_conversations`
+- ✅ POST messages — 200 em 21s, task `loja-gpt-responder` executou Anthropic Sonnet 4.6
+- ✅ KB consultada com 3 fontes citadas no output: `algoritmo-relevancia.md`, `operacao-metricas.md`, `_index.md`
+- ✅ Resposta cita explicitamente `[REF:02-suporte-sistemas/ifood/algoritmo-relevancia.md]`
+- ✅ Custo registrado: `$0.017148` / mensagem (3251 tokens input / 493 output)
+- ✅ PATCH archive — 200, `arquivada: true`
+- ✅ Regra de negócio: POST em arquivada → 422
+- ✅ FK `agent_runs.agent_id → agents.id` satisfeita (agent `loja-gpt` registrado)
+
+### Decisões Arquiteturais Tomadas no Smoke
+
+1. **KB no bundle do Trigger.dev cloud** — solução intermediária: copiar `consult-delivery-knowledge` para `trigger/knowledge-base/` no repo principal, usar `additionalFiles` em `trigger.config.ts` pra forçar inclusão dos `.md`. Path final: `/app/trigger/knowledge-base` (via env var `KNOWLEDGE_BASE_PATH`).
+2. **Agent `loja-gpt` registrado** na tabela `agents` (id text, letter `L`, color `#8B5CF6`, default_modo `ia`).
+3. **`_index.md` da KB** corrigido pra usar paths completos `02-suporte-sistemas/ifood/...` ao invés de `ifood/...`.
+
+---
+
+## Tech Debt — Onda 04
+
+### Alta prioridade
+
+1. **CI/CD auto-deploy do Trigger.dev de `main`** sobrescreve deploys de feature branches. Qualquer Onda futura vai bater nisso. Soluções possíveis: filtrar workflow por branch, exigir approval manual, ou só rodar deploy após merge.
+2. **Branches locais divergentes na VPS** sem governança (descoberto durante smoke: `feature/piloto-03-loja-gpt` tinha 17 commits órfãos com features BomDia/Encerramento; `feature/v2-cora-asaas` 168 commits ahead do origin). Trabalho preservado em `origin/backup/vps-bomdia-encerramento-2026-05-22`. Investigar quem está commitando direto na VPS sem push.
+3. **KB duplicada** em 2 repos (`consult-delivery-knowledge` separado + `consult-delivery/trigger/knowledge-base` no bundle). Sync manual frágil. Migrar pra git submodule ou refatorar `searchKnowledgeBase` pra fetch HTTP do GitHub raw.
+
+### Média prioridade
+
+4. **Polling síncrono 60s** em POST /messages bloqueia worker do Bridge. Migrar pra fire-and-forget + Supabase Realtime em `loja_gpt_messages`.
+5. **Race condition no SELECT+UPDATE** de `custo_total_usd` em `loja_gpt_conversations`. Usar increment atômico via RPC SQL.
+
+### Baixa prioridade
+
+6. **GitHub Actions `deploy.yml`** só dispara em main — frontend de feature branches sem live preview.
+7. **JWT Supabase TTL 1h** — sessão de smoke precisou relogar 3x. Considerar refresh token automático no Bridge.
+8. **`react-markdown`** pra render rico das respostas IA (atualmente `formatWhatsApp` mínimo).
+9. **Cleanup periódico de conversas vazias** (D3A cria conv ao clicar "Nova", podem acumular órfãs).
+10. **`agent_runs.input`** quando `conversation_id` é null no disparo — registro órfão no audit.
+
+### Cosmético
+
+11. Hover do botão Arquivar via ref callback manipulando DOM no parent — refatorar pra CSS class ou React state.
+12. Animação `lgpt-bounce` referenciada em TypingIndicator — validar keyframes em `src/index.css`.
+13. Hardcoded `USD_TO_BRL = 5.3` no TabIaEspecialista — atualizar periodicamente ou puxar de API.
+14. Endpoint `GET /agents/loja-gpt-responder/runs/:run_id` mencionado na resposta 202 do Bridge — não foi implementado nesta Onda, smoke recomendado manual.
+
+---
+
+## Pendências de Cleanup
+
+- 5 conversas de teste criadas no smoke em `loja_gpt_conversations` (loja Varanda's) — podem ser arquivadas ou deletadas.
+- VPS está no checkout temporário de `feature/piloto-03-loja-gpt` (não em `main`). Próxima sessão: decidir merge feature→main ou reset pro main da VPS.
+- Branch `backup/vps-bomdia-encerramento-2026-05-22` no origin preserva trabalho órfão da VPS — decidir destino (merge em main, descartar, ou virar PR separada).
