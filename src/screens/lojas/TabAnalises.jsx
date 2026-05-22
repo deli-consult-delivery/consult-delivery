@@ -117,10 +117,14 @@ const TIPO_LABEL = {
 
 // ── Modal: Nova análise ───────────────────────────────────────────────────────
 
-function ModalNovaAnalise({ lojaId, onClose, onSaved }) {
+function ModalNovaAnalise({ lojaId, onClose, onSaved, onAccepted }) {
   const [form, setForm] = useState({ loom_url: '', tipo: 'periodica', transcricao: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  // 'form' → 'result' (200) ou onSaved (202/erro)
+  const [viewMode, setViewMode] = useState('form');
+  const [resultAnalise, setResultAnalise] = useState(null);
+  const [tarefasPreview, setTarefasPreview] = useState([]);
 
   function handleChange(e) {
     const { name, value } = e.target;
@@ -159,13 +163,41 @@ function ModalNovaAnalise({ lojaId, onClose, onSaved }) {
         return;
       }
 
-      // 200 = concluído; 202 = ainda processando (aguardar)
-      onSaved(analise, status === 202);
+      if (status === 200) {
+        // Busca analise atualizada (com resumo_executivo) + preview de tarefas
+        const [{ data: analiseAtualizada }, { data: previews }] = await Promise.all([
+          supabase
+            .from('analises')
+            .select('id,tipo,status,resumo_executivo,total_tarefas_geradas,relatorio_markdown,loom_url,created_at')
+            .eq('id', analise.id)
+            .single(),
+          supabase
+            .from('tarefas_loja')
+            .select('id,titulo,bloco,prioridade,ordem')
+            .eq('analise_id', analise.id)
+            .order('ordem', { ascending: true })
+            .limit(5),
+        ]);
+        setResultAnalise(analiseAtualizada || { ...analise, total_tarefas_geradas: body.tarefas_geradas || 0 });
+        setTarefasPreview(previews || []);
+        setViewMode('result');
+        return;
+      }
+
+      // 202 = ainda processando — fecha o modal e mostra banner
+      onSaved(analise, true);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleRefazer() {
+    setViewMode('form');
+    setResultAnalise(null);
+    setTarefasPreview([]);
+    setError(null);
   }
 
   return (
@@ -200,7 +232,108 @@ function ModalNovaAnalise({ lojaId, onClose, onSaved }) {
           </button>
         </div>
 
+        {/* ── Resultado pós-processamento ───────────────────────────────── */}
+        {viewMode === 'result' && resultAnalise && (
+          <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* Cabeçalho */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 18 }}>✅</span>
+              <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--g-900, #fff)' }}>
+                Análise processada!
+              </span>
+              {resultAnalise.total_tarefas_geradas > 0 && (
+                <span style={{
+                  fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
+                  background: 'rgba(16,185,129,0.12)', color: '#10b981',
+                  border: '1px solid rgba(16,185,129,0.25)',
+                }}>
+                  {resultAnalise.total_tarefas_geradas} tarefas
+                </span>
+              )}
+            </div>
+
+            {/* Resumo executivo */}
+            {resultAnalise.resumo_executivo && (
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--g-500, #6b7280)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
+                  Resumo Executivo
+                </div>
+                <div style={{
+                  padding: '10px 12px', borderRadius: 8, maxHeight: 140, overflowY: 'auto',
+                  background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.18)',
+                  fontSize: 12, color: 'var(--g-800, #e5e7eb)', lineHeight: 1.7,
+                }}>
+                  {resultAnalise.resumo_executivo}
+                </div>
+              </div>
+            )}
+
+            {/* Preview das tarefas */}
+            {tarefasPreview.length > 0 && (
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--g-500, #6b7280)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
+                  Tarefas geradas
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 160, overflowY: 'auto' }}>
+                  {tarefasPreview.map((t, i) => (
+                    <div key={t.id} style={{
+                      display: 'flex', alignItems: 'flex-start', gap: 8,
+                      padding: '5px 10px', borderRadius: 6,
+                      background: 'var(--bg-input, #111)', border: '1px solid var(--g-200, #2a2a2a)',
+                    }}>
+                      <span style={{ fontSize: 10, color: 'var(--g-500, #6b7280)', minWidth: 16, flexShrink: 0 }}>
+                        {t.ordem ?? i + 1}.
+                      </span>
+                      <span style={{ fontSize: 12, color: 'var(--g-700, #d1d5db)', flex: 1 }}>
+                        {t.titulo}
+                      </span>
+                      <span style={{
+                        fontSize: 9, color: 'var(--g-500, #6b7280)', textTransform: 'uppercase',
+                        letterSpacing: '0.06em', flexShrink: 0,
+                      }}>
+                        {t.bloco}
+                      </span>
+                    </div>
+                  ))}
+                  {resultAnalise.total_tarefas_geradas > tarefasPreview.length && (
+                    <div style={{ fontSize: 11, color: 'var(--g-500, #6b7280)', padding: '3px 10px' }}>
+                      + {resultAnalise.total_tarefas_geradas - tarefasPreview.length} mais na aba Tarefas
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Ações */}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
+              <button
+                type="button"
+                onClick={handleRefazer}
+                style={{
+                  padding: '8px 18px', borderRadius: 6, cursor: 'pointer',
+                  background: 'transparent', border: '1px solid var(--g-300, #374151)',
+                  color: 'var(--g-600, #9ca3af)', fontSize: 13,
+                }}
+              >
+                Refazer com ajuste
+              </button>
+              <button
+                type="button"
+                onClick={() => onAccepted(resultAnalise)}
+                style={{
+                  padding: '8px 18px', borderRadius: 6, cursor: 'pointer',
+                  background: 'var(--red, #b70c00)', border: 'none',
+                  color: '#fff', fontSize: 13, fontWeight: 600,
+                }}
+              >
+                Aceitar e criar tarefas
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Form */}
+        {viewMode === 'form' && (
         <form onSubmit={handleSubmit} style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Tipo */}
           <div>
@@ -319,6 +452,7 @@ function ModalNovaAnalise({ lojaId, onClose, onSaved }) {
             </button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );
@@ -557,6 +691,14 @@ export default function TabAnalises({ lojaId, userId, onGoToTarefas }) {
     });
   }
 
+  function handleAccepted(analise) {
+    setShowModal(false);
+    loadAnalises().then(() => {
+      setSelectedId(analise.id);
+    });
+    if (onGoToTarefas) onGoToTarefas(analise.id);
+  }
+
   const containerHeight = 560;
   const sidebarWidth = 220;
 
@@ -708,6 +850,7 @@ export default function TabAnalises({ lojaId, userId, onGoToTarefas }) {
           lojaId={lojaId}
           onClose={() => setShowModal(false)}
           onSaved={handleSaved}
+          onAccepted={handleAccepted}
         />
       )}
     </>
