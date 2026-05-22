@@ -682,7 +682,7 @@ export default function TabIaEspecialista({ lojaId, userId }) {
     setLoadingMsgs(true);
     try {
       const data = await bridgeFetch(`/api/loja-gpt/conversations/${convId}`);
-      setMessages(data.messages || []);
+      setMessages(data.conversation?.messages || []);
     } catch (err) {
       setError('Erro ao carregar mensagens: ' + err.message);
       setMessages([]);
