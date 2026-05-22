@@ -57,12 +57,12 @@ Anota AI, Saipos, Cardapio Web, iFood e outros sistemas que a Consult ajuda a us
 | `saipos/` | Tutoriais e troubleshooting Saipos | ⏳ pendente |
 | `cardapio-web/` | Tutoriais e troubleshooting Cardapio Web | ⏳ pendente |
 | `playbook-suporte.md` | Como atender chamado de suporte | ⏳ pendente |
-| `ifood/_index.md` | Sub-índice iFood — algoritmo, super restaurante, promoções, cardápio, operação | ✅ ativo |
-| `ifood/algoritmo-relevancia.md` | Fatores de ranking: volume, cancelamento, nota, tempo, fotos | ✅ ativo |
-| `ifood/super-restaurante.md` | Critérios do selo Super Restaurante (≥4.7 nota, ≥180 pedidos/mês) | ✅ ativo |
-| `ifood/precos-e-promocoes.md` | Cupons, Frete Grátis, Item Patrocinado, pedido mínimo, ticket médio | ✅ ativo |
-| `ifood/cardapio-otimizacao.md` | Fotos, descrições ranqueáveis, categorias, combos, complementos | ✅ ativo |
-| `ifood/operacao-metricas.md` | Taxa cancelamento, tempo preparo, indicadores que o algoritmo usa | ✅ ativo |
+| `02-suporte-sistemas/ifood/_index.md` | Sub-índice iFood — algoritmo, super restaurante, promoções, cardápio, operação | ✅ ativo |
+| `02-suporte-sistemas/ifood/algoritmo-relevancia.md` | Fatores de ranking: volume, cancelamento, nota, tempo, fotos | ✅ ativo |
+| `02-suporte-sistemas/ifood/super-restaurante.md` | Critérios do selo Super Restaurante (≥4.7 nota, ≥180 pedidos/mês) | ✅ ativo |
+| `02-suporte-sistemas/ifood/precos-e-promocoes.md` | Cupons, Frete Grátis, Item Patrocinado, pedido mínimo, ticket médio | ✅ ativo |
+| `02-suporte-sistemas/ifood/cardapio-otimizacao.md` | Fotos, descrições ranqueáveis, categorias, combos, complementos | ✅ ativo |
+| `02-suporte-sistemas/ifood/operacao-metricas.md` | Taxa cancelamento, tempo preparo, indicadores que o algoritmo usa | ✅ ativo |
 
 ### 03-crm/ — Processos CRM
 
