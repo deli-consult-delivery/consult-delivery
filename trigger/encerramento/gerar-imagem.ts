@@ -362,10 +362,10 @@ async function executar(input: Input, runId: string): Promise<Output> {
   const anthropic = new Anthropic();
 
   const returnLine = isSat
-    ? "🕘 Segunda-feira voltamos às 09h | Emergências via WhatsApp"
+    ? "🕘 Segunda-feira voltamos às 09h — demandas recebidas serão respondidas no próximo dia útil"
     : weekday === 5
-      ? "🕘 Voltamos amanhã às 08h | Emergências via WhatsApp"
-      : "🕘 Voltamos amanhã às 09h | Emergências via WhatsApp";
+      ? "🕘 Voltamos amanhã às 08h — demandas recebidas serão respondidas no próximo dia útil"
+      : "🕘 Voltamos amanhã às 09h — demandas recebidas serão respondidas no próximo dia útil";
 
   const briefLine = input.custom_brief?.trim()
     ? `\nContexto adicional: ${input.custom_brief.trim()}`
@@ -408,7 +408,7 @@ Canto inferior direito: foguete laranja #f97316 + chamas brancas + texto "Consul
 
 ═══ LEGENDA WHATSAPP (PT-BR — máx 4 linhas, tom de encerramento) ═══
 Linha 1: "${greetingLine}" + [1 emoji] + frase calorosa de encerramento relacionada ao tema (máx 10 palavras)
-Linha 2: frase mostrando que a Consult Delivery cumpriu mais um dia ao lado da operação do cliente (máx 12 palavras)
+Linha 2: frase curta reforçando que a equipe da Consult Delivery encerrou o expediente e está disponível para responder no próximo dia útil (máx 12 palavras — NÃO mencionar "operação", "pedidos" ou sugerir que o cliente também encerrou)
 [linha em branco]
 Linha 3: horário de retorno (ex: "${returnLine}")
 SEM links, SEM @, SEM hashtag, SEM CTA de compra
@@ -442,7 +442,7 @@ Gere JSON com exatamente 4 campos:
 
 3. "caption" (PT-BR — máx 4 linhas, tom de encerramento):
    Linha 1: "${greetingLine}" + [1 emoji] + frase calorosa de encerramento sobre "${theme}" (máx 10 palavras)
-   Linha 2: frase mostrando que a Consult Delivery cumpriu mais um dia ao lado da operação do cliente (máx 12 palavras)
+   Linha 2: frase curta reforçando que a equipe da Consult Delivery encerrou o expediente e estará disponível no próximo dia útil (máx 12 palavras — NÃO mencionar "operação", "pedidos" ou sugerir que o cliente também encerrou)
    [linha em branco]
    Linha 3: "${returnLine}"
    — sem links, @, hashtag, CTA de compra
