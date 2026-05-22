@@ -4,6 +4,24 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 
+async function withOverloadedRetry<T>(fn: () => Promise<T>, maxAttempts = 4): Promise<T> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err: unknown) {
+      const status = (err as { status?: number })?.status;
+      if (status === 529 && attempt < maxAttempts) {
+        const delay = attempt * 15_000;
+        logger.warn(`Anthropic overloaded (529) — aguardando ${delay / 1000}s antes de tentar novamente`, { attempt });
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error("withOverloadedRetry: unreachable");
+}
+
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
 const InputSchema = z.object({
@@ -361,7 +379,7 @@ async function executar(input: Input, runId: string): Promise<Output> {
 
   const greetingLine = isSat ? "Bom fim de semana!" : "Boa noite!";
 
-  const claudeResp = await anthropic.messages.create({
+  const claudeResp = await withOverloadedRetry(() => anthropic.messages.create({
     model:      "claude-sonnet-4-6",
     max_tokens: 1400,
     system: `Você é o Superagente de Imagens de Encerramento de Expediente da Consult Delivery — consultoria de delivery do Wandson Silva. Gere diariamente: prompt de imagem (Recraft) + headline + legenda WhatsApp para o encerramento do dia de trabalho.
@@ -431,7 +449,7 @@ Gere JSON com exatamente 4 campos:
 
 Retorne: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme":"..."}`,
     }],
-  });
+  }));
 
   const rawText = claudeResp.content
     .filter((b) => b.type === "text")
