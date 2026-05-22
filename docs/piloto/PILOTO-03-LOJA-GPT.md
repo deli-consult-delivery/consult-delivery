@@ -448,3 +448,46 @@ Executado contra loja **Varanda's Restaurante & Pizzaria** (`6a8c6978-8575-45a2-
 - 5 conversas de teste criadas no smoke em `loja_gpt_conversations` (loja Varanda's) — podem ser arquivadas ou deletadas.
 - VPS está no checkout temporário de `feature/piloto-03-loja-gpt` (não em `main`). Próxima sessão: decidir merge feature→main ou reset pro main da VPS.
 - Branch `backup/vps-bomdia-encerramento-2026-05-22` no origin preserva trabalho órfão da VPS — decidir destino (merge em main, descartar, ou virar PR separada).
+
+---
+
+## Update Pós-Merge — Bug crítico em produção (2026-05-22, +1h após merge)
+
+Após merge `feature/piloto-03-loja-gpt` → `main` (commit `4ece67d`) e Pages deploy, usuário (Wandson testando na loja interna CONSULTORIA - VARANDAS) reportou: **mensagens persistiam no DB mas UI mostrava placeholder vazio "Loja-GPT pronto para responder"** mesmo após reload.
+
+### Diagnóstico
+
+- ✅ Bridge endpoint `GET /api/loja-gpt/conversations/:id` retornava JSON correto:
+```json
+  { "conversation": { "id": "...", "messages": [...] } }
+```
+- ❌ Componente `TabIaEspecialista.jsx` linha 685 lia `data.messages` (sem o nível `conversation`), caindo sempre no fallback `|| []`.
+
+### Fix
+
+Commit `72b4368` (1 linha):
+
+```diff
+-      setMessages(data.messages || []);
++      setMessages(data.conversation?.messages || []);
+```
+
+### Validado em produção
+
+Após Pages deploy, screenshots confirmam:
+- Mensagens user + assistant renderizadas
+- Markdown formatado (negrito, emojis, listas)
+- 3 fontes citadas no rodapé das respostas
+- Optimistic update do user funcionando
+- Timestamps consistentes
+
+### Lição aprendida
+
+**Smoke E2E (Tarefa 10) validou Bridge + Trigger.dev + DB + KB, mas NÃO validou render da UI** — apenas HTTP status codes via cURL. O bug do unwrap só apareceu em uso real através do app.
+
+### Tech Debt adicional pra Onda 04
+
+**#15. Smoke E2E precisa incluir validação visual da UI** — não só HTTP status. Possíveis abordagens:
+- Playwright/Cypress E2E test que clica numa conversa e verifica que mensagens renderizam
+- Manual checklist: "abrir app + clicar conversa + verificar render" como passo obrigatório do smoke
+- Validar render via screenshot diff automatizado
