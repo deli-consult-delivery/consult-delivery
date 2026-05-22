@@ -8,8 +8,15 @@ import Icon from '../../components/Icon.jsx';
 // ── Constantes ────────────────────────────────────────────────────────────────
 
 const BRIDGE = import.meta.env.VITE_BRIDGE_URL || 'https://bridge.consultdelivery.com.br';
+const USD_TO_BRL = 5.3;
+const CUSTO_ALERTA_USD = 0.50;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function formatBRL(usd) {
+  const brl = (usd ?? 0) * USD_TO_BRL;
+  return brl < 0.01 ? null : `R$${brl.toFixed(2)}`;
+}
 
 function formatRelTime(isoStr) {
   if (!isoStr) return '';
@@ -356,6 +363,19 @@ function ConvItem({ conv, isActive, onSelect, onArchive }) {
             </span>
           </>
         )}
+        {(() => {
+          const label = formatBRL(conv.custo_total_usd);
+          if (!label) return null;
+          const alerta = (conv.custo_total_usd ?? 0) > CUSTO_ALERTA_USD;
+          return (
+            <>
+              <span style={{ fontSize: 9, color: 'var(--g-400)' }}>·</span>
+              <span style={{ fontSize: 11, color: alerta ? '#ef4444' : 'var(--g-500)' }}>
+                {label}
+              </span>
+            </>
+          );
+        })()}
       </div>
       <button
         aria-label="Arquivar conversa"
@@ -513,6 +533,26 @@ function ChatArea({ messages, loadingMsgs, sending, error, onDismissError, pergu
             {activeConv.total_messages} msgs
           </span>
         )}
+        {(() => {
+          const label = formatBRL(activeConv?.custo_total_usd);
+          if (!label) return null;
+          const alerta = (activeConv?.custo_total_usd ?? 0) > CUSTO_ALERTA_USD;
+          return (
+            <span
+              style={{
+                marginLeft: activeConv?.total_messages > 0 ? 6 : 'auto',
+                fontSize: 11,
+                color: alerta ? '#ef4444' : 'var(--g-500)',
+                background: alerta ? 'rgba(239,68,68,0.08)' : 'var(--g-100)',
+                borderRadius: 20,
+                padding: '2px 8px',
+                border: `1px solid ${alerta ? 'rgba(239,68,68,0.25)' : 'var(--g-200)'}`,
+              }}
+            >
+              {label}
+            </span>
+          );
+        })()}
       </div>
 
       {/* Mensagens */}
