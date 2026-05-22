@@ -363,7 +363,9 @@ async function executar(input: Input, runId: string): Promise<Output> {
 
   const returnLine = isSat
     ? "🕘 Segunda-feira voltamos às 09h | Emergências via WhatsApp"
-    : "🕘 Voltamos amanhã às 09h | Emergências via WhatsApp";
+    : weekday === 5
+      ? "🕘 Voltamos amanhã às 08h | Emergências via WhatsApp"
+      : "🕘 Voltamos amanhã às 09h | Emergências via WhatsApp";
 
   const briefLine = input.custom_brief?.trim()
     ? `\nContexto adicional: ${input.custom_brief.trim()}`
