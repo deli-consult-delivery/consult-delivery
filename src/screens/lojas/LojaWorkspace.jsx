@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase.js';
 import Icon from '../../components/Icon.jsx';
 import AtribuirConsultorModal from './AtribuirConsultorModal.jsx';
 import TabIaEspecialista from './TabIaEspecialista.jsx';
+import TabAnalises from './TabAnalises.jsx';
 
 const BRIDGE = import.meta.env.VITE_BRIDGE_URL || 'https://bridge.consultdelivery.com.br';
 
@@ -26,7 +27,7 @@ const SEG_LABEL = {
   acai: 'Açaí', sobremesa: 'Sobremesa', padaria: 'Padaria', outro: 'Outro',
 };
 const PAPEL_LABEL = { principal: 'Principal', colaborador: 'Colaborador', observador: 'Observador' };
-const TABS = ['Visão Geral', 'Métricas', 'Consultores', 'Campanhas', 'Histórico', 'Tarefas', 'IA Especialista'];
+const TABS = ['Visão Geral', 'Métricas', 'Consultores', 'Campanhas', 'Histórico', 'Tarefas', 'IA Especialista', 'Análises'];
 
 const STATUS_TAREFA_LABEL = {
   rascunho: 'Rascunho',
@@ -255,6 +256,7 @@ export default function LojaWorkspace({ tenantDbId, userId, go, lojaId }) {
       {(tab === 3 || tab === 4) && <TabEmConstrucao nome={TABS[tab]} />}
       {tab === 5 && <TabTarefas lojaId={lojaId} />}
       {tab === 6 && <TabIaEspecialista lojaId={lojaId} userId={userId} />}
+      {tab === 7 && <TabAnalises lojaId={lojaId} userId={userId} onGoToTarefas={(analiseId) => setTab(5)} />}
 
       {showAtribuir && (
         <AtribuirConsultorModal
