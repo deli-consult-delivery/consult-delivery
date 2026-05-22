@@ -4,6 +4,7 @@ import AgentAvatar from '../components/AgentAvatar.jsx';
 import { TENANTS } from '../data.js';
 import { supabase } from '../lib/supabase.js';
 import BomDiaScreen from './BomDiaScreen.jsx';
+import EncerramentoScreen from './EncerramentoScreen.jsx';
 
 // ─── Agentes conhecidos (metadados estáticos) ──────────────────
 const AGENT_META = {
@@ -17,6 +18,7 @@ const AGENT_META = {
   nova:           { name: 'NOVA',         desc: 'Agente de novidades e conteúdo',             eta: '~1 min' },
   'analise-ifood': { name: 'Analista iFood', desc: 'Análise de métricas e relatório iFood',  eta: '~3 min' },
   'bom-dia':       { name: 'Bom Dia',        desc: 'Artes motivacionais diárias para WhatsApp (seg–sáb)', eta: '~2 min' },
+  'encerramento':  { name: 'Encerramento',   desc: 'Finalização de expediente diária para WhatsApp (seg–sáb)', eta: '~2 min' },
 };
 
 // Sugestões rápidas no input
@@ -308,7 +310,8 @@ const AISidebar = ({ onPick, current, agentStats, recentRuns, loadingRuns }) => 
     { id: 'all',      icon: 'bot',     label: 'Todos os agentes', count: Object.keys(agentStats).length || null },
     { id: 'mine',     icon: 'star',    label: 'Meus agentes',     count: 3 },
     { id: 'log',      icon: 'refresh', label: 'Atividade' },
-    { id: 'bom-dia',  icon: 'sun',     label: 'Bom Dia' },
+    { id: 'bom-dia',     icon: 'sun',  label: 'Bom Dia' },
+    { id: 'encerramento', icon: 'moon', label: 'Encerramento' },
   ];
 
   // Agentes com ao menos 1 run, ordenados por last_run_at desc (para sidebar)
@@ -558,11 +561,13 @@ const AgentsHub = ({ tenant, tenantDbId, userId }) => {
 
   const handleSbPick = (it) => {
     if (it.id === 'bom-dia') { setActiveAgentScreen('bom-dia'); return; }
+    if (it.id === 'encerramento') { setActiveAgentScreen('encerramento'); return; }
     setSbActive(it.id);
   };
 
   const runTemplate = (sa) => {
     if (sa.id === 'bom-dia') { setActiveAgentScreen('bom-dia'); return; }
+    if (sa.id === 'encerramento') { setActiveAgentScreen('encerramento'); return; }
     const exemplos = {
       lara: 'Crie a campanha de hoje pra Pizzaria do João baseado no que vendeu mais essa semana',
       max:  'Audite o cardápio do iFood e me diga o que tá ruim',
@@ -742,6 +747,40 @@ const AgentsHub = ({ tenant, tenantDbId, userId }) => {
             </div>
             <div style={{ flex: 1, overflow: 'auto' }}>
               <BomDiaScreen tenantDbId={tenantDbId} userId={userId} />
+            </div>
+          </div>
+        )}
+
+        {activeAgentScreen === 'encerramento' && (
+          <div style={{
+            position: 'absolute', inset: 0, zIndex: 20,
+            background: '#0E0E0E',
+            display: 'flex', flexDirection: 'column',
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '8px 16px',
+              borderBottom: '1px solid rgba(255,255,255,0.07)',
+              background: 'rgba(255,255,255,0.02)',
+              flexShrink: 0,
+            }}>
+              <button
+                onClick={() => setActiveAgentScreen(null)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  color: 'rgba(255,255,255,0.55)', fontSize: 12,
+                  padding: '4px 8px', borderRadius: 6,
+                }}
+              >
+                <Icon name="chevleft" size={13}/> Hub
+              </button>
+              <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: 13 }}>/</span>
+              <span style={{ color: 'white', fontSize: 12, fontWeight: 600 }}>Encerramento</span>
+            </div>
+            <div style={{ flex: 1, overflow: 'auto' }}>
+              <EncerramentoScreen tenantDbId={tenantDbId} userId={userId} />
             </div>
           </div>
         )}
