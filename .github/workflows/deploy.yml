@@ -70,14 +70,42 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy bridge-server na VPS
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
+      - name: Configurar chave SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Deploy bridge-server na VPS (com retry)
+        run: |
+          SSH="ssh -i ~/.ssh/deploy_key \
+            -o ConnectTimeout=30 \
+            -o StrictHostKeyChecking=no \
+            -o ServerAliveInterval=10 \
+            -o ServerAliveCountMax=3 \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}"
+
+          SCRIPT='
+            set -e
             cd /root/consult-delivery
             git fetch origin main
             git reset --hard origin/main
-            pm2 restart bridge-server
+            pm2 restart bridge-server || pm2 start bridge-server
+          '
+
+          for attempt in 1 2 3; do
+            echo "=== Tentativa $attempt/3 ==="
+            if $SSH "$SCRIPT"; then
+              echo "✅ Deploy concluído na tentativa $attempt"
+              exit 0
+            fi
+            echo "❌ Tentativa $attempt falhou"
+            if [ "$attempt" -lt 3 ]; then
+              echo "Aguardando 20s antes de tentar novamente..."
+              sleep 20
+            fi
+          done
+
+          echo "💥 Todas as 3 tentativas falharam"
+          echo "Verifique a VPS: ${{ secrets.VPS_HOST }}:22"
+          exit 1
