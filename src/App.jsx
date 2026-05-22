@@ -25,6 +25,7 @@ import BrenoScreen from './screens/BrenoScreen.jsx';
 import SofiaScreen from './screens/SofiaScreen.jsx';
 import VeraScreen from './screens/VeraScreen.jsx';
 import BomDiaScreen from './screens/BomDiaScreen.jsx';
+import EncerramentoScreen from './screens/EncerramentoScreen.jsx';
 import { CONVERSATIONS, INADIMPLENTES, TENANTS } from './data.js';
 import { supabase } from './lib/supabase.js';
 import { listTenants } from './lib/api.js';
@@ -257,7 +258,8 @@ export default function App() {
         {route === 'breno'    && <BrenoScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'sofia'    && <SofiaScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'vera'     && <VeraScreen  tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'bom-dia'  && <BomDiaScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
+        {route === 'bom-dia'      && <BomDiaScreen      tenantDbId={tenantDbId} userId={session?.user?.id} />}
+        {route === 'encerramento' && <EncerramentoScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'settings'  && <SettingsScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} onTenantChange={async (newSlug) => {
           if (newSlug) {
             setTenant(newSlug);

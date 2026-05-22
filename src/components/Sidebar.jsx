@@ -21,7 +21,9 @@ const NAV_GROUPS = [
   {
     label: 'Agentes IA',
     items: [
-      { id: 'agents', icon: 'bot', label: 'Painel Agentes' },
+      { id: 'agents',       icon: 'bot',  label: 'Painel Agentes' },
+      { id: 'bom-dia',      icon: 'sun',  label: 'Bom Dia'        },
+      { id: 'encerramento', icon: 'moon', label: 'Encerramento'   },
     ],
   },
   {
