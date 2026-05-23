@@ -656,27 +656,16 @@ function TabTarefas({ lojaId }) {
                       </>)}
                       {t.status === 'aprovada' && (
                         <TarefaActionBtn
-                          label="Iniciar execução"
-                          color="#f97316"
-                          loading={actionLoading === t.id + 'iniciar-execucao'}
-                          onClick={() => takeAction(t.id, 'iniciar-execucao')}
-                        />
-                      )}
-                      {t.status === 'em_execucao' && (
-                        <TarefaActionBtn
-                          label="Submeter para validação"
-                          color="#8b5cf6"
-                          loading={actionLoading === t.id + 'submeter-validacao'}
-                          onClick={() => takeAction(t.id, 'submeter-validacao')}
-                        />
-                      )}
-                      {t.status === 'aguardando_validacao' && (
-                        <TarefaActionBtn
-                          label="Concluir"
+                          label="✅ Marcar concluída"
                           color="#10b981"
-                          loading={actionLoading === t.id + 'concluir'}
-                          onClick={() => takeAction(t.id, 'concluir')}
+                          loading={actionLoading === t.id + 'marcar-concluida'}
+                          onClick={() => takeAction(t.id, 'marcar-concluida')}
                         />
+                      )}
+                      {(t.status === 'em_execucao' || t.status === 'aguardando_validacao') && (
+                        <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
+                          {t.status === 'em_execucao' ? 'Em execução…' : 'Aguardando validação…'}
+                        </span>
                       )}
                       <div style={{ flex: 1 }} />
                       <button

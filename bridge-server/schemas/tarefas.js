@@ -98,6 +98,11 @@ const ConcluirSchema = z.object({
   nota: z.string().max(2000).optional(),
 });
 
+// POST /api/tarefas/:id/marcar-concluida — body (TD#31: compound 1-clique)
+const MarcarConcluidaSchema = z.object({
+  nota: z.string().max(2000).optional(),
+});
+
 // ── Lote 4 ──────────────────────────────────────────────────────────────────
 
 // GET /api/tarefas/:id/comentarios — query
@@ -143,6 +148,7 @@ module.exports = {
   IniciarExecucaoSchema,
   SubmeterValidacaoSchema,
   ConcluirSchema,
+  MarcarConcluidaSchema,
   ListComentariosQuerySchema,
   CreateComentarioSchema,
   RelatorioQuerySchema,
