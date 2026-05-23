@@ -695,6 +695,155 @@ function ModalEnviarWhatsapp({ analise, lojaId, onClose, onEnviada }) {
   );
 }
 
+// ── T8: Card sessão WhatsApp ativa ────────────────────────────────────────────
+
+const ACAO_LABEL_WA = {
+  aprovada:           'Aprovou',
+  rejeitada:          'Rejeitou',
+  perguntou_duvida:   'Enviou dúvida',
+  enviada_aprovacao:  'Análise enviada',
+  iniciou_execucao:   'Iniciou execução',
+  concluiu:           'Concluiu',
+  reabriu:            'Reabriu',
+};
+
+function CardSessaoWhatsapp({ analiseId }) {
+  const [sessao,     setSessao]     = useState(null);
+  const [interacoes, setInteracoes] = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [canceling,  setCanceling]  = useState(false);
+
+  const loadSessao = useCallback(async () => {
+    setLoading(true);
+    const { data: s } = await supabase
+      .from('whatsapp_aprovacao_sessions')
+      .select('id,numero_destino,expira_em')
+      .eq('analise_id', analiseId)
+      .eq('status', 'ativa')
+      .maybeSingle();
+    setSessao(s ?? null);
+
+    if (s) {
+      const { data: tarefas } = await supabase
+        .from('tarefas_loja')
+        .select('id')
+        .eq('analise_id', analiseId)
+        .limit(200);
+      if (tarefas?.length) {
+        const ids = tarefas.map(t => t.id);
+        const { data: rows } = await supabase
+          .from('tarefa_aprovacoes')
+          .select('id,acao,comentario,created_at')
+          .in('tarefa_id', ids)
+          .eq('feita_via', 'whatsapp')
+          .order('created_at', { ascending: false })
+          .limit(50);
+        setInteracoes(rows ?? []);
+      }
+    }
+    setLoading(false);
+  }, [analiseId]);
+
+  useEffect(() => { loadSessao(); }, [loadSessao]);
+
+  if (loading || !sessao) return null;
+
+  const diasRestantes = Math.max(0, Math.ceil((new Date(sessao.expira_em) - new Date()) / 86400000));
+
+  async function cancelarSessao() {
+    if (!window.confirm('Encerrar sessão? O cliente não poderá mais aprovar via WhatsApp.')) return;
+    setCanceling(true);
+    await supabase
+      .from('whatsapp_aprovacao_sessions')
+      .update({ status: 'cancelada' })
+      .eq('id', sessao.id);
+    setSessao(null);
+    setInteracoes([]);
+    setCanceling(false);
+  }
+
+  return (
+    <div style={{
+      marginBottom: 20, padding: '14px 16px', borderRadius: 8,
+      background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.25)',
+    }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 16 }}>📱</span>
+          <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--g-900, #fff)' }}>
+            Sessão WhatsApp ativa
+          </span>
+          <span style={{
+            fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
+            background: diasRestantes <= 1 ? 'rgba(239,68,68,0.15)' : 'rgba(16,185,129,0.12)',
+            color: diasRestantes <= 1 ? '#ef4444' : '#10b981',
+            border: `1px solid ${diasRestantes <= 1 ? 'rgba(239,68,68,0.3)' : 'rgba(16,185,129,0.25)'}`,
+          }}>
+            {diasRestantes}d restantes
+          </span>
+        </div>
+        <button
+          onClick={cancelarSessao}
+          disabled={canceling}
+          style={{
+            padding: '4px 10px', borderRadius: 5, cursor: 'pointer', fontSize: 11, fontWeight: 600,
+            background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+            color: '#ef4444', opacity: canceling ? 0.5 : 1,
+          }}
+        >
+          {canceling ? 'Encerrando…' : 'Encerrar sessão'}
+        </button>
+      </div>
+
+      {/* Número */}
+      <div style={{ fontSize: 11, color: 'var(--g-500, #6b7280)', marginBottom: interacoes.length ? 12 : 4 }}>
+        Aguardando resposta de{' '}
+        <strong style={{ color: 'var(--g-700, #9ca3af)' }}>{sessao.numero_destino}</strong>
+      </div>
+
+      {/* Interações */}
+      {interacoes.length > 0 && (
+        <div>
+          <div style={{
+            fontSize: 10, fontWeight: 700, color: 'var(--g-500, #6b7280)',
+            textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6,
+          }}>
+            Interações via WhatsApp
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {interacoes.map(i => (
+              <div key={i.id} style={{
+                display: 'flex', alignItems: 'flex-start', gap: 8,
+                padding: '6px 10px', borderRadius: 6,
+                background: 'rgba(255,255,255,0.04)', fontSize: 12,
+              }}>
+                <span style={{ color: 'var(--g-600, #4b5563)', fontSize: 11, whiteSpace: 'nowrap', marginTop: 1 }}>
+                  {new Date(i.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                </span>
+                <span style={{ fontWeight: 600, color: 'var(--g-800, #e5e7eb)' }}>
+                  {ACAO_LABEL_WA[i.acao] ?? i.acao}
+                </span>
+                {i.comentario && (
+                  <span style={{ color: 'var(--g-500, #6b7280)', fontStyle: 'italic' }}>
+                    — {i.comentario}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {interacoes.length === 0 && (
+        <div style={{ fontSize: 11, color: 'var(--g-400, #9ca3af)', fontStyle: 'italic' }}>
+          Nenhuma resposta recebida ainda.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Painel de detalhe ─────────────────────────────────────────────────────────
 
 function AnaliseDetalhe({ analise, lojaId, onGoToTarefas, onEnviada }) {
@@ -847,6 +996,11 @@ function AnaliseDetalhe({ analise, lojaId, onGoToTarefas, onEnviada }) {
           onClose={() => setShowEnviarModal(false)}
           onEnviada={() => { setShowEnviarModal(false); onEnviada?.(); }}
         />
+      )}
+
+      {/* T8: Sessão WhatsApp ativa — visível quando análise foi enviada ao cliente */}
+      {analise.status === 'enviada_cliente' && (
+        <CardSessaoWhatsapp analiseId={analise.id} />
       )}
 
       {/* Loom URL */}
