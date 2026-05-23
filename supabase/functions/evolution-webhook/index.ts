@@ -1154,7 +1154,7 @@ async function handleAprovacaoSession({
 
   const { data: tarefas } = await supabase
     .from('tarefas_loja')
-    .select('id, bloco, titulo')
+    .select('id, bloco, titulo, status')
     .eq('analise_id', sessao.analise_id)
     .order('bloco',          { ascending: true })
     .order('ordem_no_bloco', { ascending: true })
@@ -1166,7 +1166,7 @@ async function handleAprovacaoSession({
   }
 
   // Mapa global: número 1-indexed → tarefa
-  const tarefaByNum = new Map<number, { id: string; bloco: string; titulo: string }>();
+  const tarefaByNum = new Map<number, { id: string; bloco: string; titulo: string; status: string }>();
   tarefas.forEach((t, i) => tarefaByNum.set(i + 1, t));
 
   // Mapa bloco → ids (ordem alfabética, igual à mensagem enviada)
@@ -1182,7 +1182,9 @@ async function handleAprovacaoSession({
   const responseLines: string[] = [];
 
   if (parsed.aprovar_tudo) {
-    for (const t of tarefas) approvedIds.add(t.id);
+    for (const t of tarefas) {
+      if (t.status === 'aguardando_aprovacao') approvedIds.add(t.id);
+    }
     responseLines.push('Recebi! Todas as tarefas aprovadas. Vou iniciar execução.');
   }
 
