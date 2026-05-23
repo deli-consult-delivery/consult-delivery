@@ -131,6 +131,22 @@ Deploy: Bridge commit `8c1d88c` (2026-05-23).
 
 ---
 
+## TD#28 — G6 fechamento de análise ignora tarefas rejeitadas ✅ FIXADO
+
+**Arquivo:** `bridge-server/routes/tarefas.js` (handler POST `/api/tarefas/:id/concluir`, G6 ~linha 611)  
+**Severidade:** Alta (G6 jamais dispara quando há ≥1 tarefa rejeitada)  
+**Sintoma:** Condição `countConcluidas >= analise.total_tarefas_geradas` conta apenas tarefas
+`concluida`. Se houver 1+ rejeitada, o total `concluida` nunca alcança `total_tarefas_geradas`
+e a análise permanece aberta para sempre — mensagem `🎉 Parabéns` nunca é enviada.  
+**Raiz:** Tarefa rejeitada é estado terminal (não vira `concluida`), mas a condição G6
+não previa esse cenário.  
+**Fix aplicado:** Adiciona query paralela para `rejeitada` e muda condição para
+`(countConcluidas + countRejeitadasG6) >= analise.total_tarefas_geradas`.
+Deploy: Bridge commit `feature/piloto-05-fechamento-jornada` (2026-05-23).  
+**Status:** ✅ Fechado
+
+---
+
 ## Resumo de status
 
 | TD   | Descrição                                    | Severidade | Status          |
@@ -144,3 +160,4 @@ Deploy: Bridge commit `8c1d88c` (2026-05-23).
 | TD#23 | `CardSessaoWhatsapp` colunas inexistentes    | Alta       | ✅ Fechado v43  |
 | TD#24 | Coluna `is_active` ausente em `lojas`        | Baixa      | Aberto          |
 | TD#27 | Silent fail INSERT `analises` `tenant_id`   | Alta       | ✅ Fechado 8c1d88c |
+| TD#28 | G6 não dispara com tarefas rejeitadas        | Alta       | ✅ Fechado (onda-05) |

@@ -608,12 +608,15 @@ module.exports = function buildTarefasRouter({ requireJwt, sbFetch, assertLojaAc
               console.log(`[api/tarefas/concluir] G5 WhatsApp sent tarefa=${id} numero=${analise.numero_whatsapp_cliente}`);
             }
 
-            // G6: encerrar análise se todas as tarefas estão concluídas
-            const concluidas = await sbFetch(
-              `tarefas_loja?analise_id=eq.${encodeURIComponent(tarefa.analise_id)}&status=eq.concluida&select=id&limit=500`
-            );
-            const countConcluidas = concluidas?.length ?? 0;
-            if (analise.total_tarefas_geradas && countConcluidas >= analise.total_tarefas_geradas) {
+            // G6: encerrar análise se todas as tarefas estão concluídas ou rejeitadas
+            // TD#28: contar rejeitadas também — tarefa rejeitada é terminal e não vira concluída
+            const [concluidas, rejeitadasG6] = await Promise.all([
+              sbFetch(`tarefas_loja?analise_id=eq.${encodeURIComponent(tarefa.analise_id)}&status=eq.concluida&select=id&limit=500`),
+              sbFetch(`tarefas_loja?analise_id=eq.${encodeURIComponent(tarefa.analise_id)}&status=eq.rejeitada&select=id&limit=500`),
+            ]);
+            const countConcluidas  = concluidas?.length    ?? 0;
+            const countRejeitadasG6 = rejeitadasG6?.length ?? 0;
+            if (analise.total_tarefas_geradas && (countConcluidas + countRejeitadasG6) >= analise.total_tarefas_geradas) {
               await sbFetch(
                 `analises?id=eq.${encodeURIComponent(analise.id)}`,
                 { method: 'PATCH', body: { status: 'concluida', concluida_em: new Date().toISOString() } }
