@@ -1,5 +1,14 @@
 # Wiki Log
 
+## [2026-05-22 14:00] session | piloto-04 Tarefas 3+4 validadas e entregues
+Touched: none
+
+## [2026-05-22 22:00] session | piloto-04 T8+T9 implementados + deploy completo
+Touched: none
+
+## [2026-05-22 12:00] session | smoke test analise-gerar-relatorio concluido
+Touched: none
+
 ## [2026-05-22 00:00] session | task analise-gerar-relatorio criada
 Touched: none
 

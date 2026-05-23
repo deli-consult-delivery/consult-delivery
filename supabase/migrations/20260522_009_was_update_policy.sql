@@ -1,14 +1,17 @@
--- Migration: 20260522_007_was_update_policy.sql
+-- Migration: 20260522_009_was_update_policy.sql
 -- Data: 2026-05-22
 -- Autor: Wandson (via Claude Code)
 -- Motivo: Adicionar política UPDATE em whatsapp_aprovacao_sessions para permitir
 --         que consultores encerrem sessões manualmente pela plataforma (T8 Onda 04).
 --         A cláusula WITH CHECK restringe o UPDATE a apenas setar status='cancelada'.
--- Risco: Baixo — apenas adiciona policy, zero impacto em dados existentes.
+-- Nota: Renomeado de 007 → 009 para corrigir prefixo duplicado. Idempotente via DROP IF EXISTS.
+-- Risco: Baixo — recria policy sem alterar dados.
 -- Reversão:
 --   DROP POLICY IF EXISTS "Cancelar sessao do tenant" ON whatsapp_aprovacao_sessions;
 
 BEGIN;
+
+DROP POLICY IF EXISTS "Cancelar sessao do tenant" ON whatsapp_aprovacao_sessions;
 
 CREATE POLICY "Cancelar sessao do tenant"
   ON whatsapp_aprovacao_sessions FOR UPDATE
