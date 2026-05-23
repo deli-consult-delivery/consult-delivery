@@ -411,11 +411,23 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
 
   if (!isGroup && messageText && !isMedia) {
     const senderNum = chatId.replace(/@[^@]*$/, '');
+    // Evolution API pode enviar JID com 12 dígitos (sem o 9 de celular BR) ou 13 dígitos (com 9).
+    // A sessão pode ter sido criada com o formato oposto ao que a API envia no webhook.
+    // Tentamos ambos os formatos para garantir o match.
+    const senderNumAlt = senderNum.startsWith('55') && senderNum.length === 12
+      ? senderNum.slice(0, 4) + '9' + senderNum.slice(4)     // 12 → 13: insere 9 após código de área
+      : senderNum.startsWith('55') && senderNum.length === 13 && senderNum[4] === '9'
+      ? senderNum.slice(0, 4) + senderNum.slice(5)            // 13 → 12: remove 9 do código de área
+      : null;
+    const numFilter = senderNumAlt
+      ? `numero_destino.eq.${senderNum},numero_destino.eq.${senderNumAlt}`
+      : `numero_destino.eq.${senderNum}`;
     const { data: t6Sessao } = await supabase
       .from('whatsapp_aprovacao_sessions')
       .select('id, analise_id, loja_id')
-      .eq('numero_destino', senderNum)
+      .or(numFilter)
       .eq('status', 'ativa')
+      .limit(1)
       .maybeSingle();
 
     if (t6Sessao) {
@@ -1222,20 +1234,18 @@ async function handleAprovacaoSession({
   for (const id of approvedIds) {
     await supabase.from('tarefas_loja').update({ status: 'aprovada' }).eq('id', id);
     await supabase.from('tarefa_aprovacoes').insert({
-      tarefa_id:      id,
-      acao:           'aprovada',
-      feita_por_tipo: 'cliente',
-      feita_via:      'whatsapp',
+      tarefa_id: id,
+      acao:      'aprovada',
+      nota:      'via WhatsApp',
     });
   }
 
   for (const id of rejectedIds) {
     await supabase.from('tarefas_loja').update({ status: 'rejeitada' }).eq('id', id);
     await supabase.from('tarefa_aprovacoes').insert({
-      tarefa_id:      id,
-      acao:           'rejeitada',
-      feita_por_tipo: 'cliente',
-      feita_via:      'whatsapp',
+      tarefa_id: id,
+      acao:      'rejeitada',
+      nota:      'via WhatsApp',
     });
   }
 
@@ -1243,11 +1253,9 @@ async function handleAprovacaoSession({
     const t = tarefaByNum.get(d.tarefa);
     if (t) {
       await supabase.from('tarefa_aprovacoes').insert({
-        tarefa_id:      t.id,
-        acao:           'perguntou_duvida',
-        feita_por_tipo: 'cliente',
-        feita_via:      'whatsapp',
-        comentario:     d.pergunta || messageText,
+        tarefa_id: t.id,
+        acao:      'perguntou_duvida',
+        nota:      d.pergunta || messageText,
       });
       responseLines.push(`Recebi! Dúvida sobre tarefa ${d.tarefa} registrada. O consultor vai responder.`);
     }
