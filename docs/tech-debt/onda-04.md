@@ -147,6 +147,22 @@ Deploy: Bridge commit `feature/piloto-05-fechamento-jornada` (2026-05-23).
 
 ---
 
+## TD#31 — UX state machine 3 etapas para concluir tarefa ✅ FIXADO
+
+**Arquivo:** `bridge-server/routes/tarefas.js`, `src/screens/lojas/LojaWorkspace.jsx`  
+**Severidade:** Alta (bloqueante para operação com cliente real)  
+**Sintoma:** Concluir uma tarefa exigia 3 cliques separados: Iniciar execução → Submeter para
+validação → Concluir. Dados de smoke mostraram 3s entre cada passo — fricção pura. O estado
+`aguardando_validacao` foi desenhado para revisão do cliente mas nunca foi implementado.  
+**Fix aplicado:**
+1. `T3 — _notificarConclusao`: lógica G5+G6 extraída do handler `/concluir` em helper reutilizável.
+2. `T1 — /marcar-concluida`: novo endpoint compound faz `aprovada → em_execucao → aguardando_validacao → concluida` em 1 request, com rollback best-effort em caso de erro.
+3. `T2 — UI 1-clique`: card `aprovada` mostra botão verde "✅ Marcar concluída"; estados intermediários mostram badge de texto estático.
+Deploy: Bridge commits `9c7bc23` + `ea147d7` (feature/piloto-06-marcar-concluida, 2026-05-23).  
+**Status:** ✅ Fechado
+
+---
+
 ## Resumo de status
 
 | TD   | Descrição                                    | Severidade | Status          |
@@ -157,6 +173,7 @@ Deploy: Bridge commit `feature/piloto-05-fechamento-jornada` (2026-05-23).
 | TD#19 | numero_destino 12 vs 13 dígitos              | Alta       | Parcial (paliativo) |
 | TD#20 | Sessão não encerra após OK tudo              | Média      | Aberto          |
 | TD#21 | `kind='agent'` inválido em notifications    | Média      | ✅ Fechado v42  |
+| TD#31 | UX state machine 3 etapas (Onda 06)          | Alta       | ✅ Fechado (onda-06) |
 | TD#23 | `CardSessaoWhatsapp` colunas inexistentes    | Alta       | ✅ Fechado v43  |
 | TD#24 | Coluna `is_active` ausente em `lojas`        | Baixa      | Aberto          |
 | TD#27 | Silent fail INSERT `analises` `tenant_id`   | Alta       | ✅ Fechado 8c1d88c |
