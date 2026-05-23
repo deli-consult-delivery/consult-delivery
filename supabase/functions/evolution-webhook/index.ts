@@ -1270,4 +1270,27 @@ async function handleAprovacaoSession({
   }
 
   console.log(`[T6] sessao=${sessao.id} aprovadas=${approvedIds.size} rejeitadas=${rejectedIds.size} duvidas=${parsed.duvidas.length}`);
+
+  // TD#20: encerra sessão quando não há mais tarefas aguardando aprovação
+  if (approvedIds.size > 0 || rejectedIds.size > 0 || parsed.aprovar_tudo) {
+    const { count: restantes } = await supabase
+      .from('tarefas_loja')
+      .select('id', { count: 'exact', head: true })
+      .eq('analise_id', sessao.analise_id)
+      .eq('status', 'aguardando_aprovacao');
+
+    if ((restantes ?? 1) === 0) {
+      await supabase
+        .from('whatsapp_aprovacao_sessions')
+        .update({ status: 'concluida', encerrada_em: new Date().toISOString() })
+        .eq('id', sessao.id);
+
+      await evoSendText(
+        inst, instance, senderNum,
+        'Todas as tarefas foram processadas! Sua análise está em execução. Você receberá atualizações em breve.',
+      );
+
+      console.log(`[T6] sessao=${sessao.id} ENCERRADA status=concluida`);
+    }
+  }
 }
