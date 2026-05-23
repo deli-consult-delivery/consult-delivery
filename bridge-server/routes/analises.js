@@ -213,7 +213,7 @@ module.exports = function buildAnalisesRouter({
 
       // Busca analise — precisa estar processada
       const analises = await sbFetch(
-        `analises?id=eq.${encodeURIComponent(aid)}&loja_id=eq.${encodeURIComponent(lojaId)}&select=id,status,total_tarefas_geradas&limit=1`
+        `analises?id=eq.${encodeURIComponent(aid)}&loja_id=eq.${encodeURIComponent(lojaId)}&select=id,status,total_tarefas_geradas,loom_url&limit=1`
       );
       if (!analises?.length)
         return res.status(404).json({ error: 'Análise não encontrada nesta loja' });
@@ -255,6 +255,11 @@ module.exports = function buildAnalisesRouter({
       let currentBloco = null;
       let blocoNum = 0;
 
+      if (analise.loom_url) {
+        lines.push(`🎥 Vídeo da análise: ${analise.loom_url.trim()}`);
+        lines.push('Assista antes de responder.');
+        lines.push('');
+      }
       lines.push(`Análise da ${loja.nome}`);
       lines.push('');
       lines.push('Olá! Conforme combinado, segue a relação completa de ajustes:');
