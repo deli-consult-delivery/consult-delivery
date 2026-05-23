@@ -115,6 +115,22 @@ A seção "Interações via WhatsApp" exibia "Nenhuma resposta recebida ainda." 
 
 ---
 
+## TD#27 — Silent fail INSERT `analises` com `tenant_id` ausente ✅ FIXADO
+
+**Arquivo:** `bridge-server/routes/analises.js` (rota POST `/api/lojas/:id/analises`)  
+**Severidade:** Alta (foi bloqueante)  
+**Sintoma:** `assertLojaAccess` retorna `tenantId` mas o objeto row passado ao INSERT em
+`analises` não incluía a coluna `tenant_id`, causando violação NOT NULL no Supabase.
+O Bridge retornava 500 mas sem log claro identificando a coluna ausente. O erro só foi
+encontrado comparando o schema da tabela com o objeto inserido.  
+**Raiz:** INSERT construído manualmente sem listar todas as colunas NOT NULL; `tenant_id`
+era obtido na função mas não propagado para o objeto row.  
+**Fix aplicado:** Adicionado `tenant_id: tenantId` ao objeto row (linha 110 do arquivo).
+Deploy: Bridge commit `8c1d88c` (2026-05-23).  
+**Status:** ✅ Fechado
+
+---
+
 ## Resumo de status
 
 | TD   | Descrição                                    | Severidade | Status          |
@@ -127,3 +143,4 @@ A seção "Interações via WhatsApp" exibia "Nenhuma resposta recebida ainda." 
 | TD#21 | `kind='agent'` inválido em notifications    | Média      | ✅ Fechado v42  |
 | TD#23 | `CardSessaoWhatsapp` colunas inexistentes    | Alta       | ✅ Fechado v43  |
 | TD#24 | Coluna `is_active` ausente em `lojas`        | Baixa      | Aberto          |
+| TD#27 | Silent fail INSERT `analises` `tenant_id`   | Alta       | ✅ Fechado 8c1d88c |
