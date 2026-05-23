@@ -102,6 +102,19 @@ A seção "Interações via WhatsApp" exibia "Nenhuma resposta recebida ainda." 
 
 ---
 
+## TD#24 — Coluna `is_active` ausente em `lojas`
+
+**Tabela:** `lojas`  
+**Severidade:** Baixa  
+**Sintoma:** Não existe coluna `is_active` na tabela `lojas`. Lojas de teste (ex: "Smoke Onda 04") não podem ser desativadas sem exclusão física — o que apaga histórico de análises e sessões WhatsApp vinculadas.  
+**Fix sugerido:**
+1. Migration: `ALTER TABLE lojas ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT true;`
+2. Adicionar ao `ListLojas` query: `WHERE is_active = true` por padrão.
+3. Atualizar RLS policies se necessário.  
+**Status:** Aberto
+
+---
+
 ## Resumo de status
 
 | TD   | Descrição                                    | Severidade | Status          |
@@ -113,3 +126,4 @@ A seção "Interações via WhatsApp" exibia "Nenhuma resposta recebida ainda." 
 | TD#20 | Sessão não encerra após OK tudo              | Média      | Aberto          |
 | TD#21 | `kind='agent'` inválido em notifications    | Média      | ✅ Fechado v42  |
 | TD#23 | `CardSessaoWhatsapp` colunas inexistentes    | Alta       | ✅ Fechado v43  |
+| TD#24 | Coluna `is_active` ausente em `lojas`        | Baixa      | Aberto          |

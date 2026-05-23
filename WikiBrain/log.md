@@ -296,6 +296,9 @@ Touched: none
 ## [2026-05-17 11:25] session | config: deploy sem prompt + Stop hook tsc
 Touched: none
 
+## [2026-05-23 16:30] session | piloto-04 merge PR #55 + cleanup + onda-05 planning
+Touched: none
+
 ## [2026-05-23 15:30] session | piloto-04 deploy evolution-webhook v42 + PR Onda 04
 Touched: none
 
