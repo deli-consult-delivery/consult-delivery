@@ -1,5 +1,8 @@
 # Wiki Log
 
+## [2026-05-23 00:00] session | piloto-05 Bloco B T5-T6 concluídos
+Touched: none
+
 ## [2026-05-22 14:00] session | piloto-04 Tarefas 3+4 validadas e entregues
 Touched: none
 
@@ -312,3 +315,24 @@ Touched: none
 - Decisão: Wandson assumiu risco, mergeou direto
 - Pendência: testar visualmente quando voltar (loja real, clicar Gerar relatório, validar modal/botões)
 - Se quebrar: hotfix em branch nova, não regredir
+
+## [2026-05-23 14:25] session | Onda 05 Bloco A T1-T4 concluído
+Touched: none
+
+## [2026-05-23 19:00] session | piloto-05 deploy A+B + smoke E2E concluído
+Touched: none
+
+## [2026-05-23 19:25] session | piloto-05 smoke E2E Parte 1 — loja+analise+envio OK
+Touched: none
+
+## [2026-05-23 20:30] session | piloto-05 TD#16 race fix + smoke v2 E2E setup completo
+Touched: none
+
+## [2026-05-23 21:30] session | piloto-05 validação Bloco A + G5 disparado em 2 tarefas
+Touched: none
+
+## [2026-05-23 22:00] session | piloto-05 G6 fix TD#28 + 9 tarefas concluídas + analise fechada
+Touched: none
+
+## [2026-05-23 23:00] session | piloto-05 merge PR #56 + VPS main + PILOTO-06 planning
+Touched: docs/piloto/PILOTO-06-PLANNING.md (criado), docs/tech-debt/onda-04.md (TD#28 fechado)
