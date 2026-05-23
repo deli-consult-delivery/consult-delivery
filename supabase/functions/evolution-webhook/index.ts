@@ -411,21 +411,10 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
 
   if (!isGroup && messageText && !isMedia) {
     const senderNum = chatId.replace(/@[^@]*$/, '');
-    // Evolution API pode enviar JID com 12 dígitos (sem o 9 de celular BR) ou 13 dígitos (com 9).
-    // A sessão pode ter sido criada com o formato oposto ao que a API envia no webhook.
-    // Tentamos ambos os formatos para garantir o match.
-    const senderNumAlt = senderNum.startsWith('55') && senderNum.length === 12
-      ? senderNum.slice(0, 4) + '9' + senderNum.slice(4)     // 12 → 13: insere 9 após código de área
-      : senderNum.startsWith('55') && senderNum.length === 13 && senderNum[4] === '9'
-      ? senderNum.slice(0, 4) + senderNum.slice(5)            // 13 → 12: remove 9 do código de área
-      : null;
-    const numFilter = senderNumAlt
-      ? `numero_destino.eq.${senderNum},numero_destino.eq.${senderNumAlt}`
-      : `numero_destino.eq.${senderNum}`;
     const { data: t6Sessao } = await supabase
       .from('whatsapp_aprovacao_sessions')
       .select('id, analise_id, loja_id')
-      .or(numFilter)
+      .eq('numero_destino', senderNum)
       .eq('status', 'ativa')
       .limit(1)
       .maybeSingle();
@@ -1165,7 +1154,7 @@ async function handleAprovacaoSession({
 
   const { data: tarefas } = await supabase
     .from('tarefas_loja')
-    .select('id, bloco, titulo')
+    .select('id, bloco, titulo, status')
     .eq('analise_id', sessao.analise_id)
     .order('bloco',          { ascending: true })
     .order('ordem_no_bloco', { ascending: true })
@@ -1177,7 +1166,7 @@ async function handleAprovacaoSession({
   }
 
   // Mapa global: número 1-indexed → tarefa
-  const tarefaByNum = new Map<number, { id: string; bloco: string; titulo: string }>();
+  const tarefaByNum = new Map<number, { id: string; bloco: string; titulo: string; status: string }>();
   tarefas.forEach((t, i) => tarefaByNum.set(i + 1, t));
 
   // Mapa bloco → ids (ordem alfabética, igual à mensagem enviada)
@@ -1193,7 +1182,9 @@ async function handleAprovacaoSession({
   const responseLines: string[] = [];
 
   if (parsed.aprovar_tudo) {
-    for (const t of tarefas) approvedIds.add(t.id);
+    for (const t of tarefas) {
+      if (t.status === 'aguardando_aprovacao') approvedIds.add(t.id);
+    }
     responseLines.push('Recebi! Todas as tarefas aprovadas. Vou iniciar execução.');
   }
 
@@ -1279,4 +1270,27 @@ async function handleAprovacaoSession({
   }
 
   console.log(`[T6] sessao=${sessao.id} aprovadas=${approvedIds.size} rejeitadas=${rejectedIds.size} duvidas=${parsed.duvidas.length}`);
+
+  // TD#20: encerra sessão quando não há mais tarefas aguardando aprovação
+  if (approvedIds.size > 0 || rejectedIds.size > 0 || parsed.aprovar_tudo) {
+    const { count: restantes } = await supabase
+      .from('tarefas_loja')
+      .select('id', { count: 'exact', head: true })
+      .eq('analise_id', sessao.analise_id)
+      .eq('status', 'aguardando_aprovacao');
+
+    if ((restantes ?? 1) === 0) {
+      await supabase
+        .from('whatsapp_aprovacao_sessions')
+        .update({ status: 'concluida', encerrada_em: new Date().toISOString() })
+        .eq('id', sessao.id);
+
+      await evoSendText(
+        inst, instance, senderNum,
+        'Todas as tarefas foram processadas! Sua análise está em execução. Você receberá atualizações em breve.',
+      );
+
+      console.log(`[T6] sessao=${sessao.id} ENCERRADA status=concluida`);
+    }
+  }
 }

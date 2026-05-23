@@ -115,6 +115,38 @@ A seção "Interações via WhatsApp" exibia "Nenhuma resposta recebida ainda." 
 
 ---
 
+## TD#27 — Silent fail INSERT `analises` com `tenant_id` ausente ✅ FIXADO
+
+**Arquivo:** `bridge-server/routes/analises.js` (rota POST `/api/lojas/:id/analises`)  
+**Severidade:** Alta (foi bloqueante)  
+**Sintoma:** `assertLojaAccess` retorna `tenantId` mas o objeto row passado ao INSERT em
+`analises` não incluía a coluna `tenant_id`, causando violação NOT NULL no Supabase.
+O Bridge retornava 500 mas sem log claro identificando a coluna ausente. O erro só foi
+encontrado comparando o schema da tabela com o objeto inserido.  
+**Raiz:** INSERT construído manualmente sem listar todas as colunas NOT NULL; `tenant_id`
+era obtido na função mas não propagado para o objeto row.  
+**Fix aplicado:** Adicionado `tenant_id: tenantId` ao objeto row (linha 110 do arquivo).
+Deploy: Bridge commit `8c1d88c` (2026-05-23).  
+**Status:** ✅ Fechado
+
+---
+
+## TD#28 — G6 fechamento de análise ignora tarefas rejeitadas ✅ FIXADO
+
+**Arquivo:** `bridge-server/routes/tarefas.js` (handler POST `/api/tarefas/:id/concluir`, G6 ~linha 611)  
+**Severidade:** Alta (G6 jamais dispara quando há ≥1 tarefa rejeitada)  
+**Sintoma:** Condição `countConcluidas >= analise.total_tarefas_geradas` conta apenas tarefas
+`concluida`. Se houver 1+ rejeitada, o total `concluida` nunca alcança `total_tarefas_geradas`
+e a análise permanece aberta para sempre — mensagem `🎉 Parabéns` nunca é enviada.  
+**Raiz:** Tarefa rejeitada é estado terminal (não vira `concluida`), mas a condição G6
+não previa esse cenário.  
+**Fix aplicado:** Adiciona query paralela para `rejeitada` e muda condição para
+`(countConcluidas + countRejeitadasG6) >= analise.total_tarefas_geradas`.
+Deploy: Bridge commit `feature/piloto-05-fechamento-jornada` (2026-05-23).  
+**Status:** ✅ Fechado
+
+---
+
 ## Resumo de status
 
 | TD   | Descrição                                    | Severidade | Status          |
@@ -127,3 +159,5 @@ A seção "Interações via WhatsApp" exibia "Nenhuma resposta recebida ainda." 
 | TD#21 | `kind='agent'` inválido em notifications    | Média      | ✅ Fechado v42  |
 | TD#23 | `CardSessaoWhatsapp` colunas inexistentes    | Alta       | ✅ Fechado v43  |
 | TD#24 | Coluna `is_active` ausente em `lojas`        | Baixa      | Aberto          |
+| TD#27 | Silent fail INSERT `analises` `tenant_id`   | Alta       | ✅ Fechado 8c1d88c |
+| TD#28 | G6 não dispara com tarefas rejeitadas        | Alta       | ✅ Fechado (onda-05) |

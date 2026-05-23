@@ -18,6 +18,8 @@ const {
   EnviarWhatsappSchema,
 } = require('../schemas/analises');
 
+const { normalizeWhatsAppNumberBR } = require('../lib/normalize-whatsapp');
+
 const TRIGGER_API_URL         = 'https://api.trigger.dev';
 const TASK_ID                 = 'analise-gerar-relatorio';
 const TRIGGER_POLL_TIMEOUT_MS = 60_000;
@@ -105,6 +107,7 @@ module.exports = function buildAnalisesRouter({
       if (!tenantId) return;
 
       const row = {
+        tenant_id:    tenantId,
         loja_id:      lojaId,
         criado_por:   req.user.id,
         status:       'rascunho',
@@ -211,7 +214,7 @@ module.exports = function buildAnalisesRouter({
 
       // Busca analise — precisa estar processada
       const analises = await sbFetch(
-        `analises?id=eq.${encodeURIComponent(aid)}&loja_id=eq.${encodeURIComponent(lojaId)}&select=id,status,total_tarefas_geradas&limit=1`
+        `analises?id=eq.${encodeURIComponent(aid)}&loja_id=eq.${encodeURIComponent(lojaId)}&select=id,status,total_tarefas_geradas,loom_url&limit=1`
       );
       if (!analises?.length)
         return res.status(404).json({ error: 'Análise não encontrada nesta loja' });
@@ -253,6 +256,11 @@ module.exports = function buildAnalisesRouter({
       let currentBloco = null;
       let blocoNum = 0;
 
+      if (analise.loom_url) {
+        lines.push(`🎥 Vídeo da análise: ${analise.loom_url.trim()}`);
+        lines.push('Assista antes de responder.');
+        lines.push('');
+      }
       lines.push(`Análise da ${loja.nome}`);
       lines.push('');
       lines.push('Olá! Conforme combinado, segue a relação completa de ajustes:');
@@ -283,9 +291,26 @@ module.exports = function buildAnalisesRouter({
 
       const messageText = lines.join('\n');
       const instanceName = body.evolution_instance || inst.instance_name;
-      const numero = body.numero_destino;
+      const numero = normalizeWhatsAppNumberBR(body.numero_destino);
 
-      // Envia via Evolution API
+      // TD#16: DB pronto ANTES do envio — evita race onde cliente responde
+      // antes de sessão/tarefas existirem, causando mensagens perdidas ou
+      // sessão fechando prematuramente (tarefas ainda rascunho → count 0).
+
+      // 1. Marca tarefas como aguardando_aprovacao (antes do envio)
+      await sbFetch(
+        `tarefas_loja?analise_id=eq.${encodeURIComponent(aid)}&status=in.(rascunho,aguardando_envio)`,
+        { method: 'PATCH', body: { status: 'aguardando_aprovacao' } }
+      );
+
+      // 2. Cria sessão de aprovação (antes do envio)
+      const sessaoData = await sbFetch('whatsapp_aprovacao_sessions', {
+        method: 'POST',
+        body: { analise_id: aid, loja_id: lojaId, numero_destino: numero, evolution_instance: instanceName, status: 'ativa' },
+      });
+      const sessao = Array.isArray(sessaoData) ? sessaoData[0] : sessaoData;
+
+      // 3. Envia via Evolution API (DB já pronto — cliente pode responder com segurança)
       const evoRes = await fetch(
         `${inst.evolution_url}/message/sendText/${instanceName}`,
         {
@@ -297,26 +322,38 @@ module.exports = function buildAnalisesRouter({
       );
       if (!evoRes.ok) {
         const evoErr = await evoRes.text();
+        // Rollback melhor esforço: reverte tarefas e cancela sessão
+        await sbFetch(
+          `tarefas_loja?analise_id=eq.${encodeURIComponent(aid)}&status=eq.aguardando_aprovacao`,
+          { method: 'PATCH', body: { status: 'rascunho' } }
+        ).catch(() => {});
+        if (sessao?.id) {
+          await sbFetch(
+            `whatsapp_aprovacao_sessions?id=eq.${encodeURIComponent(sessao.id)}`,
+            { method: 'PATCH', body: { status: 'cancelada' } }
+          ).catch(() => {});
+        }
         throw new Error(`Evolution API ${evoRes.status}: ${evoErr.slice(0, 300)}`);
       }
 
-      // Cria sessão de aprovação
-      const sessaoData = await sbFetch('whatsapp_aprovacao_sessions', {
-        method: 'POST',
-        body: { analise_id: aid, loja_id: lojaId, numero_destino: numero, evolution_instance: instanceName, status: 'ativa' },
-      });
-      const sessao = Array.isArray(sessaoData) ? sessaoData[0] : sessaoData;
+      // 4. Extrai message_id da resposta Evolution para rastreio
+      let evoJson = null;
+      try { evoJson = await evoRes.json(); } catch {}
+      const messageIdEvolution = evoJson?.key?.id ?? evoJson?.id ?? null;
 
-      // Marca tarefas como aguardando_aprovacao
-      await sbFetch(
-        `tarefas_loja?analise_id=eq.${encodeURIComponent(aid)}&status=in.(rascunho,aguardando_envio)`,
-        { method: 'PATCH', body: { status: 'aguardando_aprovacao' } }
-      );
-
-      // Marca análise como enviada_cliente
+      // 5. Marca análise como enviada_cliente com metadados do envio
       await sbFetch(
         `analises?id=eq.${encodeURIComponent(aid)}`,
-        { method: 'PATCH', body: { status: 'enviada_cliente' } }
+        {
+          method: 'PATCH',
+          body: {
+            status: 'enviada_cliente',
+            numero_whatsapp_cliente: numero,
+            enviada_em: new Date().toISOString(),
+            enviada_via: 'whatsapp',
+            ...(messageIdEvolution ? { message_id_evolution: messageIdEvolution } : {}),
+          },
+        }
       );
 
       console.log(`[api/analises/enviar-whatsapp] loja=${lojaId} analise=${aid} numero=${numero} sessao=${sessao?.id}`);

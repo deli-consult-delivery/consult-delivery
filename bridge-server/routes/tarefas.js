@@ -572,6 +572,77 @@ module.exports = function buildTarefasRouter({ requireJwt, sbFetch, assertLojaAc
         metadata: {},
       });
 
+      // G5: notificar cliente via WhatsApp quando tarefa concluída
+      if (tarefa.analise_id) {
+        try {
+          const analises = await sbFetch(
+            `analises?id=eq.${encodeURIComponent(tarefa.analise_id)}&select=id,numero_whatsapp_cliente,total_tarefas_geradas&limit=1`
+          );
+          const analise = analises?.[0];
+
+          if (analise?.numero_whatsapp_cliente) {
+            const [lojas, instances] = await Promise.all([
+              sbFetch(`lojas?id=eq.${encodeURIComponent(tarefa.loja_id)}&select=nome&limit=1`),
+              sbFetch(`evolution_instances?tenant_id=eq.${encodeURIComponent(tenant_id)}&select=evolution_url,api_key,instance_name&limit=1`),
+            ]);
+            const loja   = lojas?.[0];
+            const inst   = instances?.[0];
+
+            if (inst) {
+              const msgLines = [
+                `✅ Tarefa concluída: ${tarefa.titulo}`,
+                '',
+                `Loja: ${loja?.nome ?? ''}`,
+              ];
+              if (tarefa.resultado_resumo) msgLines.push(tarefa.resultado_resumo);
+
+              await fetch(
+                `${inst.evolution_url}/message/sendText/${inst.instance_name}`,
+                {
+                  method:  'POST',
+                  headers: { 'Content-Type': 'application/json', apikey: inst.api_key },
+                  body:    JSON.stringify({ number: analise.numero_whatsapp_cliente, text: msgLines.join('\n') }),
+                  signal:  AbortSignal.timeout(15_000),
+                }
+              );
+              console.log(`[api/tarefas/concluir] G5 WhatsApp sent tarefa=${id} numero=${analise.numero_whatsapp_cliente}`);
+            }
+
+            // G6: encerrar análise se todas as tarefas estão concluídas ou rejeitadas
+            // TD#28: contar rejeitadas também — tarefa rejeitada é terminal e não vira concluída
+            const [concluidas, rejeitadasG6] = await Promise.all([
+              sbFetch(`tarefas_loja?analise_id=eq.${encodeURIComponent(tarefa.analise_id)}&status=eq.concluida&select=id&limit=500`),
+              sbFetch(`tarefas_loja?analise_id=eq.${encodeURIComponent(tarefa.analise_id)}&status=eq.rejeitada&select=id&limit=500`),
+            ]);
+            const countConcluidas  = concluidas?.length    ?? 0;
+            const countRejeitadasG6 = rejeitadasG6?.length ?? 0;
+            if (analise.total_tarefas_geradas && (countConcluidas + countRejeitadasG6) >= analise.total_tarefas_geradas) {
+              await sbFetch(
+                `analises?id=eq.${encodeURIComponent(analise.id)}`,
+                { method: 'PATCH', body: { status: 'concluida', concluida_em: new Date().toISOString() } }
+              );
+              if (inst) {
+                await fetch(
+                  `${inst.evolution_url}/message/sendText/${inst.instance_name}`,
+                  {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json', apikey: inst.api_key },
+                    body:    JSON.stringify({
+                      number: analise.numero_whatsapp_cliente,
+                      text:   `🎉 Parabéns! Todas as ${analise.total_tarefas_geradas} tarefas da análise da sua loja ${loja?.nome ?? ''} foram executadas.\n\nVocê pode acompanhar resultados nos próximos dias.\n\nObrigado pela parceria — Consult Delivery.`,
+                    }),
+                    signal: AbortSignal.timeout(15_000),
+                  }
+                );
+              }
+              console.log(`[api/tarefas/concluir] G6 análise=${analise.id} CONCLUÍDA`);
+            }
+          }
+        } catch (wapErr) {
+          console.error('[api/tarefas/concluir] G5+G6 WhatsApp falhou (non-fatal):', wapErr.message);
+        }
+      }
+
       console.log(`[api/tarefas/concluir POST] id=${id}`);
       res.json({ ok: true, status: 'concluida' });
     } catch (err) {
