@@ -12,6 +12,7 @@ const {
   IniciarExecucaoSchema,
   SubmeterValidacaoSchema,
   ConcluirSchema,
+  MarcarConcluidaSchema,
   ListComentariosQuerySchema,
   CreateComentarioSchema,
   RelatorioQuerySchema,
@@ -532,6 +533,78 @@ module.exports = function buildTarefasRouter({ requireJwt, sbFetch, assertLojaAc
     }
   });
 
+  // ── Helper G5+G6: notificar cliente + fechar análise se completa ─────────
+  // Non-fatal: nunca propaga exceção para o chamador
+  async function _notificarConclusao(tarefa, tenant_id) {
+    if (!tarefa.analise_id) return;
+    try {
+      const analises = await sbFetch(
+        `analises?id=eq.${encodeURIComponent(tarefa.analise_id)}&select=id,numero_whatsapp_cliente,total_tarefas_geradas&limit=1`
+      );
+      const analise = analises?.[0];
+      if (!analise?.numero_whatsapp_cliente) return;
+
+      const [lojas, instances] = await Promise.all([
+        sbFetch(`lojas?id=eq.${encodeURIComponent(tarefa.loja_id)}&select=nome&limit=1`),
+        sbFetch(`evolution_instances?tenant_id=eq.${encodeURIComponent(tenant_id)}&select=evolution_url,api_key,instance_name&limit=1`),
+      ]);
+      const loja = lojas?.[0];
+      const inst = instances?.[0];
+
+      if (inst) {
+        // G5 — tarefa concluída
+        const msgLines = [
+          `✅ Tarefa concluída: ${tarefa.titulo}`,
+          '',
+          `Loja: ${loja?.nome ?? ''}`,
+        ];
+        if (tarefa.resultado_resumo) msgLines.push(tarefa.resultado_resumo);
+        await fetch(
+          `${inst.evolution_url}/message/sendText/${inst.instance_name}`,
+          {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', apikey: inst.api_key },
+            body:    JSON.stringify({ number: analise.numero_whatsapp_cliente, text: msgLines.join('\n') }),
+            signal:  AbortSignal.timeout(15_000),
+          }
+        );
+        console.log(`[_notificarConclusao] G5 sent tarefa=${tarefa.id} numero=${analise.numero_whatsapp_cliente}`);
+      }
+
+      // G6 — encerrar análise se todas as tarefas estão concluídas ou rejeitadas
+      // TD#28: rejeitada é terminal — não vira concluída; contar ambas
+      const [concluidas, rejeitadasG6] = await Promise.all([
+        sbFetch(`tarefas_loja?analise_id=eq.${encodeURIComponent(tarefa.analise_id)}&status=eq.concluida&select=id&limit=500`),
+        sbFetch(`tarefas_loja?analise_id=eq.${encodeURIComponent(tarefa.analise_id)}&status=eq.rejeitada&select=id&limit=500`),
+      ]);
+      const countConcluidas   = concluidas?.length   ?? 0;
+      const countRejeitadasG6 = rejeitadasG6?.length ?? 0;
+      if (analise.total_tarefas_geradas && (countConcluidas + countRejeitadasG6) >= analise.total_tarefas_geradas) {
+        await sbFetch(
+          `analises?id=eq.${encodeURIComponent(analise.id)}`,
+          { method: 'PATCH', body: { status: 'concluida', concluida_em: new Date().toISOString() } }
+        );
+        if (inst) {
+          await fetch(
+            `${inst.evolution_url}/message/sendText/${inst.instance_name}`,
+            {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json', apikey: inst.api_key },
+              body:    JSON.stringify({
+                number: analise.numero_whatsapp_cliente,
+                text:   `🎉 Parabéns! Todas as ${analise.total_tarefas_geradas} tarefas da análise da sua loja ${loja?.nome ?? ''} foram executadas.\n\nVocê pode acompanhar resultados nos próximos dias.\n\nObrigado pela parceria — Consult Delivery.`,
+              }),
+              signal: AbortSignal.timeout(15_000),
+            }
+          );
+        }
+        console.log(`[_notificarConclusao] G6 análise=${analise.id} CONCLUÍDA`);
+      }
+    } catch (wapErr) {
+      console.error('[_notificarConclusao] G5+G6 falhou (non-fatal):', wapErr.message);
+    }
+  }
+
   // ════════════════════════════════════════════════════════════════════════
   // POST /api/tarefas/:id/concluir — aguardando_validacao → concluida
   // ════════════════════════════════════════════════════════════════════════
@@ -572,81 +645,89 @@ module.exports = function buildTarefasRouter({ requireJwt, sbFetch, assertLojaAc
         metadata: {},
       });
 
-      // G5: notificar cliente via WhatsApp quando tarefa concluída
-      if (tarefa.analise_id) {
-        try {
-          const analises = await sbFetch(
-            `analises?id=eq.${encodeURIComponent(tarefa.analise_id)}&select=id,numero_whatsapp_cliente,total_tarefas_geradas&limit=1`
-          );
-          const analise = analises?.[0];
-
-          if (analise?.numero_whatsapp_cliente) {
-            const [lojas, instances] = await Promise.all([
-              sbFetch(`lojas?id=eq.${encodeURIComponent(tarefa.loja_id)}&select=nome&limit=1`),
-              sbFetch(`evolution_instances?tenant_id=eq.${encodeURIComponent(tenant_id)}&select=evolution_url,api_key,instance_name&limit=1`),
-            ]);
-            const loja   = lojas?.[0];
-            const inst   = instances?.[0];
-
-            if (inst) {
-              const msgLines = [
-                `✅ Tarefa concluída: ${tarefa.titulo}`,
-                '',
-                `Loja: ${loja?.nome ?? ''}`,
-              ];
-              if (tarefa.resultado_resumo) msgLines.push(tarefa.resultado_resumo);
-
-              await fetch(
-                `${inst.evolution_url}/message/sendText/${inst.instance_name}`,
-                {
-                  method:  'POST',
-                  headers: { 'Content-Type': 'application/json', apikey: inst.api_key },
-                  body:    JSON.stringify({ number: analise.numero_whatsapp_cliente, text: msgLines.join('\n') }),
-                  signal:  AbortSignal.timeout(15_000),
-                }
-              );
-              console.log(`[api/tarefas/concluir] G5 WhatsApp sent tarefa=${id} numero=${analise.numero_whatsapp_cliente}`);
-            }
-
-            // G6: encerrar análise se todas as tarefas estão concluídas ou rejeitadas
-            // TD#28: contar rejeitadas também — tarefa rejeitada é terminal e não vira concluída
-            const [concluidas, rejeitadasG6] = await Promise.all([
-              sbFetch(`tarefas_loja?analise_id=eq.${encodeURIComponent(tarefa.analise_id)}&status=eq.concluida&select=id&limit=500`),
-              sbFetch(`tarefas_loja?analise_id=eq.${encodeURIComponent(tarefa.analise_id)}&status=eq.rejeitada&select=id&limit=500`),
-            ]);
-            const countConcluidas  = concluidas?.length    ?? 0;
-            const countRejeitadasG6 = rejeitadasG6?.length ?? 0;
-            if (analise.total_tarefas_geradas && (countConcluidas + countRejeitadasG6) >= analise.total_tarefas_geradas) {
-              await sbFetch(
-                `analises?id=eq.${encodeURIComponent(analise.id)}`,
-                { method: 'PATCH', body: { status: 'concluida', concluida_em: new Date().toISOString() } }
-              );
-              if (inst) {
-                await fetch(
-                  `${inst.evolution_url}/message/sendText/${inst.instance_name}`,
-                  {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json', apikey: inst.api_key },
-                    body:    JSON.stringify({
-                      number: analise.numero_whatsapp_cliente,
-                      text:   `🎉 Parabéns! Todas as ${analise.total_tarefas_geradas} tarefas da análise da sua loja ${loja?.nome ?? ''} foram executadas.\n\nVocê pode acompanhar resultados nos próximos dias.\n\nObrigado pela parceria — Consult Delivery.`,
-                    }),
-                    signal: AbortSignal.timeout(15_000),
-                  }
-                );
-              }
-              console.log(`[api/tarefas/concluir] G6 análise=${analise.id} CONCLUÍDA`);
-            }
-          }
-        } catch (wapErr) {
-          console.error('[api/tarefas/concluir] G5+G6 WhatsApp falhou (non-fatal):', wapErr.message);
-        }
-      }
+      await _notificarConclusao(tarefa, tenant_id);
 
       console.log(`[api/tarefas/concluir POST] id=${id}`);
       res.json({ ok: true, status: 'concluida' });
     } catch (err) {
       console.error('[api/tarefas/concluir POST]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  // POST /api/tarefas/:id/marcar-concluida — aprovada → concluida (compound)
+  // TD#31: colapsa iniciar-execucao + submeter-validacao + concluir em 1 clique
+  // ════════════════════════════════════════════════════════════════════════
+  router.post('/tarefas/:id/marcar-concluida', requireJwt, async (req, res) => {
+    const { id } = req.params;
+
+    const body = validate(MarcarConcluidaSchema, req.body, res);
+    if (!body) return;
+
+    try {
+      const ctx = await fetchTarefaComAcesso(req, res, id);
+      if (!ctx) return;
+      const { tarefa, tenant_id } = ctx;
+
+      if (tarefa.status !== 'aprovada') {
+        return res.status(409).json({
+          error: `Status '${tarefa.status}' não permite marcar-concluida (esperado: aprovada)`,
+        });
+      }
+
+      try {
+        // 1. aprovada → em_execucao
+        await patchTarefa(id, { status: 'em_execucao', executada_em: new Date().toISOString() });
+        await supabaseInsert('tarefa_aprovacoes', {
+          tarefa_id: id,
+          acao:      'iniciou_execucao',
+          autor_id:  req.user.id,
+          nota:      null,
+        });
+
+        // 2. em_execucao → aguardando_validacao
+        await patchTarefa(id, { status: 'aguardando_validacao' });
+        await supabaseInsert('tarefa_aprovacoes', {
+          tarefa_id: id,
+          acao:      'submeteu_validacao',
+          autor_id:  req.user.id,
+          nota:      null,
+        });
+
+        // 3. aguardando_validacao → concluida
+        await patchTarefa(id, { status: 'concluida', concluida_em: new Date().toISOString() });
+        await supabaseInsert('tarefa_aprovacoes', {
+          tarefa_id: id,
+          acao:      'concluiu',
+          autor_id:  req.user.id,
+          nota:      body.nota ?? null,
+        });
+      } catch (seqErr) {
+        console.error('[api/tarefas/marcar-concluida] erro na sequência — revertendo pra aprovada:', seqErr.message);
+        try {
+          await patchTarefa(id, { status: 'aprovada', executada_em: null, concluida_em: null });
+        } catch (rbErr) {
+          console.error('[api/tarefas/marcar-concluida] rollback falhou:', rbErr.message);
+        }
+        return res.status(500).json({ error: seqErr.message });
+      }
+
+      await logAudit({
+        tenant_id,
+        user_id:  req.user.id,
+        action:   'tarefa_marcada_concluida',
+        resource: `tarefas_loja:${id}`,
+        metadata: {},
+      });
+
+      // passar tarefa com status atualizado para G5+G6
+      await _notificarConclusao({ ...tarefa, status: 'concluida' }, tenant_id);
+
+      console.log(`[api/tarefas/marcar-concluida POST] id=${id}`);
+      res.json({ ok: true, status: 'concluida', tarefa_id: id });
+    } catch (err) {
+      console.error('[api/tarefas/marcar-concluida POST]', err.message);
       res.status(500).json({ error: err.message });
     }
   });
