@@ -107,6 +107,7 @@ module.exports = function buildAnalisesRouter({
       if (!tenantId) return;
 
       const row = {
+        tenant_id:    tenantId,
         loja_id:      lojaId,
         criado_por:   req.user.id,
         status:       'rascunho',
