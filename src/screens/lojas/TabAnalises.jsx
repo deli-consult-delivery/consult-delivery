@@ -96,17 +96,19 @@ function renderMarkdown(text) {
 // ── Status helpers ────────────────────────────────────────────────────────────
 
 const STATUS_LABEL = {
-  rascunho: 'Rascunho',
-  processando: 'Processando…',
-  processada: 'Processada',
-  erro: 'Erro',
+  rascunho:         'Rascunho',
+  processando:      'Processando…',
+  processada:       'Processada',
+  enviada_cliente:  'Enviada ao cliente',
+  erro:             'Erro',
 };
 
 const STATUS_COLOR = {
-  rascunho: '#6b7280',
-  processando: '#f59e0b',
-  processada: '#10b981',
-  erro: '#ef4444',
+  rascunho:        '#6b7280',
+  processando:     '#f59e0b',
+  processada:      '#10b981',
+  enviada_cliente: '#8b5cf6',
+  erro:            '#ef4444',
 };
 
 const TIPO_LABEL = {
@@ -482,9 +484,221 @@ function StatusBadge({ status }) {
   );
 }
 
+// ── Modal: Enviar análise ao cliente via WhatsApp ─────────────────────────────
+
+const BLOCO_LABEL_PT = {
+  identidade: 'IDENTIDADE',
+  cardapio:   'CARDÁPIO',
+  operacao:   'OPERAÇÃO',
+  avaliacoes: 'AVALIAÇÕES',
+  marketing:  'MARKETING',
+  suporte:    'SUPORTE',
+};
+
+function buildWaMessage(nomeLoja, tarefas) {
+  const lines = [];
+  lines.push(`Análise da ${nomeLoja}`);
+  lines.push('');
+  lines.push('Olá! Conforme combinado, segue a relação completa de ajustes:');
+  let numGlobal = 0;
+  let currentBloco = null;
+  let blocoNum = 0;
+  for (const t of tarefas) {
+    numGlobal++;
+    if (t.bloco !== currentBloco) {
+      currentBloco = t.bloco;
+      blocoNum++;
+      lines.push('');
+      lines.push(`📋 BLOCO ${blocoNum} — ${BLOCO_LABEL_PT[t.bloco] || t.bloco.toUpperCase()}`);
+    }
+    lines.push('');
+    lines.push(`Tarefa ${numGlobal}: ${t.titulo}`);
+    lines.push(`Situação: ${t.situacao}`);
+  }
+  lines.push('');
+  lines.push('Pra aprovar, responda:');
+  lines.push("- 'OK 1' (aprova tarefa 1)");
+  lines.push("- 'OK bloco 1' (aprova bloco inteiro)");
+  lines.push("- 'OK tudo' (aprova todas)");
+  lines.push("- 'NAO 3' (rejeita tarefa 3)");
+  lines.push("- 'DUVIDA 4: [pergunta]' (envia pergunta)");
+  lines.push("- 'OK 1, 3, 5' (aprova múltiplas)");
+  lines.push('');
+  lines.push('Aguardo retorno.');
+  return lines.join('\n');
+}
+
+function ModalEnviarWhatsapp({ analise, lojaId, onClose, onEnviada }) {
+  const [numeroDestino, setNumeroDestino] = useState('');
+  const [tarefas, setTarefas] = useState([]);
+  const [nomeLoja, setNomeLoja] = useState('');
+  const [loadingData, setLoadingData] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    async function load() {
+      setLoadingData(true);
+      try {
+        const [{ data: lojaData }, { data: tarefasData }] = await Promise.all([
+          supabase.from('lojas').select('nome,whatsapp').eq('id', lojaId).single(),
+          supabase
+            .from('tarefas_loja')
+            .select('id,titulo,bloco,situacao')
+            .eq('analise_id', analise.id)
+            .order('bloco', { ascending: true })
+            .order('ordem_no_bloco', { ascending: true }),
+        ]);
+        if (lojaData?.nome)     setNomeLoja(lojaData.nome);
+        if (lojaData?.whatsapp) setNumeroDestino(lojaData.whatsapp);
+        setTarefas(tarefasData || []);
+      } catch (err) {
+        setError('Erro ao carregar dados: ' + err.message);
+      } finally {
+        setLoadingData(false);
+      }
+    }
+    load();
+  }, [analise.id, lojaId]);
+
+  async function handleEnviar() {
+    if (!numeroDestino.trim()) { setError('Informe o número de destino'); return; }
+    setLoading(true);
+    setError(null);
+    try {
+      await bridgeFetch(`/api/lojas/${lojaId}/analises/${analise.id}/enviar-whatsapp`, {
+        method: 'POST',
+        body: JSON.stringify({ numero_destino: numeroDestino.trim() }),
+      });
+      onEnviada();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const preview = loadingData ? '…carregando…' : buildWaMessage(nomeLoja || 'loja', tarefas);
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 1000,
+      background: 'rgba(0,0,0,0.72)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 16,
+    }}>
+      <div style={{
+        background: 'var(--bg-card, #1a1a1a)',
+        border: '1px solid var(--g-200, #2a2a2a)',
+        borderRadius: 12, padding: 24,
+        width: '100%', maxWidth: 560, maxHeight: '90vh',
+        display: 'flex', flexDirection: 'column', gap: 16,
+        overflowY: 'auto',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--g-900, #fff)' }}>
+            Enviar análise ao cliente via WhatsApp
+          </span>
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--g-500, #6b7280)', fontSize: 20, lineHeight: 1, padding: 0 }}
+          >
+            ×
+          </button>
+        </div>
+
+        <div>
+          <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--g-500, #6b7280)', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>
+            Número de destino (formato Evolution API)
+          </label>
+          <input
+            value={numeroDestino}
+            onChange={e => setNumeroDestino(e.target.value)}
+            placeholder="5511999999999@s.whatsapp.net"
+            style={{
+              width: '100%', boxSizing: 'border-box',
+              padding: '8px 12px', borderRadius: 6,
+              border: '1px solid var(--g-200, #2a2a2a)',
+              background: 'var(--bg-input, #111)', color: 'var(--g-900, #fff)',
+              fontSize: 13, fontFamily: 'inherit',
+            }}
+          />
+          <span style={{ fontSize: 11, color: 'var(--g-500, #6b7280)', marginTop: 4, display: 'block' }}>
+            Ex: 5511999999999@s.whatsapp.net — use o número sem + ou espaços
+          </span>
+        </div>
+
+        <div>
+          <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--g-500, #6b7280)', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>
+            Preview da mensagem ({tarefas.length} tarefas)
+          </label>
+          <pre style={{
+            whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            padding: '10px 12px', borderRadius: 6,
+            background: 'var(--bg-input, #111)',
+            border: '1px solid var(--g-200, #2a2a2a)',
+            fontSize: 11, color: 'var(--g-700, #9ca3af)', lineHeight: 1.6,
+            maxHeight: 240, overflowY: 'auto', margin: 0,
+            fontFamily: 'inherit',
+          }}>
+            {preview}
+          </pre>
+        </div>
+
+        {error && (
+          <div style={{
+            padding: '8px 12px', borderRadius: 6,
+            background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+            color: '#ef4444', fontSize: 12,
+          }}>
+            {error}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            style={{
+              padding: '8px 18px', borderRadius: 6, cursor: 'pointer',
+              background: 'transparent', border: '1px solid var(--g-300, #374151)',
+              color: 'var(--g-600, #9ca3af)', fontSize: 13,
+            }}
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleEnviar}
+            disabled={loading || loadingData}
+            style={{
+              padding: '8px 18px', borderRadius: 6,
+              cursor: (loading || loadingData) ? 'not-allowed' : 'pointer',
+              background: (loading || loadingData) ? '#555' : '#8b5cf6',
+              border: 'none', color: '#fff', fontSize: 13, fontWeight: 600,
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}
+          >
+            {loading && (
+              <span style={{
+                width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)',
+                borderTopColor: '#fff', borderRadius: '50%',
+                animation: 'spin 0.7s linear infinite', display: 'inline-block',
+              }} />
+            )}
+            {loading ? 'Enviando…' : 'Enviar agora'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Painel de detalhe ─────────────────────────────────────────────────────────
 
-function AnaliseDetalhe({ analise, lojaId, onGoToTarefas }) {
+function AnaliseDetalhe({ analise, lojaId, onGoToTarefas, onEnviada }) {
+  const [showEnviarModal, setShowEnviarModal] = useState(false);
   if (!analise) {
     return (
       <div style={{
@@ -586,7 +800,7 @@ function AnaliseDetalhe({ analise, lojaId, onGoToTarefas }) {
 
       {/* Botão Ver tarefas */}
       {analise.total_tarefas_geradas > 0 && onGoToTarefas && (
-        <div style={{ marginBottom: 20 }}>
+        <div style={{ marginBottom: 8 }}>
           <button
             onClick={() => onGoToTarefas(analise.id)}
             style={{
@@ -603,6 +817,36 @@ function AnaliseDetalhe({ analise, lojaId, onGoToTarefas }) {
             Ver {analise.total_tarefas_geradas} tarefas geradas
           </button>
         </div>
+      )}
+
+      {/* Botão Enviar pra cliente — só quando processada */}
+      {analise.status === 'processada' && (
+        <div style={{ marginBottom: 20 }}>
+          <button
+            onClick={() => setShowEnviarModal(true)}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              padding: '8px 16px', borderRadius: 6, cursor: 'pointer',
+              background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.3)',
+              color: '#8b5cf6', fontSize: 13, fontWeight: 600,
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
+            </svg>
+            Enviar análise pra cliente via WhatsApp
+          </button>
+        </div>
+      )}
+
+      {/* Modal envio WhatsApp */}
+      {showEnviarModal && (
+        <ModalEnviarWhatsapp
+          analise={analise}
+          lojaId={lojaId}
+          onClose={() => setShowEnviarModal(false)}
+          onEnviada={() => { setShowEnviarModal(false); onEnviada?.(); }}
+        />
       )}
 
       {/* Loom URL */}
@@ -841,6 +1085,7 @@ export default function TabAnalises({ lojaId, userId, onGoToTarefas }) {
             analise={selectedAnalise}
             lojaId={lojaId}
             onGoToTarefas={onGoToTarefas}
+            onEnviada={loadAnalises}
           />
         </div>
       </div>

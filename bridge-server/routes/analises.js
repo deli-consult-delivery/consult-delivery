@@ -15,6 +15,7 @@ const {
   ListAnalisesQuerySchema,
   CreateAnaliseSchema,
   ProcessarAnaliseSchema,
+  EnviarWhatsappSchema,
 } = require('../schemas/analises');
 
 const TRIGGER_API_URL         = 'https://api.trigger.dev';
@@ -189,6 +190,139 @@ module.exports = function buildAnalisesRouter({
       return res.json({ ok: true, run_id: runId, ...output });
     } catch (err) {
       console.error('[api/lojas/:id/analises/processar]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 4. POST /api/lojas/:id/analises/:aid/enviar-whatsapp
+  //    Envia análise formatada ao cliente via WhatsApp e abre sessão de aprovação.
+  //    Pré-condição: analise.status === 'processada'
+  // ══════════════════════════════════════════════════════════════════════════
+  router.post('/lojas/:id/analises/:aid/enviar-whatsapp', requireJwt, async (req, res) => {
+    const { id: lojaId, aid } = req.params;
+
+    const body = validate(EnviarWhatsappSchema, req.body, res);
+    if (!body) return;
+
+    try {
+      const tenantId = await assertLojaAccess(req, res, lojaId);
+      if (!tenantId) return;
+
+      // Busca analise — precisa estar processada
+      const analises = await sbFetch(
+        `analises?id=eq.${encodeURIComponent(aid)}&loja_id=eq.${encodeURIComponent(lojaId)}&select=id,status,total_tarefas_geradas&limit=1`
+      );
+      if (!analises?.length)
+        return res.status(404).json({ error: 'Análise não encontrada nesta loja' });
+      const analise = analises[0];
+      if (analise.status !== 'processada')
+        return res.status(400).json({ error: `Análise precisa ter status 'processada' (atual: ${analise.status})` });
+
+      // Busca loja (nome + whatsapp)
+      const lojas = await sbFetch(
+        `lojas?id=eq.${encodeURIComponent(lojaId)}&select=id,nome,whatsapp&limit=1`
+      );
+      const loja = lojas?.[0] ?? { nome: 'loja' };
+
+      // Busca tarefas ordenadas por bloco + ordem_no_bloco
+      const tarefas = await sbFetch(
+        `tarefas_loja?analise_id=eq.${encodeURIComponent(aid)}&order=bloco.asc,ordem_no_bloco.asc&select=id,titulo,bloco,situacao&limit=200`
+      );
+
+      // Busca instância Evolution do tenant
+      const instances = await sbFetch(
+        `evolution_instances?tenant_id=eq.${encodeURIComponent(tenantId)}&select=evolution_url,api_key,instance_name&limit=1`
+      );
+      const inst = instances?.[0];
+      if (!inst)
+        return res.status(404).json({ error: 'Instância Evolution não configurada para este tenant' });
+
+      // Monta mensagem formatada
+      const BLOCO_LABEL = {
+        identidade: 'IDENTIDADE',
+        cardapio:   'CARDÁPIO',
+        operacao:   'OPERAÇÃO',
+        avaliacoes: 'AVALIAÇÕES',
+        marketing:  'MARKETING',
+        suporte:    'SUPORTE',
+      };
+      const tarefasList = tarefas ?? [];
+      const lines = [];
+      let numGlobal = 0;
+      let currentBloco = null;
+      let blocoNum = 0;
+
+      lines.push(`Análise da ${loja.nome}`);
+      lines.push('');
+      lines.push('Olá! Conforme combinado, segue a relação completa de ajustes:');
+
+      for (const tarefa of tarefasList) {
+        numGlobal++;
+        if (tarefa.bloco !== currentBloco) {
+          currentBloco = tarefa.bloco;
+          blocoNum++;
+          lines.push('');
+          lines.push(`📋 BLOCO ${blocoNum} — ${BLOCO_LABEL[tarefa.bloco] || tarefa.bloco.toUpperCase()}`);
+        }
+        lines.push('');
+        lines.push(`Tarefa ${numGlobal}: ${tarefa.titulo}`);
+        lines.push(`Situação: ${tarefa.situacao}`);
+      }
+
+      lines.push('');
+      lines.push('Pra aprovar, responda:');
+      lines.push("- 'OK 1' (aprova tarefa 1)");
+      lines.push("- 'OK bloco 1' (aprova bloco inteiro)");
+      lines.push("- 'OK tudo' (aprova todas)");
+      lines.push("- 'NAO 3' (rejeita tarefa 3)");
+      lines.push("- 'DUVIDA 4: [pergunta]' (envia pergunta)");
+      lines.push("- 'OK 1, 3, 5' (aprova múltiplas)");
+      lines.push('');
+      lines.push('Aguardo retorno.');
+
+      const messageText = lines.join('\n');
+      const instanceName = body.evolution_instance || inst.instance_name;
+      const numero = body.numero_destino;
+
+      // Envia via Evolution API
+      const evoRes = await fetch(
+        `${inst.evolution_url}/message/sendText/${instanceName}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', apikey: inst.api_key },
+          body: JSON.stringify({ number: numero, text: messageText }),
+          signal: AbortSignal.timeout(20_000),
+        }
+      );
+      if (!evoRes.ok) {
+        const evoErr = await evoRes.text();
+        throw new Error(`Evolution API ${evoRes.status}: ${evoErr.slice(0, 300)}`);
+      }
+
+      // Cria sessão de aprovação
+      const sessaoData = await sbFetch('whatsapp_aprovacao_sessions', {
+        method: 'POST',
+        body: { analise_id: aid, loja_id: lojaId, numero_destino: numero, evolution_instance: instanceName, status: 'ativa' },
+      });
+      const sessao = Array.isArray(sessaoData) ? sessaoData[0] : sessaoData;
+
+      // Marca tarefas como aguardando_aprovacao
+      await sbFetch(
+        `tarefas_loja?analise_id=eq.${encodeURIComponent(aid)}&status=in.(rascunho,aguardando_envio)`,
+        { method: 'PATCH', body: { status: 'aguardando_aprovacao' } }
+      );
+
+      // Marca análise como enviada_cliente
+      await sbFetch(
+        `analises?id=eq.${encodeURIComponent(aid)}`,
+        { method: 'PATCH', body: { status: 'enviada_cliente' } }
+      );
+
+      console.log(`[api/analises/enviar-whatsapp] loja=${lojaId} analise=${aid} numero=${numero} sessao=${sessao?.id}`);
+      return res.json({ ok: true, session_id: sessao?.id ?? null, numero_destino: numero, tarefas_count: tarefasList.length });
+    } catch (err) {
+      console.error('[api/lojas/:id/analises/:aid/enviar-whatsapp]', err.message);
       res.status(500).json({ error: err.message });
     }
   });

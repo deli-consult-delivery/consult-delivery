@@ -20,8 +20,15 @@ const ProcessarAnaliseSchema = z.object({
   analise_id: z.string().uuid(),
 });
 
+// ── POST /api/lojas/:id/analises/:aid/enviar-whatsapp — envio WhatsApp ────────
+const EnviarWhatsappSchema = z.object({
+  numero_destino:    z.string().min(5, 'Número de destino obrigatório'),
+  evolution_instance: z.string().optional(),
+});
+
 module.exports = {
   ListAnalisesQuerySchema,
   CreateAnaliseSchema,
   ProcessarAnaliseSchema,
+  EnviarWhatsappSchema,
 };
