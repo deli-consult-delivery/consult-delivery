@@ -18,6 +18,8 @@ const {
   EnviarWhatsappSchema,
 } = require('../schemas/analises');
 
+const { normalizeWhatsAppNumberBR } = require('../lib/normalize-whatsapp');
+
 const TRIGGER_API_URL         = 'https://api.trigger.dev';
 const TASK_ID                 = 'analise-gerar-relatorio';
 const TRIGGER_POLL_TIMEOUT_MS = 60_000;
@@ -283,7 +285,7 @@ module.exports = function buildAnalisesRouter({
 
       const messageText = lines.join('\n');
       const instanceName = body.evolution_instance || inst.instance_name;
-      const numero = body.numero_destino;
+      const numero = normalizeWhatsAppNumberBR(body.numero_destino);
 
       // Envia via Evolution API
       const evoRes = await fetch(
