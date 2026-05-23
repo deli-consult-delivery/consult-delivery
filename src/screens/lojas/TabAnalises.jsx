@@ -733,9 +733,8 @@ function CardSessaoWhatsapp({ analiseId }) {
         const ids = tarefas.map(t => t.id);
         const { data: rows } = await supabase
           .from('tarefa_aprovacoes')
-          .select('id,acao,comentario,created_at')
+          .select('id,acao,nota,created_at')
           .in('tarefa_id', ids)
-          .eq('feita_via', 'whatsapp')
           .order('created_at', { ascending: false })
           .limit(50);
         setInteracoes(rows ?? []);
@@ -824,9 +823,9 @@ function CardSessaoWhatsapp({ analiseId }) {
                 <span style={{ fontWeight: 600, color: 'var(--g-800, #e5e7eb)' }}>
                   {ACAO_LABEL_WA[i.acao] ?? i.acao}
                 </span>
-                {i.comentario && (
+                {i.nota && (
                   <span style={{ color: 'var(--g-500, #6b7280)', fontStyle: 'italic' }}>
-                    — {i.comentario}
+                    — {i.nota}
                   </span>
                 )}
               </div>

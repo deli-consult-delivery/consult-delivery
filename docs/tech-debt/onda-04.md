@@ -88,6 +88,20 @@ Deploy: evolution-webhook v42 (2026-05-23).
 
 ---
 
+## TD#23 — `CardSessaoWhatsapp` query com colunas inexistentes ✅ FIXADO
+
+**Arquivo:** `src/screens/lojas/TabAnalises.jsx` (função `CardSessaoWhatsapp`, ~linha 734)  
+**Severidade:** Alta (interações sempre vazias no UI)  
+**Sintoma:** O componente fazia `.select('id,acao,comentario,created_at')` e `.eq('feita_via','whatsapp')`.
+Nenhuma das duas colunas (`comentario`, `feita_via`) existe em `tarefa_aprovacoes`.
+Supabase JS v2 retornava erro silencioso → `rows = null` → `interacoes = []`.
+A seção "Interações via WhatsApp" exibia "Nenhuma resposta recebida ainda." mesmo com 22 aprovações no DB.  
+**Fix aplicado:** `.select('id,acao,nota,created_at')`, removido `.eq('feita_via','whatsapp')`,
+`i.comentario` → `i.nota` no JSX. Query corrigida retorna 22 rows (aprovada=20, rejeitada=1, duvida=1).  
+**Status:** ✅ Fechado — commit na branch feature/piloto-04-whatsapp-loom
+
+---
+
 ## Resumo de status
 
 | TD   | Descrição                                    | Severidade | Status          |
@@ -98,3 +112,4 @@ Deploy: evolution-webhook v42 (2026-05-23).
 | TD#19 | numero_destino 12 vs 13 dígitos              | Alta       | Parcial (paliativo) |
 | TD#20 | Sessão não encerra após OK tudo              | Média      | Aberto          |
 | TD#21 | `kind='agent'` inválido em notifications    | Média      | ✅ Fechado v42  |
+| TD#23 | `CardSessaoWhatsapp` colunas inexistentes    | Alta       | ✅ Fechado v43  |

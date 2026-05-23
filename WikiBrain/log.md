@@ -3,6 +3,9 @@
 ## [2026-05-22 14:00] session | piloto-04 Tarefas 3+4 validadas e entregues
 Touched: none
 
+## [2026-05-23 03:30] session | piloto-04 T10 Parte1 smoke E2E completo + migration 010
+Touched: none
+
 ## [2026-05-22 22:00] session | piloto-04 T8+T9 implementados + deploy completo
 Touched: none
 
@@ -291,6 +294,15 @@ Touched: none
 ## [2026-05-16 14:36] session | fix TypeScript .catch + GSD hooks config
 Touched: none
 ## [2026-05-17 11:25] session | config: deploy sem prompt + Stop hook tsc
+Touched: none
+
+## [2026-05-23 15:30] session | piloto-04 deploy evolution-webhook v42 + PR Onda 04
+Touched: none
+
+## [2026-05-23 14:30] session | piloto-04 T10 validação final + tech debt TD#16-TD#21
+Touched: none
+
+## [2026-05-23 04:30] session | piloto-04 T10 Parte2 — bug phone mismatch + colunas inexistentes fix
 Touched: none
 
 ## [2026-05-20] PR #54 mergeado SEM teste visual do modal RelatorioModal
