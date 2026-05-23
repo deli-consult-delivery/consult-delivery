@@ -320,10 +320,10 @@ module.exports = function buildAnalisesRouter({
         { method: 'PATCH', body: { status: 'aguardando_aprovacao' } }
       );
 
-      // Marca análise como enviada_cliente
+      // Marca análise como enviada_cliente e salva número para notificações futuras (T5/G5)
       await sbFetch(
         `analises?id=eq.${encodeURIComponent(aid)}`,
-        { method: 'PATCH', body: { status: 'enviada_cliente' } }
+        { method: 'PATCH', body: { status: 'enviada_cliente', numero_whatsapp_cliente: numero } }
       );
 
       console.log(`[api/analises/enviar-whatsapp] loja=${lojaId} analise=${aid} numero=${numero} sessao=${sessao?.id}`);

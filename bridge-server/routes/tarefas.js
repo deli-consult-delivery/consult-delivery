@@ -572,6 +572,47 @@ module.exports = function buildTarefasRouter({ requireJwt, sbFetch, assertLojaAc
         metadata: {},
       });
 
+      // G5: notificar cliente via WhatsApp quando tarefa concluída
+      if (tarefa.analise_id) {
+        try {
+          const analises = await sbFetch(
+            `analises?id=eq.${encodeURIComponent(tarefa.analise_id)}&select=id,numero_whatsapp_cliente,total_tarefas_geradas&limit=1`
+          );
+          const analise = analises?.[0];
+
+          if (analise?.numero_whatsapp_cliente) {
+            const [lojas, instances] = await Promise.all([
+              sbFetch(`lojas?id=eq.${encodeURIComponent(tarefa.loja_id)}&select=nome&limit=1`),
+              sbFetch(`evolution_instances?tenant_id=eq.${encodeURIComponent(tenant_id)}&select=evolution_url,api_key,instance_name&limit=1`),
+            ]);
+            const loja   = lojas?.[0];
+            const inst   = instances?.[0];
+
+            if (inst) {
+              const msgLines = [
+                `✅ Tarefa concluída: ${tarefa.titulo}`,
+                '',
+                `Loja: ${loja?.nome ?? ''}`,
+              ];
+              if (tarefa.resultado_resumo) msgLines.push(tarefa.resultado_resumo);
+
+              await fetch(
+                `${inst.evolution_url}/message/sendText/${inst.instance_name}`,
+                {
+                  method:  'POST',
+                  headers: { 'Content-Type': 'application/json', apikey: inst.api_key },
+                  body:    JSON.stringify({ number: analise.numero_whatsapp_cliente, text: msgLines.join('\n') }),
+                  signal:  AbortSignal.timeout(15_000),
+                }
+              );
+              console.log(`[api/tarefas/concluir] G5 WhatsApp sent tarefa=${id} numero=${analise.numero_whatsapp_cliente}`);
+            }
+          }
+        } catch (wapErr) {
+          console.error('[api/tarefas/concluir] G5 WhatsApp falhou (non-fatal):', wapErr.message);
+        }
+      }
+
       console.log(`[api/tarefas/concluir POST] id=${id}`);
       res.json({ ok: true, status: 'concluida' });
     } catch (err) {
