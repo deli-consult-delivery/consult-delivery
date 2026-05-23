@@ -607,9 +607,36 @@ module.exports = function buildTarefasRouter({ requireJwt, sbFetch, assertLojaAc
               );
               console.log(`[api/tarefas/concluir] G5 WhatsApp sent tarefa=${id} numero=${analise.numero_whatsapp_cliente}`);
             }
+
+            // G6: encerrar análise se todas as tarefas estão concluídas
+            const concluidas = await sbFetch(
+              `tarefas_loja?analise_id=eq.${encodeURIComponent(tarefa.analise_id)}&status=eq.concluida&select=id&limit=500`
+            );
+            const countConcluidas = concluidas?.length ?? 0;
+            if (analise.total_tarefas_geradas && countConcluidas >= analise.total_tarefas_geradas) {
+              await sbFetch(
+                `analises?id=eq.${encodeURIComponent(analise.id)}`,
+                { method: 'PATCH', body: { status: 'concluida', concluida_em: new Date().toISOString() } }
+              );
+              if (inst) {
+                await fetch(
+                  `${inst.evolution_url}/message/sendText/${inst.instance_name}`,
+                  {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json', apikey: inst.api_key },
+                    body:    JSON.stringify({
+                      number: analise.numero_whatsapp_cliente,
+                      text:   `🎉 Parabéns! Todas as ${analise.total_tarefas_geradas} tarefas da análise da sua loja ${loja?.nome ?? ''} foram executadas.\n\nVocê pode acompanhar resultados nos próximos dias.\n\nObrigado pela parceria — Consult Delivery.`,
+                    }),
+                    signal: AbortSignal.timeout(15_000),
+                  }
+                );
+              }
+              console.log(`[api/tarefas/concluir] G6 análise=${analise.id} CONCLUÍDA`);
+            }
           }
         } catch (wapErr) {
-          console.error('[api/tarefas/concluir] G5 WhatsApp falhou (non-fatal):', wapErr.message);
+          console.error('[api/tarefas/concluir] G5+G6 WhatsApp falhou (non-fatal):', wapErr.message);
         }
       }
 
