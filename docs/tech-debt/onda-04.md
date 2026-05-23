@@ -74,17 +74,17 @@ para o handler T6 mesmo após todas as tarefas aprovadas.
 
 ---
 
-## TD#21 — `internal_notifications` INSERT com `kind='agent'` inválido
+## TD#21 — `internal_notifications` INSERT com `kind='agent'` inválido ✅ FIXADO
 
-**Arquivo:** `supabase/functions/evolution-webhook/index.ts` (função `handleAprovacaoSession`, ~última seção)  
+**Arquivo:** `supabase/functions/evolution-webhook/index.ts` (função `handleAprovacaoSession`)  
 **Severidade:** Média  
-**Sintoma:** O código insere `kind: 'agent'` em `internal_notifications`, mas esse valor
-provavelmente viola um CHECK constraint na tabela (valores válidos observados: `channel_message`,
-`deli_alert`). O INSERT falha silenciosamente — nenhuma notificação interna chega para
-a equipe quando o cliente responde via WhatsApp.  
-**Fix sugerido:** Verificar constraint em `internal_notifications.kind`; usar valor válido
-(ex: `'agent'` se for adicionado ao enum, ou `'system'`/`'deli_alert'` existente).  
-**Status:** Aberto — notificações internas de resposta WhatsApp não funcionam
+**Sintoma:** O código inseria `kind: 'agent'` em `internal_notifications`, mas o CHECK
+constraint aceita apenas: `agent_invoked, agent_completed, agent_failed, draft_pending,
+draft_approved, draft_rejected, deli_proposal, deli_alert, system, channel_message`.
+O INSERT falhava silenciosamente — nenhuma notificação interna chegava à equipe.  
+**Fix aplicado:** Alterado para `kind: 'agent_completed'`.
+Deploy: evolution-webhook v42 (2026-05-23).  
+**Status:** ✅ Fechado
 
 ---
 
@@ -97,4 +97,4 @@ a equipe quando o cliente responde via WhatsApp.
 | TD#18 | Silent fail INSERT colunas inexistentes      | Alta       | ✅ Fechado v41   |
 | TD#19 | numero_destino 12 vs 13 dígitos              | Alta       | Parcial (paliativo) |
 | TD#20 | Sessão não encerra após OK tudo              | Média      | Aberto          |
-| TD#21 | `kind='agent'` inválido em notifications    | Média      | Aberto          |
+| TD#21 | `kind='agent'` inválido em notifications    | Média      | ✅ Fechado v42  |

@@ -1271,7 +1271,7 @@ async function handleAprovacaoSession({
     await supabase.from('internal_notifications').insert({
       tenant_id:         tenantId,
       recipient_user_id: null,
-      kind:              'agent',
+      kind:              'agent_completed',
       title:             'Cliente respondeu análise via WhatsApp',
       body:              `${total} ação(ões) processada(s). Verifique as tarefas da loja.`,
       link:              `/lojas/${sessao.loja_id}`,
