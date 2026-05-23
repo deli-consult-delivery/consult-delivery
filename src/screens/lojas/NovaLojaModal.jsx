@@ -49,8 +49,9 @@ export default function NovaLojaModal({ tenantDbId, userId, onClose, onCreated }
         }),
       });
       if (!res.ok) throw new Error((await res.text()) || `Erro ${res.status}`);
-      const loja = await res.json();
-      onCreated(Array.isArray(loja) ? loja[0] : loja);
+      const raw = await res.json();
+      const created = raw?.loja ?? (Array.isArray(raw) ? raw[0] : raw);
+      onCreated(created);
     } catch (err) {
       setError(err.message || 'Erro ao criar loja.');
       setSaving(false);

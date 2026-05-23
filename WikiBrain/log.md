@@ -1,5 +1,8 @@
 # Wiki Log
 
+## [2026-05-23 23:00] session | piloto-06 TD#31 smoke E2E + PR #57 mergeado
+Touched: none
+
 ## [2026-05-23 00:00] session | piloto-05 Bloco B T5-T6 concluídos
 Touched: none
 
@@ -336,3 +339,6 @@ Touched: none
 
 ## [2026-05-23 23:00] session | piloto-05 merge PR #56 + VPS main + PILOTO-06 planning
 Touched: docs/piloto/PILOTO-06-PLANNING.md (criado), docs/tech-debt/onda-04.md (TD#28 fechado)
+
+## [2026-05-23 23:30] session | piloto-06 TD#31 _notificarConclusao + marcar-concluida + UI 1-clique
+Touched: bridge-server/routes/tarefas.js, bridge-server/schemas/tarefas.js, src/screens/lojas/LojaWorkspace.jsx, docs/tech-debt/onda-04.md (TD#31 fechado)
