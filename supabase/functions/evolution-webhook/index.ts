@@ -407,6 +407,40 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
       .eq('status', 'em_atendimento');
   }
 
+  // ── T6: Respostas de clientes com sessão de aprovação WhatsApp ativa ─────────
+
+  if (!isGroup && messageText && !isMedia) {
+    const senderNum = chatId.replace(/@[^@]*$/, '');
+    // Evolution API pode enviar JID com 12 dígitos (sem o 9 de celular BR) ou 13 dígitos (com 9).
+    // A sessão pode ter sido criada com o formato oposto ao que a API envia no webhook.
+    // Tentamos ambos os formatos para garantir o match.
+    const senderNumAlt = senderNum.startsWith('55') && senderNum.length === 12
+      ? senderNum.slice(0, 4) + '9' + senderNum.slice(4)     // 12 → 13: insere 9 após código de área
+      : senderNum.startsWith('55') && senderNum.length === 13 && senderNum[4] === '9'
+      ? senderNum.slice(0, 4) + senderNum.slice(5)            // 13 → 12: remove 9 do código de área
+      : null;
+    const numFilter = senderNumAlt
+      ? `numero_destino.eq.${senderNum},numero_destino.eq.${senderNumAlt}`
+      : `numero_destino.eq.${senderNum}`;
+    const { data: t6Sessao } = await supabase
+      .from('whatsapp_aprovacao_sessions')
+      .select('id, analise_id, loja_id')
+      .or(numFilter)
+      .eq('status', 'ativa')
+      .limit(1)
+      .maybeSingle();
+
+    if (t6Sessao) {
+      await handleAprovacaoSession({
+        inst, instance, tenantId, senderNum, messageText,
+        sessao: t6Sessao as { id: string; analise_id: string; loja_id: string },
+      }).catch(err => {
+        console.error('[T6] handleAprovacaoSession falhou:', (err as Error).message);
+      });
+      return;
+    }
+  }
+
   // ── Bot: resposta automática fora do horário (somente PV, não grupos) ───────
 
   // AWAIT (não fire-and-forget) — Deno Edge Runtime cancela tasks pendentes
@@ -1016,4 +1050,233 @@ async function checkAndSendBotResponse({ inst, tenantId, instance, chatId, convI
   });
 
   console.log('[BOT] resposta automática enviada para', chatId, '| fora do horário (', weekday, hour + ':' + String(minute).padStart(2, '0'), ')');
+}
+
+// ── T6: Envia texto via Evolution API ────────────────────────────────────────
+async function evoSendText(
+  inst: { evolution_url: string; api_key: string },
+  instance: string,
+  number: string,
+  text: string,
+): Promise<void> {
+  try {
+    const r = await fetch(`${inst.evolution_url}/message/sendText/${instance}`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', apikey: inst.api_key },
+      body:    JSON.stringify({ number, text }),
+      signal:  AbortSignal.timeout(15_000),
+    });
+    if (!r.ok) console.warn('[T6] evoSendText status:', r.status);
+  } catch (err) {
+    console.warn('[T6] evoSendText falhou:', (err as Error).message);
+  }
+}
+
+// ── T6: Parser de respostas (inline — não pode importar de trigger/) ─────────
+function parseRespostaClienteLocal(texto: string): {
+  aprovacoes: number[];
+  bloco_aprovacoes: string[];
+  aprovar_tudo: boolean;
+  rejeicoes: number[];
+  duvidas: Array<{ tarefa: number; pergunta: string }>;
+  ambiguo: boolean;
+} {
+  const base = {
+    aprovacoes:       [] as number[],
+    bloco_aprovacoes: [] as string[],
+    aprovar_tudo:     false,
+    rejeicoes:        [] as number[],
+    duvidas:          [] as Array<{ tarefa: number; pergunta: string }>,
+    ambiguo:          false,
+  };
+  const t = texto.trim();
+  if (!t) return { ...base, ambiguo: true };
+
+  const norm = t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  let matched = false;
+
+  if (/\bok\s+tudo\b/.test(norm)) { base.aprovar_tudo = true; matched = true; }
+
+  for (const m of norm.matchAll(/\bok\s+bloco\s+([^\s,;]+)/gi)) {
+    const slug = m[1].normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+      .replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    base.bloco_aprovacoes.push(slug); matched = true;
+  }
+
+  for (const m of norm.matchAll(/\b(?:ok|aprovado)\s+([\d][\d\s,]*)/gi)) {
+    const rest = m[1].trim();
+    if (/^tudo$/.test(rest)) continue;
+    const nums = rest.split(/[\s,]+/).map(n => parseInt(n, 10)).filter(n => !isNaN(n) && n > 0);
+    if (nums.length) { base.aprovacoes.push(...nums); matched = true; }
+  }
+
+  for (const m of texto.matchAll(/\bok\s+([a-zA-ZÀ-ɏ][a-zA-ZÀ-ɏ\s]*?)(?:\s*$|[,;])/gi)) {
+    const raw     = m[1].trim();
+    const normRaw = raw.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    if (normRaw === 'tudo' || normRaw.startsWith('bloco')) continue;
+    if (/^\d[\d\s,]*$/.test(normRaw)) continue;
+    const slug = normRaw.replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    if (slug && !base.bloco_aprovacoes.includes(slug)) { base.bloco_aprovacoes.push(slug); matched = true; }
+  }
+
+  for (const m of norm.matchAll(/\b(?:nao|rejeito|rejeitado)\s+([\d][\d\s,]*)/gi)) {
+    const nums = m[1].split(/[\s,]+/).map(n => parseInt(n, 10)).filter(n => !isNaN(n) && n > 0);
+    if (nums.length) { base.rejeicoes.push(...nums); matched = true; }
+  }
+
+  for (const m of norm.matchAll(/\bduvida\s+(\d+)\s*[:—-]\s*(.+)/gi)) {
+    const tarefa = parseInt(m[1], 10);
+    if (!isNaN(tarefa)) { base.duvidas.push({ tarefa, pergunta: m[2].trim() }); matched = true; }
+  }
+
+  for (const m of norm.matchAll(/\bduvida\s+(?:na|no|em)?\s*(\d+)/gi)) {
+    const tarefa = parseInt(m[1], 10);
+    if (!isNaN(tarefa) && !base.duvidas.some(d => d.tarefa === tarefa)) {
+      base.duvidas.push({ tarefa, pergunta: '' }); matched = true;
+    }
+  }
+
+  if (!matched) base.ambiguo = true;
+  return base;
+}
+
+// ── T6: Processa respostas de aprovação de tarefas via WhatsApp ───────────────
+async function handleAprovacaoSession({
+  inst,
+  instance,
+  tenantId,
+  senderNum,
+  messageText,
+  sessao,
+}: {
+  inst:        { evolution_url: string; api_key: string };
+  instance:    string;
+  tenantId:    string;
+  senderNum:   string;
+  messageText: string;
+  sessao:      { id: string; analise_id: string; loja_id: string };
+}): Promise<void> {
+  const parsed = parseRespostaClienteLocal(messageText);
+
+  if (parsed.ambiguo) {
+    await evoSendText(inst, instance, senderNum, "Não entendi sua resposta. Pode repetir como 'OK 5'?");
+    return;
+  }
+
+  const { data: tarefas } = await supabase
+    .from('tarefas_loja')
+    .select('id, bloco, titulo')
+    .eq('analise_id', sessao.analise_id)
+    .order('bloco',          { ascending: true })
+    .order('ordem_no_bloco', { ascending: true })
+    .limit(200);
+
+  if (!tarefas?.length) {
+    await evoSendText(inst, instance, senderNum, 'Sessão ativa mas sem tarefas encontradas. Fale com seu consultor.');
+    return;
+  }
+
+  // Mapa global: número 1-indexed → tarefa
+  const tarefaByNum = new Map<number, { id: string; bloco: string; titulo: string }>();
+  tarefas.forEach((t, i) => tarefaByNum.set(i + 1, t));
+
+  // Mapa bloco → ids (ordem alfabética, igual à mensagem enviada)
+  const blocoIds = new Map<string, string[]>();
+  for (const t of tarefas) {
+    if (!blocoIds.has(t.bloco)) blocoIds.set(t.bloco, []);
+    blocoIds.get(t.bloco)!.push(t.id);
+  }
+  const blocoOrder = [...blocoIds.keys()];
+
+  const approvedIds = new Set<string>();
+  const rejectedIds = new Set<string>();
+  const responseLines: string[] = [];
+
+  if (parsed.aprovar_tudo) {
+    for (const t of tarefas) approvedIds.add(t.id);
+    responseLines.push('Recebi! Todas as tarefas aprovadas. Vou iniciar execução.');
+  }
+
+  for (const blocoSlug of parsed.bloco_aprovacoes) {
+    const asNum = parseInt(blocoSlug, 10);
+    let ids: string[] | undefined;
+    if (!isNaN(asNum) && asNum >= 1 && asNum <= blocoOrder.length) {
+      ids = blocoIds.get(blocoOrder[asNum - 1]);
+    } else {
+      const key = blocoOrder.find(b =>
+        b.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase() === blocoSlug
+      );
+      if (key) ids = blocoIds.get(key);
+    }
+    if (ids) {
+      for (const id of ids) approvedIds.add(id);
+      responseLines.push(`Recebi! Bloco ${blocoSlug} aprovado. Vou iniciar execução.`);
+    }
+  }
+
+  for (const num of parsed.aprovacoes) {
+    const t = tarefaByNum.get(num);
+    if (t) {
+      approvedIds.add(t.id);
+      responseLines.push(`Recebi! Tarefa ${num} aprovada. Vou iniciar execução.`);
+    }
+  }
+
+  for (const num of parsed.rejeicoes) {
+    const t = tarefaByNum.get(num);
+    if (t) {
+      rejectedIds.add(t.id);
+      approvedIds.delete(t.id);
+      responseLines.push(`Recebi! Tarefa ${num} rejeitada. Vou avisar o consultor.`);
+    }
+  }
+
+  for (const id of approvedIds) {
+    await supabase.from('tarefas_loja').update({ status: 'aprovada' }).eq('id', id);
+    await supabase.from('tarefa_aprovacoes').insert({
+      tarefa_id: id,
+      acao:      'aprovada',
+      nota:      'via WhatsApp',
+    });
+  }
+
+  for (const id of rejectedIds) {
+    await supabase.from('tarefas_loja').update({ status: 'rejeitada' }).eq('id', id);
+    await supabase.from('tarefa_aprovacoes').insert({
+      tarefa_id: id,
+      acao:      'rejeitada',
+      nota:      'via WhatsApp',
+    });
+  }
+
+  for (const d of parsed.duvidas) {
+    const t = tarefaByNum.get(d.tarefa);
+    if (t) {
+      await supabase.from('tarefa_aprovacoes').insert({
+        tarefa_id: t.id,
+        acao:      'perguntou_duvida',
+        nota:      d.pergunta || messageText,
+      });
+      responseLines.push(`Recebi! Dúvida sobre tarefa ${d.tarefa} registrada. O consultor vai responder.`);
+    }
+  }
+
+  const reply = responseLines.length
+    ? responseLines.join('\n')
+    : 'Recebi! Processando suas respostas.';
+  await evoSendText(inst, instance, senderNum, reply);
+
+  const total = approvedIds.size + rejectedIds.size + parsed.duvidas.length;
+  if (total > 0) {
+    await supabase.from('internal_notifications').insert({
+      tenant_id:         tenantId,
+      recipient_user_id: null,
+      kind:              'agent_completed',
+      title:             'Cliente respondeu análise via WhatsApp',
+      body:              `${total} ação(ões) processada(s). Verifique as tarefas da loja.`,
+      link:              `/lojas/${sessao.loja_id}`,
+    });
+  }
+
+  console.log(`[T6] sessao=${sessao.id} aprovadas=${approvedIds.size} rejeitadas=${rejectedIds.size} duvidas=${parsed.duvidas.length}`);
 }

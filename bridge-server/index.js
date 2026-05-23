@@ -1120,6 +1120,14 @@ app.use('/api', require('./routes/loja-gpt')({
   TRIGGER_SECRET_KEY,
 }));
 
+// ── PILOTO Onda 04 — Análises (Loom + IA) ────────────────────────────────────
+app.use('/api', require('./routes/analises')({
+  requireJwt,
+  sbFetch,
+  assertLojaAccess,
+  TRIGGER_SECRET_KEY,
+}));
+
 const server = app.listen(PORT, '0.0.0.0', () => {
   // D2: timeout do servidor > 60s para suportar polling síncrono do loja-gpt
   server.timeout = 90_000; // 90s — folga sobre os 60s de poll da task
@@ -1136,4 +1144,5 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`[bridge] PILOTO lojas API:      GET|POST|PATCH /api/lojas, GET|POST|DELETE /api/lojas/:id/consultores, POST /api/lojas/:id/metricas`);
   console.log(`[bridge] PILOTO Onda 02:        GET|POST /api/tarefas/loja/:id, GET /api/tarefas/:id`);
   console.log(`[bridge] PILOTO Onda 03:        GET|POST /api/lojas/:id/loja-gpt/conversations, GET /api/loja-gpt/conversations/:id, POST /api/loja-gpt/conversations/:id/messages, PATCH /api/loja-gpt/conversations/:id`);
+  console.log(`[bridge] PILOTO Onda 04:        GET|POST /api/lojas/:id/analises, POST /api/lojas/:id/analises/processar, POST /api/lojas/:id/analises/:aid/enviar-whatsapp`);
 });

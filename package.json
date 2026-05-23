@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.2",
@@ -21,6 +23,7 @@
     "@trigger.dev/build": "4.4.6",
     "@vitejs/plugin-react": "^4.3.1",
     "typescript": "^5.9.3",
-    "vite": "^5.4.8"
+    "vite": "^5.4.8",
+    "vitest": "^1.6.1"
   }
 }
