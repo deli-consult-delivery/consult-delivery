@@ -30,9 +30,29 @@ o Bridge precisa saber individualmente se a resposta vem wrappada ou não — in
 
 ---
 
+## TD#34 — LojasListView trunca em 1000 rows (Supabase default)
+
+**Arquivo:** `src/screens/lojas/LojasListView.jsx` (função `load()`, ~linha 49)  
+**Severidade:** Alta (lojas ficam invisíveis na UI sem nenhum erro visível)  
+**Sintoma:** Query `.from('lojas').select(...).eq('tenant_id', ...).order('nome')` não tem `.limit()`.
+O PostgREST do Supabase aplica limite default de 1000 rows. Com 1172 lojas no tenant `consult`,
+tudo após a posição 1000 na ordenação `ORDER BY nome` fica invisível.
+"Uraka Burger" está na posição 1101 alfabeticamente — nunca retornada.  
+**Origem das lojas extras:** ~1137 lojas legadas (seed/import de 15/05/2026, `created_by=null`) +
+35 com nome lixo (`.`, `..`, `Gi`, `VJ`, etc.) do mesmo import. Essas lojas inflam o count
+mas não são clientes reais da plataforma.  
+**Fix sugerido:**
+1. Curto prazo: adicionar `.limit(2000)` na query de `load()` até ter paginação real.
+2. Médio prazo: implementar paginação (`.range(offset, offset+49)`) + scroll infinito ou paginação por página.
+3. Limpeza: deletar lojas lixo (`nome IS NULL OR length(trim(nome)) <= 2`, 35 registros) e lojas de smoke (`nome ILIKE '%Smoke%' OR nome ILIKE '%Wandson%'`).  
+**Status:** Aberto
+
+---
+
 ## Resumo de status
 
 | TD    | Descrição                                        | Severidade | Status          |
 |-------|--------------------------------------------------|------------|-----------------|
 | TD#31 | UX 3 etapas para concluir tarefa                 | Alta       | ✅ Fechado       |
 | TD#33 | Frontend não valida payload Bridge (wrapper)     | Média      | Parcial (modal fixado) |
+| TD#34 | LojasListView trunca em 1000 rows (Supabase default) | Alta  | Aberto          |
