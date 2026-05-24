@@ -162,4 +162,88 @@ WHERE `mentioned_agent = 'deli' AND processed_by_deli = false` → invocar Bridg
 
 ---
 
-*Atualizado em: 2026-05-24 S1-G00 T2*
+## TD#44 — bom_dia_config.hora_semana/hora_sabado não consumidas pelo cron
+**Status:** 🟡 ABERTO
+**Descoberto em:** S1-G00 T3 (2026-05-24)
+**Severidade:** Média — UI pode dar falsa impressão de controle de horário
+
+**Sintoma:**
+`bom_dia_config` tem colunas `hora_semana` (09:00) e `hora_sabado` (08:00).
+Essas colunas NÃO são lidas pelo código de agendamento — os horários estão hardcoded no cron:
+- `0 12 * * 1-5` (12:00 UTC = 09:00 BRT)
+- `0 11 * * 6` (11:00 UTC = 08:00 BRT)
+
+**Root cause:** Colunas criadas para uma feature de horário configurável que nunca foi implementada.
+
+**Impacto:** Alterar `hora_semana` no banco ou via UI não muda o horário real de disparo.
+
+**Fix:** Implementar leitura de `bom_dia_config.hora_semana/hora_sabado` no cron dinâmico
+OU documentar que as colunas são decorativas e remover da UI.
+
+---
+
+## TD#45 — BomDia tem 4 schedule tasks (design dual-scheduler não documentado)
+**Status:** 🔵 OBSERVAÇÃO
+**Descoberto em:** S1-G00 T3 (2026-05-24)
+**Severidade:** Baixa — funciona, mas pode causar confusão em manutenção
+
+**Sintoma:**
+BomDia tem 4 schedule tasks no Trigger.dev:
+- `bom-dia-schedule-weekday` (11:55 UTC, `gerar-imagem.ts`) — só gera imagem
+- `bom-dia-schedule-sabado` (10:55 UTC, `gerar-imagem.ts`) — só gera imagem  
+- `bom-dia-envio-agendado-semana` (12:00 UTC, `envio-agendado.ts`) — gera + envia
+- `bom-dia-envio-agendado-sabado` (11:00 UTC, `envio-agendado.ts`) — gera + envia
+
+Design intent: pré-geração 5min antes do envio. Não está documentado em nenhum arquivo.
+Encerramento tem apenas 2 tasks (sem pré-geração).
+
+**Fix:** Documentar o design dual-scheduler em `docs/` ou em comentário de código.
+
+---
+
+## TD#46 — agents-state.md incorretamente lista HeyGen como engine de BomDia
+**Status:** ✅ CORRIGIDO NO ARQUIVO T1
+**Descoberto em:** S1-G00 T3 (2026-05-24)
+**Severidade:** Baixa — erro documental, não funcional
+
+agents-state.md linha 121 dizia: `geração de imagem HeyGen`
+Engine real: OpenRouter API / Recraft V4.1 Utility
+Fix aplicado: linha corrigida em agents-state.md durante S1-G00 T3.
+
+---
+
+## TD#47 — Encerramento sem withOverloadedRetry para Recraft
+**Status:** 🔵 OBSERVAÇÃO
+**Descoberto em:** S1-G00 T3 (2026-05-24)
+**Severidade:** Baixa — inconsistência entre BomDia e Encerramento
+
+`trigger/encerramento/gerar-imagem.ts` usa `withOverloadedRetry()` para chamadas Claude (529),
+mas NÃO usa retry equivalente para chamadas Recraft V4.1 via OpenRouter.
+`trigger/bom-dia/gerar-imagem.ts` usa retry manual (3 tentativas, delay 3s) para Recraft,
+mas NÃO tem `withOverloadedRetry()` para Claude.
+
+Inconsistência: cada arquivo tem retry em lugares diferentes.
+
+**Sugestão:** Padronizar o retry pattern nos dois arquivos.
+
+---
+
+## TD#48 — BomDia: storage path diz 1920x1080 mas resolução real é 1820x1024
+**Status:** 🟡 ABERTO
+**Descoberto em:** S1-G00 T3 / cd-validator-strict (2026-05-24)
+**Severidade:** Baixa — arquivo funciona, mas metadata do nome é enganoso
+
+**Sintoma:**
+`trigger/bom-dia/gerar-imagem.ts` linha 363: `size = "1820x1024"` (para Recraft V4.1)
+linha 763: path no Storage: `bom-dia/{date}-{pathId}-feed-1920x1080.webp` (nome errado)
+
+Encerramento é consistente: usa `feed-1820x1024.webp` no path (sem discrepância).
+
+**Root cause:** Cópia/rename errada durante desenvolvimento. Storage path não foi atualizado.
+
+**Fix:** Corrigir o nome do path em `gerar-imagem.ts` para `feed-1820x1024.webp`.
+Atenção: a mudança invalida URLs já no Storage — considerar migração de paths existentes ou manter legado.
+
+---
+
+*Atualizado em: 2026-05-24 S1-G00 T3*

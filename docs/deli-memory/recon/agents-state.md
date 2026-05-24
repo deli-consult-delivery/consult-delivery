@@ -118,10 +118,12 @@ output: {"error":"The operation was aborted due to timeout"}
 |-------|-------|
 | agent_id | `bom-dia` (manual) + `bom-dia-scheduler` (cron) |
 | Filepath | `trigger/bom-dia/envio-agendado.ts`, `trigger/bom-dia/gerar-imagem.ts` |
-| Prompt-base | Não encontrado `.md` externo — geração de imagem HeyGen |
-| Tabelas Supabase | `bom_dia_config`, `agent_runs`, `whatsapp_groups`, `evolution_instances` |
-| Schedule IDs | `bom-dia-envio-agendado-semana` (cron `0 12 * * 1-5` = seg-sex 09:00 BRT) |
-| | `bom-dia-envio-agendado-sabado` (cron `0 11 * * 6` = sáb 08:00 BRT) |
+| Prompt-base | Claude claude-sonnet-4-6 gera prompt → OpenRouter / Recraft V4.1 Utility (NOT HeyGen) |
+| Tabelas Supabase | `bom_dia_config`, `bom_dia_feedback`, `agent_runs`, `whatsapp_groups`, `evolution_instances`, `tenant_agent_config` |
+| Schedule IDs | `bom-dia-schedule-weekday` (cron `55 11 * * 1-5` = 08:55 BRT, só gera imagem) |
+| | `bom-dia-schedule-sabado` (cron `55 10 * * 6` = 07:55 BRT, só gera imagem) |
+| | `bom-dia-envio-agendado-semana` (cron `0 12 * * 1-5` = seg-sex 09:00 BRT, full pipeline) |
+| | `bom-dia-envio-agendado-sabado` (cron `0 11 * * 6` = sáb 08:00 BRT, full pipeline) |
 | Bridge endpoint | `POST /agents/bom-dia/send-groups` (x-internal-token) → Evolution API sendMedia |
 | Runs total | bom-dia: 41 (29 ok / 12 fail) &#124; bom-dia-scheduler: 10 (8 ok / 2 fail) |
 | Última run com sucesso | 2026-05-23 10:56:02 UTC (manual `bom-dia`) |
