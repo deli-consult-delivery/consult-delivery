@@ -1,5 +1,8 @@
 # Wiki Log
 
+## [2026-05-24 HH:MM] session | F2 reabrir tarefa shipada onda-07
+Touched: none
+
 ## [2026-05-23 23:00] session | piloto-06 TD#31 smoke E2E + PR #57 mergeado
 Touched: none
 
@@ -358,3 +361,6 @@ Touched: docs/piloto/PILOTO-06-PLANNING.md (criado), docs/tech-debt/onda-04.md (
 
 ## [2026-05-23 23:30] session | piloto-06 TD#31 _notificarConclusao + marcar-concluida + UI 1-clique
 Touched: bridge-server/routes/tarefas.js, bridge-server/schemas/tarefas.js, src/screens/lojas/LojaWorkspace.jsx, docs/tech-debt/onda-04.md (TD#31 fechado)
+
+## [2026-05-24 18:00] session | Feature Discovery Swarm — F1 + F3
+Touched: none (planos salvos em docs/features/, não em WikiBrain/wiki/)
