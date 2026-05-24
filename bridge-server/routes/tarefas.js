@@ -13,6 +13,7 @@ const {
   SubmeterValidacaoSchema,
   ConcluirSchema,
   MarcarConcluidaSchema,
+  ReabrirSchema,
   ListComentariosQuerySchema,
   CreateComentarioSchema,
   RelatorioQuerySchema,
@@ -728,6 +729,76 @@ module.exports = function buildTarefasRouter({ requireJwt, sbFetch, assertLojaAc
       res.json({ ok: true, status: 'concluida', tarefa_id: id });
     } catch (err) {
       console.error('[api/tarefas/marcar-concluida POST]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  // POST /api/tarefas/:id/reabrir — concluida → aprovada|em_execucao (TD#35)
+  // ════════════════════════════════════════════════════════════════════════
+  router.post('/tarefas/:id/reabrir', requireJwt, async (req, res) => {
+    const { id } = req.params;
+
+    const body = validate(ReabrirSchema, req.body, res);
+    if (!body) return;
+
+    try {
+      const ctx = await fetchTarefaComAcesso(req, res, id);
+      if (!ctx) return;
+      const { tarefa, tenant_id } = ctx;
+
+      if (tarefa.status !== 'concluida') {
+        return res.status(409).json({
+          error: `Status '${tarefa.status}' não pode ser reaberto (esperado: concluida)`,
+        });
+      }
+
+      const patchData = {
+        status:       body.status_alvo,
+        concluida_em: null,
+        executada_em: body.status_alvo === 'aprovada' ? null : tarefa.executada_em,
+      };
+
+      await patchTarefa(id, patchData);
+
+      await supabaseInsert('tarefa_aprovacoes', {
+        tarefa_id: id,
+        acao:      'reaberta',
+        autor_id:  req.user.id,
+        nota:      body.motivo,
+      });
+
+      // Se havia análise concluída, reabre também para 'enviada_cliente'
+      if (tarefa.analise_id) {
+        try {
+          const analises = await sbFetch(
+            `analises?id=eq.${encodeURIComponent(tarefa.analise_id)}&select=id,status&limit=1`
+          );
+          const analise = analises?.[0];
+          if (analise?.status === 'concluida') {
+            await sbFetch(
+              `analises?id=eq.${encodeURIComponent(analise.id)}`,
+              { method: 'PATCH', body: { status: 'enviada_cliente', concluida_em: null } }
+            );
+            console.log(`[api/tarefas/reabrir] analise=${analise.id} reaberta → enviada_cliente`);
+          }
+        } catch (analiseErr) {
+          console.error('[api/tarefas/reabrir] reabrir análise (non-fatal):', analiseErr.message);
+        }
+      }
+
+      await logAudit({
+        tenant_id,
+        user_id:  req.user.id,
+        action:   'tarefa_reaberta',
+        resource: `tarefas_loja:${id}`,
+        metadata: { status_alvo: body.status_alvo, motivo: body.motivo },
+      });
+
+      console.log(`[api/tarefas/reabrir POST] id=${id} status_alvo=${body.status_alvo}`);
+      res.json({ ok: true, status: body.status_alvo, tarefa_id: id });
+    } catch (err) {
+      console.error('[api/tarefas/reabrir POST]', err.message);
       res.status(500).json({ error: err.message });
     }
   });

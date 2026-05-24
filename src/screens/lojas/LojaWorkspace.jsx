@@ -662,6 +662,18 @@ function TabTarefas({ lojaId }) {
                           onClick={() => takeAction(t.id, 'marcar-concluida')}
                         />
                       )}
+                      {t.status === 'concluida' && (
+                        <TarefaActionBtn
+                          label="↩ Reabrir tarefa"
+                          color="#f59e0b"
+                          loading={actionLoading === t.id + 'reabrir'}
+                          onClick={async () => {
+                            const motivo = window.prompt('Motivo da reabertura (obrigatório):');
+                            if (!motivo || motivo.trim().length < 3) return;
+                            await takeAction(t.id, 'reabrir', { motivo: motivo.trim(), status_alvo: 'aprovada' });
+                          }}
+                        />
+                      )}
                       {(t.status === 'em_execucao' || t.status === 'aguardando_validacao') && (
                         <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
                           {t.status === 'em_execucao' ? 'Em execução…' : 'Aguardando validação…'}
