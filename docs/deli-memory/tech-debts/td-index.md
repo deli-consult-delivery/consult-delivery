@@ -246,4 +246,103 @@ Atenção: a mudança invalida URLs já no Storage — considerar migração de 
 
 ---
 
-*Atualizado em: 2026-05-24 S1-G00 T3*
+---
+
+## TD#49 — deli_triggers sem seed em produção — DELI sem regras de autonomia
+**Status:** 🟡 ABERTO
+**Descoberto em:** S1-G00 T4 (2026-05-24)
+**Severidade:** Média — DELI opera sem regras Verde/Amarelo/Vermelho configuradas
+
+**Sintoma:**
+Tabela `deli_triggers` tem 0 rows. CLAUDE.md §16 lista triggers iniciais que deveriam existir:
+- Verde: cliente sumiu 7 dias → notifica equipe
+- Verde: mensagem recebida → atualizar client_timeline
+- Amarelo: métrica caiu 20%+ → invocar analista-ifood
+- Vermelho: mudança em config → aguardar APROVADO VERMELHO
+
+Nenhum desses seeds foi inserido em produção.
+
+**Root cause:** Seed foi planejado mas nunca executado. Migration criou schema, não dados.
+
+**Impacto:** DELI funciona (10 runs, 91% sucesso) mas sem regras de autonomia — opera ad-hoc.
+`deli_pending_approvals` também vazia: fluxo de aprovação verde/amarelo/vermelho não ativado.
+
+**Fix:** Executar INSERT em `deli_triggers` com os triggers iniciais do CLAUDE.md §16.
+
+---
+
+## TD#50 — RBAC schema criado mas tabelas vazias — permissões não aplicadas via DB
+**Status:** 🟡 ABERTO
+**Descoberto em:** S1-G00 T4 (2026-05-24)
+**Severidade:** Média — RequireRole no React pode não ter dados reais para validar
+
+**Sintoma:**
+`roles`, `role_permissions`, `user_roles` têm 0 rows.
+Schema criado em migration `20260504_001_rbac.sql`. Dados nunca inseridos.
+
+**Impacto:** Se RequireRole consulta estas tabelas para controle de acesso,
+o RBAC pode estar operando sem dados → acesso possivelmente não restrito via DB.
+(RequireRole pode usar claims do JWT ao invés do DB — verificar implementação.)
+
+**Fix:** 1. Verificar se RequireRole usa JWT claims ou consulta DB.
+        2. Se usa DB: inserir dados em `roles` e `role_permissions` conforme CLAUDE.md §13.
+
+---
+
+## TD#51 — loja_metricas sempre vazia — ingestão de métricas sem implementação
+**Status:** 🔵 OBSERVAÇÃO
+**Descoberto em:** S1-G00 T4 (2026-05-24)
+**Severidade:** Baixa — não bloqueia operação atual
+
+**Sintoma:**
+`loja_metricas` (17 cols, tenant_id presente) tem 0 rows.
+CLAUDE.md §14 menciona: "snapshot diário de métricas (populado pelo n8n)".
+n8n foi REMOVIDO da stack (CLAUDE.md §3: "N8N: NÃO USADO").
+
+**Root cause:** Ingestão de métricas dependia do n8n que foi eliminado.
+Tabela ficou órfã. VERA usa `vera_metricas_snapshot` (3 rows) como alternativa.
+
+**Impacto:** Sem dados históricos de métricas por loja. Dashboards que consultam `loja_metricas` retornam vazio.
+
+**Fix:** Criar task Trigger.dev para popular `loja_metricas` diariamente (substituindo n8n).
+
+---
+
+## TD#52 — client_facts e client_timeline vazios — Memória Central nunca usada
+**Status:** 🔵 OBSERVAÇÃO
+**Descoberto em:** S1-G00 T4 (2026-05-24)
+**Severidade:** Baixa — sistema de memória de agentes inoperante
+
+**Sintoma:**
+`client_facts` e `client_timeline` têm 0 rows.
+CLAUDE.md §14 define: "Agentes leem contexto ANTES de agir" e "Agentes registram fatos novos".
+Nenhum agente ativo (VERA, DELI, analise-gerar-relatorio, BomDia) escreve nestas tabelas.
+
+**Root cause:** Integração com Memória Central não foi implementada em nenhuma task Trigger.dev.
+Agentes operam sem contexto persistente sobre lojas.
+
+**Fix:** Adicionar `INSERT INTO client_facts` e `client_timeline` em agents relevantes (DELI, VERA, analise).
+
+---
+
+## TD#53 — pg_stat stale para múltiplas tabelas — rowcounts via monitoramento não confiáveis
+**Status:** 🔵 OBSERVAÇÃO
+**Descoberto em:** S1-G00 T4 (2026-05-24)
+**Severidade:** Baixa — afeta apenas observabilidade, não funcionalidade
+
+**Sintoma:**
+`pg_stat_user_tables.n_live_tup` retorna 0 para tabelas que têm dados:
+- `customers`: pg_stat=0, COUNT=1168 (discrepância de 1168 rows)
+- `analises`: pg_stat=6, COUNT=15
+- `agents`: pg_stat=5, COUNT=15
+- `whatsapp_groups`: pg_stat=0, COUNT=69
+- `conversation_events`: pg_stat=62, COUNT=1008
+
+**Root cause:** PostgreSQL ANALYZE não foi executado recentemente em todas as tabelas.
+`n_live_tup` só é atualizado após ANALYZE/autovacuum, não em tempo real.
+
+**Fix:** Executar `ANALYZE;` periodicamente ou confiar em COUNT(*) ao invés de pg_stat para rowcounts precisos.
+
+---
+
+*Atualizado em: 2026-05-24 S1-G00 T3, T4*
