@@ -84,4 +84,82 @@ Confirmar se Asaas webhook está ativo em produção ou se CORA é ainda POC.
 
 ---
 
-*Atualizado em: 2026-05-24 S1-G00 T1*
+---
+
+## TD#40 — BRENO processar-webhook usa coluna errada no banco
+**Status:** 🔴 ABERTO
+**Descoberto em:** S1-G00 T2 (2026-05-24)
+**Severidade:** Alta — BRENO nunca lê configuração real do banco
+
+**Sintoma:**
+`trigger/breno/processar-webhook.ts` linha ~110 faz:
+```ts
+.eq("agent_slug", "breno")
+```
+Coluna real em `tenant_agent_config`: **`agent_id`** (não `agent_slug`).
+Resultado: query sempre retorna `null`, modo defaulta para `"hibrido"` sem ler DB.
+Não quebra a task — mas ignora qualquer configuração inserida no banco.
+
+**Root cause:** Nome de coluna errado no código — provavelmente mudança de schema posterior à escrita da task.
+
+**Impacto:** `tenant_agent_config` inacessível para BRENO. Qualquer mudança de modo via DB ignorada silenciosamente.
+
+**Fix:** Trocar `.eq("agent_slug", "breno")` por `.eq("agent_id", "breno")` em `processar-webhook.ts`.
+
+---
+
+## TD#41 — ChatScreen tem /tarefa e /handoff sem handler no Bridge
+**Status:** 🟡 ABERTO
+**Descoberto em:** S1-G00 T2 (2026-05-24)
+**Severidade:** Média — UI mostra comandos não funcionais
+
+**Sintoma:**
+`src/screens/ChatScreen.jsx` declara AI_COMMANDS: `/resumir`, `/traduzir`, `/tom`, `/proxima`, `/tarefa`, `/cobranca`, `/handoff`.
+Bridge `POST /chat/ai` trata apenas: `/resumir`, `/proxima`, `/traduzir`, `/tom`, `/cobranca`, `/livre`, `/resposta`.
+
+`/tarefa` e `/handoff` estão na UI mas não têm handler no Bridge.
+
+**Impacto:** Usuário digita `/tarefa` ou `/handoff`, sem feedback de erro claro — provavelmente cai no fallback genérico.
+
+**Fix:** Implementar handlers no Bridge OU remover da lista AI_COMMANDS no ChatScreen.
+
+---
+
+## TD#42 — BRENO deployado no Trigger.dev? Nunca executou em produção
+**Status:** 🟡 ABERTO
+**Descoberto em:** S1-G00 T2 (2026-05-24)
+**Severidade:** Média — feature planejada inoperante
+
+**Sintoma:**
+- `trigger/breno/processar-webhook.ts`, `responder.ts`, `resumir-conversa.ts` existem em código
+- `agent_runs` mostra **0 runs** para qualquer agent_id relacionado a BRENO
+- `tenant_agent_config` não tem nenhuma linha para `agent_id='breno'`
+
+**Possíveis causas:**
+1. Task nunca deployada no Trigger.dev cloud (task ID `breno-processar-webhook` não registrado)
+2. Bridge `POST /internal/agents/breno-processar-webhook/run` retornando erro 404
+3. `triggerBrenoIfNeeded()` na Edge Function falhando silenciosamente (fire-and-forget com `.catch`)
+
+**Fix:** Verificar se `breno-processar-webhook` aparece em cloud.trigger.dev → Runs. Rodar `npx trigger.dev@4.4.6 deploy` para garantir deploy. Inserir row em `tenant_agent_config`.
+
+---
+
+## TD#43 — @deli em grupo capturada mas não invocada
+**Status:** 🔵 OBSERVAÇÃO
+**Descoberto em:** S1-G00 T2 (2026-05-24)
+**Severidade:** Baixa — design intencional, mas limita DELI ativa
+
+**Sintoma:**
+Linha 462 da `evolution-webhook/index.ts` exclui `deli` do `enqueueAgentInvoke()`.
+`@deli` em grupo é salva em `whatsapp_messages.mentioned_agent = 'deli'` mas nunca chama o Bridge.
+`whatsapp_messages.processed_by_deli` existe mas permanece `false`.
+
+**Contexto:** DELI foi projetada como cron-driven (revisao-matinal), não event-driven.
+
+**Extension point:**
+Para DELI responder a @menções: adicionar Realtime listener em `whatsapp_messages`
+WHERE `mentioned_agent = 'deli' AND processed_by_deli = false` → invocar Bridge.
+
+---
+
+*Atualizado em: 2026-05-24 S1-G00 T2*
