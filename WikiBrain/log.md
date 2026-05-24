@@ -3,6 +3,22 @@
 ## [2026-05-23 23:00] session | piloto-06 TD#31 smoke E2E + PR #57 mergeado
 Touched: none
 
+## [2026-05-23] session | Uraka invisível — Supabase 1000-row limit fix
+Touched: none
+
+## [2026-05-24] session | is_active soft-delete + TD#24 fechado
+Touched: none
+
+## [2026-05-23 23:30] session | E2E Uraka jornada completa + Onda 07 planning
+Touched: docs/piloto/PILOTO-07-PLANNING.md
+- Onda 04+05+06 validadas em prod via UI real
+- 12/12 tarefas, G5+G6, TD#31 1-clique OK
+- 3 bugs UI fixados durante teste real (TD#33, TD#34, TD#24)
+- Onda 07 (F1-F4) planejada ~6d total
+
+## [2026-05-24 00:00] session | fix NovaLojaModal wrapper Bridge + cleanup Uraka
+Touched: none
+
 ## [2026-05-23 00:00] session | piloto-05 Bloco B T5-T6 concluídos
 Touched: none
 

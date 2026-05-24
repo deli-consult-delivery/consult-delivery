@@ -49,10 +49,24 @@ mas não são clientes reais da plataforma.
 
 ---
 
+## Validação E2E 2026-05-23
+
+Jornada completa Uraka Burger validada via UI real. 12/12 tarefas concluídas com sucesso.  
+G5 (WhatsApp pede aprovação) e G6 (fechamento análise + mensagem parabéns) disparando corretamente.  
+TD#31 (1-clique Marcar concluída) funcionando em produção.
+
+**Bugs descobertos e fixados durante o teste real:**
+- ✅ TD#33 — `NovaLojaModal` passava wrapper Bridge `{ loja: {...} }` direto para `onCreated` → spinner infinito. Fixado commit `9d7750b`.
+- ✅ TD#34 — Supabase PostgREST default 1000-row limit cortava lista. Uraka (posição 1101) invisível. Fixado com `.limit(2000)` commit `534697d`.
+- ✅ TD#24 — Coluna `is_active` criada; 1171 lojas seed arquivadas via soft delete, Uraka visível. Commit `c206622`.
+
+---
+
 ## Resumo de status
 
 | TD    | Descrição                                        | Severidade | Status          |
 |-------|--------------------------------------------------|------------|-----------------|
 | TD#31 | UX 3 etapas para concluir tarefa                 | Alta       | ✅ Fechado       |
 | TD#33 | Frontend não valida payload Bridge (wrapper)     | Média      | Parcial (modal fixado) |
-| TD#34 | LojasListView trunca em 1000 rows (Supabase default) | Alta  | Aberto          |
+| TD#34 | LojasListView trunca em 1000 rows (Supabase default) | Alta  | ✅ Fechado `534697d` |
+| TD#24 | Coluna is_active ausente em lojas                | Baixa      | ✅ Fechado `c206622` |
