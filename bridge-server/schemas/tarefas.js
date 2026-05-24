@@ -9,7 +9,7 @@ const STATUS_VALUES = [
 const PRIORIDADES = ['quick_win', 'estrutural', 'material_cliente'];
 const ACOES_APROVACAO = [
   'enviada_aprovacao', 'aprovada', 'rejeitada', 'perguntou_duvida',
-  'iniciou_execucao', 'submeteu_validacao', 'concluiu', 'reabriu',
+  'iniciou_execucao', 'submeteu_validacao', 'concluiu', 'reabriu', 'reaberta',
 ];
 
 const UuidSchema = z.string().uuid('UUID inválido');
@@ -125,6 +125,12 @@ const RelatorioQuerySchema = z.object({
   data_fim:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
+// POST /api/tarefas/:id/reabrir — body (TD#35: reabre tarefa concluida)
+const ReabrirSchema = z.object({
+  motivo:       z.string().min(3).max(2000),
+  status_alvo:  z.enum(['aprovada', 'em_execucao']).default('aprovada'),
+});
+
 // POST /api/tarefas/:id/prints — body (frontend faz upload no Storage; aqui registra metadados)
 const CreatePrintSchema = z.object({
   tipo:          z.enum(['antes', 'depois', 'outro']),
@@ -149,6 +155,7 @@ module.exports = {
   SubmeterValidacaoSchema,
   ConcluirSchema,
   MarcarConcluidaSchema,
+  ReabrirSchema,
   ListComentariosQuerySchema,
   CreateComentarioSchema,
   RelatorioQuerySchema,
