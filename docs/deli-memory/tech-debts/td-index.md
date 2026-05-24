@@ -345,4 +345,37 @@ Agentes operam sem contexto persistente sobre lojas.
 
 ---
 
-*Atualizado em: 2026-05-24 S1-G00 T3, T4*
+*Atualizado em: 2026-05-24 S1-G00 T3, T4, T5*
+
+---
+
+## TD#54 — 25 branches merged não removidos do remote
+**Status:** 🔵 OBSERVAÇÃO
+**Descoberto em:** S1-G00 T5 (2026-05-24)
+**Severidade:** Baixa — higiene de repositório
+
+**Sintoma:**
+`git branch -r --merged origin/main` retorna 25 branches além de main/gh-pages.
+Todos já foram merged — não têm código pendente.
+
+**Root cause:** Nenhum processo de cleanup pós-merge. GitHub não deleta automaticamente.
+
+**Fix:** `git push origin --delete <branch>` para cada um dos 25. Lista completa em broken-inventory.md §1.1.
+Ou ativar "Auto-delete head branches" nas Settings do GitHub repo.
+
+---
+
+## TD#55 — 23 branches unmerged potencialmente stale (lote 2026-05-15)
+**Status:** 🟡 MÉDIA
+**Descoberto em:** S1-G00 T5 (2026-05-24)
+**Severidade:** Média — risco de código pendente não mergeado e acúmulo de drift
+
+**Sintoma:**
+29 branches no remote não mergeados em main. Após excluir os 6 ativos da série piloto:
+- 3 branches com ≥15 dias (wandson/chat-status-system, wandson/fix-sidebar-chat, wandson/lara-agente-regua) — definitivamente stale
+- 20 branches do lote 2026-05-15 (v2-8 a v2-12, fix/*, feat/*, docs/*) — podem conter fixes reais não aplicados
+
+**Root cause:** Features desenvolvidas em sprint Onda v2 (mai/2026) não foram mergeadas nem descartadas explicitamente.
+
+**Fix:** Revisar cada branch do lote 2026-05-15. Para cada um: merge em main ou delete explícito.
+Lista completa com datas em broken-inventory.md §1.2.
