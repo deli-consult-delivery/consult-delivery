@@ -1,5 +1,13 @@
 # Wiki Log
 
+## [2026-05-25] session | P0 fix: TD#36 + TD#40 — BRENO + schedulers
+- TD#40: `trigger/breno/processar-webhook.ts:113` `.eq("agent_slug","breno")` → `.eq("agent_id","breno")` — silent fail em toda leitura de config corrigido
+- TD#36: `trigger/bom-dia/envio-agendado.ts` e `trigger/encerramento/envio-agendado.ts` AbortSignal.timeout 30s → 120s
+- PR #60 mergeado, Trigger.dev redeploy + VPS pull confirmado
+- T3 smoke: agent_run `breno/success` criado em prod (run_id: `run_cmpkj08th313y0uop2r0nakn9`)
+- T4 evidência: pre-fix AbortErrors em agent_runs (2026-05-22/23), fix deployado, VPS limpo pós-deploy
+- TD#36, TD#40, TD#47(parcial) fechados em td-index.md
+
 ## [2026-05-24 HH:MM] session | F2 reabrir tarefa shipada onda-07
 Touched: none
 
@@ -366,4 +374,7 @@ Touched: bridge-server/routes/tarefas.js, bridge-server/schemas/tarefas.js, src/
 Touched: none (planos salvos em docs/features/, não em WikiBrain/wiki/)
 
 ## [2026-05-24 20:00] session | S1-G00 recon T5-T6 branches edge functions
+Touched: none
+
+## [2026-05-24 21:35] session | slim CLAUDE.md 42k→10k
 Touched: none
