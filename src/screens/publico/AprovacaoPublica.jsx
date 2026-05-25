@@ -163,8 +163,8 @@ export default function AprovacaoPublica() {
                         </span>
                       )}
                     </div>
-                    {tarefa.descricao && (
-                      <p style={styles.tarefaDesc}>{tarefa.descricao}</p>
+                    {tarefa.o_que_sera_feito && (
+                      <p style={styles.tarefaDesc}>{tarefa.o_que_sera_feito}</p>
                     )}
 
                     {!jaDecidida && (

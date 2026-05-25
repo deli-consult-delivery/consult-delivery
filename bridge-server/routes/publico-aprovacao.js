@@ -79,7 +79,7 @@ module.exports = function buildPublicoAprovacaoRouter({ sbFetch, supabaseInsert 
       const loja = lojas?.[0] ?? { nome: 'Loja' };
 
       const tarefas = await sbFetch(
-        `tarefas_loja?analise_id=eq.${encodeURIComponent(analise.id)}&order=bloco.asc,ordem_no_bloco.asc&select=id,titulo,bloco,status,situacao,descricao&limit=200`
+        `tarefas_loja?analise_id=eq.${encodeURIComponent(analise.id)}&order=bloco.asc,ordem_no_bloco.asc&select=id,titulo,bloco,status,situacao,o_que_sera_feito&limit=200`
       );
 
       return res.json({
