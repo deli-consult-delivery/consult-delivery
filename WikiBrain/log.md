@@ -1,5 +1,27 @@
 # Wiki Log
 
+## [2026-05-24] session | G01 DELI Core — 5/5 sub-goals shipados
+- G01.2: migration agent_prompts (RLS via tenant_members, profiles sem tenant_id), seed 3 prompts globais. Smoke: COUNT=3 ✓
+- G01.1: src/agents/shared/runtime.ts — executeAgent/getPrompt/logRun. tsc --noEmit EXIT:0 ✓
+- G01.3: trigger/deli/briefing-7h.ts — schedule 10h UTC, agent_runs 24h + contratos, Bridge send-whatsapp
+- G01.4: trigger/deli/chat-handler.ts — filtra @deli, draft em agent_drafts (nunca envia direto)
+- G01.5: trigger/deli/orchestrator-5min.ts — semáforo Verde/Amarelo/Vermelho, Bridge notify
+- PR #62 mergeado em main (ad6319b)
+- Nota: UNIQUE com COALESCE não funciona em CREATE TABLE inline → usa CREATE UNIQUE INDEX separado
+- Nota: worktree sem node_modules → junction para main repo (mklink /J)
+
+## [2026-05-25] session | Sprint 1 AI First bootstrap — PRDs + 5 goals paralelos
+- PRD-MASTER.md (90d): diagnóstico real (49 clientes, R$20k MRR, churn 33%), metas S1/S2/S3, arquitetura runtime único, 5 schemas SQL
+- PRD-SPRINT-1.md (30d): 5 métricas D30 com critérios de aceite SQL, dependências G01→G02, anti-padrões travados
+- G01.md: DELI Core — runtime.ts + agent_prompts + briefing-7h + chat-handler + orchestrator-5min
+- G02.md: BRENO — webhook reusa runtime + task-extractor 30min + renewal-monitor 8h
+- G03.md: Contratos digitais — migration + UI + bridge + assinatura digital + Asaas
+- G04.md: Onboarding — migration + UI D1/D7/D30/D60/D90 + task automação
+- G05.md: Re-contratação 49 — script lista + UI bulk WhatsApp + tracker aceite
+- SETUP-WORKTREES.md: 5 worktrees, regras de colisão, prefixos migration, fluxo PR
+- PR #61 mergeado em main (squash)
+- Touched: docs/deli-memory/sprint-01/ (7 arquivos criados)
+
 ## [2026-05-25] session | P0 fix: TD#36 + TD#40 — BRENO + schedulers
 - TD#40: `trigger/breno/processar-webhook.ts:113` `.eq("agent_slug","breno")` → `.eq("agent_id","breno")` — silent fail em toda leitura de config corrigido
 - TD#36: `trigger/bom-dia/envio-agendado.ts` e `trigger/encerramento/envio-agendado.ts` AbortSignal.timeout 30s → 120s
