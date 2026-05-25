@@ -789,6 +789,111 @@ app.post('/agents/encerramento/send-groups', requireJwtOrInternal, async (req, r
 });
 
 // ════════════════════════════════════════════════════════════════════════════
+// POST /agents/recontratacao/:customer_id/enviar — Envia oferta de re-contratação
+// G05.3: insere aceite_recontratacao + dispara WhatsApp via Evolution API
+// Anti-padrão 3: bloqueia reenvio se mensagem_enviada_em já preenchido
+// ════════════════════════════════════════════════════════════════════════════
+
+const RECONTRATACAO_TEMPLATES = {
+  light:       (nome) => `Olá ${nome}! Renovamos nossa parceria. Pacote Light R$500/mês - gestão iFood completa, relatórios semanais e suporte prioritário. Para confirmar ou saber mais, responda esta mensagem!`,
+  performance: (nome) => `Olá ${nome}! Novo modelo de parceria: R$500 base + 12% do crescimento que geramos juntos. Você paga mais só quando cresce mais. Vamos conversar?`,
+  enterprise:  (nome) => `Olá ${nome}! Proposta Enterprise: R$1.200/mês, mínimo 6 meses, com gestão completa e consultoria estratégica mensal. Responda para agendar uma apresentação!`,
+  growth:      (nome) => `Olá ${nome}! Pacote Growth com IA no iFood: R$2.500 setup + R$1.500/mês. Automatização avançada e IA para maximizar seus resultados. Quer saber mais?`,
+};
+
+app.post('/agents/recontratacao/:customer_id/enviar', requireJwt, async (req, res) => {
+  const { customer_id } = req.params;
+  const { tenant_id, pacote } = req.body;
+
+  if (!tenant_id || !pacote)
+    return res.status(400).json({ error: 'tenant_id e pacote são obrigatórios' });
+  if (!RECONTRATACAO_TEMPLATES[pacote])
+    return res.status(400).json({ error: `pacote inválido: ${pacote}` });
+  if (!SUPABASE_SERVICE_KEY)
+    return res.status(503).json({ error: 'SUPABASE_SERVICE_KEY não configurado' });
+
+  try {
+    // Bloqueia reenvio (anti-padrão 3)
+    const existente = await supabaseSelect('aceite_recontratacao', { customer_id, tenant_id });
+    if (existente?.mensagem_enviada_em) {
+      return res.status(409).json({ error: 'oferta já enviada para este cliente', aceite_id: existente.id });
+    }
+
+    // Buscar customer
+    const customer = await supabaseSelect('customers', { id: customer_id, tenant_id });
+    if (!customer) return res.status(404).json({ error: 'cliente não encontrado' });
+
+    // Buscar JID via conversations (mais recente) ou fallback no phone
+    let whatsapp_jid = null;
+    try {
+      const rc = await fetch(
+        `${SUPABASE_URL}/rest/v1/conversations?customer_id=eq.${customer_id}&tenant_id=eq.${tenant_id}&is_group=eq.false&whatsapp_chat_id=not.is.null&order=last_message_at.desc&select=whatsapp_chat_id&limit=1`,
+        { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }
+      );
+      const convRows = await rc.json();
+      whatsapp_jid = convRows?.[0]?.whatsapp_chat_id ?? null;
+    } catch (_) { /* JID fica null */ }
+    whatsapp_jid = whatsapp_jid ?? customer.phone_normalized ?? customer.phone;
+
+    if (!whatsapp_jid)
+      return res.status(422).json({ error: 'cliente sem JID WhatsApp conhecido' });
+
+    // Buscar instância Evolution (tenant-specific ou fallback global)
+    let inst = null;
+    try {
+      inst = await supabaseSelect('evolution_instances', { tenant_id });
+      if (!inst) {
+        const ri = await fetch(
+          `${SUPABASE_URL}/rest/v1/evolution_instances?ativo=eq.true&select=evolution_url,api_key,instance_name&limit=1`,
+          { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }
+        );
+        const rows = await ri.json();
+        inst = rows?.[0] ?? null;
+      }
+    } catch (_) { /* inst fica null */ }
+
+    // INSERT aceite_recontratacao
+    const aceite = await supabaseInsert('aceite_recontratacao', {
+      tenant_id,
+      customer_id,
+      whatsapp_jid,
+      pacote_ofertado: pacote,
+      status: 'pendente',
+      mensagem_enviada_em: new Date().toISOString(),
+    });
+
+    // Enviar WhatsApp (best-effort — não falha o endpoint se Evolution cair)
+    const nome = customer.name || customer.whatsapp_name || 'cliente';
+    const mensagem = RECONTRATACAO_TEMPLATES[pacote](nome);
+    if (inst?.evolution_url && inst?.api_key && inst?.instance_name) {
+      try {
+        const ew = await fetch(
+          `${inst.evolution_url}/message/sendText/${inst.instance_name}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', apikey: inst.api_key },
+            body: JSON.stringify({ number: whatsapp_jid, text: mensagem }),
+            signal: AbortSignal.timeout(15_000),
+          }
+        );
+        if (!ew.ok) console.warn(`[recontratacao] Evolution ${ew.status}: ${(await ew.text()).slice(0, 200)}`);
+        else console.log(`[recontratacao] mensagem enviada → ${whatsapp_jid}`);
+      } catch (ewErr) {
+        console.warn('[recontratacao] Evolution erro:', ewErr.message);
+      }
+    } else {
+      console.warn('[recontratacao] sem instância Evolution — WA não enviado');
+    }
+
+    console.log(`[recontratacao] enviar customer=${customer_id} pacote=${pacote} aceite=${aceite?.id}`);
+    res.json({ success: true, aceite_id: aceite?.id });
+  } catch (err) {
+    console.error('[recontratacao/enviar]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
 // GET /whatsapp/groups — Lista grupos WhatsApp via Evolution API
 // ════════════════════════════════════════════════════════════════════════════
 app.get('/whatsapp/groups', requireJwt, async (req, res) => {
