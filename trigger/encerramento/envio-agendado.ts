@@ -214,7 +214,7 @@ async function enviarEncerramento(runId: string, weekdayLabel: string): Promise<
           caption:    `${caption ?? ""}\n\nEquipe Consult Delivery 🚀\n\n*🤖 Mensagem automática*`,
           tenant_id:  tenantId,
         }),
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(120_000),
       });
 
       if (!bridgeResp.ok) {

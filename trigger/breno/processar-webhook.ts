@@ -110,7 +110,7 @@ export const brenoProcessarWebhook = task({
       .from("tenant_agent_config")
       .select("modo_override")
       .eq("tenant_id", input.tenant_id)
-      .eq("agent_slug", "breno")
+      .eq("agent_id", "breno")
       .maybeSingle();
 
     const modo: string = config?.modo_override ?? "hibrido"; // default hibrido

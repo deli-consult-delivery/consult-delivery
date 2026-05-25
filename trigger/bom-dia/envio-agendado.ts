@@ -239,7 +239,7 @@ async function enviarBomDia(runId: string, weekdayLabel: string): Promise<Output
           caption:    `${caption ?? ""}\n\nEquipe Consult Delivery 🚀`,
           tenant_id:  tenantId,
         }),
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(120_000),
       });
 
       if (!bridgeResp.ok) {
