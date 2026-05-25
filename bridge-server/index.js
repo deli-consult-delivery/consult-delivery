@@ -801,7 +801,7 @@ const RECONTRATACAO_TEMPLATES = {
   growth:      (nome) => `Olá ${nome}! Pacote Growth com IA no iFood: R$2.500 setup + R$1.500/mês. Automatização avançada e IA para maximizar seus resultados. Quer saber mais?`,
 };
 
-app.post('/agents/recontratacao/:customer_id/enviar', requireJwt, async (req, res) => {
+app.post('/agents/recontratacao/:customer_id/enviar', requireJwtOrInternal, async (req, res) => {
   const { customer_id } = req.params;
   const { tenant_id, pacote } = req.body;
 

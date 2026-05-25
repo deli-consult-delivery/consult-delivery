@@ -16,6 +16,7 @@ const NAV_GROUPS = [
       { id: 'lojas',           icon: 'building', label: 'Lojas'        },
       { id: 'crm',             icon: 'users',    label: 'Clientes'     },
       { id: 'contratos',       icon: 'paper',    label: 'Contratos'    },
+      { id: 'recontratacao',   icon: 'send',     label: 'Re-contratação' },
       { id: 'tarefas-clientes', icon: 'columns', label: 'Espaços'       },
     ],
   },
