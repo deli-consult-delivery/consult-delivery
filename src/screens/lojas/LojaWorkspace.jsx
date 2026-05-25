@@ -758,14 +758,7 @@ function MarcarConcluidaModal({ tarefaId, onClose, onDone }) {
       const token = session?.access_token;
       const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
-      const r1 = await fetch(`${BRIDGE}/api/tarefas/${tarefaId}/marcar-concluida`, {
-        method: 'POST', headers, body: JSON.stringify({ nota }),
-      });
-      if (!r1.ok) {
-        const b = await r1.json().catch(() => ({ error: r1.statusText }));
-        throw new Error(b.error || r1.statusText);
-      }
-
+      // Upload anexos BEFORE marcar-concluida so _notificarConclusao sees the images
       if (files.length > 0) {
         const anexos = [];
         for (const file of files) {
@@ -787,6 +780,14 @@ function MarcarConcluidaModal({ tarefaId, onClose, onDone }) {
           const b = await r2.json().catch(() => ({ error: r2.statusText }));
           throw new Error(b.error || r2.statusText);
         }
+      }
+
+      const r1 = await fetch(`${BRIDGE}/api/tarefas/${tarefaId}/marcar-concluida`, {
+        method: 'POST', headers, body: JSON.stringify({ nota }),
+      });
+      if (!r1.ok) {
+        const b = await r1.json().catch(() => ({ error: r1.statusText }));
+        throw new Error(b.error || r1.statusText);
       }
 
       onDone();
