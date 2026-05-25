@@ -560,16 +560,42 @@ module.exports = function buildTarefasRouter({ requireJwt, sbFetch, assertLojaAc
           `Loja: ${loja?.nome ?? ''}`,
         ];
         if (tarefa.resultado_resumo) msgLines.push(tarefa.resultado_resumo);
-        await fetch(
-          `${inst.evolution_url}/message/sendText/${inst.instance_name}`,
-          {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json', apikey: inst.api_key },
-            body:    JSON.stringify({ number: analise.numero_whatsapp_cliente, text: msgLines.join('\n') }),
-            signal:  AbortSignal.timeout(15_000),
+        const msgText = msgLines.join('\n');
+
+        // Verificar imagens em tarefa_anexos para sendMedia
+        const imgAnexos = await sbFetch(
+          `tarefa_anexos?tarefa_id=eq.${encodeURIComponent(tarefa.id)}&select=url,mime_type&limit=10`
+        ).then(rows => (rows || []).filter(r => r.mime_type.startsWith('image/'))).catch(() => []);
+
+        if (imgAnexos.length > 0) {
+          for (let i = 0; i < imgAnexos.length; i++) {
+            await fetch(
+              `${inst.evolution_url}/message/sendMedia/${inst.instance_name}`,
+              {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json', apikey: inst.api_key },
+                body:    JSON.stringify({
+                  number:    analise.numero_whatsapp_cliente,
+                  mediatype: 'image',
+                  media:     imgAnexos[i].url,
+                  caption:   i === 0 ? msgText : '',
+                }),
+                signal: AbortSignal.timeout(15_000),
+              }
+            );
           }
-        );
-        console.log(`[_notificarConclusao] G5 sent tarefa=${tarefa.id} numero=${analise.numero_whatsapp_cliente}`);
+        } else {
+          await fetch(
+            `${inst.evolution_url}/message/sendText/${inst.instance_name}`,
+            {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json', apikey: inst.api_key },
+              body:    JSON.stringify({ number: analise.numero_whatsapp_cliente, text: msgText }),
+              signal:  AbortSignal.timeout(15_000),
+            }
+          );
+        }
+        console.log(`[_notificarConclusao] G5 sent tarefa=${tarefa.id} numero=${analise.numero_whatsapp_cliente} imgs=${imgAnexos.length}`);
       }
 
       // G6 — encerrar análise se todas as tarefas estão concluídas ou rejeitadas
