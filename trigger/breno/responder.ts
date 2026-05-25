@@ -1,6 +1,6 @@
 import { task, logger } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
-import Anthropic from "@anthropic-ai/sdk";
+import { executeAgent } from "../../src/agents/shared/runtime";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 
@@ -34,7 +34,6 @@ export const brenoResponder = task({
   run: async (payload: unknown, { ctx }) => {
     const start = Date.now();
     const input = InputSchema.parse(payload);
-    const anthropic = new Anthropic();
     const sb = getSupabase();
 
     const { data: configRow } = await sb
@@ -97,42 +96,14 @@ export const brenoResponder = task({
       .map(m => `${m.role === "client" ? "Cliente" : "Equipe"}: ${m.content}`)
       .join("\n");
 
-    const prompt = `Você é BRENO, assistente de atendimento da Consult Delivery. Ajuda a equipe a responder clientes de delivery com simpatia e eficiência.
-
-**Contexto da conversa:**
-Cliente: ${conv?.contact_name || input.sender_name || "Cliente"}
-${ctxMessages ? `\nHistórico recente:\n${ctxMessages}` : ""}
-
-**Nova mensagem do cliente:**
-"${input.message}"
-
-Analise a mensagem e retorne APENAS JSON:
-{
-  "resposta": "resposta sugerida para o cliente (natural, em português brasileiro, máx 3 frases)",
-  "tom": "amigavel|informativo|empático|urgente",
-  "precisa_humano": false,
-  "motivo_humano": null
-}
-
-Regras:
-- Se o cliente reclamar de algo sério (produto estragado, cobrança errada, acidente) → precisa_humano: true com motivo
-- Se for pergunta simples (horário, cardápio, status pedido) → responda diretamente
-- Se for elogio → agradeça brevemente
-- Se não souber responder → precisa_humano: true
-- NUNCA prometa o que não pode cumprir
-- Tom sempre cordial, como pequeno negócio brasileiro`;
-
-    const response = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 600,
-      system: "Você é BRENO, assistente de atendimento. JSON apenas, sem markdown.",
-      messages: [{ role: "user", content: prompt }],
-    });
-
-    const rawText = response.content
-      .filter((b) => b.type === "text")
-      .map((b) => (b as Anthropic.TextBlock).text)
-      .join("");
+    const agentResult = await executeAgent('breno', {
+      task: 'respond_to_client',
+      cliente: conv?.contact_name || input.sender_name || "Cliente",
+      mensagem: input.message,
+      historico: ctxMessages || "",
+      instrucoes: 'Retorne APENAS JSON (sem markdown): {"resposta":"resposta natural em pt-BR máx 3 frases","tom":"amigavel|informativo|empático|urgente","precisa_humano":false,"motivo_humano":null}. Se problema sério (produto estragado, cobrança errada, acidente): precisa_humano:true com motivo. NUNCA prometa o que não pode cumprir.',
+    }, { runId: ctx.run.id, tenantId: input.tenant_id });
+    const rawText = agentResult.output as string;
 
     let parsed: { resposta: string; tom: string; precisa_humano: boolean; motivo_humano?: string | null };
     try {

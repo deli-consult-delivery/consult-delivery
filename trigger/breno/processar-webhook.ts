@@ -206,6 +206,22 @@ export const brenoProcessarWebhook = task({
         responder_run_id: responderHandle.id,
         modo,
       });
+
+      // Registrar support_ticket — BRENO está atendendo este contato
+      try {
+        await sb.from("support_tickets").insert({
+          tenant_id:       input.tenant_id,
+          conversation_id: input.conversation_id ?? null,
+          sender_jid:      input.sender_jid,
+          descricao:       input.message_body,
+          status:          "em_andamento",
+          resolvido_por:   "breno",
+        });
+      } catch (ticketErr) {
+        logger.warn("breno-processar-webhook: support_tickets insert falhou", {
+          error: (ticketErr as Error).message,
+        });
+      }
     } catch (err) {
       // Soft-fail: falha no enqueue não derruba o webhook inteiro
       logger.warn("breno-processar-webhook: erro ao enfileirar breno-responder", {
