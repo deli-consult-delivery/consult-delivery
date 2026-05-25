@@ -1128,6 +1128,12 @@ app.use('/api', require('./routes/analises')({
   TRIGGER_SECRET_KEY,
 }));
 
+// ── F4 Onda 07 — Dashboard Público de Aprovação (sem JWT) ────────────────────
+app.use('/api', require('./routes/publico-aprovacao')({
+  sbFetch,
+  supabaseInsert,
+}));
+
 const server = app.listen(PORT, '0.0.0.0', () => {
   // D2: timeout do servidor > 60s para suportar polling síncrono do loja-gpt
   server.timeout = 90_000; // 90s — folga sobre os 60s de poll da task
