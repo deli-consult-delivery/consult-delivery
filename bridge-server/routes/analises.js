@@ -214,7 +214,7 @@ module.exports = function buildAnalisesRouter({
 
       // Busca analise — precisa estar processada
       const analises = await sbFetch(
-        `analises?id=eq.${encodeURIComponent(aid)}&loja_id=eq.${encodeURIComponent(lojaId)}&select=id,status,total_tarefas_geradas,loom_url&limit=1`
+        `analises?id=eq.${encodeURIComponent(aid)}&loja_id=eq.${encodeURIComponent(lojaId)}&select=id,status,total_tarefas_geradas,loom_url,public_token&limit=1`
       );
       if (!analises?.length)
         return res.status(404).json({ error: 'Análise não encontrada nesta loja' });
@@ -288,6 +288,10 @@ module.exports = function buildAnalisesRouter({
       lines.push("- 'OK 1, 3, 5' (aprova múltiplas)");
       lines.push('');
       lines.push('Aguardo retorno.');
+      if (analise.public_token) {
+        lines.push('');
+        lines.push(`🔗 Aprovar online (mais fácil): https://app.consultdelivery.com.br/aprovacao/${analise.public_token}`);
+      }
 
       const messageText = lines.join('\n');
       const instanceName = body.evolution_instance || inst.instance_name;
