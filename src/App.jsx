@@ -28,6 +28,7 @@ import BomDiaScreen from './screens/BomDiaScreen.jsx';
 import EncerramentoScreen from './screens/EncerramentoScreen.jsx';
 import ContratosScreen from './screens/Contratos/ContratosScreen.jsx';
 import RecontratacaoScreen from './screens/Recontratacao/RecontratacaoScreen.jsx';
+import OnboardingScreen from './screens/OnboardingScreen.jsx';
 import { CONVERSATIONS, INADIMPLENTES, TENANTS } from './data.js';
 import { supabase } from './lib/supabase.js';
 import { listTenants } from './lib/api.js';
@@ -262,8 +263,9 @@ export default function App() {
         {route === 'vera'     && <VeraScreen  tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'bom-dia'      && <BomDiaScreen      tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'encerramento' && <EncerramentoScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'contratos'      && <ContratosScreen    tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'recontratacao'  && <RecontratacaoScreen tenantDbId={tenantDbId} />}
+        {route === 'contratos'      && <ContratosScreen      tenantDbId={tenantDbId} userId={session?.user?.id} />}
+        {route === 'recontratacao'  && <RecontratacaoScreen  tenantDbId={tenantDbId} />}
+        {route === 'onboarding'     && <OnboardingScreen     tenantDbId={tenantDbId} />}
         {route === 'settings'  && <SettingsScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} onTenantChange={async (newSlug) => {
           if (newSlug) {
             setTenant(newSlug);
