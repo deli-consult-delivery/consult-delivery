@@ -26,6 +26,7 @@ import SofiaScreen from './screens/SofiaScreen.jsx';
 import VeraScreen from './screens/VeraScreen.jsx';
 import BomDiaScreen from './screens/BomDiaScreen.jsx';
 import EncerramentoScreen from './screens/EncerramentoScreen.jsx';
+import ContratosScreen from './screens/Contratos/ContratosScreen.jsx';
 import { CONVERSATIONS, INADIMPLENTES, TENANTS } from './data.js';
 import { supabase } from './lib/supabase.js';
 import { listTenants } from './lib/api.js';
@@ -260,6 +261,7 @@ export default function App() {
         {route === 'vera'     && <VeraScreen  tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'bom-dia'      && <BomDiaScreen      tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'encerramento' && <EncerramentoScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
+        {route === 'contratos'   && <ContratosScreen    tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'settings'  && <SettingsScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} onTenantChange={async (newSlug) => {
           if (newSlug) {
             setTenant(newSlug);

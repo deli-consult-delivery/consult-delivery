@@ -21,6 +21,7 @@ const NEXUS_TICKET_TOKEN     = process.env.NEXUS_TICKET_TOKEN;
 const TRIGGER_SECRET_KEY     = process.env.TRIGGER_SECRET_KEY;
 const TRIGGER_API_URL        = 'https://api.trigger.dev';
 const ASAAS_WEBHOOK_SECRET   = process.env.ASAAS_WEBHOOK_SECRET;
+const ASAAS_API_KEY          = process.env.ASAAS_API_KEY;
 const ANTHROPIC_API_KEY      = process.env.ANTHROPIC_API_KEY;
 const ANTHROPIC_MODEL        = process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001';
 // EvoNexus webhook trigger IDs (visibilidade no painel, fire-and-forget)
@@ -1128,6 +1129,16 @@ app.use('/api', require('./routes/analises')({
   TRIGGER_SECRET_KEY,
 }));
 
+// ── G03 — Contratos Digitais ─────────────────────────────────────────────────
+app.use('/api', require('./routes/contratos')({
+  requireJwt,
+  supabaseInsert,
+  SUPABASE_URL,
+  SUPABASE_SERVICE_KEY,
+  TRIGGER_SECRET_KEY,
+  ASAAS_API_KEY,
+}));
+
 const server = app.listen(PORT, '0.0.0.0', () => {
   // D2: timeout do servidor > 60s para suportar polling síncrono do loja-gpt
   server.timeout = 90_000; // 90s — folga sobre os 60s de poll da task
@@ -1145,4 +1156,6 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`[bridge] PILOTO Onda 02:        GET|POST /api/tarefas/loja/:id, GET /api/tarefas/:id`);
   console.log(`[bridge] PILOTO Onda 03:        GET|POST /api/lojas/:id/loja-gpt/conversations, GET /api/loja-gpt/conversations/:id, POST /api/loja-gpt/conversations/:id/messages, PATCH /api/loja-gpt/conversations/:id`);
   console.log(`[bridge] PILOTO Onda 04:        GET|POST /api/lojas/:id/analises, POST /api/lojas/:id/analises/processar, POST /api/lojas/:id/analises/:aid/enviar-whatsapp`);
+  console.log(`[bridge] G03 Contratos:         POST /api/contratos/:id/enviar-assinatura, POST /api/contratos/:id/link-asaas, POST /api/contratos/sign (público)`);
+  console.log(`[bridge] ASAAS_API_KEY:         ${ASAAS_API_KEY ? '✓' : '✗ /contratos/:id/link-asaas recusará'}`);
 });
