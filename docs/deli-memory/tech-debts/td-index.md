@@ -8,8 +8,9 @@ Plataforma Consult Delivery | Iniciado em 2026-05-24
 ---
 
 ## TD#36 — Schedulers BomDia + Encerramento com timeout
-**Status:** 🔴 ABERTO
+**Status:** ✅ FECHADO — fix/p0-td36-td40
 **Descoberto em:** S1-G00 T1 (2026-05-24)
+**Fechado em:** 2026-05-24
 **Severidade:** Alta — envios automáticos falhando silenciosamente
 
 **Sintoma:**
@@ -25,20 +26,12 @@ Trigger.dev cloud → Bridge Server `POST /agents/{bom-dia|encerramento}/send-gr
 Bridge chama Evolution API `/message/sendMedia/{instance}` com 20s por grupo.
 Evolution API lenta ou instável → timeout acumulado excede 30s → Trigger.dev cancela a task.
 
-**Retry:** configurado (5 tentativas, backoff 30s→120s), mas falha em todas.
+**Fix aplicado:**
+`AbortSignal.timeout(30_000)` → `AbortSignal.timeout(120_000)` em:
+- `trigger/bom-dia/envio-agendado.ts`
+- `trigger/encerramento/envio-agendado.ts`
 
-**Evidência:**
-```
-agent_runs WHERE agent_id='bom-dia-scheduler' AND status='failed' — 2 ocorrências
-agent_runs WHERE agent_id='encerramento-scheduler' AND status='failed' — 4 ocorrências
-```
-
-**Impacto:** Clientes não recebem imagem de bom dia / encerramento nos grupos quando Evolution API está lenta.
-
-**Sugestão de fix:**
-1. Aumentar timeout no Trigger.dev para 120s (ou remover AbortSignal e depender do retry)
-2. Separar `gerar-imagem` de `enviar-grupos` em tasks independentes com retry individual por grupo
-3. Adicionar fallback: se Evolution timeout, enfileirar para retry manual
+Ambas as tasks já tinham retry configurado (5 tentativas, backoff 30s→120s).
 
 ---
 
@@ -87,8 +80,9 @@ Confirmar se Asaas webhook está ativo em produção ou se CORA é ainda POC.
 ---
 
 ## TD#40 — BRENO processar-webhook usa coluna errada no banco
-**Status:** 🔴 ABERTO
+**Status:** ✅ FECHADO — fix/p0-td36-td40
 **Descoberto em:** S1-G00 T2 (2026-05-24)
+**Fechado em:** 2026-05-24
 **Severidade:** Alta — BRENO nunca lê configuração real do banco
 
 **Sintoma:**
@@ -98,13 +92,12 @@ Confirmar se Asaas webhook está ativo em produção ou se CORA é ainda POC.
 ```
 Coluna real em `tenant_agent_config`: **`agent_id`** (não `agent_slug`).
 Resultado: query sempre retorna `null`, modo defaulta para `"hibrido"` sem ler DB.
-Não quebra a task — mas ignora qualquer configuração inserida no banco.
 
 **Root cause:** Nome de coluna errado no código — provavelmente mudança de schema posterior à escrita da task.
 
-**Impacto:** `tenant_agent_config` inacessível para BRENO. Qualquer mudança de modo via DB ignorada silenciosamente.
-
-**Fix:** Trocar `.eq("agent_slug", "breno")` por `.eq("agent_id", "breno")` em `processar-webhook.ts`.
+**Fix aplicado:**
+`.eq("agent_slug", "breno")` → `.eq("agent_id", "breno")` em `trigger/breno/processar-webhook.ts`.
+Confirmado via SQL: `tenant_agent_config` tem coluna `agent_id`, não `agent_slug`.
 
 ---
 
@@ -213,8 +206,9 @@ Fix aplicado: linha corrigida em agents-state.md durante S1-G00 T3.
 ---
 
 ## TD#47 — Encerramento sem withOverloadedRetry para Recraft
-**Status:** 🔵 OBSERVAÇÃO
+**Status:** ✅ FECHADO (parcial) — fix/p0-td36-td40
 **Descoberto em:** S1-G00 T3 (2026-05-24)
+**Fechado em:** 2026-05-24
 **Severidade:** Baixa — inconsistência entre BomDia e Encerramento
 
 `trigger/encerramento/gerar-imagem.ts` usa `withOverloadedRetry()` para chamadas Claude (529),
@@ -222,9 +216,10 @@ mas NÃO usa retry equivalente para chamadas Recraft V4.1 via OpenRouter.
 `trigger/bom-dia/gerar-imagem.ts` usa retry manual (3 tentativas, delay 3s) para Recraft,
 mas NÃO tem `withOverloadedRetry()` para Claude.
 
-Inconsistência: cada arquivo tem retry em lugares diferentes.
+**Fix aplicado (scheduler layer):**
+Ambas as tasks de envio (`envio-agendado.ts`) já tinham `retry: { maxAttempts: 5, minTimeoutInMs: 30_000, maxTimeoutInMs: 120_000, factor: 2 }` idêntico — retry no scheduler está consistente.
 
-**Sugestão:** Padronizar o retry pattern nos dois arquivos.
+**Pendente (gerar-imagem layer):** Padronizar `withOverloadedRetry` / Recraft retry entre os dois `gerar-imagem.ts` files — deixar para próxima iteração.
 
 ---
 
