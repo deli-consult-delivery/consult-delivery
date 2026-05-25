@@ -473,6 +473,7 @@ function TabTarefas({ lojaId }) {
   const [showRelatorio, setShowRelatorio] = useState(false);
   const [relatorioData, setRelatorioData] = useState(null);
   const [loadingRelatorio, setLoadingRelatorio] = useState(false);
+  const [marcarConcluidaId, setMarcarConcluidaId] = useState(null);
 
   useEffect(() => { loadTarefas(); }, [lojaId]);
 
@@ -659,7 +660,7 @@ function TabTarefas({ lojaId }) {
                           label="✅ Marcar concluída"
                           color="#10b981"
                           loading={actionLoading === t.id + 'marcar-concluida'}
-                          onClick={() => takeAction(t.id, 'marcar-concluida')}
+                          onClick={() => setMarcarConcluidaId(t.id)}
                         />
                       )}
                       {t.status === 'concluida' && (
@@ -715,6 +716,13 @@ function TabTarefas({ lojaId }) {
           onClose={() => { setShowRelatorio(false); setRelatorioData(null); }}
         />
       )}
+      {marcarConcluidaId && (
+        <MarcarConcluidaModal
+          tarefaId={marcarConcluidaId}
+          onClose={() => setMarcarConcluidaId(null)}
+          onDone={() => { setMarcarConcluidaId(null); loadTarefas(); }}
+        />
+      )}
     </div>
   );
 }
@@ -733,6 +741,116 @@ function TarefaActionBtn({ label, color, loading, onClick }) {
     >
       {loading ? 'Aguarde…' : label}
     </button>
+  );
+}
+
+function MarcarConcluidaModal({ tarefaId, onClose, onDone }) {
+  const [nota, setNota]     = useState('');
+  const [files, setFiles]   = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState('');
+
+  async function submit() {
+    setSaving(true);
+    setError('');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+
+      const r1 = await fetch(`${BRIDGE}/api/tarefas/${tarefaId}/marcar-concluida`, {
+        method: 'POST', headers, body: JSON.stringify({ nota }),
+      });
+      if (!r1.ok) {
+        const b = await r1.json().catch(() => ({ error: r1.statusText }));
+        throw new Error(b.error || r1.statusText);
+      }
+
+      if (files.length > 0) {
+        const anexos = [];
+        for (const file of files) {
+          const ext  = file.name.split('.').pop().toLowerCase();
+          const path = `${tarefaId}/${crypto.randomUUID()}.${ext}`;
+          const { error: upErr } = await supabase.storage
+            .from('task-attachments')
+            .upload(path, file, { cacheControl: '3600', upsert: false });
+          if (upErr) throw new Error(`Upload falhou: ${upErr.message}`);
+          const { data: sd } = await supabase.storage
+            .from('task-attachments')
+            .createSignedUrl(path, 60 * 60 * 24 * 365 * 5);
+          anexos.push({ url: sd.signedUrl, mime_type: file.type, size_bytes: file.size });
+        }
+        const r2 = await fetch(`${BRIDGE}/api/tarefas/${tarefaId}/anexos`, {
+          method: 'POST', headers, body: JSON.stringify({ anexos }),
+        });
+        if (!r2.ok) {
+          const b = await r2.json().catch(() => ({ error: r2.statusText }));
+          throw new Error(b.error || r2.statusText);
+        }
+      }
+
+      onDone();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleFiles(e) {
+    const valid = Array.from(e.target.files)
+      .filter(f => ['image/jpeg','image/png','image/gif','image/webp','application/pdf'].includes(f.type) && f.size <= 5 * 1024 * 1024)
+      .slice(0, 5);
+    setFiles(valid);
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: '#000b', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9200, padding: 20 }}>
+      <div style={{ background: '#141414', border: '1px solid #2a2a2a', borderRadius: 14, width: '100%', maxWidth: 480, padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#fff' }}>Marcar como concluída</h3>
+
+        <div>
+          <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 6 }}>Resultado / observação</label>
+          <textarea
+            value={nota}
+            onChange={e => setNota(e.target.value)}
+            placeholder="Descreva o que foi feito, resultado obtido…"
+            rows={3}
+            style={{ ...mini, width: '100%', resize: 'none', boxSizing: 'border-box' }}
+          />
+        </div>
+
+        <div>
+          <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 6 }}>
+            Prints / evidências <span style={{ color: '#4b5563' }}>(até 5 · jpg, png, pdf · 5 MB cada)</span>
+          </label>
+          <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" onChange={handleFiles}
+            style={{ fontSize: 12, color: '#e5e7eb', width: '100%' }} />
+          {files.length > 0 && (
+            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {files.map((f, i) => (
+                <div key={i} style={{ fontSize: 12, color: '#9ca3af' }}>
+                  {f.name} <span style={{ color: '#4b5563' }}>({(f.size / 1024).toFixed(0)} KB)</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {error && <div style={{ fontSize: 12, color: '#ef4444' }}>{error}</div>}
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} disabled={saving}
+            style={{ background: 'none', border: '1px solid #2a2a2a', color: '#9ca3af', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
+            Cancelar
+          </button>
+          <button onClick={submit} disabled={saving}
+            style={{ background: '#10b981', border: 'none', color: '#fff', padding: '8px 20px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, opacity: saving ? 0.7 : 1 }}>
+            {saving ? 'Salvando…' : 'Confirmar conclusão'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -985,8 +1103,10 @@ function TarefaDetailModal({ tarefaId, onClose, onRefresh }) {
   const [innerTab, setInnerTab]       = useState(0);
   const [comentario, setComentario]   = useState('');
   const [savingCmt, setSavingCmt]     = useState(false);
+  const [anexos, setAnexos]           = useState([]);
+  const [loadingAnexos, setLoadingAnexos] = useState(false);
 
-  const INNER_TABS = ['Detalhes', 'Histórico', 'Comentários'];
+  const INNER_TABS = ['Detalhes', 'Histórico', 'Comentários', 'Prints'];
 
   async function bridgeFetch(path, options = {}) {
     const { data: { session } } = await supabase.auth.getSession();
@@ -1006,6 +1126,15 @@ function TarefaDetailModal({ tarefaId, onClose, onRefresh }) {
   }
 
   useEffect(() => { load(); }, [tarefaId]);
+
+  useEffect(() => {
+    if (innerTab !== 3) return;
+    setLoadingAnexos(true);
+    bridgeFetch(`/api/tarefas/${tarefaId}/anexos`)
+      .then(d => setAnexos(d.anexos || []))
+      .catch(() => setAnexos([]))
+      .finally(() => setLoadingAnexos(false));
+  }, [innerTab, tarefaId]);
 
   async function addComment() {
     if (!comentario.trim()) return;
@@ -1134,6 +1263,33 @@ function TarefaDetailModal({ tarefaId, onClose, onRefresh }) {
                   {savingCmt ? '…' : 'Enviar'}
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* Prints */}
+          {!loading && innerTab === 3 && (
+            <div>
+              {loadingAnexos ? (
+                <div style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', padding: '30px 0' }}>Carregando…</div>
+              ) : anexos.length === 0 ? (
+                <div style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', padding: '30px 0' }}>Nenhum print anexado nesta tarefa.</div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12 }}>
+                  {anexos.map(a => (
+                    <a key={a.id} href={a.url} target="_blank" rel="noreferrer"
+                      style={{ display: 'block', background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, overflow: 'hidden', textDecoration: 'none' }}>
+                      {a.mime_type.startsWith('image/') ? (
+                        <img src={a.url} alt="" style={{ width: '100%', height: 120, objectFit: 'cover', display: 'block' }} />
+                      ) : (
+                        <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 13 }}>PDF</div>
+                      )}
+                      <div style={{ padding: '6px 8px', fontSize: 11, color: '#9ca3af' }}>
+                        {(a.size_bytes / 1024).toFixed(0)} KB · {new Date(a.created_at).toLocaleDateString('pt-BR')}
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

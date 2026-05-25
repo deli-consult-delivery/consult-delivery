@@ -1218,6 +1218,14 @@ app.use('/api', require('./routes/tarefas')({
   supabaseInsert,
 }));
 
+// ── Onda 07 F1 — Anexos de tarefas ──────────────────────────────────────────
+app.use('/api', require('./routes/tarefa-anexos')({
+  requireJwt,
+  sbFetch,
+  assertLojaAccess,
+  supabaseInsert,
+}));
+
 // ── PILOTO Onda 03 — Loja-GPT ────────────────────────────────────────────────
 app.use('/api', require('./routes/loja-gpt')({
   requireJwt,
