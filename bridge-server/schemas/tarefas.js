@@ -131,6 +131,20 @@ const ReabrirSchema = z.object({
   status_alvo:  z.enum(['aprovada', 'em_execucao']).default('aprovada'),
 });
 
+// POST /api/tarefas/:id/solicitar-revisao-cliente — body
+const SolicitarRevisaoClienteSchema = z.object({
+  nota: z.string().max(2000).optional(),
+});
+
+// POST /api/tarefas/:id/revisar — body
+const RevisarSchema = z.object({
+  tipo:   z.enum(['aprovacao', 'recusa']),
+  motivo: z.string().max(2000).optional().nullable(),
+}).refine(
+  data => data.tipo !== 'recusa' || !!(data.motivo?.trim()),
+  { message: 'Motivo obrigatório ao recusar', path: ['motivo'] }
+);
+
 // POST /api/tarefas/:id/prints — body (frontend faz upload no Storage; aqui registra metadados)
 const CreatePrintSchema = z.object({
   tipo:          z.enum(['antes', 'depois', 'outro']),
@@ -156,6 +170,8 @@ module.exports = {
   ConcluirSchema,
   MarcarConcluidaSchema,
   ReabrirSchema,
+  SolicitarRevisaoClienteSchema,
+  RevisarSchema,
   ListComentariosQuerySchema,
   CreateComentarioSchema,
   RelatorioQuerySchema,

@@ -407,6 +407,67 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
       .eq('status', 'em_atendimento');
   }
 
+  // ── F3 Onda07: Revisão cliente pós-conclusão ─────────────────────────────────
+  if (!isGroup && messageText && !isMedia) {
+    const senderNumF3    = chatId.replace(/@[^@]*$/, '');
+    const okMatchF3      = messageText.match(/^(OK|✅)\s+(\d+)/i);
+    const ajustarMatchF3 = messageText.match(/^(AJUSTAR|❌)\s+(\d+)[:\-]\s*(.+)/i);
+
+    if (okMatchF3 || ajustarMatchF3) {
+      const n = parseInt((okMatchF3 ?? ajustarMatchF3)![2], 10);
+      try {
+        const { data: clientAnalises } = await supabase
+          .from('analises')
+          .select('id')
+          .eq('tenant_id', tenantId)
+          .eq('numero_whatsapp_cliente', senderNumF3);
+
+        const analiseIds = (clientAnalises ?? []).map((a: { id: string }) => a.id);
+
+        if (analiseIds.length > 0) {
+          const { data: pendentes } = await supabase
+            .from('tarefas_loja')
+            .select('id, titulo')
+            .in('analise_id', analiseIds)
+            .eq('revisao_status', 'aguardando')
+            .order('aguarda_revisao_em', { ascending: true })
+            .limit(50);
+
+          const tarefa = ((pendentes ?? []) as { id: string; titulo: string }[])[n - 1];
+
+          if (tarefa) {
+            const tipo   = okMatchF3 ? 'aprovacao' : 'recusa';
+            const motivo = ajustarMatchF3 ? ajustarMatchF3[3].trim() : null;
+
+            const BRIDGE_URL_F3    = Deno.env.get('BRIDGE_URL')    ?? '';
+            const BRIDGE_SECRET_F3 = Deno.env.get('BRIDGE_SECRET') ?? '';
+
+            await fetch(`${BRIDGE_URL_F3}/api/tarefas/${tarefa.id}/revisar`, {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json', 'x-bridge-secret': BRIDGE_SECRET_F3 },
+              body:    JSON.stringify({ tipo, motivo }),
+              signal:  AbortSignal.timeout(10_000),
+            }).catch(e => console.warn('[F3] revisar falhou:', (e as Error).message));
+
+            const replyTxt = tipo === 'aprovacao'
+              ? `✅ Revisão aprovada! Tarefa: ${tarefa.titulo}`
+              : `📋 Ajuste solicitado para: ${tarefa.titulo}. O consultor foi notificado.`;
+
+            if (inst) {
+              await evoSendText(inst, instance, chatId, replyTxt).catch(e =>
+                console.warn('[F3] reply WhatsApp falhou:', (e as Error).message)
+              );
+            }
+
+            return;
+          }
+        }
+      } catch (f3Err) {
+        console.warn('[F3] parser erro (não crítico):', (f3Err as Error).message);
+      }
+    }
+  }
+
   // ── T6: Respostas de clientes com sessão de aprovação WhatsApp ativa ─────────
 
   if (!isGroup && messageText && !isMedia) {
