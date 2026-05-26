@@ -1365,6 +1365,13 @@ app.use('/api', require('./routes/wizard-publico')({
   supabaseInsert,
 }));
 
+// ── Inadimplentes (CORA V1 — cora_cobrancas) ─────────────────────────────────
+app.use('/api', require('./routes/inadimplentes')({
+  requireJwt,
+  SUPABASE_URL,
+  SUPABASE_SERVICE_KEY,
+}));
+
 const server = app.listen(PORT, '0.0.0.0', () => {
   // D2: timeout do servidor > 60s para suportar polling síncrono do loja-gpt
   server.timeout = 90_000; // 90s — folga sobre os 60s de poll da task
