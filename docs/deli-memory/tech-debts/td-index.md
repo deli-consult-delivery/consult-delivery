@@ -340,7 +340,31 @@ Agentes operam sem contexto persistente sobre lojas.
 
 ---
 
-*Atualizado em: 2026-05-24 S1-G00 T3, T4, T5*
+*Atualizado em: 2026-05-24 S1-G00 T3, T4, T5 | 2026-05-25 batch TDs P1*
+
+---
+
+## TD#57 — bom_dia_config: schedule dinâmica por-tenant não suportada pelo Trigger.dev v3
+**Status:** 🟡 ROADMAP
+**Descoberto em:** batch TDs P1 (2026-05-25)
+**Severidade:** Baixa — schedule atual (fixo UTC) funciona; hora por-tenant é melhoria
+
+**Sintoma:**
+`bom_dia_config` tem colunas `hora_semana` e `hora_sabado` por tenant, mas o scheduler usa
+cron fixo `"0 12 * * 1-5"` / `"0 11 * * 6"` para todos os tenants.
+Trigger.dev v3 não suporta schedules dinâmicas criadas em runtime — `schedules.task()` exige
+cron estático na definição do task.
+
+**Root cause:** Limitação arquitetural do Trigger.dev v3: `schedules.task()` aceita apenas
+cron literal no código. Não há API para registrar schedules por-tenant dinamicamente.
+
+**Impacto:** Todos os tenants disparam no mesmo horário (12h UTC = 09h BRT seg-sex, 11h UTC = 08h BRT sáb).
+Columns `hora_semana` e `hora_sabado` são lidas e logadas, mas não respeitadas para alterar horário.
+
+**Fix (roadmap):**
+Opção A: Trigger.dev v4+ ou Inngest — avaliar suporte a dynamic schedules.
+Opção B: Task única + cron de 15 em 15 min que verifica se cada tenant está dentro da janela configurada.
+Opção C: Usar Supabase pg_cron com invocação via HTTP para cada tenant.
 
 ---
 
