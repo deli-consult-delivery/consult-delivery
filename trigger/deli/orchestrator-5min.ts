@@ -249,6 +249,12 @@ export const deliOrchestrator5min = schedules.task({
   retry: { maxAttempts: 2, minTimeoutInMs: 30_000, maxTimeoutInMs: 60_000 },
 
   run: async (_payload, { ctx }) => {
+    const ORCHESTRATOR_DISABLED = process.env.DELI_ORCHESTRATOR_DISABLED === 'true';
+    if (ORCHESTRATOR_DISABLED) {
+      logger.warn("deli-orchestrator: DISABLED via env var");
+      return { semaforo: "Verde", motivos: ["disabled_via_env"], results: { verde: [], amarelo: [], vermelho: [] } };
+    }
+
     const sb = getSupabase();
     const since5min = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     const resultsBySemaforo: Record<AutonomyLevel, string[]> = { verde: [], amarelo: [], vermelho: [] };
@@ -324,9 +330,10 @@ export const deliOrchestrator5min = schedules.task({
     motivos.push(...resultsBySemaforo.verde.map((s) => `🟢 ${s}`));
 
     // 4. Notificar Bridge se não-Verde
-    if (semaforo !== "Verde") {
-      await notifyBridge(semaforo, motivos, ctx.run.id);
-    }
+    // NOTIFICAÇÃO TEMPORARIAMENTE DESLIGADA — bug spam (Wandson 2026-05-26)
+    // if (semaforo !== "Verde") {
+    //   await notifyBridge(semaforo, motivos, ctx.run.id);
+    // }
 
     logger.info("deli-orchestrator-5min: concluído", { semaforo, motivos });
 
