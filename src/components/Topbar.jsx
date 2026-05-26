@@ -33,7 +33,7 @@ function fmtTime(isoString) {
   return `${Math.floor(hrs / 24)}d`;
 }
 
-export default function Topbar({ route, tenant, setTenant, tenants, theme = 'claro', setTheme, onMenuToggle, tenantId, userId }) {
+export default function Topbar({ route, tenant, setTenant, tenants, theme = 'claro', setTheme, onMenuToggle, tenantId, userId, onNavigate }) {
   const [openTenant, setOpenTenant] = useState(false);
   const [openNotif, setOpenNotif] = useState(false);
   const [openTheme, setOpenTheme] = useState(false);
@@ -189,18 +189,27 @@ export default function Topbar({ route, tenant, setTenant, tenants, theme = 'cla
             <div className="dropdown" style={{ right: 0, minWidth: 320 }} onMouseLeave={() => setOpenNotif(false)}>
               <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--g-100)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <strong style={{ fontSize: 13 }}>Notificações</strong>
-                <button
-                  className="btn-ghost"
-                  style={{ fontSize: 11, padding: '2px 8px' }}
-                  onClick={() =>
-                    markAllNotificationsRead(tenantId, userId).then(() => {
-                      setNotifications(prev => prev.map(n => ({ ...n, read_at: n.read_at ?? new Date().toISOString() })));
-                      setUnreadCount(0);
-                    })
-                  }
-                >
-                  Marcar lidas
-                </button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    className="btn-ghost"
+                    style={{ fontSize: 11, padding: '2px 8px' }}
+                    onClick={() =>
+                      markAllNotificationsRead(tenantId, userId).then(() => {
+                        setNotifications(prev => prev.map(n => ({ ...n, read_at: n.read_at ?? new Date().toISOString() })));
+                        setUnreadCount(0);
+                      })
+                    }
+                  >
+                    Marcar lidas
+                  </button>
+                  <button
+                    className="btn-ghost"
+                    style={{ fontSize: 11, padding: '2px 8px' }}
+                    onClick={() => { setOpenNotif(false); onNavigate?.('notificacoes'); }}
+                  >
+                    Ver todas
+                  </button>
+                </div>
               </div>
               {notifications.length === 0 && (
                 <div style={{ padding: '24px 14px', textAlign: 'center', fontSize: 12, color: 'var(--g-400)' }}>

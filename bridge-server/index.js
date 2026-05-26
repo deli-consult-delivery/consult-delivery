@@ -1372,6 +1372,12 @@ app.use('/api', require('./routes/inadimplentes')({
   SUPABASE_SERVICE_KEY,
 }));
 
+// ── Notificações internas — painel ───────────────────────────────────────────
+app.use('/api', require('./routes/notifications')({
+  requireJwt,
+  sbFetch,
+}));
+
 const server = app.listen(PORT, '0.0.0.0', () => {
   // D2: timeout do servidor > 60s para suportar polling síncrono do loja-gpt
   server.timeout = 90_000; // 90s — folga sobre os 60s de poll da task

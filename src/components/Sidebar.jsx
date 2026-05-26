@@ -41,6 +41,12 @@ const NAV_GROUPS = [
       { id: 'reports', icon: 'chart', label: 'Relatórios' },
     ],
   },
+  {
+    label: 'Sistema',
+    items: [
+      { id: 'notificacoes', icon: 'bell', label: 'Notificações' },
+    ],
+  },
 ];
 
 const NAV_ADMIN = [
