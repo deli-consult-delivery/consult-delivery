@@ -1252,8 +1252,23 @@ app.use('/api', require('./routes/contratos')({
   ASAAS_API_KEY,
 }));
 
+// ── G03.3 — Asaas Webhook (contratos) ────────────────────────────────────────
+app.use('/api', require('./routes/asaas-webhook')({
+  supabaseInsert,
+  supabaseSelect,
+  supabaseUpdate,
+  ASAAS_WEBHOOK_SECRET,
+}));
+
 // ── F4 Onda 07 — Dashboard Público de Aprovação (sem JWT) ────────────────────
 app.use('/api', require('./routes/publico-aprovacao')({
+  sbFetch,
+  supabaseInsert,
+}));
+
+// ── S2-G01.5 — LARA editorial: drafts + revisão + publicação ─────────────────
+app.use('/api', require('./routes/lara')({
+  requireJwt,
   sbFetch,
   supabaseInsert,
 }));
@@ -1276,5 +1291,6 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`[bridge] PILOTO Onda 03:        GET|POST /api/lojas/:id/loja-gpt/conversations, GET /api/loja-gpt/conversations/:id, POST /api/loja-gpt/conversations/:id/messages, PATCH /api/loja-gpt/conversations/:id`);
   console.log(`[bridge] PILOTO Onda 04:        GET|POST /api/lojas/:id/analises, POST /api/lojas/:id/analises/processar, POST /api/lojas/:id/analises/:aid/enviar-whatsapp`);
   console.log(`[bridge] G03 Contratos:         POST /api/contratos/:id/enviar-assinatura, POST /api/contratos/:id/link-asaas, POST /api/contratos/sign (público)`);
+  console.log(`[bridge] G03.3 Asaas Webhook:  POST /api/asaas/webhook (público, valida asaas-access-token)`);
   console.log(`[bridge] ASAAS_API_KEY:         ${ASAAS_API_KEY ? '✓' : '✗ /contratos/:id/link-asaas recusará'}`);
 });
