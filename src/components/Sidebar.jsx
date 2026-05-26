@@ -1,44 +1,46 @@
 import { useState, useEffect } from 'react';
 import Icon from './Icon.jsx';
+import { usePermissions } from '../hooks/usePermissions.js';
 
+// null = visible to all authenticated users
 const NAV_GROUPS = [
   {
     label: 'Início',
     items: [
-      { id: 'dashboard', icon: 'home',     label: 'Dashboard' },
-      { id: 'deli',      icon: 'bot',      label: 'DELI', pulse: true },
+      { id: 'dashboard', icon: 'home',    label: 'Dashboard' },
+      { id: 'deli',      icon: 'bot',     label: 'DELI', pulse: true, roles: ['admin', 'deli_owner'] },
     ],
   },
   {
     label: 'Operação',
     items: [
-      { id: 'chat',            icon: 'chat',     label: 'Chat Ao Vivo' },
-      { id: 'lojas',           icon: 'building', label: 'Lojas'        },
-      { id: 'crm',             icon: 'users',    label: 'Clientes'     },
-      { id: 'contratos',        icon: 'paper',       label: 'Contratos'      },
-      { id: 'recontratacao',    icon: 'send',        label: 'Re-contratação' },
-      { id: 'tarefas',          icon: 'checkcircle', label: 'Todas Tarefas'  },
-      { id: 'tarefas-clientes', icon: 'columns',     label: 'Espaços'        },
-      { id: 'onboarding',       icon: 'checkcircle', label: 'Onboarding'     },
+      { id: 'chat',             icon: 'chat',        label: 'Chat Ao Vivo',   roles: ['admin', 'atendimento', 'marketing'] },
+      { id: 'lojas',            icon: 'building',    label: 'Lojas' },
+      { id: 'crm',              icon: 'users',       label: 'Clientes',       roles: ['admin', 'marketing'] },
+      { id: 'contratos',        icon: 'paper',       label: 'Contratos',      roles: ['admin'] },
+      { id: 'recontratacao',    icon: 'send',        label: 'Re-contratação', roles: ['admin'] },
+      { id: 'tarefas',          icon: 'checkcircle', label: 'Todas Tarefas',  roles: ['admin'] },
+      { id: 'tarefas-clientes', icon: 'columns',     label: 'Espaços',        roles: ['admin', 'marketing'] },
+      { id: 'onboarding',       icon: 'checkcircle', label: 'Onboarding',     roles: ['admin', 'atendimento', 'marketing'] },
     ],
   },
   {
     label: 'Agentes IA',
     items: [
-      { id: 'agents',       icon: 'bot',  label: 'Painel Agentes' },
+      { id: 'agents', icon: 'bot', label: 'Painel Agentes', roles: ['admin'] },
     ],
   },
   {
     label: 'Marketing',
     items: [
-      { id: 'campanhas',       icon: 'megaphone', label: 'Campanhas' },
-      { id: 'drafts-pendentes', icon: 'paper',    label: 'Disparos'  },
+      { id: 'campanhas',        icon: 'megaphone', label: 'Campanhas', roles: ['admin', 'marketing'] },
+      { id: 'drafts-pendentes', icon: 'paper',     label: 'Disparos',  roles: ['admin', 'marketing'] },
     ],
   },
   {
     label: 'Dados',
     items: [
-      { id: 'reports', icon: 'chart', label: 'Relatórios' },
+      { id: 'reports', icon: 'chart', label: 'Relatórios', roles: ['admin', 'marketing'] },
     ],
   },
   {
@@ -50,8 +52,8 @@ const NAV_GROUPS = [
 ];
 
 const NAV_ADMIN = [
-  { id: 'grupos',   icon: 'whatsapp', label: 'Grupos WhatsApp' },
-  { id: 'settings', icon: 'gear',     label: 'Configurações'   },
+  { id: 'grupos',   icon: 'whatsapp', label: 'Grupos WhatsApp', roles: ['admin', 'atendimento'] },
+  { id: 'settings', icon: 'gear',     label: 'Configurações',   roles: ['admin'] },
 ];
 
 function SidebarItem({ item, route, setRoute, badge, expanded }) {
@@ -73,13 +75,18 @@ function SidebarItem({ item, route, setRoute, badge, expanded }) {
   );
 }
 
-export default function Sidebar({ route, setRoute, counts, isOpen }) {
+export default function Sidebar({ route, setRoute, counts, isOpen, userId }) {
   const [expanded, setExpanded] = useState(() => {
     try { return localStorage.getItem('cd-sidebar-expanded') === 'true'; } catch { return false; }
   });
   const [hidden, setHidden] = useState(() => {
     try { return localStorage.getItem('cd-sidebar-hidden') === 'true'; } catch { return false; }
   });
+
+  const { hasRole, loading: permLoading } = usePermissions(userId);
+
+  const visible = (item) =>
+    !item.roles || permLoading || item.roles.some(r => hasRole(r));
 
   useEffect(() => {
     const w = hidden ? '0px' : expanded ? '220px' : '64px';
@@ -118,22 +125,26 @@ export default function Sidebar({ route, setRoute, counts, isOpen }) {
 
         {/* Grupos de navegação */}
         <nav className="sidebar-nav scrollbar-hidden">
-          {NAV_GROUPS.map((group, gi) => (
-            <div key={gi} style={{ width: '100%' }}>
-              {gi > 0 && <div className="side-divider" />}
-              {expanded && <div className="side-section">{group.label}</div>}
-              {group.items.map(item => (
-                <SidebarItem key={item.id} item={item} route={route} setRoute={setRoute} badge={counts[item.id]} expanded={expanded} />
-              ))}
-            </div>
-          ))}
+          {NAV_GROUPS.map((group, gi) => {
+            const visibleItems = group.items.filter(visible);
+            if (!visibleItems.length) return null;
+            return (
+              <div key={gi} style={{ width: '100%' }}>
+                {gi > 0 && <div className="side-divider" />}
+                {expanded && <div className="side-section">{group.label}</div>}
+                {visibleItems.map(item => (
+                  <SidebarItem key={item.id} item={item} route={route} setRoute={setRoute} badge={counts[item.id]} expanded={expanded} />
+                ))}
+              </div>
+            );
+          })}
         </nav>
 
         {/* Rodapé — Admin */}
         <div className="sidebar-footer">
           <div className="side-divider" />
           {expanded && <div className="side-section">Admin</div>}
-          {NAV_ADMIN.map(item => (
+          {NAV_ADMIN.filter(visible).map(item => (
             <SidebarItem key={item.id} item={item} route={route} setRoute={setRoute} expanded={expanded} />
           ))}
           <button className="side-expand-btn" onClick={() => setExpanded(v => !v)} title={expanded ? 'Recolher menu' : 'Expandir menu'}>

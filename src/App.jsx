@@ -31,6 +31,7 @@ import EncerramentoScreen from './screens/EncerramentoScreen.jsx';
 import ContratosScreen from './screens/Contratos/ContratosScreen.jsx';
 import RecontratacaoScreen from './screens/Recontratacao/RecontratacaoScreen.jsx';
 import OnboardingScreen from './screens/OnboardingScreen.jsx';
+import RequireRole from './components/auth/RequireRole.jsx';
 import InadimplentesScreen from './screens/InadimplentesScreen.jsx';
 import NotificacoesScreen from './screens/NotificacoesScreen.jsx';
 import { CONVERSATIONS, INADIMPLENTES, TENANTS } from './data.js';
@@ -246,6 +247,7 @@ export default function App() {
         setRoute={r => { setRoute(r); setSidebarOpen(false); }}
         counts={counts}
         isOpen={sidebarOpen}
+        userId={session?.user?.id}
       />
       <Topbar
         route={route}
@@ -260,42 +262,163 @@ export default function App() {
         onNavigate={setRoute}
       />
       <main className="main scroll" key={route + tenant}>
+        {/* Rotas públicas (sem RequireRole) */}
         {route === 'dashboard' && <DashboardScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={setRoute} />}
-        {route === 'chat'      && <ChatScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={setRoute} />}
-        {route === 'tarefas' && <TasksScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'cora'         && <CoraScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'analise-ifood'   && <AnaliseiFoodScreen tenant={tenant} tenantDbId={tenantDbId} />}
-        {route === 'tarefas-clientes' && <TarefasClientesScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'crm'             && <CRMScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={nav => setRoute(nav)} />}
-        {route === 'reports'         && <ReportsScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'agents'           && <AgentsPage tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'lojas'     && <LojasScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'campanhas' && <CampanhasScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'lara'           && <LaraScreen          tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'lara-editorial' && <LaraEditorialScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'drafts-pendentes' && <DraftsPendentesScreen tenantId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'grupos'    && <GruposScreen tenant={tenant} tenantDbId={tenantDbId} />}
-        {route === 'deli'        && <DeliScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'deli-painel' && <DeliPainel tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'max'      && <MaxScreen  tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'nova'     && <NovaScreen  tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'breno'    && <BrenoScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'sofia'    && <SofiaScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'vera'     && <VeraScreen  tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'bom-dia'      && <BomDiaScreen      tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'encerramento' && <EncerramentoScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'contratos'      && <ContratosScreen      tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'recontratacao'  && <RecontratacaoScreen  tenantDbId={tenantDbId} />}
-        {route === 'onboarding'     && <OnboardingScreen     tenantDbId={tenantDbId} />}
-        {route === 'inadimplentes'  && <InadimplentesScreen  tenantDbId={tenantDbId} userId={session?.user?.id} />}
+        {route === 'lojas'        && <LojasScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'notificacoes' && <NotificacoesScreen tenantDbId={tenantDbId} userId={session?.user?.id} onNavigate={setRoute} />}
-        {route === 'settings'  && <SettingsScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} onTenantChange={async (newSlug) => {
-          if (newSlug) {
-            setTenant(newSlug);
-          } else {
-            await reloadTenants();
-          }
-        }} />}
+
+        {/* admin + atendimento + marketing */}
+        {route === 'chat' && (
+          <RequireRole roles={['admin', 'atendimento', 'marketing']} userId={session?.user?.id}>
+            <ChatScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={setRoute} />
+          </RequireRole>
+        )}
+        {route === 'onboarding' && (
+          <RequireRole roles={['admin', 'atendimento', 'marketing']} userId={session?.user?.id}>
+            <OnboardingScreen tenantDbId={tenantDbId} />
+          </RequireRole>
+        )}
+
+        {/* admin + marketing */}
+        {route === 'crm' && (
+          <RequireRole roles={['admin', 'marketing']} userId={session?.user?.id}>
+            <CRMScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={nav => setRoute(nav)} />
+          </RequireRole>
+        )}
+        {route === 'reports' && (
+          <RequireRole roles={['admin', 'marketing']} userId={session?.user?.id}>
+            <ReportsScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+        {route === 'lara' && (
+          <RequireRole roles={['admin', 'marketing']} userId={session?.user?.id}>
+            <LaraScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+        {route === 'lara-editorial' && (
+          <RequireRole roles={['admin', 'marketing']} userId={session?.user?.id}>
+            <LaraEditorialScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+        {route === 'sofia' && (
+          <RequireRole roles={['admin', 'marketing']} userId={session?.user?.id}>
+            <SofiaScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+        {route === 'tarefas-clientes' && (
+          <RequireRole roles={['admin', 'marketing']} userId={session?.user?.id}>
+            <TarefasClientesScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+        {route === 'campanhas' && (
+          <RequireRole roles={['admin', 'marketing']} userId={session?.user?.id}>
+            <CampanhasScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+        {route === 'drafts-pendentes' && (
+          <RequireRole roles={['admin', 'marketing']} userId={session?.user?.id}>
+            <DraftsPendentesScreen tenantId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+
+        {/* admin only */}
+        {route === 'tarefas' && (
+          <RequireRole roles={['admin']} userId={session?.user?.id}>
+            <TasksScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+        {route === 'contratos' && (
+          <RequireRole roles={['admin']} userId={session?.user?.id}>
+            <ContratosScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+        {route === 'recontratacao' && (
+          <RequireRole roles={['admin']} userId={session?.user?.id}>
+            <RecontratacaoScreen tenantDbId={tenantDbId} />
+          </RequireRole>
+        )}
+        {route === 'agents' && (
+          <RequireRole roles={['admin']} userId={session?.user?.id}>
+            <AgentsPage tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+        {route === 'settings' && (
+          <RequireRole roles={['admin']} userId={session?.user?.id}>
+            <SettingsScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} onTenantChange={async (newSlug) => {
+              if (newSlug) {
+                setTenant(newSlug);
+              } else {
+                await reloadTenants();
+              }
+            }} />
+          </RequireRole>
+        )}
+        {route === 'max' && (
+          <RequireRole roles={['admin']} userId={session?.user?.id}>
+            <MaxScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+        {route === 'nova' && (
+          <RequireRole roles={['admin']} userId={session?.user?.id}>
+            <NovaScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+        {route === 'breno' && (
+          <RequireRole roles={['admin']} userId={session?.user?.id}>
+            <BrenoScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+        {route === 'vera' && (
+          <RequireRole roles={['admin']} userId={session?.user?.id}>
+            <VeraScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+
+        {/* admin + deli_owner */}
+        {route === 'deli' && (
+          <RequireRole roles={['admin', 'deli_owner']} userId={session?.user?.id}>
+            <DeliScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+        {route === 'deli-painel' && (
+          <RequireRole roles={['admin', 'deli_owner']} userId={session?.user?.id}>
+            <DeliPainel tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+
+        {/* admin + atendimento */}
+        {route === 'analise-ifood' && (
+          <RequireRole roles={['admin', 'atendimento']} userId={session?.user?.id}>
+            <AnaliseiFoodScreen tenant={tenant} tenantDbId={tenantDbId} />
+          </RequireRole>
+        )}
+        {route === 'grupos' && (
+          <RequireRole roles={['admin', 'atendimento']} userId={session?.user?.id}>
+            <GruposScreen tenant={tenant} tenantDbId={tenantDbId} />
+          </RequireRole>
+        )}
+        {route === 'bom-dia' && (
+          <RequireRole roles={['admin', 'atendimento']} userId={session?.user?.id}>
+            <BomDiaScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+        {route === 'encerramento' && (
+          <RequireRole roles={['admin', 'atendimento']} userId={session?.user?.id}>
+            <EncerramentoScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+
+        {/* admin + financeiro */}
+        {route === 'cora' && (
+          <RequireRole roles={['admin', 'financeiro']} userId={session?.user?.id}>
+            <CoraScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+        {route === 'inadimplentes' && (
+          <RequireRole roles={['admin', 'financeiro']} userId={session?.user?.id}>
+            <InadimplentesScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
       </main>
       <TweaksPanel title="Tweaks">
         <TweakSection title="Marca">
