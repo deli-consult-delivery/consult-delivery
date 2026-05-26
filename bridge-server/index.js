@@ -1325,6 +1325,13 @@ app.use('/api', require('./routes/asaas-webhook')({
   ASAAS_WEBHOOK_SECRET,
 }));
 
+// ── Relatórios — Dashboard consolidado por tenant ───────────────────────────
+app.use('/api', require('./routes/relatorios')({
+  requireJwt,
+  sbFetch,
+  assertTenantMember,
+}));
+
 // ── F4 Onda 07 — Dashboard Público de Aprovação (sem JWT) ────────────────────
 app.use('/api', require('./routes/publico-aprovacao')({
   sbFetch,
