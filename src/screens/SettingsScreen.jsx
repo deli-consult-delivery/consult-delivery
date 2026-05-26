@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Icon from '../components/Icon.jsx';
 import UserAvatar from '../components/UserAvatar.jsx';
 import { META_TEMPLATES, DEPARTMENTS } from '../data.js';
+import CustomFieldsManager from './Settings/CustomFieldsManager.jsx';
 
 const SettingsScreen = ({ tenant, tenantDbId, userId, onTenantChange }) => {
   const [section, setSection] = useState('workspace');
@@ -15,6 +16,7 @@ const SettingsScreen = ({ tenant, tenantDbId, userId, onTenantChange }) => {
     { id: 'rules',        label: 'Regras de roteamento',icon: 'route' },
     { id: 'billing',      label: 'Faturamento e IA',    icon: 'dollar' },
     { id: 'security',     label: 'Segurança',           icon: 'shield' },
+    { id: 'custom_fields', label: 'Campos personalizados', icon: 'settings' },
   ];
 
   return (
@@ -47,6 +49,11 @@ const SettingsScreen = ({ tenant, tenantDbId, userId, onTenantChange }) => {
           {section === 'rules'        && <RulesSettings />}
           {section === 'billing'      && <BillingSettings />}
           {section === 'security'     && <SecuritySettings />}
+          {section === 'custom_fields' && (
+            <SettingsCard title="Campos personalizados" sub="Adicione campos extras a lojas, clientes, leads, tarefas e contratos.">
+              <CustomFieldsManager tenantDbId={tenantDbId} />
+            </SettingsCard>
+          )}
         </div>
       </div>
     </div>

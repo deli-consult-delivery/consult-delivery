@@ -5,6 +5,7 @@ import AgentAvatar from '../components/AgentAvatar.jsx';
 import UserAvatar from '../components/UserAvatar.jsx';
 import { supabase } from '../lib/supabase.js';
 import { TENANTS, CRM_CUSTOMERS } from '../data.js';
+import CustomFieldsSection from '../components/CustomFieldsSection.jsx';
 
 const CrmScreen = ({ tenant, tenantDbId, onNavigate }) => {
   const [mode, setMode] = uSCrm('clientes');
@@ -528,6 +529,8 @@ const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0, onNavigate }) =>
         <LeadFormModal
           title="Editar Lead"
           initial={editLead}
+          leadId={editLead.id}
+          tenantDbId={tenantDbId}
           onClose={() => setEditLead(null)}
           onSave={data => handleEditLead(editLead.id, data)}
         />,
@@ -568,7 +571,7 @@ const thStyle = {
   letterSpacing: 0.5,
 };
 
-const LeadFormModal = ({ title, initial, onClose, onSave }) => {
+const LeadFormModal = ({ title, initial, leadId, tenantDbId, onClose, onSave }) => {
   const [form, setForm] = uSCrm({
     nome:           initial?.nome || '',
     whatsapp:       initial?.whatsapp || '',
@@ -647,6 +650,9 @@ const LeadFormModal = ({ title, initial, onClose, onSave }) => {
             <label style={labelStyle}>Notas</label>
             <textarea className="input" placeholder="Observações…" value={form.notas} onChange={e => set('notas', e.target.value)} rows={3} style={{ width:'100%', resize:'vertical' }}/>
           </div>
+          {leadId && tenantDbId && (
+            <CustomFieldsSection entidade="lead" entidadeId={leadId} tenantId={tenantDbId} />
+          )}
           <div style={{ display:'flex', gap: 8, justifyContent:'flex-end', marginTop: 4 }}>
             <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
             <button type="submit" className="btn-primary" style={{ background:'#B70C00' }} disabled={saving}>
