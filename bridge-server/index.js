@@ -1378,6 +1378,9 @@ app.use('/api', require('./routes/notifications')({
   sbFetch,
 }));
 
+// ── CRM — pipeline de leads ───────────────────────────────────────────────────
+app.use('/api', require('./routes/crm')({ requireJwt, sbFetch, supabaseInsert }));
+
 const server = app.listen(PORT, '0.0.0.0', () => {
   // D2: timeout do servidor > 60s para suportar polling síncrono do loja-gpt
   server.timeout = 90_000; // 90s — folga sobre os 60s de poll da task

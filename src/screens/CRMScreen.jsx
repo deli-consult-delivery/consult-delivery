@@ -197,391 +197,343 @@ const ClientesView = ({ tenant, tenantDbId, onNavigate, onImportClick }) => {
   );
 };
 
+const STAGES = [
+  { id: 'novo',        label: 'Novo',       color: '#6B7280' },
+  { id: 'qualificado', label: 'Qualificado', color: '#3B82F6' },
+  { id: 'proposta',    label: 'Proposta',    color: '#F59E0B' },
+  { id: 'negociacao',  label: 'Negociação',  color: '#8B5CF6' },
+  { id: 'fechado',     label: 'Fechado',     color: '#10B981' },
+  { id: 'perdido',     label: 'Perdido',     color: '#EF4444' },
+];
+
 /* ─── LEADS VIEW ─── */
 const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0, onNavigate }) => {
   const [leads, setLeads] = uSCrm([]);
   const [loading, setLoading] = uSCrm(true);
+  const [view, setView] = uSCrm('kanban');
   const [search, setSearch] = uSCrm('');
-  const [selected, setSelected] = uSCrm(new Set());
-  const [showMenu, setShowMenu] = uSCrm(false);
+  const [stageFilter, setStageFilter] = uSCrm('all');
   const [showModal, setShowModal] = uSCrm(false);
-  const [rowMenuId, setRowMenuId] = uSCrm(null);
   const [editLead, setEditLead] = uSCrm(null);
   const [deleteConfirm, setDeleteConfirm] = uSCrm(null);
   const [deleting, setDeleting] = uSCrm(false);
-  const menuRef = useRef(null);
-  const rowMenuRef = useRef(null);
+  const [draggingId, setDraggingId] = uSCrm(null);
+  const [dragOver, setDragOver] = uSCrm(null);
 
   useEffect(() => {
     if (!tenantDbId) return;
     fetchLeads();
   }, [tenantDbId, refreshKey]);
 
-  useEffect(() => {
-    const handler = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) setShowMenu(false);
-      if (rowMenuRef.current && !rowMenuRef.current.contains(e.target)) setRowMenuId(null);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  async function handleDelete(lead) {
-    setDeleting(true);
-    await supabase.from('customers').delete().eq('id', lead.id);
-    setLeads(prev => prev.filter(l => l.id !== lead.id));
-    setDeleteConfirm(null);
-    setDeleting(false);
-  }
-
   async function fetchLeads() {
     setLoading(true);
     const { data, error } = await supabase
-      .from('customers')
-      .select('id, name, phone, email, avatar, tags, metadata, segment, created_at')
+      .from('leads')
+      .select('id, nome, email, whatsapp, origem, stage, valor_estimado, score, responsavel_id, notas, created_at, updated_at')
       .eq('tenant_id', tenantDbId)
-      .eq('segment', 'Lead')
       .order('created_at', { ascending: false });
     if (!error && data) setLeads(data);
     setLoading(false);
   }
 
-  const filtered = uMCrm(() => {
-    if (!search) return leads;
-    const q = search.toLowerCase();
-    return leads.filter(l =>
-      l.name?.toLowerCase().includes(q) ||
-      l.phone?.toLowerCase().includes(q) ||
-      l.email?.toLowerCase().includes(q)
-    );
-  }, [leads, search]);
-
-  function toggleRow(id) {
-    setSelected(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  }
-
-  function toggleAll() {
-    if (selected.size === filtered.length) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(filtered.map(l => l.id)));
-    }
-  }
-
-  function exportCSV() {
-    const rows = filtered.map(l => [
-      `"${(l.name || '').replace(/"/g,'""')}"`,
-      `"${l.phone || ''}"`,
-      `"${l.email || ''}"`,
-      `"${(l.metadata?.company || '')}"`,
-      `"${(l.metadata?.source || '')}"`,
-      `"${(l.tags || []).join(', ')}"`,
-    ].join(','));
-    const csv = ['Nome,Telefone,Email,Empresa,Origem,Tags', ...rows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'leads.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
   async function handleNewLead(data) {
-    const { error } = await supabase.from('customers').insert({
+    const { error } = await supabase.from('leads').insert({
       tenant_id: tenantDbId,
-      name: data.name,
-      phone: data.phone || null,
+      nome: data.nome,
       email: data.email || null,
-      avatar: data.name.slice(0, 2).toUpperCase(),
-      segment: 'Lead',
-      tags: data.tags ? data.tags.split(',').map(t => t.trim()).filter(Boolean) : ['lead'],
-      metadata: {
-        company: data.company || null,
-        source: data.source || null,
-      },
+      whatsapp: data.whatsapp || null,
+      origem: data.origem || null,
+      stage: data.stage || 'novo',
+      valor_estimado: data.valor_estimado ? parseFloat(data.valor_estimado) : null,
+      score: data.score ? parseInt(data.score) : null,
+      notas: data.notas || null,
     });
-    if (!error) {
-      setShowModal(false);
-      fetchLeads();
+    if (!error) { setShowModal(false); fetchLeads(); }
+  }
+
+  async function handleEditLead(id, data) {
+    const { error } = await supabase.from('leads').update({
+      nome: data.nome,
+      email: data.email || null,
+      whatsapp: data.whatsapp || null,
+      origem: data.origem || null,
+      stage: data.stage || 'novo',
+      valor_estimado: data.valor_estimado ? parseFloat(data.valor_estimado) : null,
+      score: data.score ? parseInt(data.score) : null,
+      notas: data.notas || null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', id);
+    if (!error) { setEditLead(null); fetchLeads(); }
+  }
+
+  async function handleDelete(lead) {
+    setDeleting(true);
+    await supabase.from('leads').delete().eq('id', lead.id);
+    setLeads(prev => prev.filter(l => l.id !== lead.id));
+    setDeleteConfirm(null);
+    setDeleting(false);
+  }
+
+  async function handleStageChange(leadId, newStage) {
+    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, stage: newStage } : l));
+    await supabase.from('leads').update({ stage: newStage, updated_at: new Date().toISOString() }).eq('id', leadId);
+  }
+
+  const filtered = uMCrm(() => {
+    let result = leads;
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter(l =>
+        l.nome?.toLowerCase().includes(q) ||
+        l.email?.toLowerCase().includes(q) ||
+        l.whatsapp?.includes(q)
+      );
     }
+    if (stageFilter !== 'all') result = result.filter(l => l.stage === stageFilter);
+    return result;
+  }, [leads, search, stageFilter]);
+
+  function handleDragStart(e, leadId) {
+    setDraggingId(leadId);
+    e.dataTransfer.effectAllowed = 'move';
   }
 
-  function formatPhone(p) {
-    if (!p) return '—';
-    const d = p.replace(/\D/g, '');
-    if (d.length === 13) return `+${d.slice(0,2)} (${d.slice(2,4)}) ${d.slice(4,9)}-${d.slice(9)}`;
-    if (d.length === 12) return `+${d.slice(0,2)} (${d.slice(2,4)}) ${d.slice(4,8)}-${d.slice(8)}`;
-    return p;
+  function handleDragOver(e, stageId) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOver(stageId);
   }
 
-  const allChecked = filtered.length > 0 && selected.size === filtered.length;
-  const someChecked = selected.size > 0 && selected.size < filtered.length;
+  function handleDrop(e, stageId) {
+    e.preventDefault();
+    if (draggingId && stageId) handleStageChange(draggingId, stageId);
+    setDraggingId(null);
+    setDragOver(null);
+  }
+
+  function handleDragEnd() {
+    setDraggingId(null);
+    setDragOver(null);
+  }
+
+  function formatValor(v) {
+    if (!v && v !== 0) return null;
+    return `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  }
+
+  const stats = uMCrm(() => {
+    const total = leads.length;
+    const valorTotal = leads.reduce((s, l) => s + Number(l.valor_estimado || 0), 0);
+    const fechados = leads.filter(l => l.stage === 'fechado').length;
+    const scorados = leads.filter(l => l.score);
+    const avgScore = scorados.length
+      ? scorados.reduce((s, l) => s + l.score, 0) / scorados.length
+      : 0;
+    return { total, valorTotal, fechados, avgScore: Math.round(avgScore * 10) / 10 };
+  }, [leads]);
 
   return (
     <>
+      {/* Stats Bar */}
+      <div style={{ display:'flex', gap: 12, marginBottom: 20, flexWrap:'wrap' }}>
+        {[
+          { label: 'Total Leads', value: stats.total, color: '#6B7280' },
+          { label: 'Pipeline', value: stats.valorTotal ? `R$ ${Number(stats.valorTotal).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '—', color: '#3B82F6' },
+          { label: 'Fechados', value: stats.fechados, color: '#10B981' },
+          { label: 'Score Médio', value: stats.avgScore || '—', color: '#F59E0B' },
+        ].map(s => (
+          <div key={s.label} style={{ background:'#161616', border:'1px solid #222', borderRadius: 10, padding:'12px 20px', display:'flex', flexDirection:'column', gap: 4, minWidth: 130 }}>
+            <div style={{ fontSize: 18, fontWeight: 800, color: s.color }}>{s.value}</div>
+            <div style={{ fontSize: 10, fontWeight: 600, color:'var(--g-500)', textTransform:'uppercase', letterSpacing: 0.5 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
       {/* Header */}
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', marginBottom: 24 }}>
-        <div>
-          <h1 className="page-h1">Leads</h1>
-          <p className="page-sub">Pipeline de prospecção · {leads.length} leads cadastrados</p>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 16 }}>
+        <div style={{ display:'flex', gap: 8, alignItems:'center' }}>
+          {/* View toggle */}
+          <div style={{ display:'flex', background:'#1A1A1A', border:'1px solid #2A2A2A', borderRadius: 8, padding: 2 }}>
+            {[{ id:'kanban', label:'Kanban' }, { id:'lista', label:'Lista' }].map(v => (
+              <button key={v.id} onClick={() => setView(v.id)} style={{
+                padding:'5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 6, border:'none', cursor:'pointer',
+                background: view === v.id ? '#2A2A2A' : 'none',
+                color: view === v.id ? 'white' : 'var(--g-500)',
+              }}>{v.label}</button>
+            ))}
+          </div>
+          {/* Stage filter */}
+          <select value={stageFilter} onChange={e => setStageFilter(e.target.value)} className="input" style={{ height: 34, fontSize: 12, paddingTop: 0, paddingBottom: 0 }}>
+            <option value="all">Todos os stages</option>
+            {STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
         </div>
         <div style={{ display:'flex', gap: 8, alignItems:'center' }}>
-          {/* Search */}
           <div style={{ position:'relative' }}>
-            <Icon name="search" size={14} style={{ position:'absolute', top: 11, left: 12, color:'var(--g-400)' }}/>
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="input"
-              placeholder="Buscar leads…"
-              style={{ paddingLeft: 36, width: 220 }}
-            />
+            <Icon name="search" size={14} style={{ position:'absolute', top: 10, left: 10, color:'var(--g-400)' }}/>
+            <input value={search} onChange={e => setSearch(e.target.value)} className="input" placeholder="Buscar leads…" style={{ paddingLeft: 32, width: 200, height: 34 }}/>
           </div>
-          {/* Overflow menu */}
-          <div ref={menuRef} style={{ position:'relative' }}>
-            <button
-              className="btn-secondary"
-              style={{ padding:'8px 10px' }}
-              onClick={() => setShowMenu(v => !v)}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
-              </svg>
-            </button>
-            {showMenu && (
-              <div style={{
-                position:'absolute', top:'calc(100% + 6px)', right: 0, background:'#1E1E1E', border:'1px solid #2A2A2A',
-                borderRadius: 10, padding: 6, minWidth: 160, zIndex: 50, boxShadow:'0 8px 24px rgba(0,0,0,.5)',
-              }}>
-                <button
-                  onClick={() => { exportCSV(); setShowMenu(false); }}
-                  style={{ display:'flex', alignItems:'center', gap: 8, width:'100%', padding:'8px 12px', background:'none', border:'none', color:'rgba(255,255,255,0.85)', fontSize: 13, cursor:'pointer', borderRadius: 6, textAlign:'left' }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#2A2A2A'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                >
-                  <Icon name="paper" size={13}/> Exportar CSV
-                </button>
-                <button
-                  onClick={() => { onImportClick?.(); setShowMenu(false); }}
-                  style={{ display:'flex', alignItems:'center', gap: 8, width:'100%', padding:'8px 12px', background:'none', border:'none', color:'rgba(255,255,255,0.85)', fontSize: 13, cursor:'pointer', borderRadius: 6, textAlign:'left' }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#2A2A2A'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                >
-                  <Icon name="upload" size={13}/> Importar CSV
-                </button>
-              </div>
-            )}
-          </div>
-          <button
-            className="btn-primary"
-            style={{ background:'#B70C00' }}
-            onClick={() => setShowModal(true)}
-          >
+          <button className="btn-primary" style={{ background:'#B70C00', height: 34 }} onClick={() => setShowModal(true)}>
             <Icon name="plus" size={14}/> Novo Lead
           </button>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        {loading ? (
-          <div style={{ padding: 60, textAlign:'center', color:'var(--g-500)', fontSize: 13 }}>Carregando leads…</div>
-        ) : (
+      {loading ? (
+        <div style={{ padding: 60, textAlign:'center', color:'var(--g-500)', fontSize: 13 }}>Carregando leads…</div>
+      ) : view === 'kanban' ? (
+        <div style={{ display:'flex', gap: 12, overflowX:'auto', paddingBottom: 12, alignItems:'flex-start' }}>
+          {STAGES.map(stage => {
+            const columnLeads = filtered.filter(l => l.stage === stage.id);
+            const isOver = dragOver === stage.id;
+            return (
+              <div
+                key={stage.id}
+                onDragOver={e => handleDragOver(e, stage.id)}
+                onDrop={e => handleDrop(e, stage.id)}
+                onDragLeave={() => setDragOver(null)}
+                style={{
+                  minWidth: 220, flex: '0 0 220px', background: isOver ? '#1A2A1A' : '#161616',
+                  border: isOver ? '1.5px dashed #10B981' : '1px solid #222',
+                  borderRadius: 12, padding: 10, transition: 'background .15s, border .15s',
+                }}
+              >
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 10, padding:'2px 4px' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap: 6 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: stage.color }}/>
+                    <span style={{ fontSize: 11, fontWeight: 700, color:'var(--g-700)', textTransform:'uppercase', letterSpacing: 0.5 }}>{stage.label}</span>
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 700, color:'var(--g-500)', background:'#222', borderRadius: 10, padding:'1px 7px' }}>{columnLeads.length}</span>
+                </div>
+                <div style={{ display:'flex', flexDirection:'column', gap: 8 }}>
+                  {columnLeads.map(lead => (
+                    <div
+                      key={lead.id}
+                      draggable
+                      onDragStart={e => handleDragStart(e, lead.id)}
+                      onDragEnd={handleDragEnd}
+                      style={{
+                        background: draggingId === lead.id ? 'rgba(183,12,0,0.08)' : '#1E1E1E',
+                        border: draggingId === lead.id ? '1px solid rgba(183,12,0,0.4)' : '1px solid #2A2A2A',
+                        borderRadius: 10, padding: '10px 12px', cursor:'grab',
+                        opacity: draggingId === lead.id ? 0.6 : 1, transition: 'opacity .1s',
+                      }}
+                    >
+                      <div style={{ fontSize: 13, fontWeight: 600, color:'white', marginBottom: 6, lineHeight: 1.3 }}>{lead.nome}</div>
+                      <div style={{ display:'flex', flexWrap:'wrap', gap: 6 }}>
+                        {lead.valor_estimado != null && (
+                          <span style={{ fontSize: 11, color:'#10B981', fontWeight: 600 }}>{formatValor(lead.valor_estimado)}</span>
+                        )}
+                        {lead.score != null && (
+                          <span style={{ fontSize: 11, color:'#F59E0B', fontWeight: 600 }}>★ {lead.score}/10</span>
+                        )}
+                        {lead.whatsapp && (
+                          <span style={{ fontSize: 10, color:'var(--g-500)' }}>{lead.whatsapp}</span>
+                        )}
+                      </div>
+                      <div style={{ display:'flex', gap: 4, marginTop: 8, justifyContent:'flex-end' }}>
+                        <button onClick={() => setEditLead(lead)} style={{ background:'none', border:'none', color:'var(--g-400)', cursor:'pointer', fontSize: 11, padding:'2px 6px', borderRadius: 4 }}
+                          onMouseEnter={e => e.currentTarget.style.color = 'white'}
+                          onMouseLeave={e => e.currentTarget.style.color = 'var(--g-400)'}
+                        >✏️</button>
+                        <button onClick={() => setDeleteConfirm(lead)} style={{ background:'none', border:'none', color:'var(--g-400)', cursor:'pointer', fontSize: 11, padding:'2px 6px', borderRadius: 4 }}
+                          onMouseEnter={e => e.currentTarget.style.color = '#EF4444'}
+                          onMouseLeave={e => e.currentTarget.style.color = 'var(--g-400)'}
+                        >🗑️</button>
+                      </div>
+                    </div>
+                  ))}
+                  {columnLeads.length === 0 && (
+                    <div style={{ textAlign:'center', color:'var(--g-400)', fontSize: 11, padding:'16px 0', fontStyle:'italic' }}>
+                      Solte aqui
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="card" style={{ padding: 0, overflow:'hidden' }}>
           <table style={{ width:'100%', borderCollapse:'collapse' }}>
             <thead>
               <tr style={{ borderBottom:'1px solid #222' }}>
-                <th style={{ width: 44, padding:'12px 16px' }}>
-                  <input
-                    type="checkbox"
-                    checked={allChecked}
-                    ref={el => { if (el) el.indeterminate = someChecked; }}
-                    onChange={toggleAll}
-                    style={{ width: 15, height: 15, accentColor:'#B70C00', cursor:'pointer' }}
-                  />
-                </th>
                 <th style={thStyle}>Nome</th>
-                <th style={thStyle}>Contatos</th>
-                <th style={thStyle}>Tags</th>
-                <th style={thStyle}>Dados</th>
-                <th style={{ width: 40 }}/>
+                <th style={thStyle}>Contato</th>
+                <th style={thStyle}>Stage</th>
+                <th style={thStyle}>Valor</th>
+                <th style={thStyle}>Score</th>
+                <th style={thStyle}>Origem</th>
+                <th style={{ width: 60 }}/>
               </tr>
             </thead>
             <tbody>
               {filtered.map(lead => {
-                const isSelected = selected.has(lead.id);
-                const company = lead.metadata?.company || null;
-                const imgUrl = lead.metadata?.image || null;
+                const stg = STAGES.find(s => s.id === lead.stage) || STAGES[0];
                 return (
-                  <tr
-                    key={lead.id}
-                    style={{
-                      borderBottom:'1px solid #1A1A1A',
-                      background: isSelected ? 'rgba(183,12,0,0.06)' : 'transparent',
-                      transition: 'background .1s',
-                    }}
-                    onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#161616'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = isSelected ? 'rgba(183,12,0,0.06)' : 'transparent'; }}
+                  <tr key={lead.id} style={{ borderBottom:'1px solid #1A1A1A' }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#161616'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                   >
-                    <td style={{ padding:'12px 16px' }}>
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleRow(lead.id)}
-                        style={{ width: 15, height: 15, accentColor:'#B70C00', cursor:'pointer' }}
-                      />
+                    <td style={{ padding:'11px 16px', fontSize: 13, fontWeight: 600, color:'white' }}>{lead.nome}</td>
+                    <td style={{ padding:'11px 16px', fontSize: 12, color:'var(--g-500)' }}>
+                      {lead.whatsapp && <div>{lead.whatsapp}</div>}
+                      {lead.email && <div style={{ fontSize: 11 }}>{lead.email}</div>}
                     </td>
-                    <td style={{ padding:'12px 16px' }}>
-                      <div style={{ display:'flex', alignItems:'center', gap: 10 }}>
-                        {imgUrl ? (
-                          <img src={imgUrl} alt="" style={{ width: 34, height: 34, borderRadius: '50%', objectFit:'cover', flexShrink: 0 }}
-                            onError={e => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'flex'; }}
-                          />
-                        ) : null}
-                        <div
-                          style={{
-                            width: 34, height: 34, borderRadius: '50%', background:'#2A2A2A',
-                            display: imgUrl ? 'none' : 'flex', alignItems:'center', justifyContent:'center',
-                            fontSize: 12, fontWeight: 700, color:'var(--g-500)', flexShrink: 0,
-                          }}
-                        >{lead.avatar || lead.name?.slice(0,2).toUpperCase()}</div>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, color:'white', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth: 260 }}>{lead.name}</div>
-                          {company && <div style={{ fontSize: 11, color:'var(--g-500)', marginTop: 1 }}>{company}</div>}
-                        </div>
+                    <td style={{ padding:'11px 16px' }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, padding:'2px 8px', borderRadius: 20, background: stg.color + '20', color: stg.color, textTransform:'uppercase', letterSpacing: 0.3 }}>
+                        {stg.label}
+                      </span>
+                    </td>
+                    <td style={{ padding:'11px 16px', fontSize: 12, color:'#10B981', fontWeight: 600 }}>
+                      {formatValor(lead.valor_estimado) || '—'}
+                    </td>
+                    <td style={{ padding:'11px 16px', fontSize: 12, color:'#F59E0B', fontWeight: 600 }}>
+                      {lead.score != null ? `★ ${lead.score}` : '—'}
+                    </td>
+                    <td style={{ padding:'11px 16px', fontSize: 12, color:'var(--g-500)' }}>{lead.origem || '—'}</td>
+                    <td style={{ padding:'11px 8px' }}>
+                      <div style={{ display:'flex', gap: 4, justifyContent:'center' }}>
+                        <button onClick={() => setEditLead(lead)} style={{ background:'none', border:'none', color:'var(--g-400)', cursor:'pointer', padding: 4, borderRadius: 4 }}
+                          onMouseEnter={e => e.currentTarget.style.color = 'white'}
+                          onMouseLeave={e => e.currentTarget.style.color = 'var(--g-400)'}
+                        >✏️</button>
+                        <button onClick={() => setDeleteConfirm(lead)} style={{ background:'none', border:'none', color:'var(--g-400)', cursor:'pointer', padding: 4, borderRadius: 4 }}
+                          onMouseEnter={e => e.currentTarget.style.color = '#EF4444'}
+                          onMouseLeave={e => e.currentTarget.style.color = 'var(--g-400)'}
+                        >🗑️</button>
                       </div>
-                    </td>
-                    <td style={{ padding:'12px 16px', fontSize: 12, color:'var(--g-500)' }}>
-                      {formatPhone(lead.phone)}
-                      {lead.email && <div style={{ fontSize: 11, color:'var(--g-400)', marginTop: 2 }}>{lead.email}</div>}
-                    </td>
-                    <td style={{ padding:'12px 16px' }}>
-                      <div style={{ display:'flex', flexWrap:'wrap', gap: 4 }}>
-                        {(lead.tags || []).map(tag => (
-                          <span key={tag} style={{
-                            fontSize: 10, fontWeight: 600, padding:'2px 8px', borderRadius: 20,
-                            background:'rgba(245,158,11,0.12)', color:'#F59E0B', letterSpacing: 0.3,
-                          }}>#{tag}</span>
-                        ))}
-                      </div>
-                    </td>
-                    <td style={{ padding:'12px 16px', fontSize: 12, color:'var(--g-500)' }}>
-                      <div>Total: <strong style={{ color:'var(--g-700)' }}>R$ 0</strong></div>
-                      <div style={{ fontSize: 11, marginTop: 2 }}>0 Compras · 0d Ciclo</div>
-                    </td>
-                    <td style={{ padding:'12px 8px', textAlign:'center', position:'relative' }}
-                      ref={rowMenuId === lead.id ? rowMenuRef : null}
-                    >
-                      <button
-                        onClick={e => { e.stopPropagation(); setRowMenuId(rowMenuId === lead.id ? null : lead.id); }}
-                        style={{ background:'none', border:'none', color:'var(--g-500)', cursor:'pointer', padding: 4, borderRadius: 4 }}
-                        onMouseEnter={e => e.currentTarget.style.color = 'white'}
-                        onMouseLeave={e => e.currentTarget.style.color = 'var(--g-500)'}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                          <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
-                        </svg>
-                      </button>
-                      {rowMenuId === lead.id && (
-                        <div style={{
-                          position:'absolute', top:'100%', right: 8, background:'#1E1E1E',
-                          border:'1px solid #2A2A2A', borderRadius: 10, padding: 6,
-                          minWidth: 180, zIndex: 100, boxShadow:'0 8px 24px rgba(0,0,0,.6)',
-                        }}>
-                          {[
-                            { icon: '✏️', label: 'Editar', action: () => { setEditLead(lead); setRowMenuId(null); } },
-                            { icon: '💬', label: 'Abrir Chat', action: () => { setRowMenuId(null); if (lead.phone) { const digits = lead.phone.replace(/\D/g,''); sessionStorage.setItem('cd-chat-target', digits); sessionStorage.setItem('cd-chat-target-name', lead.name || ''); sessionStorage.setItem('cd-chat-target-cid', lead.id || ''); window.dispatchEvent(new CustomEvent('cd-open-chat', { detail: { phone: digits, name: lead.name, customerId: lead.id } })); } onNavigate?.('chat'); } },
-                            { icon: '🗑️', label: 'Excluir', danger: true, action: () => { setDeleteConfirm(lead); setRowMenuId(null); } },
-                          ].map(item => (
-                            <button
-                              key={item.label}
-                              onMouseDown={e => e.stopPropagation()}
-                              onClick={e => { e.stopPropagation(); item.action(); }}
-                              style={{
-                                display:'flex', alignItems:'center', gap: 8, width:'100%',
-                                padding:'8px 12px', background:'none', border:'none',
-                                color: item.danger ? '#EF4444' : 'rgba(255,255,255,0.85)',
-                                fontSize: 13, cursor:'pointer', borderRadius: 6, textAlign:'left',
-                              }}
-                              onMouseEnter={e => e.currentTarget.style.background = item.danger ? 'rgba(239,68,68,0.1)' : '#2A2A2A'}
-                              onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                            >
-                              <span style={{ fontSize: 14 }}>{item.icon}</span> {item.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </td>
                   </tr>
                 );
               })}
-              {filtered.length === 0 && !loading && (
+              {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={6} style={{ padding: 60, textAlign:'center', color:'var(--g-400)', fontSize: 13 }}>
-                    {search ? 'Nenhum lead encontrado para essa busca.' : 'Nenhum lead cadastrado ainda.'}
+                  <td colSpan={7} style={{ padding: 60, textAlign:'center', color:'var(--g-400)', fontSize: 13 }}>
+                    {search ? 'Nenhum lead encontrado.' : 'Nenhum lead cadastrado ainda.'}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
-        )}
+        </div>
+      )}
 
-        {/* Bulk action footer */}
-        {selected.size > 0 && (
-          <div style={{
-            position:'sticky', bottom: 0, background:'#1A1A1A', borderTop:'1px solid #2A2A2A',
-            padding:'12px 20px', display:'flex', alignItems:'center', justifyContent:'space-between',
-          }}>
-            <span style={{ fontSize: 13, color:'rgba(255,255,255,0.7)' }}>
-              <strong style={{ color:'white' }}>{selected.size}</strong> lead{selected.size > 1 ? 's' : ''} selecionado{selected.size > 1 ? 's' : ''}
-            </span>
-            <div style={{ display:'flex', gap: 8 }}>
-              <button className="btn-secondary" style={{ fontSize: 12 }} onClick={() => setSelected(new Set())}>Cancelar</button>
-              <button className="btn-primary" style={{ fontSize: 12, background:'#B70C00' }}>
-                <Icon name="check" size={12}/> Converter para cliente
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* New Lead Modal — portal para sair do route-enter */}
       {showModal && createPortal(
-        <NewLeadModal onClose={() => setShowModal(false)} onSave={handleNewLead}/>,
+        <LeadFormModal title="Novo Lead" onClose={() => setShowModal(false)} onSave={handleNewLead}/>,
         document.body
       )}
 
-      {/* Edit Lead Modal — portal para sair do route-enter */}
       {editLead && createPortal(
-        <EditLeadModal
-          lead={editLead}
+        <LeadFormModal
+          title="Editar Lead"
+          initial={editLead}
           onClose={() => setEditLead(null)}
-          onSave={async updated => {
-            const { error } = await supabase.from('customers').update({
-              name:  updated.name,
-              phone: updated.phone || null,
-              email: updated.email || null,
-              tags:  updated.tags ? updated.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
-              metadata: { ...(editLead.metadata || {}), company: updated.company || null },
-            }).eq('id', editLead.id);
-            if (error) throw new Error(error.message);
-            setLeads(prev => prev.map(l => l.id === editLead.id
-              ? { ...l, name: updated.name, phone: updated.phone, email: updated.email,
-                  tags: updated.tags ? updated.tags.split(',').map(t => t.trim()).filter(Boolean) : l.tags,
-                  metadata: { ...(l.metadata || {}), company: updated.company || null },
-                  avatar: updated.name.slice(0,2).toUpperCase() }
-              : l));
-            setEditLead(null);
-          }}
+          onSave={data => handleEditLead(editLead.id, data)}
         />,
         document.body
       )}
 
-      {/* Delete Confirm Modal — portal para sair do route-enter */}
       {deleteConfirm && createPortal(
         <div style={{ position:'fixed', inset: 0, background:'rgba(0,0,0,0.6)', zIndex: 1000, display:'flex', alignItems:'center', justifyContent:'center' }}
           onClick={e => e.target === e.currentTarget && setDeleteConfirm(null)}>
@@ -589,19 +541,14 @@ const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0, onNavigate }) =>
             <div style={{ fontSize: 32, textAlign:'center', marginBottom: 14 }}>🗑️</div>
             <h3 style={{ margin:'0 0 8px', fontSize: 16, fontWeight: 700, color:'white', textAlign:'center' }}>Excluir lead</h3>
             <p style={{ margin:'0 0 24px', fontSize: 13, color:'var(--g-500)', textAlign:'center', lineHeight: 1.5 }}>
-              Tem certeza que deseja excluir <strong style={{ color:'white' }}>{deleteConfirm.name}</strong>?
-              <br/>Esta ação não pode ser desfeita.
+              Tem certeza que deseja excluir <strong style={{ color:'white' }}>{deleteConfirm.nome}</strong>?<br/>Esta ação não pode ser desfeita.
             </p>
             <div style={{ display:'flex', gap: 8 }}>
               <button className="btn-secondary" style={{ flex: 1, justifyContent:'center' }} onClick={() => setDeleteConfirm(null)}>Cancelar</button>
-              <button
-                className="btn-primary"
+              <button className="btn-primary"
                 style={{ flex: 1, justifyContent:'center', background: deleting ? 'rgba(239,68,68,0.4)' : '#EF4444' }}
-                disabled={deleting}
-                onClick={() => handleDelete(deleteConfirm)}
-              >
-                {deleting ? 'Excluindo…' : 'Excluir'}
-              </button>
+                disabled={deleting} onClick={() => handleDelete(deleteConfirm)}
+              >{deleting ? 'Excluindo…' : 'Excluir'}</button>
             </div>
           </div>
         </div>,
@@ -621,68 +568,89 @@ const thStyle = {
   letterSpacing: 0.5,
 };
 
-const NewLeadModal = ({ onClose, onSave }) => {
-  const [form, setForm] = uSCrm({ name: '', phone: '', email: '', company: '', source: '', tags: '' });
+const LeadFormModal = ({ title, initial, onClose, onSave }) => {
+  const [form, setForm] = uSCrm({
+    nome:           initial?.nome || '',
+    whatsapp:       initial?.whatsapp || '',
+    email:          initial?.email || '',
+    origem:         initial?.origem || '',
+    stage:          initial?.stage || 'novo',
+    valor_estimado: initial?.valor_estimado ?? '',
+    score:          initial?.score ?? '',
+    notas:          initial?.notas || '',
+  });
   const [saving, setSaving] = uSCrm(false);
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
   async function submit(e) {
     e.preventDefault();
-    if (!form.name.trim()) return;
+    if (!form.nome.trim()) return;
     setSaving(true);
     await onSave(form);
     setSaving(false);
   }
 
   return (
-    <div style={{
-      position:'fixed', inset: 0, background:'rgba(0,0,0,0.6)', zIndex: 1000,
-      display:'flex', alignItems:'center', justifyContent:'center',
-    }} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background:'#1A1A1A', border:'1px solid #2A2A2A', borderRadius: 14, padding: 28, width: 460, boxShadow:'0 24px 48px rgba(0,0,0,.6)' }}>
+    <div style={{ position:'fixed', inset: 0, background:'rgba(0,0,0,0.6)', zIndex: 1000, display:'flex', alignItems:'center', justifyContent:'center' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background:'#1A1A1A', border:'1px solid #2A2A2A', borderRadius: 14, padding: 28, width: 480, boxShadow:'0 24px 48px rgba(0,0,0,.6)', maxHeight:'90vh', overflowY:'auto' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 20 }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color:'white' }}>Novo Lead</h3>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color:'white' }}>{title}</h3>
           <button onClick={onClose} style={{ background:'none', border:'none', color:'var(--g-500)', cursor:'pointer', fontSize: 20, lineHeight: 1 }}>×</button>
         </div>
         <form onSubmit={submit} style={{ display:'flex', flexDirection:'column', gap: 14 }}>
           <div>
             <label style={labelStyle}>Nome *</label>
-            <input className="input" placeholder="Nome do lead" value={form.name} onChange={e => set('name', e.target.value)} required style={{ width:'100%' }}/>
+            <input className="input" placeholder="Nome do lead" value={form.nome} onChange={e => set('nome', e.target.value)} required style={{ width:'100%' }}/>
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: 12 }}>
             <div>
-              <label style={labelStyle}>Telefone</label>
-              <input className="input" placeholder="5594999..." value={form.phone} onChange={e => set('phone', e.target.value)} style={{ width:'100%' }}/>
+              <label style={labelStyle}>WhatsApp</label>
+              <input className="input" placeholder="5594999..." value={form.whatsapp} onChange={e => set('whatsapp', e.target.value)} style={{ width:'100%' }}/>
             </div>
             <div>
               <label style={labelStyle}>Email</label>
               <input className="input" type="email" placeholder="email@..." value={form.email} onChange={e => set('email', e.target.value)} style={{ width:'100%' }}/>
             </div>
           </div>
-          <div>
-            <label style={labelStyle}>Empresa</label>
-            <input className="input" placeholder="Nome da empresa" value={form.company} onChange={e => set('company', e.target.value)} style={{ width:'100%' }}/>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={labelStyle}>Stage</label>
+              <select className="input" value={form.stage} onChange={e => set('stage', e.target.value)} style={{ width:'100%' }}>
+                {STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Origem</label>
+              <select className="input" value={form.origem} onChange={e => set('origem', e.target.value)} style={{ width:'100%' }}>
+                <option value="">Selecione…</option>
+                <option value="Indicação">Indicação</option>
+                <option value="iFood">iFood</option>
+                <option value="Instagram">Instagram</option>
+                <option value="WhatsApp">WhatsApp</option>
+                <option value="Outro">Outro</option>
+              </select>
+            </div>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={labelStyle}>Valor Estimado (R$)</label>
+              <input className="input" type="number" placeholder="0" min="0" step="1" value={form.valor_estimado} onChange={e => set('valor_estimado', e.target.value)} style={{ width:'100%' }}/>
+            </div>
+            <div>
+              <label style={labelStyle}>Score (1–10)</label>
+              <input className="input" type="number" placeholder="—" min="1" max="10" value={form.score} onChange={e => set('score', e.target.value)} style={{ width:'100%' }}/>
+            </div>
           </div>
           <div>
-            <label style={labelStyle}>Origem</label>
-            <select className="input" value={form.source} onChange={e => set('source', e.target.value)} style={{ width:'100%' }}>
-              <option value="">Selecione…</option>
-              <option value="Indicação">Indicação</option>
-              <option value="iFood">iFood</option>
-              <option value="Instagram">Instagram</option>
-              <option value="WhatsApp">WhatsApp</option>
-              <option value="Outro">Outro</option>
-            </select>
-          </div>
-          <div>
-            <label style={labelStyle}>Tags (separadas por vírgula)</label>
-            <input className="input" placeholder="lead, novo, ..." value={form.tags} onChange={e => set('tags', e.target.value)} style={{ width:'100%' }}/>
+            <label style={labelStyle}>Notas</label>
+            <textarea className="input" placeholder="Observações…" value={form.notas} onChange={e => set('notas', e.target.value)} rows={3} style={{ width:'100%', resize:'vertical' }}/>
           </div>
           <div style={{ display:'flex', gap: 8, justifyContent:'flex-end', marginTop: 4 }}>
             <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
             <button type="submit" className="btn-primary" style={{ background:'#B70C00' }} disabled={saving}>
-              {saving ? 'Salvando…' : 'Criar Lead'}
+              {saving ? 'Salvando…' : title}
             </button>
           </div>
         </form>
@@ -898,82 +866,6 @@ const NotesTab = ({ customer }) => (
     </div>
   </div>
 );
-
-/* ─── EDIT LEAD MODAL ─── */
-const EditLeadModal = ({ lead, onClose, onSave }) => {
-  const tagsArr = Array.isArray(lead.tags) ? lead.tags : [];
-  const [form, setForm] = uSCrm({
-    name:    lead.name || '',
-    phone:   lead.phone || '',
-    email:   lead.email || '',
-    company: lead.metadata?.company || '',
-    tags:    tagsArr.join(', '),
-  });
-  const [saving, setSaving] = uSCrm(false);
-  const [saveError, setSaveError] = uSCrm('');
-
-  function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
-
-  async function submit(e) {
-    e.preventDefault();
-    if (!form.name.trim()) return;
-    setSaving(true);
-    setSaveError('');
-    try {
-      await onSave(form);
-    } catch (err) {
-      setSaveError(err?.message || 'Erro ao salvar. Tente novamente.');
-    }
-    setSaving(false);
-  }
-
-  return (
-    <div style={{ position:'fixed', inset: 0, background:'rgba(0,0,0,0.6)', zIndex: 1000, display:'flex', alignItems:'center', justifyContent:'center' }}
-      onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background:'#1A1A1A', border:'1px solid #2A2A2A', borderRadius: 14, padding: 28, width: 460, boxShadow:'0 24px 48px rgba(0,0,0,.6)' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 20 }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color:'white' }}>Editar Lead</h3>
-          <button onClick={onClose} style={{ background:'none', border:'none', color:'var(--g-500)', cursor:'pointer', fontSize: 20 }}>×</button>
-        </div>
-        <form onSubmit={submit} style={{ display:'flex', flexDirection:'column', gap: 14 }}>
-          <div>
-            <label style={labelStyle}>Nome *</label>
-            <input className="input" value={form.name} onChange={e => set('name', e.target.value)} required style={{ width:'100%' }}/>
-          </div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: 12 }}>
-            <div>
-              <label style={labelStyle}>Telefone</label>
-              <input className="input" value={form.phone} onChange={e => set('phone', e.target.value)} style={{ width:'100%' }}/>
-            </div>
-            <div>
-              <label style={labelStyle}>E-mail</label>
-              <input className="input" type="email" value={form.email} onChange={e => set('email', e.target.value)} style={{ width:'100%' }}/>
-            </div>
-          </div>
-          <div>
-            <label style={labelStyle}>Empresa</label>
-            <input className="input" value={form.company} onChange={e => set('company', e.target.value)} style={{ width:'100%' }}/>
-          </div>
-          <div>
-            <label style={labelStyle}>Tags (separadas por vírgula)</label>
-            <input className="input" value={form.tags} onChange={e => set('tags', e.target.value)} placeholder="lead, novo, ..." style={{ width:'100%' }}/>
-          </div>
-          {saveError && (
-            <div style={{ fontSize: 12, color: '#EF4444', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, padding: '8px 12px' }}>
-              {saveError}
-            </div>
-          )}
-          <div style={{ display:'flex', gap: 8, justifyContent:'flex-end', marginTop: 4 }}>
-            <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
-            <button type="submit" className="btn-primary" style={{ background:'#B70C00' }} disabled={saving}>
-              {saving ? 'Salvando…' : 'Salvar alterações'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
 
 /* ─── IMPORT CSV MODAL ─── */
 const ImportCSVModal = ({ tenantDbId, onClose, onImported }) => {
