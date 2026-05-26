@@ -1345,6 +1345,12 @@ app.use('/api', require('./routes/lara')({
   supabaseInsert,
 }));
 
+// ── S2-G02 — SOFIA: Leads qualificados ───────────────────────────────────────
+app.use('/api', require('./routes/sofia')({
+  requireJwt,
+  sbFetch,
+}));
+
 const server = app.listen(PORT, '0.0.0.0', () => {
   // D2: timeout do servidor > 60s para suportar polling síncrono do loja-gpt
   server.timeout = 90_000; // 90s — folga sobre os 60s de poll da task
