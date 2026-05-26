@@ -439,12 +439,9 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
             const tipo   = okMatchF3 ? 'aprovacao' : 'recusa';
             const motivo = ajustarMatchF3 ? ajustarMatchF3[3].trim() : null;
 
-            const BRIDGE_URL_F3    = Deno.env.get('BRIDGE_URL')    ?? '';
-            const BRIDGE_SECRET_F3 = Deno.env.get('BRIDGE_SECRET') ?? '';
-
-            await fetch(`${BRIDGE_URL_F3}/api/tarefas/${tarefa.id}/revisar`, {
+            await fetch(`${BRIDGE_URL}/api/tarefas/${tarefa.id}/revisar`, {
               method:  'POST',
-              headers: { 'Content-Type': 'application/json', 'x-bridge-secret': BRIDGE_SECRET_F3 },
+              headers: { 'Content-Type': 'application/json', 'x-bridge-secret': BRIDGE_SECRET },
               body:    JSON.stringify({ tipo, motivo }),
               signal:  AbortSignal.timeout(10_000),
             }).catch(e => console.warn('[F3] revisar falhou:', (e as Error).message));
