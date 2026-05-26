@@ -16,6 +16,8 @@ const {
   ConcluirSchema,
   MarcarConcluidaSchema,
   ReabrirSchema,
+  SolicitarRevisaoClienteSchema,
+  RevisarSchema,
   ListComentariosQuerySchema,
   CreateComentarioSchema,
   RelatorioQuerySchema,
@@ -1131,6 +1133,159 @@ module.exports = function buildTarefasRouter({ requireJwt, sbFetch, assertLojaAc
       res.status(201).json({ print });
     } catch (err) {
       console.error('[api/tarefas/:id/prints POST]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  // POST /api/tarefas/:id/solicitar-revisao-cliente  (F3 Onda07)
+  // Marca tarefa como aguardando revisão e envia WhatsApp ao cliente
+  // ════════════════════════════════════════════════════════════════════════
+  router.post('/tarefas/:id/solicitar-revisao-cliente', requireJwt, async (req, res) => {
+    const { id } = req.params;
+
+    const body = validate(SolicitarRevisaoClienteSchema, req.body || {}, res);
+    if (!body) return;
+
+    try {
+      const ctx = await fetchTarefaComAcesso(req, res, id);
+      if (!ctx) return;
+      const { tarefa, tenant_id } = ctx;
+
+      if (tarefa.status !== 'concluida') {
+        return res.status(422).json({ error: `Status '${tarefa.status}' inválido para solicitar revisão. Esperado: concluida` });
+      }
+
+      await patchTarefa(id, {
+        revisao_status:     'aguardando',
+        aguarda_revisao_em: new Date().toISOString(),
+      });
+
+      // WhatsApp (best-effort — falha não bloqueia resposta)
+      if (tarefa.analise_id) {
+        try {
+          const analises = await sbFetch(
+            `analises?id=eq.${encodeURIComponent(tarefa.analise_id)}&select=id,numero_whatsapp_cliente&limit=1`
+          );
+          const analise = analises?.[0];
+          if (analise?.numero_whatsapp_cliente) {
+            const [lojas, instances] = await Promise.all([
+              sbFetch(`lojas?id=eq.${encodeURIComponent(tarefa.loja_id)}&select=nome&limit=1`),
+              sbFetch(`evolution_instances?tenant_id=eq.${encodeURIComponent(tenant_id)}&select=evolution_url,api_key,instance_name&limit=1`),
+            ]);
+            const loja = lojas?.[0];
+            const inst = instances?.[0];
+            if (inst) {
+              const msg =
+                `📋 *Revisão solicitada — ${tarefa.titulo}*\n\n` +
+                `Loja: ${loja?.nome ?? ''}\n\n` +
+                `Gostaríamos da sua revisão sobre a conclusão dessa tarefa.\n` +
+                `Responda:\n` +
+                `• *OK 1* — para aprovar\n` +
+                `• *AJUSTAR 1: [motivo]* — para solicitar ajuste`;
+              await fetch(
+                `${inst.evolution_url}/message/sendText/${inst.instance_name}`,
+                {
+                  method:  'POST',
+                  headers: { 'Content-Type': 'application/json', apikey: inst.api_key },
+                  body:    JSON.stringify({ number: analise.numero_whatsapp_cliente, text: msg }),
+                  signal:  AbortSignal.timeout(15_000),
+                }
+              );
+              console.log(`[solicitar-revisao-cliente] WhatsApp enviado tarefa=${id} numero=${analise.numero_whatsapp_cliente}`);
+            }
+          }
+        } catch (wapErr) {
+          console.warn('[solicitar-revisao-cliente] WhatsApp falhou (non-fatal):', wapErr.message);
+        }
+      }
+
+      await logAudit({
+        tenant_id,
+        user_id:  req.user.id,
+        action:   'tarefa_revisao_solicitada',
+        resource: `tarefas_loja:${id}`,
+        metadata: {},
+      });
+
+      console.log(`[api/tarefas/:id/solicitar-revisao-cliente POST] id=${id}`);
+      res.json({ ok: true, revisao_status: 'aguardando' });
+    } catch (err) {
+      console.error('[api/tarefas/:id/solicitar-revisao-cliente POST]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  // POST /api/tarefas/:id/revisar { tipo, motivo? }  (F3 Onda07)
+  // Registra decisão de revisão (aprovacao|recusa).
+  // Auth: JWT (consultor/admin) OU x-bridge-secret (parser WhatsApp)
+  // ════════════════════════════════════════════════════════════════════════
+
+  function _requireJwtOrBridgeSecret(req, res, next) {
+    const secret   = req.headers['x-bridge-secret'];
+    const expected = process.env.BRIDGE_SECRET;
+    if (secret) {
+      if (!expected || secret !== expected) return res.status(401).json({ error: 'unauthorized' });
+      req.user = { id: null };
+      req.bridgeInternal = true;
+      return next();
+    }
+    return requireJwt(req, res, next);
+  }
+
+  router.post('/tarefas/:id/revisar', _requireJwtOrBridgeSecret, async (req, res) => {
+    const { id } = req.params;
+
+    const body = validate(RevisarSchema, req.body, res);
+    if (!body) return;
+
+    let tarefa    = null;
+    let tenant_id = null;
+
+    try {
+      if (req.bridgeInternal) {
+        const rows = await sbFetch(`tarefas_loja?id=eq.${encodeURIComponent(id)}&select=*&limit=1`);
+        tarefa = rows?.[0];
+        if (!tarefa) return res.status(404).json({ error: 'Tarefa não encontrada' });
+        const lojas = await sbFetch(`lojas?id=eq.${encodeURIComponent(tarefa.loja_id)}&select=tenant_id&limit=1`);
+        tenant_id = lojas?.[0]?.tenant_id;
+      } else {
+        const ctx = await fetchTarefaComAcesso(req, res, id);
+        if (!ctx) return;
+        tarefa    = ctx.tarefa;
+        tenant_id = ctx.tenant_id;
+      }
+    } catch (fetchErr) {
+      return res.status(500).json({ error: fetchErr.message });
+    }
+
+    try {
+      const novoStatus = body.tipo === 'aprovacao' ? 'aprovada' : 'recusada';
+
+      await patchTarefa(id, {
+        revisao_status: novoStatus,
+        revisao_motivo: body.motivo ?? null,
+      });
+
+      await supabaseInsert('tarefa_revisoes', {
+        tarefa_id: id,
+        tipo:      body.tipo === 'aprovacao' ? 'aprovacao' : 'recusa',
+        motivo:    body.motivo ?? null,
+      });
+
+      await logAudit({
+        tenant_id,
+        user_id:  req.user.id,
+        action:   'tarefa_revisada',
+        resource: `tarefas_loja:${id}`,
+        metadata: { tipo: body.tipo, motivo: body.motivo ?? null },
+      });
+
+      console.log(`[api/tarefas/:id/revisar POST] id=${id} tipo=${body.tipo}`);
+      res.json({ ok: true, revisao_status: novoStatus });
+    } catch (err) {
+      console.error('[api/tarefas/:id/revisar POST]', err.message);
       res.status(500).json({ error: err.message });
     }
   });
