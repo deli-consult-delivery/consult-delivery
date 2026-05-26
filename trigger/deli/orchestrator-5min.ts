@@ -129,7 +129,7 @@ async function evaluateTrigger(
           }
 
           if (snapshots.length >= 2) {
-            const [novo, antigo] = snapshots as [
+            const [novo, antigo] = snapshots as unknown as [
               { nota_media: number | null },
               { nota_media: number | null },
             ];
