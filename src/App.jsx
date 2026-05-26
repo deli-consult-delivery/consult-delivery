@@ -20,6 +20,7 @@ import LaraEditorialScreen from './screens/LaraEditorial/LaraEditorialScreen.jsx
 import DraftsPendentesScreen from './screens/DraftsPendentesScreen.jsx';
 import GruposScreen from './screens/GruposScreen.jsx';
 import DeliScreen from './screens/DeliScreen.jsx';
+import DeliPainel from './screens/DeliPainel.jsx';
 import MaxScreen from './screens/MaxScreen.jsx';
 import NovaScreen from './screens/NovaScreen.jsx';
 import BrenoScreen from './screens/BrenoScreen.jsx';
@@ -257,7 +258,8 @@ export default function App() {
         {route === 'lara-editorial' && <LaraEditorialScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'drafts-pendentes' && <DraftsPendentesScreen tenantId={tenantDbId} userId={session?.user?.id} />}
         {route === 'grupos'    && <GruposScreen tenant={tenant} tenantDbId={tenantDbId} />}
-        {route === 'deli'     && <DeliScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
+        {route === 'deli'        && <DeliScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
+        {route === 'deli-painel' && <DeliPainel tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'max'      && <MaxScreen  tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'nova'     && <NovaScreen  tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'breno'    && <BrenoScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}

@@ -1338,6 +1338,13 @@ app.use('/api', require('./routes/publico-aprovacao')({
   supabaseInsert,
 }));
 
+// ── S2-G05 — DELI Semáforo: aprovações pendentes ─────────────────────────────
+app.use('/api', require('./routes/deli-approvals')({
+  requireJwt,
+  sbFetch,
+  supabaseInsert,
+}));
+
 // ── S2-G01.5 — LARA editorial: drafts + revisão + publicação ─────────────────
 app.use('/api', require('./routes/lara')({
   requireJwt,
