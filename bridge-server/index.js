@@ -1356,6 +1356,13 @@ app.use('/api', require('./routes/lara')({
 app.use('/api', require('./routes/sofia')({
   requireJwt,
   sbFetch,
+  supabaseInsert,
+}));
+
+// ── Wizard Self-service — /comecar (sem JWT) ──────────────────────────────────
+app.use('/api', require('./routes/wizard-publico')({
+  sbFetch,
+  supabaseInsert,
 }));
 
 const server = app.listen(PORT, '0.0.0.0', () => {
