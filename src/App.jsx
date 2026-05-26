@@ -31,6 +31,7 @@ import EncerramentoScreen from './screens/EncerramentoScreen.jsx';
 import ContratosScreen from './screens/Contratos/ContratosScreen.jsx';
 import RecontratacaoScreen from './screens/Recontratacao/RecontratacaoScreen.jsx';
 import OnboardingScreen from './screens/OnboardingScreen.jsx';
+import InadimplentesScreen from './screens/InadimplentesScreen.jsx';
 import { CONVERSATIONS, INADIMPLENTES, TENANTS } from './data.js';
 import { supabase } from './lib/supabase.js';
 import { listTenants } from './lib/api.js';
@@ -270,6 +271,7 @@ export default function App() {
         {route === 'contratos'      && <ContratosScreen      tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'recontratacao'  && <RecontratacaoScreen  tenantDbId={tenantDbId} />}
         {route === 'onboarding'     && <OnboardingScreen     tenantDbId={tenantDbId} />}
+        {route === 'inadimplentes'  && <InadimplentesScreen  tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'settings'  && <SettingsScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} onTenantChange={async (newSlug) => {
           if (newSlug) {
             setTenant(newSlug);
