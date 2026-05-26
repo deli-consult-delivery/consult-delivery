@@ -134,7 +134,7 @@ export default function App() {
         .then(c => { if (alive) setNotifUnread(c); })
         .catch(() => {});
     load();
-    const channel = subscribeToNotifications(tenantDbId, session.user.id, load);
+    const channel = subscribeToNotifications(tenantDbId, session.user.id, load, 'badge');
     return () => { alive = false; supabase.removeChannel(channel); };
   }, [tenantDbId, session?.user?.id]);
 

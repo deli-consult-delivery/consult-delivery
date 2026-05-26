@@ -69,7 +69,7 @@ export default function NotificacoesScreen({ tenantDbId, userId, onNavigate }) {
 
   useEffect(() => {
     load();
-    const channel = subscribeToNotifications(tenantDbId, userId, load);
+    const channel = subscribeToNotifications(tenantDbId, userId, load, 'screen');
     return () => supabase.removeChannel(channel);
   }, [load]);
 

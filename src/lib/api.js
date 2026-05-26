@@ -615,9 +615,12 @@ export async function deleteNotification(notificationId) {
   if (error) throw error;
 }
 
-export function subscribeToNotifications(tenantId, userId, onInsert) {
+export function subscribeToNotifications(tenantId, userId, onInsert, suffix = '') {
+  const name = suffix
+    ? `notifications-${tenantId}-${userId}-${suffix}`
+    : `notifications-${tenantId}-${userId}`;
   return supabase
-    .channel(`notifications-${tenantId}-${userId}`)
+    .channel(name)
     .on('postgres_changes', {
       event: 'INSERT',
       schema: 'public',

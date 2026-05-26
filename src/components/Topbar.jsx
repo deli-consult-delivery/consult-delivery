@@ -54,7 +54,7 @@ export default function Topbar({ route, tenant, setTenant, tenants, theme = 'cla
         })
         .catch(err => console.error('[Topbar] notifications', err));
     load();
-    const channel = subscribeToNotifications(tenantId, userId, load);
+    const channel = subscribeToNotifications(tenantId, userId, load, 'topbar');
     return () => supabase.removeChannel(channel);
   }, [tenantId, userId]);
 
