@@ -245,7 +245,7 @@ async function notifyBridge(semaforo: Semaforo, motivos: string[], runId: string
 
 export const deliOrchestrator5min = schedules.task({
   id: "deli-orchestrator-5min",
-  cron: "0 0 31 2 *", // PAUSED — spam emergency 2026-05-26
+  cron: "0 0 29 2 1", // PAUSED — spam emergency 2026-05-26 (Feb 29 on Monday = never)
   retry: { maxAttempts: 2, minTimeoutInMs: 30_000, maxTimeoutInMs: 60_000 },
 
   run: async (_payload, { ctx }) => {
