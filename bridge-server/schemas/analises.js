@@ -26,9 +26,15 @@ const EnviarWhatsappSchema = z.object({
   evolution_instance: z.string().optional(),
 });
 
+// ── PATCH /api/lojas/:id/analises/:aid/loom — atualizar loom_url ──────────────
+const UpdateLoomSchema = z.object({
+  loom_url: z.string().url('URL inválida').nullable().optional(),
+});
+
 module.exports = {
   ListAnalisesQuerySchema,
   CreateAnaliseSchema,
   ProcessarAnaliseSchema,
   EnviarWhatsappSchema,
+  UpdateLoomSchema,
 };

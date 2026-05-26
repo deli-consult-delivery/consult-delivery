@@ -843,10 +843,49 @@ function CardSessaoWhatsapp({ analiseId }) {
   );
 }
 
+// ── Loom helpers ─────────────────────────────────────────────────────────────
+
+function loomEmbedUrl(url) {
+  if (!url) return '';
+  return url.replace('loom.com/share/', 'loom.com/embed/');
+}
+
 // ── Painel de detalhe ─────────────────────────────────────────────────────────
 
-function AnaliseDetalhe({ analise, lojaId, onGoToTarefas, onEnviada }) {
+function AnaliseDetalhe({ analise, lojaId, onGoToTarefas, onEnviada, onLoomUpdated }) {
   const [showEnviarModal, setShowEnviarModal] = useState(false);
+  const [editingLoom, setEditingLoom] = useState(false);
+  const [loomInput, setLoomInput] = useState('');
+  const [loomSaving, setLoomSaving] = useState(false);
+  const [loomError, setLoomError] = useState(null);
+
+  function startEditLoom() {
+    setLoomInput(analise?.loom_url || '');
+    setLoomError(null);
+    setEditingLoom(true);
+  }
+
+  async function saveLoom() {
+    const url = loomInput.trim() || null;
+    if (url && !/^https?:\/\/.+loom\.com\/.+/.test(url)) {
+      setLoomError('URL deve ser um link Loom válido (https://www.loom.com/share/...)');
+      return;
+    }
+    setLoomSaving(true);
+    setLoomError(null);
+    try {
+      await bridgeFetch(`/api/lojas/${lojaId}/analises/${analise.id}/loom`, {
+        method: 'PATCH',
+        body: JSON.stringify({ loom_url: url }),
+      });
+      setEditingLoom(false);
+      onLoomUpdated?.();
+    } catch (err) {
+      setLoomError(err.message);
+    } finally {
+      setLoomSaving(false);
+    }
+  }
   if (!analise) {
     return (
       <div style={{
@@ -1002,22 +1041,106 @@ function AnaliseDetalhe({ analise, lojaId, onGoToTarefas, onEnviada }) {
         <CardSessaoWhatsapp analiseId={analise.id} />
       )}
 
-      {/* Loom URL */}
-      {analise.loom_url && (
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--g-500, #6b7280)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
+      {/* Loom section */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--g-500, #6b7280)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
             Vídeo Loom
           </div>
-          <a
-            href={analise.loom_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ fontSize: 12, color: 'var(--info, #3b82f6)', textDecoration: 'underline', wordBreak: 'break-all' }}
-          >
-            {analise.loom_url}
-          </a>
+          {!editingLoom && (
+            <button
+              onClick={startEditLoom}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 11, color: 'var(--g-500, #6b7280)', padding: '2px 6px',
+                borderRadius: 4, textDecoration: 'underline',
+              }}
+            >
+              {analise.loom_url ? 'Editar' : '+ Adicionar vídeo'}
+            </button>
+          )}
         </div>
-      )}
+
+        {/* Inline editor */}
+        {editingLoom && (
+          <div style={{ marginBottom: 8 }}>
+            <input
+              type="url"
+              value={loomInput}
+              onChange={e => setLoomInput(e.target.value)}
+              placeholder="https://www.loom.com/share/..."
+              autoFocus
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                padding: '7px 10px', borderRadius: 6,
+                border: '1px solid var(--g-300, #374151)',
+                background: 'var(--bg-input, #111)', color: 'var(--g-900, #fff)',
+                fontSize: 12, marginBottom: 6,
+              }}
+            />
+            {loomError && (
+              <div style={{ fontSize: 11, color: '#ef4444', marginBottom: 6 }}>{loomError}</div>
+            )}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => setEditingLoom(false)}
+                disabled={loomSaving}
+                style={{
+                  padding: '5px 14px', borderRadius: 5, cursor: 'pointer', fontSize: 12,
+                  background: 'transparent', border: '1px solid var(--g-300, #374151)',
+                  color: 'var(--g-600, #9ca3af)',
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={saveLoom}
+                disabled={loomSaving}
+                style={{
+                  padding: '5px 14px', borderRadius: 5, cursor: loomSaving ? 'not-allowed' : 'pointer', fontSize: 12,
+                  background: 'var(--red, #b70c00)', border: 'none', color: '#fff', fontWeight: 600,
+                  opacity: loomSaving ? 0.6 : 1,
+                }}
+              >
+                {loomSaving ? 'Salvando…' : 'Salvar'}
+              </button>
+              {analise.loom_url && (
+                <button
+                  onClick={() => { setLoomInput(''); saveLoom(); }}
+                  disabled={loomSaving}
+                  style={{
+                    padding: '5px 14px', borderRadius: 5, cursor: 'pointer', fontSize: 12,
+                    background: 'transparent', border: '1px solid rgba(239,68,68,0.4)',
+                    color: '#ef4444',
+                  }}
+                >
+                  Remover
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Embed iframe */}
+        {!editingLoom && analise.loom_url && (
+          <div style={{ position: 'relative', paddingTop: '56.25%', borderRadius: 8, overflow: 'hidden', background: '#000' }}>
+            <iframe
+              src={loomEmbedUrl(analise.loom_url)}
+              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
+              frameBorder="0"
+              allowFullScreen
+              title="Análise em vídeo"
+            />
+          </div>
+        )}
+
+        {/* Placeholder when no URL and not editing */}
+        {!editingLoom && !analise.loom_url && (
+          <div style={{ fontSize: 11, color: 'var(--g-400, #9ca3af)', fontStyle: 'italic' }}>
+            Nenhum vídeo adicionado.
+          </div>
+        )}
+      </div>
 
       {/* Relatório markdown */}
       {analise.relatorio_markdown && (
@@ -1239,6 +1362,7 @@ export default function TabAnalises({ lojaId, userId, onGoToTarefas }) {
             lojaId={lojaId}
             onGoToTarefas={onGoToTarefas}
             onEnviada={loadAnalises}
+            onLoomUpdated={loadAnalises}
           />
         </div>
       </div>

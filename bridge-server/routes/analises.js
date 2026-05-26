@@ -16,6 +16,7 @@ const {
   CreateAnaliseSchema,
   ProcessarAnaliseSchema,
   EnviarWhatsappSchema,
+  UpdateLoomSchema,
 } = require('../schemas/analises');
 
 const { normalizeWhatsAppNumberBR } = require('../lib/normalize-whatsapp');
@@ -364,6 +365,65 @@ module.exports = function buildAnalisesRouter({
       return res.json({ ok: true, session_id: sessao?.id ?? null, numero_destino: numero, tarefas_count: tarefasList.length });
     } catch (err) {
       console.error('[api/lojas/:id/analises/:aid/enviar-whatsapp]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 5. PATCH /api/lojas/:id/analises/:aid/loom
+  //    Atualiza loom_url em análise existente (set ou clear).
+  // ══════════════════════════════════════════════════════════════════════════
+  router.patch('/lojas/:id/analises/:aid/loom', requireJwt, async (req, res) => {
+    const { id: lojaId, aid } = req.params;
+
+    const body = validate(UpdateLoomSchema, req.body, res);
+    if (!body) return;
+
+    try {
+      if (!await assertLojaAccess(req, res, lojaId)) return;
+
+      const analises = await sbFetch(
+        `analises?id=eq.${encodeURIComponent(aid)}&loja_id=eq.${encodeURIComponent(lojaId)}&select=id&limit=1`
+      );
+      if (!analises?.length)
+        return res.status(404).json({ error: 'Análise não encontrada nesta loja' });
+
+      const loom_url = body.loom_url ?? null;
+      await sbFetch(
+        `analises?id=eq.${encodeURIComponent(aid)}`,
+        { method: 'PATCH', body: { loom_url } }
+      );
+
+      const embed_url = loom_url ? loom_url.replace('loom.com/share/', 'loom.com/embed/') : null;
+      console.log(`[api/analises/loom PATCH] analise=${aid} loom_url=${loom_url}`);
+      return res.json({ ok: true, loom_url, embed_url });
+    } catch (err) {
+      console.error('[api/lojas/:id/analises/:aid/loom PATCH]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 6. GET /api/lojas/:id/analises/:aid/loom
+  //    Retorna loom_url + embed_url da análise.
+  // ══════════════════════════════════════════════════════════════════════════
+  router.get('/lojas/:id/analises/:aid/loom', requireJwt, async (req, res) => {
+    const { id: lojaId, aid } = req.params;
+
+    try {
+      if (!await assertLojaAccess(req, res, lojaId)) return;
+
+      const analises = await sbFetch(
+        `analises?id=eq.${encodeURIComponent(aid)}&loja_id=eq.${encodeURIComponent(lojaId)}&select=id,loom_url&limit=1`
+      );
+      if (!analises?.length)
+        return res.status(404).json({ error: 'Análise não encontrada nesta loja' });
+
+      const { loom_url } = analises[0];
+      const embed_url = loom_url ? loom_url.replace('loom.com/share/', 'loom.com/embed/') : null;
+      return res.json({ loom_url: loom_url ?? null, embed_url });
+    } catch (err) {
+      console.error('[api/lojas/:id/analises/:aid/loom GET]', err.message);
       res.status(500).json({ error: err.message });
     }
   });
