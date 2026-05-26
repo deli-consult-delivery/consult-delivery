@@ -111,9 +111,12 @@ async function enviarBomDia(runId: string, weekdayLabel: string): Promise<Output
   const sb = getSupabase();
 
   // 2. Buscar tenants com auto_send = true
+  // hora_semana e hora_sabado são lidos para log/observabilidade.
+  // Trigger.dev v3 não suporta dynamic schedule por-tenant — horário fixo
+  // no cron (12h UTC seg-sex / 11h UTC sáb). TD#57: schedule dinâmica futura.
   const { data: configs, error: configErr } = await sb
     .from("bom_dia_config")
-    .select("tenant_id")
+    .select("tenant_id, hora_semana, hora_sabado")
     .eq("auto_send", true);
 
   if (configErr) {
