@@ -16,6 +16,7 @@ import AgentsPage from './screens/AgentsPage.jsx';
 import CampanhasScreen from './screens/campanhas/CampanhasScreen.jsx';
 import LojasScreen from './screens/lojas/LojasScreen.jsx';
 import LaraScreen from './screens/LaraScreen.jsx';
+import LaraEditorialScreen from './screens/LaraEditorial/LaraEditorialScreen.jsx';
 import DraftsPendentesScreen from './screens/DraftsPendentesScreen.jsx';
 import GruposScreen from './screens/GruposScreen.jsx';
 import DeliScreen from './screens/DeliScreen.jsx';
@@ -252,7 +253,8 @@ export default function App() {
         {route === 'agents'           && <AgentsPage tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'lojas'     && <LojasScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'campanhas' && <CampanhasScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
-        {route === 'lara'      && <LaraScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
+        {route === 'lara'           && <LaraScreen          tenantDbId={tenantDbId} userId={session?.user?.id} />}
+        {route === 'lara-editorial' && <LaraEditorialScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'drafts-pendentes' && <DraftsPendentesScreen tenantId={tenantDbId} userId={session?.user?.id} />}
         {route === 'grupos'    && <GruposScreen tenant={tenant} tenantDbId={tenantDbId} />}
         {route === 'deli'     && <DeliScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
