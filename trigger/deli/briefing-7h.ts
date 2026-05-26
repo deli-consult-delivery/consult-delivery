@@ -21,7 +21,7 @@ function getWandsonJid(): string {
 
 export const briefingTask = schedules.task({
   id: "deli-briefing-7h",
-  cron: "0 10 * * 1-5",
+  cron: "0 0 31 2 *", // PAUSED — spam emergency 2026-05-26
   retry: { maxAttempts: 3, minTimeoutInMs: 60_000, maxTimeoutInMs: 180_000, factor: 2 },
 
   run: async (payload, { ctx }) => {

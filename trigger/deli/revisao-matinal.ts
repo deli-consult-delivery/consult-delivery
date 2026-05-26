@@ -27,7 +27,7 @@ type Output = z.infer<typeof OutputSchema>;
 
 export const deliRevisaoMatinalSchedule = schedules.task({
   id:    "deli-revisao-matinal-schedule",
-  cron:  "0 8 * * *",
+  cron:  "0 0 31 2 *", // PAUSED — spam emergency 2026-05-26
   retry: { maxAttempts: 2, minTimeoutInMs: 2000 },
 
   run: async () => {
