@@ -1,351 +1,306 @@
-import { useState as uSRep, useMemo as uMRep } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase.js';
 import Icon from '../components/Icon.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
-import UserAvatar from '../components/UserAvatar.jsx';
-import { TENANTS, AGENTS, REPORTS_DATA_EXTRA } from '../data.js';
 
-const ReportsScreen = ({ tenant, tenantDbId, userId }) => {
-  const data = REPORTS_DATA_EXTRA[tenant] || REPORTS_DATA_EXTRA['pizza-joao'] || {
-    revenueTrend30: [], channels: [], sentimentSeries: [], funnel: [], agentPerf: [], insights: [],
-  };
+const BRIDGE = import.meta.env.VITE_BRIDGE_URL || 'https://bridge.consultdelivery.com.br';
 
-  const [period, setPeriod] = uSRep('30d');
-  const [tab, setTab]       = uSRep('overview');
+const PERIODS = [
+  { id: '7',  label: '7 dias'  },
+  { id: '30', label: '30 dias' },
+  { id: '90', label: '90 dias' },
+];
 
-  const periods = [
-    { id: '7d',  label: '7 dias' },
-    { id: '30d', label: '30 dias' },
-    { id: '90d', label: '90 dias' },
-    { id: 'ytd', label: 'Ano' },
-  ];
-  const tabs = [
-    { id: 'overview',  label: 'Visão geral',  icon: 'chart' },
-    { id: 'channels',  label: 'Canais',       icon: 'msg' },
-    { id: 'agents',    label: 'Agentes',      icon: 'sparkles' },
-    { id: 'funnel',    label: 'Funil',        icon: 'paper' },
-    { id: 'sentiment', label: 'Sentimento',   icon: 'heart' },
-  ];
+const TABS = [
+  { id: 'overview',  label: 'Visão geral', icon: 'chart'    },
+  { id: 'channels',  label: 'Canais',      icon: 'msg'      },
+  { id: 'agents',    label: 'Agentes',     icon: 'sparkles' },
+  { id: 'funnel',    label: 'Funil',       icon: 'paper'    },
+  { id: 'sentiment', label: 'Sentimento',  icon: 'heart'    },
+];
 
-  const totalRevenue = (data.revenueTrend30 || []).reduce((s, v) => s + v, 0);
-  const lastWeek = (data.revenueTrend30 || []).slice(-7).reduce((s, v) => s + v, 0);
-  const prevWeek = (data.revenueTrend30 || []).slice(-14, -7).reduce((s, v) => s + v, 0);
-  const growth   = prevWeek ? ((lastWeek - prevWeek) / prevWeek * 100).toFixed(1) : 0;
-  const fmt = (n) => 'R$ ' + (n / 1000).toFixed(1) + 'k';
-  const fmtBig = (n) => n.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+// ── helper ──────────────────────────────────────────────────────────────────
+
+async function bridgeFetch(path, options = {}) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const res = await fetch(`${BRIDGE}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session?.access_token}`,
+      ...options.headers,
+    },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(body.error || res.statusText);
+  }
+  return res.json();
+}
+
+// ── main ─────────────────────────────────────────────────────────────────────
+
+const ReportsScreen = ({ tenant, tenantDbId }) => {
+  const [period,       setPeriod]       = useState('30');
+  const [tab,          setTab]          = useState('overview');
+  const [lojas,        setLojas]        = useState([]);
+  const [selectedLoja, setSelectedLoja] = useState('');
+  const [dashData,     setDashData]     = useState(null);
+  const [loading,      setLoading]      = useState(false);
+  const [error,        setError]        = useState(null);
+
+  // Carregar lista de lojas para dropdown de filtro
+  useEffect(() => {
+    if (!tenantDbId) return;
+    bridgeFetch(`/api/lojas?tenant_id=${tenantDbId}&limit=100`)
+      .then(d => setLojas(d.lojas || []))
+      .catch(() => {});
+  }, [tenantDbId]);
+
+  // Carregar dashboard ao mudar período ou loja
+  useEffect(() => {
+    if (!tenantDbId) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    let qs = `/api/relatorios/dashboard?tenant_id=${tenantDbId}&periodo=${period}`;
+    if (selectedLoja) qs += `&loja_id=${encodeURIComponent(selectedLoja)}`;
+    bridgeFetch(qs)
+      .then(d => { if (!cancelled) { setDashData(d); setLoading(false); } })
+      .catch(err => { if (!cancelled) { setError(err.message); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [tenantDbId, period, selectedLoja]);
+
+  const m             = dashData?.metrics || {};
+  const tarefasPorDia = (dashData?.charts || []).find(c => c.id === 'tarefas_por_dia')?.data || [];
 
   const kpis = [
-    { label: 'Faturamento',     value: 'R$ ' + fmtBig(totalRevenue),  delta: '+' + growth + '%',  good: true },
-    { label: 'Conversas',       value: '1.240',                       delta: '+18%',              good: true },
-    { label: 'Ticket médio',    value: 'R$ 89,40',                    delta: '+8%',               good: true },
-    { label: 'Conversão',       value: '23,1%',                       delta: '+3,2pp',            good: true },
-    { label: 'NPS médio',       value: '8,4',                         delta: '+0,6',              good: true },
-    { label: 'SLA quebrado',    value: '8%',                          delta: '+2pp',              good: false },
+    { label: 'Tarefas concluídas (30d)', value: m.tarefas_concluidas_30d },
+    { label: 'Taxa de conclusão',         value: m.taxa_conclusao != null ? `${m.taxa_conclusao}%` : undefined },
+    { label: 'Análises processadas',      value: m.analises_processadas_30d },
+    { label: 'Lojas ativas',             value: m.lojas_ativas },
   ];
+
+  const fmtVal = v => {
+    if (v == null) return loading ? '…' : '—';
+    if (typeof v === 'string') return v;
+    return Number(v).toLocaleString('pt-BR');
+  };
 
   return (
     <div className="route-enter" style={{ padding: '28px 32px 56px', maxWidth: 1480, margin: '0 auto' }}>
-      {/* Header */}
+
+      {/* ── Header ──────────────────────────────────────────────── */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', marginBottom: 24, flexWrap:'wrap', gap: 16 }}>
         <div>
           <h1 className="page-h1">Relatórios</h1>
           <div className="page-sub" style={{ display:'inline-flex', alignItems:'center', gap: 6 }}>
-            Powered by <AgentAvatar id="vera" size={16}/> VERA · análise contínua de toda a operação
+            Powered by <AgentAvatar id="vera" size={16}/> VERA · análise contínua da operação
           </div>
         </div>
-        <div style={{ display:'flex', gap: 8 }}>
+        <div style={{ display:'flex', gap: 8, flexWrap:'wrap', alignItems:'center' }}>
+          {lojas.length > 0 && (
+            <select
+              value={selectedLoja}
+              onChange={e => setSelectedLoja(e.target.value)}
+              style={{
+                height: 34, padding: '0 12px', borderRadius: 8,
+                border: '1px solid var(--g-200)', background: 'white',
+                fontSize: 13, color: 'var(--g-700)', cursor: 'pointer',
+              }}
+            >
+              <option value="">Todas as lojas</option>
+              {lojas.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
+            </select>
+          )}
           <div className="rep-period">
-            {periods.map(p => (
-              <button key={p.id} className={`rep-period-btn ${period === p.id ? 'on' : ''}`} onClick={() => setPeriod(p.id)}>{p.label}</button>
+            {PERIODS.map(p => (
+              <button
+                key={p.id}
+                className={`rep-period-btn ${period === p.id ? 'on' : ''}`}
+                onClick={() => setPeriod(p.id)}
+              >
+                {p.label}
+              </button>
             ))}
           </div>
-          <button className="btn-secondary"><Icon name="paper" size={14}/> CSV</button>
-          <button className="btn-secondary"><Icon name="paper" size={14}/> PDF</button>
         </div>
       </div>
 
-      {/* VERA insight banner */}
+      {/* ── VERA insight banner ──────────────────────────────────── */}
       <div className="rep-insight">
         <AgentAvatar id="vera" size={44}/>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 11, fontWeight: 800, color:'#A78BFA', letterSpacing: 1, textTransform:'uppercase', marginBottom: 6 }}>VERA · Análise do período</div>
+          <div style={{ fontSize: 11, fontWeight: 800, color:'#A78BFA', letterSpacing: 1, textTransform:'uppercase', marginBottom: 6 }}>
+            VERA · Análise do período
+          </div>
           <div style={{ fontSize: 14, color:'white', lineHeight: 1.55 }}>
-            Faturamento subiu <strong style={{ color:'#10B981' }}>+{growth}%</strong> nos últimos 7 dias.
-            DELI está convertendo <strong>72%</strong> dos atendimentos de vendas.
-            Ponto de atenção: <strong style={{ color:'#F59E0B' }}>SLA quebrado</strong> em 8% das conversas no horário das 19h–21h.
+            {loading && 'Carregando análise do período…'}
+            {error  && `Não foi possível carregar os dados: ${error}`}
+            {!loading && !error && dashData && (
+              <>
+                {m.tarefas_concluidas_30d != null && (
+                  <><strong style={{ color:'#10B981' }}>{m.tarefas_concluidas_30d}</strong> tarefas concluídas nos últimos 30 dias.{' '}</>
+                )}
+                {m.taxa_conclusao != null && (
+                  <>Taxa de conclusão: <strong style={{ color: m.taxa_conclusao >= 70 ? '#10B981' : '#F59E0B' }}>{m.taxa_conclusao}%</strong>.{' '}</>
+                )}
+                {m.onboarding_em_andamento > 0 && (
+                  <><strong style={{ color:'#F59E0B' }}>{m.onboarding_em_andamento}</strong> {m.onboarding_em_andamento === 1 ? 'cliente' : 'clientes'} em onboarding ativo.</>
+                )}
+                {!m.tarefas_concluidas_30d && !m.taxa_conclusao && (
+                  'Nenhuma tarefa concluída no período. Verifique os dados da operação.'
+                )}
+              </>
+            )}
           </div>
         </div>
-        <button className="btn-primary" style={{ background:'white', color:'#0D0D0D', flexShrink: 0 }}>
-          Aprofundar <Icon name="arrowright" size={13}/>
-        </button>
       </div>
 
-      {/* KPI strip */}
+      {/* ── KPI strip ────────────────────────────────────────────── */}
       <div className="rep-kpi-grid">
         {kpis.map(k => (
           <div key={k.label} className="card rep-kpi">
-            <div style={{ fontSize: 11, color:'var(--g-500)', textTransform:'uppercase', letterSpacing: 0.5, fontWeight: 700 }}>{k.label}</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color:'var(--g-900)', marginTop: 4, fontFeatureSettings:"'tnum'" }}>{k.value}</div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: k.good ? '#10B981' : '#EF4444', marginTop: 2 }}>{k.delta}</div>
+            <div style={{ fontSize: 11, color:'var(--g-500)', textTransform:'uppercase', letterSpacing: 0.5, fontWeight: 700 }}>
+              {k.label}
+            </div>
+            <div style={{ fontSize: 28, fontWeight: 800, color: loading ? 'var(--g-300)' : 'var(--g-900)', marginTop: 4, fontFeatureSettings:"'tnum'", transition: 'color .2s' }}>
+              {fmtVal(k.value)}
+            </div>
           </div>
         ))}
       </div>
 
-      {/* Tabs */}
+      {error && !loading && (
+        <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius: 10, padding: '12px 16px', marginBottom: 24, color:'#DC2626', fontSize: 13 }}>
+          <strong>Erro:</strong> {error}
+        </div>
+      )}
+
+      {/* ── Tabs ─────────────────────────────────────────────────── */}
       <div className="rep-tabs">
-        {tabs.map(t => (
+        {TABS.map(t => (
           <button key={t.id} className={`rep-tab ${tab === t.id ? 'on' : ''}`} onClick={() => setTab(t.id)}>
             <Icon name={t.icon} size={14}/> {t.label}
           </button>
         ))}
       </div>
 
-      {/* Tab content */}
+      {/* ── Tab: Overview ────────────────────────────────────────── */}
       {tab === 'overview' && (
         <div className="rep-grid-2">
-          <div className="chart-card">
-            <div className="chart-card-h">
-              <div>
-                <div className="chart-card-title">Receita · últimos 30 dias</div>
-                <div className="chart-card-sub">Total: R$ {fmtBig(totalRevenue)}</div>
-              </div>
-              <span className="badge badge-green">+{growth}%</span>
-            </div>
-            <RevenueChart data={data.revenueTrend30 || []}/>
-          </div>
-          <div className="chart-card">
-            <div className="chart-card-h">
-              <div>
-                <div className="chart-card-title">Mix de canais</div>
-                <div className="chart-card-sub">Distribuição por origem</div>
-              </div>
-            </div>
-            <ChannelBars channels={data.channels || []}/>
-          </div>
           <div className="chart-card" style={{ gridColumn: '1 / -1' }}>
             <div className="chart-card-h">
               <div>
-                <div className="chart-card-title">Insights da VERA</div>
-                <div className="chart-card-sub">Padrões detectados automaticamente no período</div>
+                <div className="chart-card-title">Tarefas concluídas por dia · 30 dias</div>
+                <div className="chart-card-sub">Total no período: {fmtVal(m.tarefas_concluidas_30d)} tarefas</div>
               </div>
             </div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
-              {(data.insights || []).map((i, idx) => (
-                <div key={idx} style={{
-                  display:'flex', gap: 10, alignItems:'flex-start',
-                  background:'var(--g-50)', border: '1px solid var(--g-100)',
-                  borderRadius: 10, padding: 12,
-                }}>
-                  <span style={{ width: 24, height: 24, background: '#A78BFA22', color: '#7C3AED', borderRadius: 6, display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink: 0, fontWeight: 800, fontSize: 11 }}>★</span>
-                  <div style={{ fontSize: 13, color:'var(--g-700)', lineHeight: 1.5 }}>{i}</div>
-                </div>
-              ))}
+            <TarefasChart data={tarefasPorDia} loading={loading}/>
+          </div>
+
+          <div className="chart-card">
+            <div className="chart-card-h">
+              <div>
+                <div className="chart-card-title">Onboarding ativo</div>
+                <div className="chart-card-sub">Clientes com checklist em andamento</div>
+              </div>
+            </div>
+            <div style={{ padding: '24px 0', textAlign:'center' }}>
+              <div style={{ fontSize: 60, fontWeight: 800, color:'#A78BFA', fontFeatureSettings:"'tnum'" }}>
+                {fmtVal(m.onboarding_em_andamento)}
+              </div>
+              <div style={{ fontSize: 13, color:'var(--g-500)', marginTop: 4 }}>clientes em onboarding</div>
+            </div>
+          </div>
+
+          <div className="chart-card">
+            <div className="chart-card-h">
+              <div>
+                <div className="chart-card-title">Contratos assinados (30d)</div>
+                <div className="chart-card-sub">Novos contratos no período</div>
+              </div>
+            </div>
+            <div style={{ padding: '24px 0', textAlign:'center' }}>
+              <div style={{ fontSize: 60, fontWeight: 800, color:'#10B981', fontFeatureSettings:"'tnum'" }}>
+                {fmtVal(m.contratos_assinados_30d)}
+              </div>
+              <div style={{ fontSize: 13, color:'var(--g-500)', marginTop: 4 }}>contratos novos</div>
             </div>
           </div>
         </div>
       )}
 
-      {tab === 'channels' && (
-        <div className="chart-card">
-          <div className="chart-card-h">
-            <div>
-              <div className="chart-card-title">Performance por canal</div>
-              <div className="chart-card-sub">Volume relativo no período</div>
-            </div>
+      {/* ── Tabs em breve ────────────────────────────────────────── */}
+      {['channels', 'agents', 'funnel', 'sentiment'].includes(tab) && (
+        <div className="chart-card" style={{ textAlign:'center', padding: '64px 24px' }}>
+          <div style={{ fontSize: 44, marginBottom: 12 }}>📊</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color:'var(--g-900)', marginBottom: 8 }}>
+            Em breve
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: 24, alignItems:'center' }}>
-            <ChannelBars channels={data.channels || []} large/>
-            <DonutChart data={data.channels || []}/>
+          <div style={{ fontSize: 14, color:'var(--g-500)', maxWidth: 400, margin: '0 auto' }}>
+            A VERA está preparando métricas de <strong>{TABS.find(t => t.id === tab)?.label.toLowerCase()}</strong> com dados reais da operação.
           </div>
-        </div>
-      )}
-
-      {tab === 'agents' && (
-        <div className="chart-card">
-          <div className="chart-card-h">
-            <div>
-              <div className="chart-card-title">Performance dos agentes IA</div>
-              <div className="chart-card-sub">{(data.agentPerf || []).length} agentes ativos no período</div>
-            </div>
-          </div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
-            {(data.agentPerf || []).map(a => {
-              const agent = AGENTS.find(x => x.id === a.id);
-              if (!agent) return null;
-              return (
-                <div key={a.id} style={{ background:'var(--g-50)', border:'1px solid var(--g-100)', borderRadius: 10, padding: 14 }}>
-                  <div style={{ display:'flex', alignItems:'center', gap: 10, marginBottom: 10 }}>
-                    <AgentAvatar id={a.id} size={32}/>
-                    <div>
-                      <div style={{ fontSize: 14, fontWeight: 800, color:'var(--g-900)' }}>{agent.name}</div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: agent.color }}>{agent.role}</div>
-                    </div>
-                  </div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: 8 }}>
-                    <Mini label="conversas" value={a.conv}/>
-                    <Mini label="sucesso"   value={a.success + '%'}/>
-                  </div>
-                  <div style={{ marginTop: 10, fontSize: 13, fontWeight: 700, color: 'var(--g-900)' }}>
-                    {a.value !== '—' ? a.value : <span style={{ color: 'var(--g-400)', fontWeight: 500 }}>sem receita atribuída</span>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {tab === 'funnel' && (
-        <div className="chart-card">
-          <div className="chart-card-h">
-            <div>
-              <div className="chart-card-title">Funil de conversão</div>
-              <div className="chart-card-sub">Da conversa ao pagamento aprovado</div>
-            </div>
-          </div>
-          {(() => {
-            const max = Math.max(...(data.funnel || [{ count: 1 }]).map(f => f.count));
-            return (data.funnel || []).map((f, i) => {
-              const prev = i > 0 ? data.funnel[i - 1].count : null;
-              const drop = prev ? Math.round((1 - f.count / prev) * 100) : 0;
-              return (
-                <div key={f.stage} className="funnel-row">
-                  <div className="funnel-label">
-                    {f.stage}
-                    {prev && drop > 0 && <span style={{ marginLeft: 6, fontSize: 11, color:'#EF4444' }}>−{drop}%</span>}
-                  </div>
-                  <div className="funnel-bar" style={{ width: ((f.count / max) * 100) + '%', background: `linear-gradient(90deg, var(--red), #FF6F4D)` }}/>
-                  <div className="funnel-v">{fmtBig(f.count)}</div>
-                </div>
-              );
-            });
-          })()}
-        </div>
-      )}
-
-      {tab === 'sentiment' && (
-        <div className="chart-card">
-          <div className="chart-card-h">
-            <div>
-              <div className="chart-card-title">Sentimento ao longo da semana</div>
-              <div className="chart-card-sub">Análise IA de todas as conversas</div>
-            </div>
-            <div style={{ display:'flex', gap: 12, fontSize: 12 }}>
-              <span style={{ display:'inline-flex', alignItems:'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background:'#10B981' }}/> Positivo</span>
-              <span style={{ display:'inline-flex', alignItems:'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background:'#9CA3AF' }}/> Neutro</span>
-              <span style={{ display:'inline-flex', alignItems:'center', gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background:'#EF4444' }}/> Negativo</span>
-            </div>
-          </div>
-          <SentimentChart data={data.sentimentSeries || []}/>
         </div>
       )}
     </div>
   );
 };
 
-const Mini = ({ label, value }) => (
-  <div style={{ background: 'white', borderRadius: 6, padding: '6px 10px' }}>
-    <div style={{ fontSize: 14, fontWeight: 800, color:'var(--g-900)', fontFeatureSettings:"'tnum'" }}>{value}</div>
-    <div style={{ fontSize: 10, color:'var(--g-500)', textTransform:'uppercase', fontWeight: 600 }}>{label}</div>
-  </div>
-);
+// ── TarefasChart — barras SVG simples ────────────────────────────────────────
 
-const RevenueChart = ({ data }) => {
-  if (!data.length) return <div style={{ padding: 40, textAlign:'center', color:'var(--g-400)' }}>Sem dados</div>;
-  const max = Math.max(...data);
-  const min = Math.min(...data);
-  const w = 580, h = 180, pad = 12;
-  const xs = data.map((_, i) => pad + (i * (w - pad * 2) / (data.length - 1)));
-  const ys = data.map(v => h - pad - ((v - min) / (max - min)) * (h - pad * 2));
-  const path = xs.map((x, i) => `${i === 0 ? 'M' : 'L'}${x},${ys[i]}`).join(' ');
-  const area = path + ` L${xs[xs.length - 1]},${h} L${xs[0]},${h} Z`;
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} style={{ width:'100%', height: 180 }}>
-      <defs>
-        <linearGradient id="rev-grad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#B70C00" stopOpacity="0.3"/>
-          <stop offset="100%" stopColor="#B70C00" stopOpacity="0"/>
-        </linearGradient>
-      </defs>
-      <path d={area} fill="url(#rev-grad)"/>
-      <path d={path} stroke="#B70C00" strokeWidth="2" fill="none"/>
-      {xs.map((x, i) => (
-        <circle key={i} cx={x} cy={ys[i]} r={i === xs.length - 1 ? 4 : 0} fill="#B70C00"/>
-      ))}
-    </svg>
-  );
-};
+const TarefasChart = ({ data, loading }) => {
+  if (loading) {
+    return (
+      <div style={{ height: 160, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--g-400)', fontSize: 13 }}>
+        Carregando…
+      </div>
+    );
+  }
+  if (!data.length) {
+    return (
+      <div style={{ height: 160, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--g-400)', fontSize: 13 }}>
+        Sem dados no período
+      </div>
+    );
+  }
 
-const ChannelBars = ({ channels, large }) => {
-  const total = channels.reduce((s, c) => s + c.value, 0) || 1;
-  return (
-    <div style={{ display:'flex', flexDirection:'column', gap: large ? 14 : 10 }}>
-      {channels.map(c => (
-        <div key={c.name}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 4 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color:'var(--g-700)' }}>{c.name}</span>
-            <span style={{ fontSize: 13, fontWeight: 700, color:'var(--g-900)' }}>{c.value}%</span>
-          </div>
-          <div style={{ height: large ? 14 : 10, background:'var(--g-100)', borderRadius: 999, overflow:'hidden' }}>
-            <div style={{ height:'100%', width: ((c.value / total) * 100) + '%', background: c.color, borderRadius: 999 }}/>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-};
+  const max  = Math.max(...data.map(d => d.concluidas), 1);
+  const W    = 640, H = 140, padX = 8, padY = 12;
+  const n    = data.length;
+  const slot = (W - padX * 2) / n;
+  const barW = Math.max(2, slot - 4);
 
-const DonutChart = ({ data }) => {
-  const total = data.reduce((s, c) => s + c.value, 0) || 1;
-  const r = 80, cx = 110, cy = 110, sw = 30;
-  let offset = 0;
   return (
-    <svg viewBox="0 0 220 220" style={{ width:'100%', maxWidth: 220 }}>
-      {data.map(c => {
-        const pct = c.value / total;
-        const len = pct * 2 * Math.PI * r;
-        const dash = `${len} ${2 * Math.PI * r}`;
-        const el = (
-          <circle
-            key={c.name}
-            cx={cx} cy={cy} r={r}
-            fill="none"
-            stroke={c.color}
-            strokeWidth={sw}
-            strokeDasharray={dash}
-            strokeDashoffset={-offset}
-            transform={`rotate(-90 ${cx} ${cy})`}
-          />
-        );
-        offset += len;
-        return el;
-      })}
-      <text x={cx} y={cy - 4} textAnchor="middle" fontSize="14" fill="var(--g-500)" fontWeight="600">Total</text>
-      <text x={cx} y={cy + 18} textAnchor="middle" fontSize="22" fill="var(--g-900)" fontWeight="800">{total}%</text>
-    </svg>
-  );
-};
-
-const SentimentChart = ({ data }) => {
-  if (!data.length) return <div style={{ padding: 40, textAlign:'center', color:'var(--g-400)' }}>Sem dados</div>;
-  const w = 580, h = 220, pad = 24;
-  const cw = (w - pad * 2) / data.length;
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} style={{ width:'100%', height: 220 }}>
+    <svg viewBox={`0 0 ${W} ${H + 20}`} style={{ width:'100%', height: 168 }}>
       {data.map((d, i) => {
-        const x = pad + i * cw;
-        const cx = x + cw / 2;
-        const total = d.pos + d.neu + d.neg;
-        const bar = (h - pad * 2) * 0.9;
-        const posH = (d.pos / total) * bar;
-        const neuH = (d.neu / total) * bar;
-        const negH = (d.neg / total) * bar;
-        const bw = cw - 14;
+        const barH = Math.max(2, (d.concluidas / max) * (H - padY));
+        const x    = padX + i * slot;
+        const y    = H - barH;
+        const showLabel = n <= 10 || i % Math.ceil(n / 8) === 0;
+        const dayNum    = d.dia.slice(8);
         return (
-          <g key={d.d}>
-            <rect x={cx - bw / 2} y={h - pad - posH}             width={bw} height={posH} fill="#10B981" rx="3"/>
-            <rect x={cx - bw / 2} y={h - pad - posH - neuH}      width={bw} height={neuH} fill="#9CA3AF"/>
-            <rect x={cx - bw / 2} y={h - pad - posH - neuH - negH} width={bw} height={negH} fill="#EF4444" rx="3"/>
-            <text x={cx} y={h - 6} textAnchor="middle" fontSize="11" fill="var(--g-500)" fontWeight="600">{d.d}</text>
+          <g key={d.dia}>
+            <rect
+              x={x}
+              y={y}
+              width={barW}
+              height={barH}
+              fill={d.concluidas > 0 ? '#B70C00' : 'var(--g-100)'}
+              rx="2"
+              opacity={d.concluidas > 0 ? 0.85 : 0.4}
+            />
+            {showLabel && (
+              <text
+                x={x + barW / 2}
+                y={H + 15}
+                textAnchor="middle"
+                fontSize="9"
+                fill="var(--g-400)"
+              >
+                {dayNum}
+              </text>
+            )}
           </g>
         );
       })}

@@ -11,6 +11,12 @@ const STATUS_MAP = {
   encerrado:{ label: 'Encerrado', bg: 'rgba(220,38,38,0.18)',   color: '#f87171' },
 };
 
+const PGTO_STATUS_MAP = {
+  em_dia:    { label: 'Em dia',    bg: 'rgba(16,185,129,0.18)',  color: '#10b981' },
+  atrasado:  { label: 'Atrasado',  bg: 'rgba(220,38,38,0.18)',   color: '#f87171' },
+  cancelado: { label: 'Cancelado', bg: 'rgba(107,114,128,0.18)', color: '#9ca3af' },
+};
+
 const PACOTE_LABELS = {
   light:       'Light',
   performance: 'Performance',
@@ -20,6 +26,17 @@ const PACOTE_LABELS = {
 
 function StatusBadge({ status }) {
   const s = STATUS_MAP[status] || STATUS_MAP.rascunho;
+  return (
+    <span style={{
+      background: s.bg, color: s.color, border: `1px solid ${s.color}44`,
+      borderRadius: 6, padding: '2px 9px', fontSize: 11, fontWeight: 600,
+    }}>{s.label}</span>
+  );
+}
+
+function PagtoStatusBadge({ status }) {
+  if (!status) return <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)' }}>—</span>;
+  const s = PGTO_STATUS_MAP[status] || { label: status, bg: 'rgba(107,114,128,0.18)', color: '#9ca3af' };
   return (
     <span style={{
       background: s.bg, color: s.color, border: `1px solid ${s.color}44`,
@@ -57,7 +74,7 @@ export default function ContratosScreen({ tenantDbId }) {
     setLoading(true);
     const { data, error } = await supabase
       .from('contratos')
-      .select('id, pacote, valor_mensal, valor_setup, status, vigencia_inicio, vigencia_fim, created_at, customers(name)')
+      .select('id, pacote, valor_mensal, valor_setup, status, pagamento_status, vigencia_inicio, vigencia_fim, created_at, customers(name)')
       .eq('tenant_id', tenantDbId)
       .order('created_at', { ascending: false });
     if (!error) setContratos(data || []);
@@ -146,6 +163,7 @@ export default function ContratosScreen({ tenantDbId }) {
                 )}
               </div>
               <StatusBadge status={c.status} />
+              <PagtoStatusBadge status={c.pagamento_status} />
             </div>
           ))}
         </div>
