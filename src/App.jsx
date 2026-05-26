@@ -22,7 +22,7 @@ import DeliScreen from './screens/DeliScreen.jsx';
 import MaxScreen from './screens/MaxScreen.jsx';
 import NovaScreen from './screens/NovaScreen.jsx';
 import BrenoScreen from './screens/BrenoScreen.jsx';
-import SofiaScreen from './screens/SofiaScreen.jsx';
+import SofiaScreen from './screens/Sofia/SofiaScreen.jsx';
 import VeraScreen from './screens/VeraScreen.jsx';
 import BomDiaScreen from './screens/BomDiaScreen.jsx';
 import EncerramentoScreen from './screens/EncerramentoScreen.jsx';
