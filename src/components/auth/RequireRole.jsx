@@ -2,24 +2,23 @@ import { usePermissions } from '../../hooks/usePermissions';
 import AccessDenied from './AccessDenied';
 
 /**
- * Renderiza children somente se o usuário tiver a permissão resource+action.
+ * Renderiza children somente se o usuário tiver a permissão ou role necessária.
  *
- * Uso:
- *   <RequireRole resource="financeiro" action="view" userId={session.user.id}>
- *     <CoraScreen />
- *   </RequireRole>
+ * Por role name (array):
+ *   <RequireRole roles={['admin', 'marketing']} userId={id}>
  *
- * Props:
- *   resource  — recurso protegido (ex: financeiro, kanban, reports)
- *   action    — ação requerida (view, create, edit, delete, execute, approve)
- *   userId    — auth.users.id do usuário logado
- *   children  — conteúdo exibido se autorizado
- *   fallback  — elemento exibido se negado (padrão: <AccessDenied />)
+ * Por permissão resource+action:
+ *   <RequireRole resource="financeiro" action="view" userId={id}>
  */
-export default function RequireRole({ resource, action, userId, children, fallback }) {
-  const { can, loading } = usePermissions(userId);
+export default function RequireRole({ resource, action, roles, userId, children, fallback }) {
+  const { can, hasRole, loading } = usePermissions(userId);
 
   if (loading) return null;
-  if (!can(resource, action)) return fallback ?? <AccessDenied />;
+
+  const allowed = roles
+    ? roles.some(r => hasRole(r))
+    : can(resource, action);
+
+  if (!allowed) return fallback ?? <AccessDenied />;
   return children;
 }
