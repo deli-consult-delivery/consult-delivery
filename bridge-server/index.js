@@ -1381,6 +1381,12 @@ app.use('/api', require('./routes/notifications')({
 // ── CRM — pipeline de leads ───────────────────────────────────────────────────
 app.use('/api', require('./routes/crm')({ requireJwt, sbFetch, supabaseInsert }));
 
+// ── Sprint 02 — Custom Fields v2 ─────────────────────────────────────────────
+app.use('/api', require('./routes/custom-fields')({
+  requireJwt,
+  sbFetch,
+  assertTenantMember,
+}));
 const server = app.listen(PORT, '0.0.0.0', () => {
   // D2: timeout do servidor > 60s para suportar polling síncrono do loja-gpt
   server.timeout = 90_000; // 90s — folga sobre os 60s de poll da task
@@ -1401,4 +1407,5 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`[bridge] G03 Contratos:         POST /api/contratos/:id/enviar-assinatura, POST /api/contratos/:id/link-asaas, POST /api/contratos/sign (público)`);
   console.log(`[bridge] G03.3 Asaas Webhook:  POST /api/asaas/webhook (público, valida asaas-access-token)`);
   console.log(`[bridge] ASAAS_API_KEY:         ${ASAAS_API_KEY ? '✓' : '✗ /contratos/:id/link-asaas recusará'}`);
+  console.log(`[bridge] Custom Fields v2:      GET|POST /api/custom-fields, PATCH|DELETE /api/custom-fields/:id, GET|POST /api/entidades/:tipo/:id/custom-values`);
 });

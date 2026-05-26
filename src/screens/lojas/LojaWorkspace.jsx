@@ -4,6 +4,7 @@ import Icon from '../../components/Icon.jsx';
 import AtribuirConsultorModal from './AtribuirConsultorModal.jsx';
 import TabIaEspecialista from './TabIaEspecialista.jsx';
 import TabAnalises from './TabAnalises.jsx';
+import CustomFieldsSection from '../../components/CustomFieldsSection.jsx';
 
 const BRIDGE = import.meta.env.VITE_BRIDGE_URL || 'https://bridge.consultdelivery.com.br';
 
@@ -236,7 +237,7 @@ export default function LojaWorkspace({ tenantDbId, userId, go, lojaId }) {
         ))}
       </div>
 
-      {tab === 0 && <TabVisaoGeral loja={loja} lojaId={lojaId} />}
+      {tab === 0 && <TabVisaoGeral loja={loja} lojaId={lojaId} tenantDbId={tenantDbId} />}
       {tab === 1 && (
         <TabMetricas
           metricas={metricas}
@@ -254,7 +255,7 @@ export default function LojaWorkspace({ tenantDbId, userId, go, lojaId }) {
         />
       )}
       {(tab === 3 || tab === 4) && <TabEmConstrucao nome={TABS[tab]} />}
-      {tab === 5 && <TabTarefas lojaId={lojaId} />}
+      {tab === 5 && <TabTarefas lojaId={lojaId} tenantDbId={tenantDbId} />}
       {tab === 6 && <TabIaEspecialista lojaId={lojaId} userId={userId} />}
       {tab === 7 && <TabAnalises lojaId={lojaId} userId={userId} onGoToTarefas={(analiseId) => setTab(5)} />}
 
@@ -272,7 +273,7 @@ export default function LojaWorkspace({ tenantDbId, userId, go, lojaId }) {
 
 // ── Tab sub-components ────────────────────────────────────────────────────────
 
-function TabVisaoGeral({ loja, lojaId }) {
+function TabVisaoGeral({ loja, lojaId, tenantDbId }) {
   const [stats, setStats] = useState(null);
 
   useEffect(() => {
@@ -333,6 +334,7 @@ function TabVisaoGeral({ loja, lojaId }) {
           ))}
         </div>
       )}
+      <CustomFieldsSection entidade="loja" entidadeId={lojaId} tenantId={tenantDbId} />
     </div>
   );
 }
@@ -462,7 +464,7 @@ function TabEmConstrucao({ nome }) {
 
 // ── TabTarefas ────────────────────────────────────────────────────────────────
 
-function TabTarefas({ lojaId }) {
+function TabTarefas({ lojaId, tenantDbId }) {
   const [tarefas, setTarefas]         = useState([]);
   const [loading, setLoading]         = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
@@ -736,6 +738,7 @@ function TabTarefas({ lojaId }) {
       {detailId && (
         <TarefaDetailModal
           tarefaId={detailId}
+          tenantDbId={tenantDbId}
           onClose={() => setDetailId(null)}
           onRefresh={loadTarefas}
         />
@@ -1128,7 +1131,7 @@ function NovaTarefaOverlay({ lojaId, onClose, onSaved }) {
 
 // ── TarefaDetailModal ─────────────────────────────────────────────────────────
 
-function TarefaDetailModal({ tarefaId, onClose, onRefresh }) {
+function TarefaDetailModal({ tarefaId, tenantDbId, onClose, onRefresh }) {
   const [data, setData]               = useState(null);
   const [loading, setLoading]         = useState(true);
   const [innerTab, setInnerTab]       = useState(0);
@@ -1237,6 +1240,7 @@ function TarefaDetailModal({ tarefaId, onClose, onRefresh }) {
                   {t.comentarios_count} comentário{t.comentarios_count !== 1 ? 's' : ''} · {t.prints_count} print{t.prints_count !== 1 ? 's' : ''}
                 </span>
               </div>
+              <CustomFieldsSection entidade="tarefa" entidadeId={tarefaId} tenantId={tenantDbId} />
             </div>
           )}
 
