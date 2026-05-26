@@ -5,6 +5,7 @@ import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 import { notifyDeli } from "../_shared/notify-deli";
 import { notify } from "../_shared/notify";
+import { getClientContext, recordFact, logTimeline } from "../../src/agents/shared/runtime";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -63,6 +64,27 @@ export const laraGerarConteudo = task({
       legenda_campanha: "Legenda de campanha iFood/Repediu",
     };
 
+    // Memória Central — carregar contexto da loja antes de gerar conteúdo
+    const clientCtx = input.loja_id
+      ? await getClientContext(input.loja_id, input.tenant_id)
+      : { facts: [], timeline: [] };
+
+    const memoriaSection = clientCtx.facts.length > 0 || clientCtx.timeline.length > 0
+      ? `\n\n## Memória da loja (use para personalizar)\n${
+          clientCtx.facts.length > 0
+            ? "Fatos conhecidos:\n" + clientCtx.facts.map(f =>
+                `- [${f.category}/${f.key}]: ${JSON.stringify(f.value)}`
+              ).join("\n")
+            : ""
+        }${
+          clientCtx.timeline.length > 0
+            ? "\nÚltimas atividades:\n" + clientCtx.timeline.slice(0, 5).map(e =>
+                `- ${e.event_type}: ${e.title}`
+              ).join("\n")
+            : ""
+        }`
+      : "";
+
     const systemPrompt = `Você é LARA, especialista sênior de CRM para food service da Consult Delivery.
 
 ## Sua missão agora
@@ -112,7 +134,7 @@ Retorne SOMENTE JSON válido:
     "Melhor horário: terça a quinta, 11h-12h e 18h-19h",
     "Teste Variação 1 primeiro — tom mais próximo performa melhor em delivery"
   ]
-}`;
+}${memoriaSection}`;
 
     const cupomInfo = input.cupom ? `\nCupom disponível: ${input.cupom}` : "";
     const tomInfo   = input.tom   ? `\nTom de voz desejado: ${input.tom}` : "";
@@ -161,6 +183,28 @@ Retorne o JSON conforme solicitado.`;
       const { error: draftErr } = await sb.from("agent_drafts").insert(drafts);
       if (draftErr) console.warn("[lara/gerar-conteudo] agent_drafts insert:", draftErr.message);
 
+    }
+
+    // Memória Central — registrar fato e timeline após geração bem-sucedida
+    if (input.loja_id && resultado.ok) {
+      await Promise.all([
+        recordFact(
+          input.loja_id,
+          input.tenant_id,
+          "content_request",
+          `tipo_${input.tipo}`,
+          { objetivo: input.objetivo, variacoes_count: resultado.variacoes.length },
+          { sourceAgent: "lara", confidence: 0.8 }
+        ),
+        logTimeline(
+          input.loja_id,
+          input.tenant_id,
+          "lara",
+          "content_generated",
+          `Conteúdo gerado: ${tipoLabel[input.tipo] ?? input.tipo}`,
+          { description: input.objetivo, payload: { campanha_id: input.campanha_id ?? null, run_id: ctx.run.id } }
+        ),
+      ]);
     }
 
     await logAgentRun({

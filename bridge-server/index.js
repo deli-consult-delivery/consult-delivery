@@ -1338,12 +1338,48 @@ app.use('/api', require('./routes/publico-aprovacao')({
   supabaseInsert,
 }));
 
+// ── S2-G05 — DELI Semáforo: aprovações pendentes ─────────────────────────────
+app.use('/api', require('./routes/deli-approvals')({
+  requireJwt,
+  sbFetch,
+  supabaseInsert,
+}));
+
 // ── S2-G01.5 — LARA editorial: drafts + revisão + publicação ─────────────────
 app.use('/api', require('./routes/lara')({
   requireJwt,
   sbFetch,
   supabaseInsert,
 }));
+
+// ── S2-G02 — SOFIA: Leads qualificados ───────────────────────────────────────
+app.use('/api', require('./routes/sofia')({
+  requireJwt,
+  sbFetch,
+  supabaseInsert,
+}));
+
+// ── Wizard Self-service — /comecar (sem JWT) ──────────────────────────────────
+app.use('/api', require('./routes/wizard-publico')({
+  sbFetch,
+  supabaseInsert,
+}));
+
+// ── Inadimplentes (CORA V1 — cora_cobrancas) ─────────────────────────────────
+app.use('/api', require('./routes/inadimplentes')({
+  requireJwt,
+  SUPABASE_URL,
+  SUPABASE_SERVICE_KEY,
+}));
+
+// ── Notificações internas — painel ───────────────────────────────────────────
+app.use('/api', require('./routes/notifications')({
+  requireJwt,
+  sbFetch,
+}));
+
+// ── CRM — pipeline de leads ───────────────────────────────────────────────────
+app.use('/api', require('./routes/crm')({ requireJwt, sbFetch, supabaseInsert }));
 
 const server = app.listen(PORT, '0.0.0.0', () => {
   // D2: timeout do servidor > 60s para suportar polling síncrono do loja-gpt

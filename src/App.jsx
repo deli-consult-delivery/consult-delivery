@@ -16,13 +16,15 @@ import AgentsPage from './screens/AgentsPage.jsx';
 import CampanhasScreen from './screens/campanhas/CampanhasScreen.jsx';
 import LojasScreen from './screens/lojas/LojasScreen.jsx';
 import LaraScreen from './screens/LaraScreen.jsx';
+import LaraEditorialScreen from './screens/LaraEditorial/LaraEditorialScreen.jsx';
 import DraftsPendentesScreen from './screens/DraftsPendentesScreen.jsx';
 import GruposScreen from './screens/GruposScreen.jsx';
 import DeliScreen from './screens/DeliScreen.jsx';
+import DeliPainel from './screens/DeliPainel.jsx';
 import MaxScreen from './screens/MaxScreen.jsx';
 import NovaScreen from './screens/NovaScreen.jsx';
 import BrenoScreen from './screens/BrenoScreen.jsx';
-import SofiaScreen from './screens/SofiaScreen.jsx';
+import SofiaScreen from './screens/Sofia/SofiaScreen.jsx';
 import VeraScreen from './screens/VeraScreen.jsx';
 import BomDiaScreen from './screens/BomDiaScreen.jsx';
 import EncerramentoScreen from './screens/EncerramentoScreen.jsx';
@@ -30,9 +32,11 @@ import ContratosScreen from './screens/Contratos/ContratosScreen.jsx';
 import RecontratacaoScreen from './screens/Recontratacao/RecontratacaoScreen.jsx';
 import OnboardingScreen from './screens/OnboardingScreen.jsx';
 import RequireRole from './components/auth/RequireRole.jsx';
+import InadimplentesScreen from './screens/InadimplentesScreen.jsx';
+import NotificacoesScreen from './screens/NotificacoesScreen.jsx';
 import { CONVERSATIONS, INADIMPLENTES, TENANTS } from './data.js';
 import { supabase } from './lib/supabase.js';
-import { listTenants } from './lib/api.js';
+import { listTenants, countUnreadNotifications, subscribeToNotifications } from './lib/api.js';
 import { registerPushSubscription } from './lib/pushNotifications.js';
 
 const TWEAK_DEFAULTS = {
@@ -52,6 +56,7 @@ export default function App() {
   const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [theme, setTheme] = useState(() => localStorage.getItem('cd-theme') || 'claro');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [notifUnread, setNotifUnread] = useState(0);
 
   useEffect(() => { localStorage.setItem('cd-route', route); }, [route]);
 
@@ -120,6 +125,19 @@ export default function App() {
     if (!session?.user?.id || !tenantDbId) return;
     registerPushSubscription(tenantDbId, session.user.id);
   }, [session?.user?.id, tenantDbId]);
+
+  // Badge de notificações não lidas para a Sidebar
+  useEffect(() => {
+    if (!tenantDbId || !session?.user?.id) return;
+    let alive = true;
+    const load = () =>
+      countUnreadNotifications(tenantDbId, session.user.id)
+        .then(c => { if (alive) setNotifUnread(c); })
+        .catch(() => {});
+    load();
+    const channel = subscribeToNotifications(tenantDbId, session.user.id, load);
+    return () => { alive = false; supabase.removeChannel(channel); };
+  }, [tenantDbId, session?.user?.id]);
 
   // ── Notificações globais de chat ─────────────────────────────────────────────
   const routeRef    = useRef(route);
@@ -219,7 +237,7 @@ export default function App() {
   const convs = CONVERSATIONS[tenant] || [];
   const unread = convs.reduce((s, c) => s + (c.unread || 0), 0);
   const coraCount = INADIMPLENTES[tenant]?.rows?.length || 0;
-  const counts = { chat: unread, cora: coraCount };
+  const counts = { chat: unread, cora: coraCount, notificacoes: notifUnread || undefined };
 
   return (
     <div className={`app-shell${route === 'chat' ? ' app-shell--notopbar' : ''}`}>
@@ -241,11 +259,13 @@ export default function App() {
         onMenuToggle={() => setSidebarOpen(v => !v)}
         tenantId={tenantDbId}
         userId={session?.user?.id}
+        onNavigate={setRoute}
       />
       <main className="main scroll" key={route + tenant}>
         {/* Rotas públicas (sem RequireRole) */}
         {route === 'dashboard' && <DashboardScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={setRoute} />}
-        {route === 'lojas'     && <LojasScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
+        {route === 'lojas'        && <LojasScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
+        {route === 'notificacoes' && <NotificacoesScreen tenantDbId={tenantDbId} userId={session?.user?.id} onNavigate={setRoute} />}
 
         {/* admin + atendimento + marketing */}
         {route === 'chat' && (
@@ -275,6 +295,11 @@ export default function App() {
             <LaraScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
           </RequireRole>
         )}
+        {route === 'lara-editorial' && (
+          <RequireRole roles={['admin', 'marketing']} userId={session?.user?.id}>
+            <LaraEditorialScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
         {route === 'sofia' && (
           <RequireRole roles={['admin', 'marketing']} userId={session?.user?.id}>
             <SofiaScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
@@ -297,6 +322,11 @@ export default function App() {
         )}
 
         {/* admin only */}
+        {route === 'tarefas' && (
+          <RequireRole roles={['admin']} userId={session?.user?.id}>
+            <TasksScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
         {route === 'contratos' && (
           <RequireRole roles={['admin']} userId={session?.user?.id}>
             <ContratosScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
@@ -323,11 +353,6 @@ export default function App() {
             }} />
           </RequireRole>
         )}
-        {route === 'deli' && (
-          <RequireRole roles={['admin', 'deli_owner']} userId={session?.user?.id}>
-            <DeliScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
-          </RequireRole>
-        )}
         {route === 'max' && (
           <RequireRole roles={['admin']} userId={session?.user?.id}>
             <MaxScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
@@ -346,6 +371,18 @@ export default function App() {
         {route === 'vera' && (
           <RequireRole roles={['admin']} userId={session?.user?.id}>
             <VeraScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+
+        {/* admin + deli_owner */}
+        {route === 'deli' && (
+          <RequireRole roles={['admin', 'deli_owner']} userId={session?.user?.id}>
+            <DeliScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+        {route === 'deli-painel' && (
+          <RequireRole roles={['admin', 'deli_owner']} userId={session?.user?.id}>
+            <DeliPainel tenantDbId={tenantDbId} userId={session?.user?.id} />
           </RequireRole>
         )}
 
@@ -375,6 +412,11 @@ export default function App() {
         {route === 'cora' && (
           <RequireRole roles={['admin', 'financeiro']} userId={session?.user?.id}>
             <CoraScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+        {route === 'inadimplentes' && (
+          <RequireRole roles={['admin', 'financeiro']} userId={session?.user?.id}>
+            <InadimplentesScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
           </RequireRole>
         )}
       </main>

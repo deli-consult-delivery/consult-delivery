@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App.jsx';
 import AprovacaoPublica from './screens/publico/AprovacaoPublica.jsx';
+import OnboardingWizard from './screens/publico/OnboardingWizard.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 
 // GitHub Pages SPA redirect: /?p=aprovacao/<token> → /aprovacao/<token>
@@ -12,12 +13,16 @@ if (_rp) {
   window.history.replaceState(null, '', '/' + _rp);
 }
 
-const _isPublicAprovacao = window.location.pathname.startsWith('/aprovacao/');
+const _path = window.location.pathname;
+const _isPublicAprovacao = _path.startsWith('/aprovacao/');
+const _isPublicWizard    = _path === '/comecar' || _path === '/comecar/';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ErrorBoundary>
-      {_isPublicAprovacao ? <AprovacaoPublica /> : <App />}
+      {_isPublicAprovacao ? <AprovacaoPublica />
+        : _isPublicWizard ? <OnboardingWizard />
+        : <App />}
     </ErrorBoundary>
   </StrictMode>
 );

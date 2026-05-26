@@ -19,6 +19,7 @@ const NAV_GROUPS = [
       { id: 'crm',              icon: 'users',       label: 'Clientes',       roles: ['admin', 'marketing'] },
       { id: 'contratos',        icon: 'paper',       label: 'Contratos',      roles: ['admin'] },
       { id: 'recontratacao',    icon: 'send',        label: 'Re-contratação', roles: ['admin'] },
+      { id: 'tarefas',          icon: 'checkcircle', label: 'Todas Tarefas',  roles: ['admin'] },
       { id: 'tarefas-clientes', icon: 'columns',     label: 'Espaços',        roles: ['admin', 'marketing'] },
       { id: 'onboarding',       icon: 'checkcircle', label: 'Onboarding',     roles: ['admin', 'atendimento', 'marketing'] },
     ],
@@ -40,6 +41,12 @@ const NAV_GROUPS = [
     label: 'Dados',
     items: [
       { id: 'reports', icon: 'chart', label: 'Relatórios', roles: ['admin', 'marketing'] },
+    ],
+  },
+  {
+    label: 'Sistema',
+    items: [
+      { id: 'notificacoes', icon: 'bell', label: 'Notificações' },
     ],
   },
 ];

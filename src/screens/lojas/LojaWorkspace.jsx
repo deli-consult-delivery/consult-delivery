@@ -663,7 +663,7 @@ function TabTarefas({ lojaId }) {
                           onClick={() => setMarcarConcluidaId(t.id)}
                         />
                       )}
-                      {t.status === 'concluida' && (
+                      {t.status === 'concluida' && (<>
                         <TarefaActionBtn
                           label="↩ Reabrir tarefa"
                           color="#f59e0b"
@@ -674,7 +674,37 @@ function TabTarefas({ lojaId }) {
                             await takeAction(t.id, 'reabrir', { motivo: motivo.trim(), status_alvo: 'aprovada' });
                           }}
                         />
-                      )}
+                        {!t.revisao_status && (
+                          <TarefaActionBtn
+                            label="📋 Solicitar revisão"
+                            color="#6366f1"
+                            loading={actionLoading === t.id + 'solicitar-revisao-cliente'}
+                            onClick={() => takeAction(t.id, 'solicitar-revisao-cliente')}
+                          />
+                        )}
+                        {t.revisao_status === 'aguardando' && (
+                          <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20, background: '#f59e0b20', color: '#d97706', border: '1px solid #f59e0b40', whiteSpace: 'nowrap' }}>
+                            ⏳ Aguardando revisão
+                          </span>
+                        )}
+                        {t.revisao_status === 'aprovada' && (
+                          <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20, background: '#10b98120', color: '#059669', border: '1px solid #10b98140', whiteSpace: 'nowrap' }}>
+                            ✅ Revisão aprovada
+                          </span>
+                        )}
+                        {t.revisao_status === 'recusada' && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20, background: '#ef444420', color: '#dc2626', border: '1px solid #ef444440', whiteSpace: 'nowrap' }}>
+                              ❌ Revisão recusada
+                            </span>
+                            {t.revisao_motivo && (
+                              <span style={{ fontSize: 11, color: '#9ca3af', paddingLeft: 4 }}>
+                                Motivo: {t.revisao_motivo}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </>)}
                       {(t.status === 'em_execucao' || t.status === 'aguardando_validacao') && (
                         <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
                           {t.status === 'em_execucao' ? 'Em execução…' : 'Aguardando validação…'}

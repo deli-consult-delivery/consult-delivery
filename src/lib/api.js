@@ -607,6 +607,14 @@ export async function markAllNotificationsRead(tenantId, userId) {
   if (error) throw error;
 }
 
+export async function deleteNotification(notificationId) {
+  const { error } = await supabase
+    .from('internal_notifications')
+    .delete()
+    .eq('id', notificationId);
+  if (error) throw error;
+}
+
 export function subscribeToNotifications(tenantId, userId, onInsert) {
   return supabase
     .channel(`notifications-${tenantId}-${userId}`)

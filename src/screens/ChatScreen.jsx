@@ -1547,6 +1547,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [waLastInbound, setWaLastInbound]      = useState(null); // null=checking, ''=>nenhuma, ISO=timestamp
   const [waAlertDismissed, setWaAlertDismissed] = useState(false);
   const textareaRef    = useRef(null);
+  const typingTimerRef = useRef(null);
   const chanScrollRef  = useRef(null);
   const chatTargetRef  = useRef(sessionStorage.getItem('cd-chat-target'));
   const activeIdRef            = useRef(activeId);
@@ -1679,6 +1680,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     refreshStatus();
     setReplyTo(null);
     setBrenoSuggestion(null);
+    // Clear typing indicator when switching conversations
+    if (typingTimerRef.current) { clearTimeout(typingTimerRef.current); typingTimerRef.current = null; }
+    setTyping(false);
     if (!activeId || !tenantDbId) return;
     supabase
       .from('breno_interactions')
@@ -1813,7 +1817,12 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           }
           return { ...m, [convId]: [...convMsgs, { id: msg.id, from: isInbound ? 'in' : 'out', text, time, _ts: msg.created_at || new Date().toISOString(), mediaType, mediaUrl: msg.media_url || null, agentName: msg.sender_name || null, waMsgId: msg.whatsapp_msg_id || null, replyTo: msg.quoted_content || null, deliveryStatus: msg.delivery_status ?? null }] };
         });
-        if (isInbound) setWaLastInbound(msg.created_at || new Date().toISOString());
+        if (isInbound) {
+          setWaLastInbound(msg.created_at || new Date().toISOString());
+          // Clear any pending typing indicator when the actual message arrives
+          if (typingTimerRef.current) { clearTimeout(typingTimerRef.current); typingTimerRef.current = null; }
+          setTyping(false);
+        }
         setConvs(prev => {
           const idx = prev.findIndex(c => c.id === convId);
           if (idx === -1) {
@@ -1870,9 +1879,40 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           return { ...m2, [msg.conversation_id]: updated };
         };
         if (msg.media_url || msg.reactions !== undefined || msg.delivery_status !== undefined) setMessages(convMsgs2);
+        // Show typing indicator for 2s when client reads our message (delivery_status ≥ 4)
+        if (msg.delivery_status >= 4 && msg.conversation_id === activeIdRef.current) {
+          if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+          setTyping(true);
+          typingTimerRef.current = setTimeout(() => { setTyping(false); typingTimerRef.current = null; }, 2000);
+        }
       })
       .subscribe((status) => { setRealtimeStatus(status); });
     return () => { supabase.removeChannel(channel); };
+  }, [selectedInstance]);
+
+  // Realtime: status e campos de conversa (status changes from other tabs/agents)
+  useEffect(() => {
+    if (!selectedInstance) return;
+    const convSub = supabase
+      .channel('conversations-status-rt')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations' }, payload => {
+        const c = payload.new;
+        setConvs(prev => prev.map(existing => {
+          if (existing.id !== c.id) return existing;
+          return {
+            ...existing,
+            status: c.status || existing.status,
+            department_id: c.department_id ?? existing.department_id,
+            breno_paused: c.breno_paused ?? existing.breno_paused,
+            last_breno_handled_at: c.last_breno_handled_at || existing.last_breno_handled_at,
+            assigned_to: c.assigned_to ?? existing.assigned_to,
+            ...(c.push_name ? { name: c.push_name, avatar: c.push_name.slice(0, 2).toUpperCase() } : {}),
+            ...(c.push_photo_url ? { photoUrl: c.push_photo_url } : {}),
+          };
+        }));
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(convSub); };
   }, [selectedInstance]);
 
   // Health check: detecta ausência de mensagens inbound (Evolution API desconectada)

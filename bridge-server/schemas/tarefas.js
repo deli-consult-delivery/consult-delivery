@@ -58,6 +58,7 @@ const UpdateTarefaSchema = z.object({
   situacao:        z.string().min(1).max(2000).optional(),
   o_que_sera_feito: z.string().min(1).max(2000).optional(),
   por_que_importa: z.string().max(2000).optional().nullable(),
+  status:          z.enum(STATUS_VALUES).optional(),
   prioridade:      z.enum(PRIORIDADES).optional(),
   ordem_no_bloco:  z.coerce.number().int().min(0).optional(),
   prazo_estimado:  z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
@@ -131,6 +132,20 @@ const ReabrirSchema = z.object({
   status_alvo:  z.enum(['aprovada', 'em_execucao']).default('aprovada'),
 });
 
+// POST /api/tarefas/:id/solicitar-revisao-cliente — body
+const SolicitarRevisaoClienteSchema = z.object({
+  nota: z.string().max(2000).optional(),
+});
+
+// POST /api/tarefas/:id/revisar — body
+const RevisarSchema = z.object({
+  tipo:   z.enum(['aprovacao', 'recusa']),
+  motivo: z.string().max(2000).optional().nullable(),
+}).refine(
+  data => data.tipo !== 'recusa' || !!(data.motivo?.trim()),
+  { message: 'Motivo obrigatório ao recusar', path: ['motivo'] }
+);
+
 // POST /api/tarefas/:id/prints — body (frontend faz upload no Storage; aqui registra metadados)
 const CreatePrintSchema = z.object({
   tipo:          z.enum(['antes', 'depois', 'outro']),
@@ -142,9 +157,29 @@ const CreatePrintSchema = z.object({
   legenda:       z.string().max(500).optional().nullable(),
 });
 
+// GET /api/tarefas — lista global por tenant com filtros
+const ListTarefasGlobalQuerySchema = z.object({
+  status:         z.enum(STATUS_VALUES).optional(),
+  loja_id:        UuidSchema.optional(),
+  responsavel_id: UuidSchema.optional(),
+  prioridade:     z.enum(PRIORIDADES).optional(),
+  prazo_de:       z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  prazo_ate:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  limit:          z.coerce.number().int().min(1).max(200).default(50),
+  offset:         z.coerce.number().int().min(0).default(0),
+});
+
+// GET /api/tarefas/calendario — agrupado por data de prazo
+const CalendarioQuerySchema = z.object({
+  inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'formato YYYY-MM-DD'),
+  fim:    z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'formato YYYY-MM-DD'),
+});
+
 module.exports = {
   BLOCOS, STATUS_VALUES, PRIORIDADES, ACOES_APROVACAO,
   ListTarefasQuerySchema,
+  ListTarefasGlobalQuerySchema,
+  CalendarioQuerySchema,
   CreateTarefaSchema,
   CreateFromTemplateSchema,
   UpdateTarefaSchema,
@@ -156,6 +191,8 @@ module.exports = {
   ConcluirSchema,
   MarcarConcluidaSchema,
   ReabrirSchema,
+  SolicitarRevisaoClienteSchema,
+  RevisarSchema,
   ListComentariosQuerySchema,
   CreateComentarioSchema,
   RelatorioQuerySchema,

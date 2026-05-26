@@ -3,6 +3,8 @@
 const express = require('express');
 const {
   ListTarefasQuerySchema,
+  ListTarefasGlobalQuerySchema,
+  CalendarioQuerySchema,
   CreateTarefaSchema,
   CreateFromTemplateSchema,
   UpdateTarefaSchema,
@@ -14,6 +16,8 @@ const {
   ConcluirSchema,
   MarcarConcluidaSchema,
   ReabrirSchema,
+  SolicitarRevisaoClienteSchema,
+  RevisarSchema,
   ListComentariosQuerySchema,
   CreateComentarioSchema,
   RelatorioQuerySchema,
@@ -48,6 +52,109 @@ module.exports = function buildTarefasRouter({ requireJwt, sbFetch, assertLojaAc
     }
     return result.data;
   }
+
+  // ── Helper: obter tenant_id do usuário autenticado ────────────────────────
+  async function getTenantIdOfUser(userId) {
+    const rows = await sbFetch(
+      `tenant_members?user_id=eq.${encodeURIComponent(userId)}&select=tenant_id&limit=1`
+    );
+    return rows?.[0]?.tenant_id ?? null;
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // GET /api/tarefas/calendario?inicio=date&fim=date — tarefas por prazo
+  // Deve vir antes de GET /tarefas/:id para não capturar "calendario" como :id
+  // Acesso: membros do tenant do usuário
+  // ════════════════════════════════════════════════════════════════════════
+  router.get('/tarefas/calendario', requireJwt, async (req, res) => {
+    const query = validate(CalendarioQuerySchema, req.query, res);
+    if (!query) return;
+
+    try {
+      const tenant_id = await getTenantIdOfUser(req.user.id);
+      if (!tenant_id) return res.status(403).json({ error: 'Usuário sem tenant' });
+
+      const lojas = await sbFetch(`lojas?tenant_id=eq.${encodeURIComponent(tenant_id)}&select=id,nome`);
+      const lojaIds = (lojas || []).map(l => l.id);
+      if (!lojaIds.length) return res.json({ por_data: {} });
+
+      const inClause = `(${lojaIds.map(id => encodeURIComponent(id)).join(',')})`;
+      const qs = `tarefas_loja?loja_id=in.${inClause}`
+               + `&prazo_estimado=gte.${query.inicio}&prazo_estimado=lte.${query.fim}`
+               + `&select=id,titulo,status,prioridade,prazo_estimado,loja_id,responsavel_id`
+               + `&order=prazo_estimado.asc&limit=500`;
+
+      const tarefas = await sbFetch(qs);
+      const arr = Array.isArray(tarefas) ? tarefas : [];
+
+      const lojaMap = Object.fromEntries((lojas || []).map(l => [l.id, l.nome]));
+      const por_data = {};
+      for (const t of arr) {
+        const key = t.prazo_estimado;
+        if (!por_data[key]) por_data[key] = [];
+        por_data[key].push({ ...t, loja_nome: lojaMap[t.loja_id] ?? null });
+      }
+
+      console.log(`[api/tarefas/calendario GET] tenant=${tenant_id} total=${arr.length}`);
+      res.json({ por_data });
+    } catch (err) {
+      console.error('[api/tarefas/calendario GET]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  // GET /api/tarefas — listar todas as tarefas do tenant com filtros
+  // Deve vir antes de GET /tarefas/:id
+  // Acesso: membros do tenant do usuário
+  // ════════════════════════════════════════════════════════════════════════
+  router.get('/tarefas', requireJwt, async (req, res) => {
+    const query = validate(ListTarefasGlobalQuerySchema, req.query, res);
+    if (!query) return;
+
+    try {
+      const tenant_id = await getTenantIdOfUser(req.user.id);
+      if (!tenant_id) return res.status(403).json({ error: 'Usuário sem tenant' });
+
+      let lojaIds;
+      if (query.loja_id) {
+        lojaIds = [query.loja_id];
+      } else {
+        const lojas = await sbFetch(`lojas?tenant_id=eq.${encodeURIComponent(tenant_id)}&select=id`);
+        lojaIds = (lojas || []).map(l => l.id);
+      }
+      if (!lojaIds.length) return res.json({ tarefas: [], limit: query.limit, offset: query.offset, has_more: false });
+
+      const inClause = `(${lojaIds.map(id => encodeURIComponent(id)).join(',')})`;
+      let qs = `tarefas_loja?loja_id=in.${inClause}`;
+      qs += `&select=id,titulo,bloco,status,prioridade,prazo_estimado,responsavel_id,loja_id,created_at,concluida_em`;
+      if (query.status)         qs += `&status=eq.${encodeURIComponent(query.status)}`;
+      if (query.responsavel_id) qs += `&responsavel_id=eq.${encodeURIComponent(query.responsavel_id)}`;
+      if (query.prioridade)     qs += `&prioridade=eq.${encodeURIComponent(query.prioridade)}`;
+      if (query.prazo_de)       qs += `&prazo_estimado=gte.${query.prazo_de}`;
+      if (query.prazo_ate)      qs += `&prazo_estimado=lte.${query.prazo_ate}`;
+      qs += `&order=created_at.desc&limit=${query.limit}&offset=${query.offset}`;
+
+      const tarefas = await sbFetch(qs);
+      const arr = Array.isArray(tarefas) ? tarefas : [];
+
+      // Enriquecer com nome da loja
+      const lojasEnrich = query.loja_id ? null
+        : await sbFetch(`lojas?tenant_id=eq.${encodeURIComponent(tenant_id)}&select=id,nome`).catch(() => null);
+      const lojaMap = Object.fromEntries((lojasEnrich || []).map(l => [l.id, l.nome]));
+
+      console.log(`[api/tarefas GET] tenant=${tenant_id} count=${arr.length} offset=${query.offset}`);
+      res.json({
+        tarefas: arr.map(t => ({ ...t, loja_nome: lojaMap[t.loja_id] ?? null })),
+        limit:    query.limit,
+        offset:   query.offset,
+        has_more: arr.length === query.limit,
+      });
+    } catch (err) {
+      console.error('[api/tarefas GET]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
 
   // ════════════════════════════════════════════════════════════════════════
   // GET /api/tarefas/loja/:lojaId — listar tarefas de uma loja com filtros
@@ -1026,6 +1133,159 @@ module.exports = function buildTarefasRouter({ requireJwt, sbFetch, assertLojaAc
       res.status(201).json({ print });
     } catch (err) {
       console.error('[api/tarefas/:id/prints POST]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  // POST /api/tarefas/:id/solicitar-revisao-cliente  (F3 Onda07)
+  // Marca tarefa como aguardando revisão e envia WhatsApp ao cliente
+  // ════════════════════════════════════════════════════════════════════════
+  router.post('/tarefas/:id/solicitar-revisao-cliente', requireJwt, async (req, res) => {
+    const { id } = req.params;
+
+    const body = validate(SolicitarRevisaoClienteSchema, req.body || {}, res);
+    if (!body) return;
+
+    try {
+      const ctx = await fetchTarefaComAcesso(req, res, id);
+      if (!ctx) return;
+      const { tarefa, tenant_id } = ctx;
+
+      if (tarefa.status !== 'concluida') {
+        return res.status(422).json({ error: `Status '${tarefa.status}' inválido para solicitar revisão. Esperado: concluida` });
+      }
+
+      await patchTarefa(id, {
+        revisao_status:     'aguardando',
+        aguarda_revisao_em: new Date().toISOString(),
+      });
+
+      // WhatsApp (best-effort — falha não bloqueia resposta)
+      if (tarefa.analise_id) {
+        try {
+          const analises = await sbFetch(
+            `analises?id=eq.${encodeURIComponent(tarefa.analise_id)}&select=id,numero_whatsapp_cliente&limit=1`
+          );
+          const analise = analises?.[0];
+          if (analise?.numero_whatsapp_cliente) {
+            const [lojas, instances] = await Promise.all([
+              sbFetch(`lojas?id=eq.${encodeURIComponent(tarefa.loja_id)}&select=nome&limit=1`),
+              sbFetch(`evolution_instances?tenant_id=eq.${encodeURIComponent(tenant_id)}&select=evolution_url,api_key,instance_name&limit=1`),
+            ]);
+            const loja = lojas?.[0];
+            const inst = instances?.[0];
+            if (inst) {
+              const msg =
+                `📋 *Revisão solicitada — ${tarefa.titulo}*\n\n` +
+                `Loja: ${loja?.nome ?? ''}\n\n` +
+                `Gostaríamos da sua revisão sobre a conclusão dessa tarefa.\n` +
+                `Responda:\n` +
+                `• *OK 1* — para aprovar\n` +
+                `• *AJUSTAR 1: [motivo]* — para solicitar ajuste`;
+              await fetch(
+                `${inst.evolution_url}/message/sendText/${inst.instance_name}`,
+                {
+                  method:  'POST',
+                  headers: { 'Content-Type': 'application/json', apikey: inst.api_key },
+                  body:    JSON.stringify({ number: analise.numero_whatsapp_cliente, text: msg }),
+                  signal:  AbortSignal.timeout(15_000),
+                }
+              );
+              console.log(`[solicitar-revisao-cliente] WhatsApp enviado tarefa=${id} numero=${analise.numero_whatsapp_cliente}`);
+            }
+          }
+        } catch (wapErr) {
+          console.warn('[solicitar-revisao-cliente] WhatsApp falhou (non-fatal):', wapErr.message);
+        }
+      }
+
+      await logAudit({
+        tenant_id,
+        user_id:  req.user.id,
+        action:   'tarefa_revisao_solicitada',
+        resource: `tarefas_loja:${id}`,
+        metadata: {},
+      });
+
+      console.log(`[api/tarefas/:id/solicitar-revisao-cliente POST] id=${id}`);
+      res.json({ ok: true, revisao_status: 'aguardando' });
+    } catch (err) {
+      console.error('[api/tarefas/:id/solicitar-revisao-cliente POST]', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════════════
+  // POST /api/tarefas/:id/revisar { tipo, motivo? }  (F3 Onda07)
+  // Registra decisão de revisão (aprovacao|recusa).
+  // Auth: JWT (consultor/admin) OU x-bridge-secret (parser WhatsApp)
+  // ════════════════════════════════════════════════════════════════════════
+
+  function _requireJwtOrBridgeSecret(req, res, next) {
+    const secret   = req.headers['x-bridge-secret'];
+    const expected = process.env.BRIDGE_SECRET;
+    if (secret) {
+      if (!expected || secret !== expected) return res.status(401).json({ error: 'unauthorized' });
+      req.user = { id: null };
+      req.bridgeInternal = true;
+      return next();
+    }
+    return requireJwt(req, res, next);
+  }
+
+  router.post('/tarefas/:id/revisar', _requireJwtOrBridgeSecret, async (req, res) => {
+    const { id } = req.params;
+
+    const body = validate(RevisarSchema, req.body, res);
+    if (!body) return;
+
+    let tarefa    = null;
+    let tenant_id = null;
+
+    try {
+      if (req.bridgeInternal) {
+        const rows = await sbFetch(`tarefas_loja?id=eq.${encodeURIComponent(id)}&select=*&limit=1`);
+        tarefa = rows?.[0];
+        if (!tarefa) return res.status(404).json({ error: 'Tarefa não encontrada' });
+        const lojas = await sbFetch(`lojas?id=eq.${encodeURIComponent(tarefa.loja_id)}&select=tenant_id&limit=1`);
+        tenant_id = lojas?.[0]?.tenant_id;
+      } else {
+        const ctx = await fetchTarefaComAcesso(req, res, id);
+        if (!ctx) return;
+        tarefa    = ctx.tarefa;
+        tenant_id = ctx.tenant_id;
+      }
+    } catch (fetchErr) {
+      return res.status(500).json({ error: fetchErr.message });
+    }
+
+    try {
+      const novoStatus = body.tipo === 'aprovacao' ? 'aprovada' : 'recusada';
+
+      await patchTarefa(id, {
+        revisao_status: novoStatus,
+        revisao_motivo: body.motivo ?? null,
+      });
+
+      await supabaseInsert('tarefa_revisoes', {
+        tarefa_id: id,
+        tipo:      body.tipo === 'aprovacao' ? 'aprovacao' : 'recusa',
+        motivo:    body.motivo ?? null,
+      });
+
+      await logAudit({
+        tenant_id,
+        user_id:  req.user.id,
+        action:   'tarefa_revisada',
+        resource: `tarefas_loja:${id}`,
+        metadata: { tipo: body.tipo, motivo: body.motivo ?? null },
+      });
+
+      console.log(`[api/tarefas/:id/revisar POST] id=${id} tipo=${body.tipo}`);
+      res.json({ ok: true, revisao_status: novoStatus });
+    } catch (err) {
+      console.error('[api/tarefas/:id/revisar POST]', err.message);
       res.status(500).json({ error: err.message });
     }
   });
