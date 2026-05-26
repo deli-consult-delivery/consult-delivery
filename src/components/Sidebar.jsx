@@ -17,6 +17,7 @@ const NAV_GROUPS = [
       { id: 'crm',             icon: 'users',    label: 'Clientes'     },
       { id: 'contratos',        icon: 'paper',       label: 'Contratos'      },
       { id: 'recontratacao',    icon: 'send',        label: 'Re-contratação' },
+      { id: 'tarefas',          icon: 'checkcircle', label: 'Todas Tarefas'  },
       { id: 'tarefas-clientes', icon: 'columns',     label: 'Espaços'        },
       { id: 'onboarding',       icon: 'checkcircle', label: 'Onboarding'     },
     ],
