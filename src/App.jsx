@@ -13,6 +13,7 @@ import CRMScreen from './screens/CRMScreen.jsx';
 import ReportsScreen from './screens/ReportsScreen.jsx';
 import SettingsScreen from './screens/SettingsScreen.jsx';
 import AgentsPage from './screens/AgentsPage.jsx';
+import AutomacoesScreen from './screens/AutomacoesScreen.jsx';
 import CampanhasScreen from './screens/campanhas/CampanhasScreen.jsx';
 import LojasScreen from './screens/lojas/LojasScreen.jsx';
 import LaraScreen from './screens/LaraScreen.jsx';
@@ -49,9 +50,10 @@ const TWEAK_DEFAULTS = {
 export default function App() {
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [tenantLoading, setTenantLoading] = useState(false);
   const [tenants, setTenants] = useState(TENANTS);
   const [route, setRoute] = useState(() => localStorage.getItem('cd-route') || 'dashboard');
-  const [tenant, setTenant] = useState(TENANTS[0].id);
+  const [tenant, setTenant] = useState(null);
   const [tenantDbId, setTenantDbId] = useState(null);
   const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [theme, setTheme] = useState(() => localStorage.getItem('cd-theme') || 'claro');
@@ -62,6 +64,36 @@ export default function App() {
 
   // Carrega tenants do banco (usado no mount e quando um workspace novo é criado)
   async function reloadTenants(preferSlug) {
+    setTenantLoading(true);
+    try {
+      // Busca tenant real do usuário via tenant_members
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: memberData } = await supabase
+        .from('tenant_members')
+        .select('tenant_id, role, tenants(id, name, slug, emoji, color)')
+        .eq('user_id', user?.id)
+        .single();
+
+      if (memberData?.tenant_id) {
+        const t = memberData.tenants;
+        const mapped = [{
+          id: t.slug,
+          dbId: t.id,
+          name: t.name,
+          emoji: t.emoji || '🏪',
+          color: t.color || '#B70C00',
+          role: memberData.role,
+        }];
+        setTenants(mapped);
+        const slugToUse = preferSlug || t.slug;
+        setTenant(slugToUse);
+        setTenantDbId(t.id);
+        setTenantLoading(false);
+        return;
+      }
+    } catch (_) { /* continua para fallback */ }
+
+    // Fallback: listTenants via api.js
     try {
       const real = await listTenants();
       if (real?.length) {
@@ -77,23 +109,13 @@ export default function App() {
         setTenant(slugToUse);
         const selected = mapped.find(t => t.id === slugToUse);
         setTenantDbId(selected?.dbId ?? mapped[0].dbId);
+        setTenantLoading(false);
         return;
       }
     } catch (_) { /* silencioso */ }
-    // fallback se listTenants falhar ou retornar vazio
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data: m } = await supabase
-        .from('tenant_members').select('tenant_id').eq('user_id', user?.id).maybeSingle();
-      if (!m?.tenant_id) return;
-      const { data: t } = await supabase
-        .from('tenants').select('id, slug, name, emoji, color').eq('id', m.tenant_id).maybeSingle();
-      if (!t) return;
-      const mapped = { id: t.slug, dbId: t.id, name: t.name, emoji: t.emoji || '🏪', color: t.color || '#B70C00' };
-      setTenants([mapped]);
-      setTenant(t.slug);
-      setTenantDbId(t.id);
-    } catch (_) { /* silencioso */ }
+
+    // Sem tenant encontrado
+    setTenantLoading(false);
   }
 
   useEffect(() => {
@@ -204,8 +226,9 @@ export default function App() {
   }, [session]);
 
   useEffect(() => {
+    if (!tenant) return;
     const cur = tenants.find(t => t.id === tenant);
-    setTenantDbId(cur?.dbId ?? null);
+    if (cur?.dbId) setTenantDbId(cur.dbId);
   }, [tenant, tenants]);
 
   useEffect(() => {
@@ -232,6 +255,28 @@ export default function App() {
 
   if (!session) {
     return <LoginScreen onLogin={setSession} />;
+  }
+
+  if (tenantLoading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, height: '100vh', background: '#0D0D0D' }}>
+        <svg width="48" height="48" viewBox="0 0 24 24" style={{ animation: 'spin 0.8s linear infinite' }}>
+          <circle cx="12" cy="12" r="10" fill="none" stroke="#B70C00" strokeWidth="2.5" strokeDasharray="60" strokeDashoffset="20" />
+        </svg>
+        <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', fontFamily: 'sans-serif' }}>Carregando workspace…</span>
+      </div>
+    );
+  }
+
+  if (!tenantDbId && !tenantLoading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, height: '100vh', background: '#0D0D0D' }}>
+        <span style={{ fontSize: 15, color: 'rgba(255,255,255,0.7)', fontFamily: 'sans-serif' }}>Nenhum workspace encontrado para este usuário.</span>
+        <button onClick={() => supabase.auth.signOut()} style={{ padding: '8px 20px', background: '#B70C00', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>
+          Sair
+        </button>
+      </div>
+    );
   }
 
   const convs = CONVERSATIONS[tenant] || [];
@@ -340,6 +385,11 @@ export default function App() {
         {route === 'agents' && (
           <RequireRole roles={['admin']} userId={session?.user?.id}>
             <AgentsPage tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+        {route === 'automacoes' && (
+          <RequireRole roles={['admin']} userId={session?.user?.id}>
+            <AutomacoesScreen tenantDbId={tenantDbId} onNavigate={setRoute} />
           </RequireRole>
         )}
         {route === 'settings' && (

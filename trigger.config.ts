@@ -9,7 +9,11 @@ export default defineConfig({
   build: {
     extensions: [
       additionalFiles({
-        files: ["./trigger/knowledge-base/**/*.md", "./src/agents/**/*.ts"],
+        files: [
+          "./trigger/_shared/**/*.ts",
+          "./trigger/knowledge-base/**/*.md",
+          "./src/agents/**/*.ts",
+        ],
       }),
     ],
   },
