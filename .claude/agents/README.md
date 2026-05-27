@@ -38,7 +38,7 @@ git commit -m "feat: subagents cd-* específicos da plataforma"
 git push
 ```
 
-## Os 3 subagents
+## Os 10 subagents cd-*
 
 ### `cd-task-creator`
 
@@ -122,6 +122,131 @@ git push
 
 ---
 
+---
+
+### `cd-echo`
+
+**Quando é invocado:** ANTES de qualquer implementação — quando user descreve algo que quer fazer.
+
+**Triggers automáticos:**
+- "quero implementar X"
+- "adicionar feature Y"
+- "criar Z no sistema"
+
+**O que garante:**
+- Gaps e ambiguidades mapeados antes de gastar tokens implementando errado
+- Checklist de 9 pontos específicos da plataforma (multi-tenant, semáforo DELI, draft, etc.)
+- Lista de perguntas acionáveis para o Wandson
+- Só passa para @cd-compass quando os gaps estão resolvidos
+
+---
+
+### `cd-compass`
+
+**Quando é invocado:** após gaps clarificados, antes de implementar.
+
+**Triggers automáticos:**
+- "planejar X"
+- "como implementar Y"
+- "quebrar em passos"
+
+**O que garante:**
+- Plano de 3-6 passos (não mais, não menos)
+- Critério de aceite testável por passo (output bruto obrigatório)
+- Match no stack real (Trigger.dev, Supabase, React)
+- Aprovação explícita do Wandson antes de implementar
+
+---
+
+### `cd-raven`
+
+**Quando é invocado:** antes de implementar plano grande ou mudança de alto risco.
+
+**Triggers automáticos:**
+- "critique o plano"
+- "o que pode dar errado"
+- "valida antes de implementar"
+- Qualquer plano com migration, novo agente, ou integração externa
+
+**O que garante:**
+- Análise adversarial multi-perspectiva (engenheiro / Wandson / cliente)
+- 10 checklist-items específicos da plataforma
+- Previsões pré-comprometimento (evita viés de confirmação)
+- Veredicto: REJEITAR / REVISAR / ACEITAR-COM-RESSALVAS / ACEITAR
+
+---
+
+### `cd-bolt`
+
+**Quando é invocado:** plano aprovado pelo Wandson, hora de implementar.
+
+**Triggers automáticos:**
+- "pode implementar"
+- "o plano foi aprovado, vai"
+- "implementa o passo X"
+
+**O que garante:**
+- Menor diff viável (sem scope creep)
+- Lê o arquivo antes de editar (anti-alucinação)
+- Verifica com tsc + build após cada passo
+- Circuit breaker: 3 falhas → escala para @cd-apex
+- Nunca comita em main
+
+---
+
+### `cd-oath`
+
+**Quando é invocado:** após o Claude ou @cd-bolt dizer que terminou.
+
+**Triggers automáticos:**
+- "verificar se está pronto"
+- "o Claude disse que terminou — confere"
+- "posso fazer PR?"
+- "audita a entrega"
+
+**O que garante:**
+- Verificação em 7 camadas com output bruto
+- Mapeamento de cada critério de aceite do plano
+- Risco de regressão avaliado
+- Nunca aprova sem evidência real
+
+---
+
+### `cd-lens`
+
+**Quando é invocado:** antes de PR ou deploy de feature importante.
+
+**Triggers automáticos:**
+- "revisa o código"
+- "code review antes de mergear"
+- "audita a implementação"
+
+**O que garante:**
+- Estágio 1: o código fez o que foi pedido?
+- Estágio 2: qualidade, segurança, convenções da plataforma
+- Checklist de anti-padrões específicos (Trigger.dev, Supabase, DELI)
+- Veredicto: APROVAR / SOLICITAR_MUDANÇAS / COMENTAR
+
+---
+
+### `cd-apex`
+
+**Quando é invocado:** decisões técnicas difíceis, bugs de causa raiz, @cd-bolt com 3 falhas.
+
+**Triggers automáticos:**
+- "por que X está acontecendo"
+- "como deveria ser arquitetado Y"
+- "o Bolt falhou 3 vezes"
+- "performance ruim em Z"
+
+**O que garante:**
+- Lê arquivos reais antes de opinar (cita arquivo:linha)
+- Causa raiz, não sintomas
+- Recomendações concretas com tradeoffs explícitos
+- Nunca escreve código — passa para @cd-bolt implementar
+
+---
+
 ## Fluxo recomendado pra criar agente novo
 
 ```
@@ -139,6 +264,47 @@ git push
 
 4. Se relatório ✅ ou ⚠️ aceitável → mergear
    Se ❌ → corrigir, voltar pro passo 3
+```
+
+## Fluxo de qualidade completo (novo — ciclo 7 agentes)
+
+Para features novas ou de alto risco:
+
+```
+1. @cd-echo    → "Analisa o pedido: [descrição]"
+               → lista gaps antes de gastar tokens implementando errado
+
+2. @cd-compass → "Cria plano com os gaps resolvidos"
+               → plano de 3-6 passos + critério de aceite
+
+3. @cd-raven   → "Critique o plano antes de implementar"
+               → adversarial review — o que vai falhar?
+
+4. Wandson aprova → "pode seguir"
+
+5. @cd-bolt    → implementa passo a passo com verificação
+   (ou @cd-task-creator + @cd-migration-creator para tasks/migrations)
+
+6. @cd-oath    → "Verificar se foi 100% implementado"
+               → veredicto PASSOU / FALHOU / INCOMPLETO
+
+7. @cd-lens    → "Code review antes do PR"
+               → APROVAR / SOLICITAR_MUDANÇAS
+
+8. PR + merge
+```
+
+Para bugs:
+```
+1. @cd-apex  → "Por que [problema] está acontecendo?"
+2. @cd-bolt  → implementa a correção recomendada
+3. @cd-oath  → confirma que o bug foi corrigido
+```
+
+Para mudanças pequenas (1-2 arquivos):
+```
+1. @cd-bolt  → implementa
+2. @cd-validator → audita (7 camadas)
 ```
 
 ## Coexistência com os 33 GSD
