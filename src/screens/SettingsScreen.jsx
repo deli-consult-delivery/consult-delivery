@@ -432,16 +432,17 @@ const UsersSettings = ({ tenantDbId }) => {
                   <td><span className={`badge ${ROLE_BADGE[u.role] || 'badge-gray'}`}>{ROLE_LABEL[u.role] || u.role}</span></td>
                   <td><span style={{ color: dotColor[status], fontSize: 12, fontWeight: 700 }}>● {dotLabel[status]}</span></td>
                   <td style={{ color: 'var(--g-500)', fontSize: 12 }}>{relativeTime(u.last_sign_in_at)}</td>
-                  <td style={{ position: 'relative' }}>
+                  <td>
+                    <div style={{ position: 'relative', display: 'inline-block' }}>
                     <button
                       className="btn-ghost"
-                      style={{ padding: 6 }}
+                      style={{ padding: '4px 8px', color: 'var(--g-400)' }}
                       onClick={e => { e.stopPropagation(); setActiveMenu(activeMenu === u.user_id ? null : u.user_id); }}
                     >
-                      <Icon name="more" size={14} />
+                      <Icon name="more" size={18} />
                     </button>
                     {activeMenu === u.user_id && (
-                      <div style={{ position: 'absolute', right: 0, top: '100%', zIndex: 100, background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, minWidth: 160, boxShadow: '0 4px 16px rgba(0,0,0,0.4)', overflow: 'hidden' }}>
+                      <div style={{ position: 'absolute', right: 0, top: '100%', zIndex: 1000, background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, minWidth: 180, boxShadow: '0 8px 24px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
                         <button
                           onClick={() => { setEditingMember(u); setActiveMenu(null); }}
                           style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--g-200)', fontSize: 13, textAlign: 'left', cursor: 'pointer' }}
@@ -456,6 +457,7 @@ const UsersSettings = ({ tenantDbId }) => {
                         >Remover usuário</button>
                       </div>
                     )}
+                    </div>
                   </td>
                 </tr>
               );
