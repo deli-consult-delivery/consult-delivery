@@ -2,6 +2,7 @@
 
 const OLLAMA_BASE = (process.env.OLLAMA_BASE_URL || 'http://localhost:11434').replace(/\/$/, '');
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'kimi-k2.6:cloud';
+const OLLAMA_API_KEY = process.env.OLLAMA_API_KEY || '';
 const OLLAMA_TIMEOUT = 30_000;
 
 const SYSTEM_PROMPT = `Você é um analisador de conversas de food delivery brasileiro.
@@ -21,7 +22,10 @@ async function callOllama(messageBody) {
   try {
     const res = await fetch(`${OLLAMA_BASE}/api/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(OLLAMA_API_KEY ? { Authorization: `Bearer ${OLLAMA_API_KEY}` } : {}),
+      },
       body: JSON.stringify({
         model: OLLAMA_MODEL,
         messages: [
