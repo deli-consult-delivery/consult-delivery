@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase.js';
 import Icon from '../components/Icon.jsx';
 import UserAvatar from '../components/UserAvatar.jsx';
 import { META_TEMPLATES, DEPARTMENTS } from '../data.js';
@@ -42,7 +43,7 @@ const SettingsScreen = ({ tenant, tenantDbId, userId, onTenantChange }) => {
 
         <div style={{ minWidth: 0 }}>
           {section === 'workspace'    && <WorkspaceSettings />}
-          {section === 'users'        && <UsersSettings />}
+          {section === 'users'        && <UsersSettings tenantDbId={tenantDbId} />}
           {section === 'departments'  && <DepartmentsSettings />}
           {section === 'integrations' && <IntegrationsSettings />}
           {section === 'templates'    && <TemplatesSettings />}
@@ -122,34 +123,77 @@ const WorkspaceSettings = () => (
   </div>
 );
 
-const UsersSettings = () => {
-  const team = [];
+const ROLE_LABEL = { owner: 'Dono', admin: 'Admin', consultor: 'Consultor', operador: 'Operador', dev: 'Dev' };
+const ROLE_BADGE = { owner: 'badge-red', admin: 'badge-red', dev: 'badge-purple', consultor: 'badge-gray', operador: 'badge-gray' };
+
+function relativeTime(ts) {
+  if (!ts) return '—';
+  const diff = Date.now() - new Date(ts).getTime();
+  const min = Math.floor(diff / 60000);
+  if (min < 2) return 'agora';
+  if (min < 60) return `há ${min}m`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `há ${h}h`;
+  return `há ${Math.floor(h / 24)}d`;
+}
+
+function statusFromLastSignIn(ts) {
+  if (!ts) return 'offline';
+  const min = (Date.now() - new Date(ts).getTime()) / 60000;
+  if (min < 10) return 'online';
+  if (min < 120) return 'idle';
+  return 'offline';
+}
+
+const UsersSettings = ({ tenantDbId }) => {
+  const [team, setTeam] = useState([]);
+  const [loading, setLoading] = useState(true);
   const palette = ['#B70C00', '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
   const dotColor = { online: '#10B981', idle: '#F59E0B', offline: '#9CA3AF' };
+  const dotLabel = { online: 'online', idle: 'ausente', offline: 'offline' };
+
+  useEffect(() => {
+    if (!tenantDbId) return;
+    supabase.rpc('get_tenant_members', { p_tenant_id: tenantDbId })
+      .then(({ data, error }) => {
+        if (!error && data) setTeam(data);
+        setLoading(false);
+      });
+  }, [tenantDbId]);
+
   return (
-    <SettingsCard title="Usuários e equipes" sub={`${team.length} membros ativos`} extra={<button className="btn-primary"><Icon name="plus" size={13} /> Convidar usuário</button>}>
-      <table className="crm-table">
-        <thead><tr><th>Nome</th><th>E-mail</th><th>Permissão</th><th>Status</th><th>Última atividade</th><th></th></tr></thead>
-        <tbody>
-          {team.map((u, i) => (
-            <tr key={u.email}>
-              <td>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: palette[i % palette.length], color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11 }}>
-                    {u.avatar || u.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
-                  </div>
-                  <span style={{ fontWeight: 600 }}>{u.name}</span>
-                </div>
-              </td>
-              <td>{u.email}</td>
-              <td><span className={`badge ${u.role === 'Owner' ? 'badge-red' : u.role === 'Dev' ? 'badge-purple' : 'badge-gray'}`}>{u.role}</span></td>
-              <td><span style={{ color: dotColor[u.status], fontSize: 12, fontWeight: 700, textTransform: 'capitalize' }}>● {u.status}</span></td>
-              <td style={{ color: 'var(--g-500)', fontSize: 12 }}>{u.last}</td>
-              <td><button className="btn-ghost" style={{ padding: 6 }}><Icon name="more" size={14} /></button></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <SettingsCard title="Usuários e equipes" sub={`${team.length} membro${team.length !== 1 ? 's' : ''} ativo${team.length !== 1 ? 's' : ''}`} extra={<button className="btn-primary"><Icon name="plus" size={13} /> Convidar usuário</button>}>
+      {loading ? (
+        <div style={{ padding: 24, textAlign: 'center', color: 'var(--g-400)', fontSize: 13 }}>Carregando...</div>
+      ) : (
+        <table className="crm-table">
+          <thead><tr><th>Nome</th><th>E-mail</th><th>Permissão</th><th>Status</th><th>Última atividade</th><th></th></tr></thead>
+          <tbody>
+            {team.map((u, i) => {
+              const name = u.full_name || u.email.split('@')[0];
+              const initials = name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
+              const status = statusFromLastSignIn(u.last_sign_in_at);
+              return (
+                <tr key={u.user_id}>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: palette[i % palette.length], color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 11 }}>
+                        {initials}
+                      </div>
+                      <span style={{ fontWeight: 600 }}>{name}</span>
+                    </div>
+                  </td>
+                  <td style={{ color: 'var(--g-500)' }}>{u.email}</td>
+                  <td><span className={`badge ${ROLE_BADGE[u.role] || 'badge-gray'}`}>{ROLE_LABEL[u.role] || u.role}</span></td>
+                  <td><span style={{ color: dotColor[status], fontSize: 12, fontWeight: 700 }}>● {dotLabel[status]}</span></td>
+                  <td style={{ color: 'var(--g-500)', fontSize: 12 }}>{relativeTime(u.last_sign_in_at)}</td>
+                  <td><button className="btn-ghost" style={{ padding: 6 }}><Icon name="more" size={14} /></button></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
     </SettingsCard>
   );
 };
