@@ -67,8 +67,11 @@ function parseSchema(raw) {
 }
 
 async function salvarAnalise({ SUPABASE_URL, SUPABASE_SERVICE_KEY }, row) {
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) return;
-  await fetch(`${SUPABASE_URL}/rest/v1/mia_analises`, {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
+    console.warn('[mia] salvarAnalise ignorado — SUPABASE_URL ou SERVICE_KEY ausente');
+    return;
+  }
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/mia_analises`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -78,6 +81,10 @@ async function salvarAnalise({ SUPABASE_URL, SUPABASE_SERVICE_KEY }, row) {
     },
     body: JSON.stringify(row),
   });
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    console.error(`[mia] salvarAnalise HTTP ${r.status}: ${body.slice(0, 200)}`);
+  }
 }
 
 /**
@@ -86,6 +93,7 @@ async function salvarAnalise({ SUPABASE_URL, SUPABASE_SERVICE_KEY }, row) {
  */
 async function analisarMensagem({ SUPABASE_URL, SUPABASE_SERVICE_KEY }, payload) {
   const { tenant_id, conversation_id, message_id, sender_jid, message_body } = payload;
+  console.log(`[mia] inicio msg="${String(message_body||'').slice(0,40)}" tenant=${tenant_id}`);
 
   if (!message_body || !tenant_id) {
     console.warn('[mia] analisar ignorado — message_body ou tenant_id ausente');

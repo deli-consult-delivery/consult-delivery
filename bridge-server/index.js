@@ -410,19 +410,22 @@ app.post('/internal/agents/:slug/run', async (req, res) => {
     console.log(`[bridge/internal/agents/run] ${slug} run_id=${data.id}`);
 
     // MIA: analisa mensagem em background quando é webhook do BRENO
-    if (slug === 'breno-processar-webhook' && payload.message_body) {
-      setImmediate(() =>
-        analisarMensagem(
-          { SUPABASE_URL, SUPABASE_SERVICE_KEY },
-          {
-            tenant_id:       payload.tenant_id,
-            conversation_id: payload.conversation_id,
-            message_id:      payload.message_id,
-            sender_jid:      payload.sender_jid,
-            message_body:    payload.message_body,
-          }
-        )
-      );
+    if (slug === 'breno-processar-webhook') {
+      console.log(`[mia:gate] slug=breno msg_body=${JSON.stringify(String(payload?.message_body||'').slice(0,40))} tenant=${payload?.tenant_id}`);
+      if (payload.message_body) {
+        setImmediate(() =>
+          analisarMensagem(
+            { SUPABASE_URL, SUPABASE_SERVICE_KEY },
+            {
+              tenant_id:       payload.tenant_id,
+              conversation_id: payload.conversation_id,
+              message_id:      payload.message_id,
+              sender_jid:      payload.sender_jid,
+              message_body:    payload.message_body,
+            }
+          ).catch(err => console.error('[mia:unhandled]', err.message))
+        );
+      }
     }
 
     return res.json({ run_id: data.id, status: data.status });
