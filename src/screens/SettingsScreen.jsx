@@ -145,24 +145,156 @@ function statusFromLastSignIn(ts) {
   return 'offline';
 }
 
+const BRIDGE_URL = import.meta.env.VITE_BRIDGE_URL || 'http://187.127.25.24:3001';
+
+function EditRoleModal({ member, tenantDbId, onClose, onSuccess }) {
+  const [role, setRole] = useState(member.role);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const roles = ['owner', 'admin', 'consultor', 'operador', 'dev'];
+
+  async function handleSave() {
+    setSaving(true); setError('');
+    const { error: err } = await supabase.rpc('update_member_role', {
+      p_tenant_id: tenantDbId,
+      p_user_id: member.user_id,
+      p_new_role: role,
+    });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    onSuccess();
+    onClose();
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 14, padding: 28, width: 380, position: 'relative' }}>
+        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--g-400)', cursor: 'pointer', fontSize: 18 }}>✕</button>
+        <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--g-100)' }}>Editar permissão</h3>
+        <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--g-400)' }}>{member.full_name}</p>
+        <select value={role} onChange={e => setRole(e.target.value)} style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #333', borderRadius: 8, color: 'var(--g-100)', fontSize: 14, marginBottom: 16 }}>
+          {roles.map(r => <option key={r} value={r}>{ROLE_LABEL[r] || r}</option>)}
+        </select>
+        {error && <div style={{ marginBottom: 12, fontSize: 12, color: '#ef4444', background: '#ef444415', padding: '8px 12px', borderRadius: 6 }}>{error}</div>}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button className="btn-ghost" onClick={onClose}>Cancelar</button>
+          <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Salvando...' : 'Salvar'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RemoveUserModal({ member, tenantDbId, onClose, onSuccess }) {
+  const [removing, setRemoving] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleRemove() {
+    setRemoving(true); setError('');
+    const { error: err } = await supabase.rpc('remove_tenant_member', {
+      p_tenant_id: tenantDbId,
+      p_user_id: member.user_id,
+    });
+    setRemoving(false);
+    if (err) { setError(err.message); return; }
+    onSuccess();
+    onClose();
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 14, padding: 28, width: 380, position: 'relative' }}>
+        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--g-400)', cursor: 'pointer', fontSize: 18 }}>✕</button>
+        <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--g-100)' }}>Remover usuário</h3>
+        <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--g-400)' }}>Tem certeza que deseja remover <strong style={{ color: 'var(--g-200)' }}>{member.full_name}</strong> do tenant? Esta ação não pode ser desfeita.</p>
+        {error && <div style={{ marginBottom: 12, fontSize: 12, color: '#ef4444', background: '#ef444415', padding: '8px 12px', borderRadius: 6 }}>{error}</div>}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button className="btn-ghost" onClick={onClose}>Cancelar</button>
+          <button style={{ padding: '8px 16px', background: '#ef4444', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }} onClick={handleRemove} disabled={removing}>{removing ? 'Removendo...' : 'Remover'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InviteUserModal({ tenantDbId, onClose, onSuccess }) {
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState('consultor');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const invitableRoles = ['admin', 'consultor', 'operador', 'dev'];
+
+  async function handleInvite() {
+    if (!email.trim()) { setError('Informe o e-mail'); return; }
+    setSaving(true); setError('');
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch(`${BRIDGE_URL}/api/users/invite`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ email: email.trim(), role, tenant_id: tenantDbId }),
+    });
+    const json = await res.json();
+    setSaving(false);
+    if (!res.ok) { setError(json.error || 'Erro ao enviar convite'); return; }
+    onSuccess();
+    onClose();
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 14, padding: 28, width: 400, position: 'relative' }}>
+        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--g-400)', cursor: 'pointer', fontSize: 18 }}>✕</button>
+        <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--g-100)' }}>Convidar usuário</h3>
+        <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--g-400)' }}>O convite será enviado por e-mail.</p>
+        <input type="email" placeholder="email@empresa.com" value={email} onChange={e => setEmail(e.target.value)} style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #333', borderRadius: 8, color: 'var(--g-100)', fontSize: 14, marginBottom: 12, boxSizing: 'border-box' }} />
+        <select value={role} onChange={e => setRole(e.target.value)} style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #333', borderRadius: 8, color: 'var(--g-100)', fontSize: 14, marginBottom: 16 }}>
+          {invitableRoles.map(r => <option key={r} value={r}>{ROLE_LABEL[r] || r}</option>)}
+        </select>
+        {error && <div style={{ marginBottom: 12, fontSize: 12, color: '#ef4444', background: '#ef444415', padding: '8px 12px', borderRadius: 6 }}>{error}</div>}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button className="btn-ghost" onClick={onClose}>Cancelar</button>
+          <button className="btn-primary" onClick={handleInvite} disabled={saving}>{saving ? 'Enviando...' : 'Enviar convite'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const UsersSettings = ({ tenantDbId }) => {
   const [team, setTeam] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [activeMenu, setActiveMenu] = useState(null);
+  const [editingMember, setEditingMember] = useState(null);
+  const [removingMember, setRemovingMember] = useState(null);
+  const [inviting, setInviting] = useState(false);
   const palette = ['#B70C00', '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
   const dotColor = { online: '#10B981', idle: '#F59E0B', offline: '#9CA3AF' };
   const dotLabel = { online: 'online', idle: 'ausente', offline: 'offline' };
 
-  useEffect(() => {
+  function loadTeam() {
     if (!tenantDbId) return;
     supabase.rpc('get_tenant_members', { p_tenant_id: tenantDbId })
       .then(({ data, error }) => {
         if (!error && data) setTeam(data);
         setLoading(false);
       });
-  }, [tenantDbId]);
+  }
+
+  useEffect(() => { loadTeam(); }, [tenantDbId]);
+
+  useEffect(() => {
+    if (!activeMenu) return;
+    const handler = () => setActiveMenu(null);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [activeMenu]);
 
   return (
-    <SettingsCard title="Usuários e equipes" sub={`${team.length} membro${team.length !== 1 ? 's' : ''} ativo${team.length !== 1 ? 's' : ''}`} extra={<button className="btn-primary"><Icon name="plus" size={13} /> Convidar usuário</button>}>
+    <SettingsCard
+      title="Usuários e equipes"
+      sub={`${team.length} membro${team.length !== 1 ? 's' : ''} ativo${team.length !== 1 ? 's' : ''}`}
+      extra={<button className="btn-primary" onClick={() => setInviting(true)}><Icon name="plus" size={13} /> Convidar usuário</button>}
+    >
       {loading ? (
         <div style={{ padding: 24, textAlign: 'center', color: 'var(--g-400)', fontSize: 13 }}>Carregando...</div>
       ) : (
@@ -187,13 +319,36 @@ const UsersSettings = ({ tenantDbId }) => {
                   <td><span className={`badge ${ROLE_BADGE[u.role] || 'badge-gray'}`}>{ROLE_LABEL[u.role] || u.role}</span></td>
                   <td><span style={{ color: dotColor[status], fontSize: 12, fontWeight: 700 }}>● {dotLabel[status]}</span></td>
                   <td style={{ color: 'var(--g-500)', fontSize: 12 }}>{relativeTime(u.last_sign_in_at)}</td>
-                  <td><button className="btn-ghost" style={{ padding: 6 }}><Icon name="more" size={14} /></button></td>
+                  <td style={{ position: 'relative' }}>
+                    <button
+                      className="btn-ghost"
+                      style={{ padding: 6 }}
+                      onClick={e => { e.stopPropagation(); setActiveMenu(activeMenu === u.user_id ? null : u.user_id); }}
+                    >
+                      <Icon name="more" size={14} />
+                    </button>
+                    {activeMenu === u.user_id && (
+                      <div style={{ position: 'absolute', right: 0, top: '100%', zIndex: 100, background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, minWidth: 160, boxShadow: '0 4px 16px rgba(0,0,0,0.4)', overflow: 'hidden' }}>
+                        <button
+                          onClick={() => { setEditingMember(u); setActiveMenu(null); }}
+                          style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--g-200)', fontSize: 13, textAlign: 'left', cursor: 'pointer' }}
+                        >Editar permissão</button>
+                        <button
+                          onClick={() => { setRemovingMember(u); setActiveMenu(null); }}
+                          style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: '#ef4444', fontSize: 13, textAlign: 'left', cursor: 'pointer' }}
+                        >Remover usuário</button>
+                      </div>
+                    )}
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       )}
+      {editingMember && <EditRoleModal member={editingMember} tenantDbId={tenantDbId} onClose={() => setEditingMember(null)} onSuccess={loadTeam} />}
+      {removingMember && <RemoveUserModal member={removingMember} tenantDbId={tenantDbId} onClose={() => setRemovingMember(null)} onSuccess={loadTeam} />}
+      {inviting && <InviteUserModal tenantDbId={tenantDbId} onClose={() => setInviting(false)} onSuccess={loadTeam} />}
     </SettingsCard>
   );
 };

@@ -1387,6 +1387,15 @@ app.use('/api', require('./routes/custom-fields')({
   sbFetch,
   assertTenantMember,
 }));
+
+// ── S2-G06 — Gestão de usuários do tenant ─────────────────────────────────────
+app.use('/api', require('./routes/users')({
+  requireJwt,
+  sbFetch,
+  SUPABASE_URL,
+  SUPABASE_SERVICE_KEY,
+}));
+
 const server = app.listen(PORT, '0.0.0.0', () => {
   // D2: timeout do servidor > 60s para suportar polling síncrono do loja-gpt
   server.timeout = 90_000; // 90s — folga sobre os 60s de poll da task
