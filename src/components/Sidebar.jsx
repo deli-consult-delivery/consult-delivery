@@ -44,6 +44,12 @@ const NAV_GROUPS = [
     ],
   },
   {
+    label: 'Automações',
+    items: [
+      { id: 'automacoes', icon: 'bot', label: 'Heartbeats', roles: ['admin'] },
+    ],
+  },
+  {
     label: 'Sistema',
     items: [
       { id: 'notificacoes', icon: 'bell', label: 'Notificações' },

@@ -1396,6 +1396,68 @@ app.use('/api', require('./routes/users')({
   SUPABASE_SERVICE_KEY,
 }));
 
+// ── Sprint 1 — Heartbeats: agentes proativos agendados ───────────────────────
+app.use('/api', require('./routes/heartbeats')({
+  requireJwt,
+  sbFetch,
+  supabaseInsert,
+  SUPABASE_URL,
+  SUPABASE_SERVICE_KEY,
+}));
+
+// ── Sprint 2 — Goals/OKR cascade ─────────────────────────────────────────────
+app.use('/api', require('./routes/goals')({
+  requireJwt,
+  sbFetch,
+  supabaseInsert,
+  SUPABASE_URL,
+  SUPABASE_SERVICE_KEY,
+}));
+
+// ── Sprint 3A — Agent Builder ─────────────────────────────────────────────────
+app.use('/api', require('./routes/agent-builder')({
+  requireJwt,
+  sbFetch,
+  supabaseInsert,
+  SUPABASE_URL,
+  SUPABASE_SERVICE_KEY,
+}));
+
+// ── Sprint 3B — Memória dos agentes ──────────────────────────────────────────
+app.use('/api', require('./routes/memories')({
+  requireJwt,
+  sbFetch,
+  supabaseInsert,
+  SUPABASE_URL,
+  SUPABASE_SERVICE_KEY,
+}));
+
+// ── Sprint 3B — Histórico de execuções dos agentes ───────────────────────────
+app.use('/api', require('./routes/agent-runs')({
+  requireJwt,
+  sbFetch,
+  SUPABASE_URL,
+  SUPABASE_SERVICE_KEY,
+}));
+
+// ── Sprint 3D — Knowledge Base genérica por agente ───────────────────────────
+app.use('/api', require('./routes/knowledge-base')({
+  requireJwt,
+  sbFetch,
+  supabaseInsert,
+  SUPABASE_URL,
+  SUPABASE_SERVICE_KEY,
+}));
+
+// ── Sprint 3C — Agent Inbox (tickets internos) + Approvals ───────────────────
+app.use('/api', require('./routes/agent-tickets')({
+  requireJwt,
+  sbFetch,
+  supabaseInsert,
+  SUPABASE_URL,
+  SUPABASE_SERVICE_KEY,
+}));
+
 const server = app.listen(PORT, '0.0.0.0', () => {
   // D2: timeout do servidor > 60s para suportar polling síncrono do loja-gpt
   server.timeout = 90_000; // 90s — folga sobre os 60s de poll da task
