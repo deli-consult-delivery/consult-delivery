@@ -410,6 +410,9 @@ app.post('/internal/agents/:slug/run', async (req, res) => {
     console.log(`[bridge/internal/agents/run] ${slug} run_id=${data.id}`);
 
     // MIA: analisa mensagem em background quando é webhook do BRENO
+    if (slug === 'breno-processar-webhook') {
+      console.log('[mia:debug] payload keys:', Object.keys(payload || {}), '| message_body:', String(payload?.message_body || '').slice(0, 80));
+    }
     if (slug === 'breno-processar-webhook' && payload.message_body) {
       setImmediate(() =>
         analisarMensagem(
