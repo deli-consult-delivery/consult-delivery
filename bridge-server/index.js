@@ -3,6 +3,7 @@ require('dotenv').config();
 
 const express  = require('express');
 const crypto   = require('crypto');
+const { analisarMensagem } = require('./routes/mia');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -407,6 +408,23 @@ app.post('/internal/agents/:slug/run', async (req, res) => {
 
     const data = await r.json();
     console.log(`[bridge/internal/agents/run] ${slug} run_id=${data.id}`);
+
+    // MIA: analisa mensagem em background quando é webhook do BRENO
+    if (slug === 'breno-processar-webhook' && payload.message_body) {
+      setImmediate(() =>
+        analisarMensagem(
+          { SUPABASE_URL, SUPABASE_SERVICE_KEY },
+          {
+            tenant_id:       payload.tenant_id,
+            conversation_id: payload.conversation_id,
+            message_id:      payload.message_id,
+            sender_jid:      payload.sender_jid,
+            message_body:    payload.message_body,
+          }
+        )
+      );
+    }
+
     return res.json({ run_id: data.id, status: data.status });
   } catch (err) {
     console.error('[bridge/internal/agents/run]', err.message);
