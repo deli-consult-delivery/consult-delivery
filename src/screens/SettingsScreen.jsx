@@ -126,6 +126,26 @@ const WorkspaceSettings = () => (
 const ROLE_LABEL = { owner: 'Dono', admin: 'Admin', consultor: 'Consultor', operador: 'Operador', dev: 'Dev' };
 const ROLE_BADGE = { owner: 'badge-red', admin: 'badge-red', dev: 'badge-purple', consultor: 'badge-gray', operador: 'badge-gray' };
 
+const ALL_SCREENS = [
+  { id: 'dashboard',        label: 'Dashboard',       group: 'Início' },
+  { id: 'deli',             label: 'DELI',            group: 'Início',      defaultRoles: ['admin','deli_owner'] },
+  { id: 'chat',             label: 'Chat Ao Vivo',    group: 'Operação',    defaultRoles: ['admin','atendimento','marketing'] },
+  { id: 'lojas',            label: 'Lojas',           group: 'Operação' },
+  { id: 'crm',              label: 'Clientes',        group: 'Operação',    defaultRoles: ['admin','marketing'] },
+  { id: 'contratos',        label: 'Contratos',       group: 'Operação',    defaultRoles: ['admin'] },
+  { id: 'recontratacao',    label: 'Re-contratação',  group: 'Operação',    defaultRoles: ['admin'] },
+  { id: 'tarefas',          label: 'Todas Tarefas',   group: 'Operação',    defaultRoles: ['admin'] },
+  { id: 'tarefas-clientes', label: 'Espaços',         group: 'Operação',    defaultRoles: ['admin','marketing'] },
+  { id: 'onboarding',       label: 'Onboarding',      group: 'Operação',    defaultRoles: ['admin','atendimento','marketing'] },
+  { id: 'agents',           label: 'Painel Agentes',  group: 'Agentes IA',  defaultRoles: ['admin'] },
+  { id: 'campanhas',        label: 'Campanhas',       group: 'Marketing',   defaultRoles: ['admin','marketing'] },
+  { id: 'drafts-pendentes', label: 'Disparos',        group: 'Marketing',   defaultRoles: ['admin','marketing'] },
+  { id: 'reports',          label: 'Relatórios',      group: 'Dados',       defaultRoles: ['admin','marketing'] },
+  { id: 'notificacoes',     label: 'Notificações',    group: 'Sistema' },
+  { id: 'grupos',           label: 'Grupos WhatsApp', group: 'Admin',       defaultRoles: ['admin','atendimento'] },
+  { id: 'settings',         label: 'Configurações',   group: 'Admin',       defaultRoles: ['admin'] },
+];
+
 function relativeTime(ts) {
   if (!ts) return '—';
   const diff = Date.now() - new Date(ts).getTime();
@@ -260,6 +280,98 @@ function InviteUserModal({ tenantDbId, onClose, onSuccess }) {
   );
 }
 
+function ScreenPermissionsModal({ member, tenantDbId, onClose }) {
+  const [perms, setPerms] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(null);
+
+  useEffect(() => {
+    supabase.rpc('get_user_screen_permissions', {
+      p_tenant_id: tenantDbId,
+      p_user_id: member.user_id,
+    }).then(({ data }) => {
+      const map = {};
+      (data || []).forEach(row => { map[row.screen_id] = row.allowed; });
+      setPerms(map);
+      setLoading(false);
+    });
+  }, [member.user_id, tenantDbId]);
+
+  async function toggle(screenId, roleDefault) {
+    const current = perms[screenId];
+    const newValue = current !== undefined ? !current : !roleDefault;
+    setSaving(screenId);
+    await supabase.rpc('set_user_screen_permission', {
+      p_tenant_id: tenantDbId,
+      p_user_id: member.user_id,
+      p_screen_id: screenId,
+      p_allowed: newValue,
+    });
+    setPerms(prev => ({ ...prev, [screenId]: newValue }));
+    setSaving(null);
+  }
+
+  const groups = ALL_SCREENS.reduce((acc, s) => {
+    (acc[s.group] = acc[s.group] || []).push(s);
+    return acc;
+  }, {});
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 14, padding: 28, width: 520, maxHeight: '80vh', overflow: 'auto', position: 'relative' }}>
+        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--g-400)', cursor: 'pointer', fontSize: 18 }}>✕</button>
+        <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--g-100)' }}>Acesso às telas</h3>
+        <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--g-400)' }}>
+          {member.full_name} · <span style={{ color: 'var(--g-300)' }}>{ROLE_LABEL[member.role] || member.role}</span>
+        </p>
+        {loading ? (
+          <div style={{ color: 'var(--g-400)', fontSize: 13, textAlign: 'center', padding: 40 }}>Carregando...</div>
+        ) : (
+          Object.entries(groups).map(([group, screens]) => (
+            <div key={group}>
+              <div style={{ fontSize: 11, color: 'var(--g-500)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 20, marginBottom: 8 }}>{group}</div>
+              {screens.map(screen => {
+                const roleDefault = !screen.defaultRoles || screen.defaultRoles.includes(member.role);
+                const explicit = perms[screen.id];
+                const effective = explicit !== undefined ? explicit : roleDefault;
+                const hasOverride = explicit !== undefined;
+                return (
+                  <div key={screen.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #222' }}>
+                    <div>
+                      <div style={{ fontSize: 13, color: effective ? 'var(--g-100)' : 'var(--g-500)' }}>{screen.label}</div>
+                      <div style={{ fontSize: 11, color: 'var(--g-600)', marginTop: 2 }}>
+                        {hasOverride ? (explicit !== roleDefault ? '⚡ override manual' : '✓ explícito') : 'padrão do cargo'}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => toggle(screen.id, roleDefault)}
+                      disabled={saving === screen.id}
+                      style={{
+                        width: 44, height: 24, borderRadius: 12, flexShrink: 0,
+                        background: effective ? '#22c55e' : '#374151',
+                        border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.15s',
+                        opacity: saving === screen.id ? 0.6 : 1,
+                      }}
+                    >
+                      <div style={{
+                        width: 16, height: 16, borderRadius: '50%', background: '#fff',
+                        position: 'absolute', top: 4, left: effective ? 24 : 4, transition: 'left 0.15s',
+                      }} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ))
+        )}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 24 }}>
+          <button className="btn-ghost" onClick={onClose}>Fechar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const UsersSettings = ({ tenantDbId }) => {
   const [team, setTeam] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -267,6 +379,7 @@ const UsersSettings = ({ tenantDbId }) => {
   const [editingMember, setEditingMember] = useState(null);
   const [removingMember, setRemovingMember] = useState(null);
   const [inviting, setInviting] = useState(false);
+  const [screenPermsMember, setScreenPermsMember] = useState(null);
   const palette = ['#B70C00', '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
   const dotColor = { online: '#10B981', idle: '#F59E0B', offline: '#9CA3AF' };
   const dotLabel = { online: 'online', idle: 'ausente', offline: 'offline' };
@@ -334,6 +447,10 @@ const UsersSettings = ({ tenantDbId }) => {
                           style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--g-200)', fontSize: 13, textAlign: 'left', cursor: 'pointer' }}
                         >Editar permissão</button>
                         <button
+                          onClick={() => { setScreenPermsMember(u); setActiveMenu(null); }}
+                          style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--g-200)', fontSize: 13, textAlign: 'left', cursor: 'pointer' }}
+                        >Gerenciar acesso às telas</button>
+                        <button
                           onClick={() => { setRemovingMember(u); setActiveMenu(null); }}
                           style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: '#ef4444', fontSize: 13, textAlign: 'left', cursor: 'pointer' }}
                         >Remover usuário</button>
@@ -349,6 +466,7 @@ const UsersSettings = ({ tenantDbId }) => {
       {editingMember && <EditRoleModal member={editingMember} tenantDbId={tenantDbId} onClose={() => setEditingMember(null)} onSuccess={loadTeam} />}
       {removingMember && <RemoveUserModal member={removingMember} tenantDbId={tenantDbId} onClose={() => setRemovingMember(null)} onSuccess={loadTeam} />}
       {inviting && <InviteUserModal tenantDbId={tenantDbId} onClose={() => setInviting(false)} onSuccess={loadTeam} />}
+      {screenPermsMember && <ScreenPermissionsModal member={screenPermsMember} tenantDbId={tenantDbId} onClose={() => setScreenPermsMember(null)} />}
     </SettingsCard>
   );
 };

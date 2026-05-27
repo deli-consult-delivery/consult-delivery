@@ -9,18 +9,22 @@ export function usePermissions(userId) {
   const [permissions, setPermissions] = useState(cached?.permissions ?? new Set());
   const [roleNames, setRoleNames]     = useState(cached?.roleNames   ?? new Set());
   const [agentAccess, setAgentAccess] = useState(cached?.agentAccess ?? {});
+  const [screenPerms, setScreenPerms] = useState(cached?.screenPerms ?? new Map());
   const [loading, setLoading]         = useState(!cached);
 
   useEffect(() => {
     if (!userId || _cache[userId]) return;
 
     (async () => {
-      const [{ data: userRoles }, { data: agents }] = await Promise.all([
+      const [{ data: userRoles }, { data: agents }, { data: screens }] = await Promise.all([
         supabase.from('user_roles')
           .select('role_id, roles(name)')
           .eq('user_id', userId),
         supabase.from('user_agent_access')
           .select('agent_name, can_invoke, can_view_history, can_approve_drafts')
+          .eq('user_id', userId),
+        supabase.from('user_screen_permissions')
+          .select('screen_id, allowed')
           .eq('user_id', userId),
       ]);
 
@@ -40,10 +44,14 @@ export function usePermissions(userId) {
       const agentMap = {};
       (agents ?? []).forEach(a => { agentMap[a.agent_name] = a; });
 
-      _cache[userId] = { permissions: permSet, roleNames: nameSet, agentAccess: agentMap };
+      const screenMap = new Map();
+      (screens ?? []).forEach(s => screenMap.set(s.screen_id, s.allowed));
+
+      _cache[userId] = { permissions: permSet, roleNames: nameSet, agentAccess: agentMap, screenPerms: screenMap };
       setPermissions(permSet);
       setRoleNames(nameSet);
       setAgentAccess(agentMap);
+      setScreenPerms(screenMap);
       setLoading(false);
     })();
   }, [userId]);
@@ -56,5 +64,6 @@ export function usePermissions(userId) {
     canInvokeAgent:  (name)             => agentAccess[name]?.can_invoke        ?? false,
     canViewHistory:  (name)             => agentAccess[name]?.can_view_history   ?? false,
     canApproveDraft: (name)             => agentAccess[name]?.can_approve_drafts ?? false,
+    canAccessScreen: (screenId)         => screenPerms.has(screenId) ? screenPerms.get(screenId) : null,
   };
 }

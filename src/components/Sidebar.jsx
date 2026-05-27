@@ -83,10 +83,14 @@ export default function Sidebar({ route, setRoute, counts, isOpen, userId }) {
     try { return localStorage.getItem('cd-sidebar-hidden') === 'true'; } catch { return false; }
   });
 
-  const { hasRole, loading: permLoading } = usePermissions(userId);
+  const { hasRole, loading: permLoading, canAccessScreen } = usePermissions(userId);
 
-  const visible = (item) =>
-    !item.roles || permLoading || item.roles.some(r => hasRole(r));
+  const visible = (item) => {
+    if (permLoading) return true;
+    const override = canAccessScreen(item.id);
+    if (override !== null) return override;
+    return !item.roles || item.roles.some(r => hasRole(r));
+  };
 
   useEffect(() => {
     const w = hidden ? '0px' : expanded ? '220px' : '64px';
