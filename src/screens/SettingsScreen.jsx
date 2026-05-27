@@ -435,11 +435,10 @@ const UsersSettings = ({ tenantDbId }) => {
                   <td>
                     <div style={{ position: 'relative', display: 'inline-block' }}>
                     <button
-                      className="btn-ghost"
-                      style={{ padding: '4px 8px', color: 'var(--g-400)' }}
                       onClick={e => { e.stopPropagation(); setActiveMenu(activeMenu === u.user_id ? null : u.user_id); }}
+                      style={{ padding: '4px 10px', background: 'none', border: '1px solid #444', borderRadius: 6, color: '#ccc', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}
                     >
-                      <Icon name="more" size={18} />
+                      Ações ▾
                     </button>
                     {activeMenu === u.user_id && (
                       <div style={{ position: 'absolute', right: 0, top: '100%', zIndex: 1000, background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, minWidth: 180, boxShadow: '0 8px 24px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
