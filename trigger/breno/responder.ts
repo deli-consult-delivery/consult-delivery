@@ -121,7 +121,18 @@ export const brenoResponder = task({
       mensagem: input.message,
       historico: ctxMessages || "",
       contexto_loja: contextoLoja,
-      instrucoes: 'Retorne APENAS JSON (sem markdown): {"resposta":"resposta natural em pt-BR máx 3 frases","tom":"amigavel|informativo|empático|urgente","precisa_humano":false,"motivo_humano":null}. Se problema sério (produto estragado, cobrança errada, acidente): precisa_humano:true com motivo. NUNCA prometa o que não pode cumprir.',
+      instrucoes: `Retorne APENAS JSON (sem markdown): {"resposta":"...","tom":"amigavel|informativo|empático|urgente","precisa_humano":false,"motivo_humano":null}.
+
+REGRAS PARA O CAMPO "resposta":
+- Máximo 3 linhas curtas. Seja direto — cliente de WhatsApp não lê texto longo.
+- Use formatação WhatsApp: *negrito* para info importante, linha em branco entre blocos.
+- Estrutura ideal (adapte ao contexto):
+  Linha 1: confirmação/saudação breve (opcional, só se fizer sentido)
+  Linha 2: a resposta principal em 1 frase
+  Linha 3: próximo passo ou encerramento
+- Tom humano, próximo, sem scripts corporativos.
+- Se problema sério (produto estragado, cobrança errada, acidente): precisa_humano:true com motivo.
+- NUNCA prometa o que não pode cumprir.`,
     }, { runId: ctx.run.id, tenantId: input.tenant_id });
     const rawText = agentResult.output as string;
 
@@ -131,7 +142,7 @@ export const brenoResponder = task({
       parsed = JSON.parse(m ? m[0] : rawText);
     } catch {
       parsed = {
-        resposta: "Olá! Obrigado pelo contato. Nossa equipe está verificando e responde em instantes!",
+        resposta: "Oi! Recebemos sua mensagem. ✅\n\nRetornamos em instantes!",
         tom: "amigavel",
         precisa_humano: true,
         motivo_humano: "Erro no processamento automático",
