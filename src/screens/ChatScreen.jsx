@@ -10,6 +10,8 @@ import ConversationFiltersBar from '../components/chat/ConversationFiltersBar.js
 import DepartmentSelector from '../components/chat/DepartmentSelector.jsx';
 import ConversationStatusBadge from '../components/chat/ConversationStatusBadge.jsx';
 import LeadPanel from '../components/chat/LeadPanel.jsx';
+import ClienteFocoPanel from '../components/cliente-foco/ClienteFocoPanel.jsx';
+import { useLojaPorRemoteJid } from '../hooks/useLojaPorRemoteJid.js';
 
 const HAS_EVO = !!(
   import.meta.env.VITE_EVOLUTION_URL && import.meta.env.VITE_EVOLUTION_KEY
@@ -3153,6 +3155,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const suggestion     = active?.deliSuggestion;
   const showGhost      = !draft && suggestion && aiMode !== 'humano';
 
+  // ── MIA: loja vinculada à conversa ativa ─────────────────
+  const lojaVinculada  = useLojaPorRemoteJid(active?.whatsapp_chat_id);
+
   const abertosCount    = statusCounts.nao_iniciado + statusCounts.aguardando + statusCounts.aberto;
   const finalizadoCount = statusCounts.finalizado;
   const unreadCount     = convs.reduce((s, c) => s + (c.unread || 0), 0);
@@ -4343,6 +4348,17 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               </>
             )}
           </>
+        )}
+
+        {/* ─── MIA: tab "Cliente em Foco" — aparece se houver loja vinculada ── */}
+        {lojaVinculada && active && (
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', padding: 12 }}>
+            <ClienteFocoPanel
+              lojaId={lojaVinculada.loja_id}
+              conversaId={active.id}
+              tenantId={tenantDbId}
+            />
+          </div>
         )}
         </div>
       </aside>
