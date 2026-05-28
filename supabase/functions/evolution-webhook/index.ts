@@ -376,9 +376,11 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
     pushName,
   });
 
+  let savedMsg: { id: string } | null = null;
+
   if (convId) {
     const inQuoted = await buildQuotedContent();
-    const { data: savedMsg, error: saveErr } = await supabase
+    const { data: upsertedMsg, error: saveErr } = await supabase
       .from('messages')
       .upsert({
         tenant_id:       tenantId,
@@ -395,6 +397,7 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
       .select('id')
       .single();
     if (saveErr) console.error('[WEBHOOK] falha ao salvar mensagem inbound em messages:', saveErr.message);
+    savedMsg = upsertedMsg;
 
     if (isMedia && savedMsg) {
       fetchMedia({ inst, instance, msgData, isPtt, isAudio, isImage, isVideo, isDocument, savedMsgId: savedMsg.id });
