@@ -61,12 +61,14 @@ export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem('cd-theme') || 'claro');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifUnread, setNotifUnread] = useState(0);
+  const hasLoadedTenantsOnce = useRef(false);
 
   useEffect(() => { localStorage.setItem('cd-route', route); }, [route]);
 
   // Carrega tenants do banco (usado no mount e quando um workspace novo é criado)
   async function reloadTenants(preferSlug) {
-    setTenantLoading(true);
+    if (!hasLoadedTenantsOnce.current) setTenantLoading(true);
+    const safetyTimer = setTimeout(() => setTenantLoading(false), 8000);
     try {
       // Busca tenant real do usuário via tenant_members
       const { data: { user } } = await supabase.auth.getUser();
@@ -74,7 +76,7 @@ export default function App() {
         .from('tenant_members')
         .select('tenant_id, role, tenants(id, name, slug, emoji, color)')
         .eq('user_id', user?.id)
-        .single();
+        .maybeSingle();
 
       if (memberData?.tenant_id) {
         const t = memberData.tenants;
@@ -90,6 +92,8 @@ export default function App() {
         const slugToUse = preferSlug || t.slug;
         setTenant(slugToUse);
         setTenantDbId(t.id);
+        hasLoadedTenantsOnce.current = true;
+        clearTimeout(safetyTimer);
         setTenantLoading(false);
         return;
       }
@@ -111,12 +115,15 @@ export default function App() {
         setTenant(slugToUse);
         const selected = mapped.find(t => t.id === slugToUse);
         setTenantDbId(selected?.dbId ?? mapped[0].dbId);
+        hasLoadedTenantsOnce.current = true;
+        clearTimeout(safetyTimer);
         setTenantLoading(false);
         return;
       }
     } catch (_) { /* silencioso */ }
 
     // Sem tenant encontrado
+    clearTimeout(safetyTimer);
     setTenantLoading(false);
   }
 
@@ -132,8 +139,11 @@ export default function App() {
       setAuthLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(prev => {
+        if (prev?.user?.id === newSession?.user?.id && prev?.access_token === newSession?.access_token) return prev;
+        return newSession;
+      });
     });
 
     return () => { subscription.unsubscribe(); clearTimeout(timer); };

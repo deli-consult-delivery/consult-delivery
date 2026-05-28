@@ -15,7 +15,8 @@ export async function listTenants() {
   const { data, error } = await supabase
     .from('tenants')
     .select('id, slug, name, emoji, color, status, plan')
-    .order('name');
+    .order('name')
+    .limit(50);
   if (error) throw error;
   return data ?? [];
 }
