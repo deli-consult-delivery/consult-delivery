@@ -35,6 +35,8 @@ import OnboardingScreen from './screens/OnboardingScreen.jsx';
 import RequireRole from './components/auth/RequireRole.jsx';
 import InadimplentesScreen from './screens/InadimplentesScreen.jsx';
 import NotificacoesScreen from './screens/NotificacoesScreen.jsx';
+import WhatsappVinculosScreen from './screens/WhatsappVinculosScreen.jsx';
+import MiaAuditScreen from './screens/MiaAuditScreen.jsx';
 import { CONVERSATIONS, INADIMPLENTES, TENANTS } from './data.js';
 import { supabase } from './lib/supabase.js';
 import { listTenants, countUnreadNotifications, subscribeToNotifications } from './lib/api.js';
@@ -455,6 +457,19 @@ export default function App() {
         {route === 'encerramento' && (
           <RequireRole roles={['admin', 'atendimento']} userId={session?.user?.id}>
             <EncerramentoScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+
+        {/* MIA — config vínculos (admin + atendimento) */}
+        {route === 'config-whatsapp-vinculos' && (
+          <RequireRole roles={['admin', 'atendimento']} userId={session?.user?.id}>
+            <WhatsappVinculosScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
+        {/* MIA — audit (admin) */}
+        {route === 'mia-audit' && (
+          <RequireRole roles={['admin']} userId={session?.user?.id}>
+            <MiaAuditScreen tenantDbId={tenantDbId} />
           </RequireRole>
         )}
 
