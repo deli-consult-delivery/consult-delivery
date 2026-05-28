@@ -1479,6 +1479,15 @@ app.use('/api', require('./routes/agent-tickets')({
   SUPABASE_SERVICE_KEY,
 }));
 
+// ── MIA-01 — Monitor IA: vínculos WhatsApp, sugestões IA, DOC, audit ─────────
+app.use('/api', require('./routes/mia-vinculos')({
+  requireJwt,
+  sbFetch,
+  supabaseInsert,
+  SUPABASE_URL,
+  SUPABASE_SERVICE_KEY,
+}));
+
 const server = app.listen(PORT, '0.0.0.0', () => {
   // D2: timeout do servidor > 60s para suportar polling síncrono do loja-gpt
   server.timeout = 90_000; // 90s — folga sobre os 60s de poll da task
