@@ -96,7 +96,9 @@ async function salvarAnalise({ SUPABASE_URL, SUPABASE_SERVICE_KEY }, row) {
  * Fire-and-forget — não lança exceção para o chamador.
  */
 async function analisarMensagem({ SUPABASE_URL, SUPABASE_SERVICE_KEY }, payload) {
-  const { tenant_id, conversation_id, message_id, sender_jid, message_body } = payload;
+  const { tenant_id, message_id, sender_jid, message_body } = payload;
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const conversation_id = UUID_RE.test(payload.conversation_id ?? '') ? payload.conversation_id : null;
   console.log(`[mia] inicio msg="${String(message_body||'').slice(0,40)}" tenant=${tenant_id}`);
 
   if (!message_body || !tenant_id) {
