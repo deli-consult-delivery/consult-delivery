@@ -1,6 +1,6 @@
 import { task, logger } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
-import { executeAgent, getClientContext, recordFact, logTimeline } from "../../src/agents/shared/runtime";
+import { executeAgent } from "../../src/agents/shared/runtime";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 
@@ -87,40 +87,20 @@ export const brenoResponder = task({
 
     const { data: conv } = await sb
       .from("conversations")
-      .select("id, contact_name, phone_number, customer_id")
+      .select("id, contact_name, phone_number")
       .eq("id", input.conversation_id)
       .eq("tenant_id", input.tenant_id)
       .maybeSingle();
 
-    // Memória Central — resolver loja via customer_id e carregar contexto
-    let lojaId: string | null = null;
-    if (conv?.customer_id) {
-      const { data: lojaRow } = await sb
-        .from("lojas")
-        .select("id")
-        .eq("client_id", conv.customer_id)
-        .eq("tenant_id", input.tenant_id)
-        .maybeSingle();
-      lojaId = lojaRow?.id ?? null;
-    }
-    const clientCtx = lojaId
-      ? await getClientContext(lojaId, input.tenant_id)
-      : { facts: [], timeline: [] };
-
     const ctxMessages = input.context_messages.slice(-10)
       .map(m => `${m.role === "client" ? "Cliente" : "Equipe"}: ${m.content}`)
       .join("\n");
-
-    const contextoLoja = clientCtx.facts.length > 0
-      ? clientCtx.facts.map(f => `${f.category}/${f.key}: ${JSON.stringify(f.value)}`).join("; ")
-      : null;
 
     const agentResult = await executeAgent('breno', {
       task: 'respond_to_client',
       cliente: conv?.contact_name || input.sender_name || "Cliente",
       mensagem: input.message,
       historico: ctxMessages || "",
-      contexto_loja: contextoLoja,
       instrucoes: 'Retorne APENAS JSON (sem markdown): {"resposta":"resposta natural em pt-BR máx 3 frases","tom":"amigavel|informativo|empático|urgente","precisa_humano":false,"motivo_humano":null}. Se problema sério (produto estragado, cobrança errada, acidente): precisa_humano:true com motivo. NUNCA prometa o que não pode cumprir.',
     }, { runId: ctx.run.id, tenantId: input.tenant_id });
     const rawText = agentResult.output as string;
@@ -226,28 +206,6 @@ export const brenoResponder = task({
       agent_run_id: null,
       requires_review: mode === "hibrido",
     });
-
-    // Memória Central — registrar interação na timeline da loja
-    if (lojaId) {
-      await Promise.all([
-        recordFact(
-          lojaId,
-          input.tenant_id,
-          "support_pattern",
-          `precisa_humano_${new Date().toISOString().slice(0, 7)}`,
-          { precisa_humano: parsed.precisa_humano, motivo: parsed.motivo_humano ?? null },
-          { sourceAgent: "breno", confidence: 0.6 }
-        ),
-        logTimeline(
-          lojaId,
-          input.tenant_id,
-          "breno",
-          "support_message_handled",
-          `Mensagem respondida via WhatsApp (${action_taken})`,
-          { description: parsed.precisa_humano ? `Escalado: ${parsed.motivo_humano}` : undefined, payload: { conversation_id: input.conversation_id, mode, run_id: ctx.run.id } }
-        ),
-      ]);
-    }
 
     await logAgentRun({
       runId: ctx.run.id,

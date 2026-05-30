@@ -453,6 +453,7 @@ app.post('/chat/ai', requireJwt, async (req, res) => {
   const { command, prompt: freePrompt, messages = [], conversation_id, tenant_id } = req.body;
   if (!command) return res.status(400).json({ error: 'command required' });
   if (!ANTHROPIC_API_KEY) return res.status(503).json({ error: 'ANTHROPIC_API_KEY não configurado' });
+  const _chatAiStart = Date.now();
 
   const SYSTEM_PROMPTS = {
     '/resumir': `Você é DELI, COO digital da Consult Delivery. Resuma esta conversa de atendimento.
@@ -491,6 +492,58 @@ Responda SOMENTE com JSON válido no formato:
     const media = m.media_type || m.mediaType || '';
     return `[${role}${sender ? ` (${sender})` : ''}]: ${text || (media ? `(${media})` : '(mídia)')}`;
   }).join('\n');
+
+  // ── /tarefa: cria tarefa na loja sem chamar Anthropic ─────────────────────
+  if (command === '/tarefa') {
+    const texto = (freePrompt || '').trim();
+    if (!texto) return res.status(400).json({ error: 'texto da tarefa obrigatório' });
+    let lojaId = null;
+    if (conversation_id && SUPABASE_SERVICE_KEY) {
+      try {
+        const cr = await fetch(
+          `${SUPABASE_URL}/rest/v1/conversations?id=eq.${conversation_id}&select=loja_id&limit=1`,
+          { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }
+        );
+        const rows = await cr.json();
+        lojaId = rows?.[0]?.loja_id ?? null;
+      } catch (_) { /* segue sem loja_id */ }
+    }
+    if (!lojaId) return res.status(422).json({ error: 'loja_id não encontrado para esta conversa' });
+    try {
+      const tarefa = await supabaseInsert('tarefas_loja', {
+        loja_id: lojaId,
+        bloco: 'suporte',
+        titulo: texto.slice(0, 200),
+        situacao: 'Criada via DELI chat',
+        o_que_sera_feito: texto,
+        status: 'rascunho',
+        created_by: req.user.id,
+      });
+      console.log(`[bridge/chat/ai] /tarefa criada id=${tarefa?.id} loja=${lojaId}`);
+      return res.json({ ok: true, title: 'Tarefa criada', bullets: [`Tarefa criada (${tarefa?.id})`] });
+    } catch (err) {
+      console.error('[bridge/chat/ai] /tarefa insert erro:', err.message);
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  // ── /handoff: registra transferência sem chamar Anthropic ─────────────────
+  if (command === '/handoff') {
+    const agente = (freePrompt || '').trim();
+    if (!agente) return res.status(400).json({ error: 'nome do agente obrigatório' });
+    if (conversation_id && tenant_id && SUPABASE_SERVICE_KEY) {
+      supabaseInsert('conversation_events', {
+        tenant_id,
+        conversation_id,
+        event_type: 'transferred',
+        actor_id:   req.user.id,
+        actor_type: 'user',
+        metadata:   { handed_off_to: agente, source: 'deli-chat' },
+      }).catch(e => console.warn('[bridge/chat/ai] /handoff event insert falhou:', e.message));
+    }
+    console.log(`[bridge/chat/ai] /handoff conv=${conversation_id} → ${agente}`);
+    return res.json({ ok: true, title: 'Handoff realizado', bullets: [`Transferido pra ${agente}`] });
+  }
 
   const systemPrompt = SYSTEM_PROMPTS[command] || SYSTEM_PROMPTS['/resumir'];
   const userContent = command === '/livre' && freePrompt
@@ -540,8 +593,20 @@ Responda SOMENTE com JSON válido no formato:
       parsed.text = parsed.bullets?.[0] || parsed.body || '';
     }
 
-    console.log(`[bridge/chat/ai] ${command} model=${ANTHROPIC_MODEL} conv=${conversation_id}`);
+    const _durationMs = Date.now() - _chatAiStart;
+    console.log(`[bridge/chat/ai] ${command} model=${ANTHROPIC_MODEL} conv=${conversation_id} ${_durationMs}ms`);
     res.json({ ok: true, ...parsed });
+    supabaseInsert('agent_runs', {
+      trigger_dev_run_id: `chat-ai-${req.user.id}-${Date.now()}`,
+      agent_id: 'chat-ai',
+      input: { command, user_id: req.user.id, tenant_id, conversation_id },
+      output: { tokens_out: data.usage?.output_tokens, tokens_in: data.usage?.input_tokens, model: ANTHROPIC_MODEL },
+      tenant_id: tenant_id || null,
+      triggered_by: req.user.id || null,
+      duration_ms: _durationMs,
+      status: 'success',
+      completed_at: new Date().toISOString(),
+    }).catch(e => console.warn('[bridge/chat/ai] audit insert falhou:', e.message));
   } catch (err) {
     console.error('[bridge/chat/ai]', err.message);
     res.status(500).json({ error: err.message });
@@ -1252,10 +1317,40 @@ app.use('/api', require('./routes/contratos')({
   ASAAS_API_KEY,
 }));
 
+// ── G03.3 — Asaas Webhook (contratos) ────────────────────────────────────────
+app.use('/api', require('./routes/asaas-webhook')({
+  supabaseInsert,
+  supabaseSelect,
+  supabaseUpdate,
+  ASAAS_WEBHOOK_SECRET,
+}));
+
+// ── Relatórios — Dashboard consolidado por tenant ───────────────────────────
+app.use('/api', require('./routes/relatorios')({
+  requireJwt,
+  sbFetch,
+  assertTenantMember,
+}));
+
 // ── F4 Onda 07 — Dashboard Público de Aprovação (sem JWT) ────────────────────
 app.use('/api', require('./routes/publico-aprovacao')({
   sbFetch,
   supabaseInsert,
+}));
+
+// ── S2-G01.5 — LARA editorial: drafts + revisão + publicação ─────────────────
+app.use('/api', require('./routes/lara')({
+  requireJwt,
+  sbFetch,
+  supabaseInsert,
+}));
+
+// ── S2-G06 — Gestão de usuários do tenant ──────────────────────────────────
+app.use('/api', require('./routes/users')({
+  requireJwt,
+  sbFetch,
+  SUPABASE_URL,
+  SUPABASE_SERVICE_KEY,
 }));
 
 const server = app.listen(PORT, '0.0.0.0', () => {
@@ -1276,5 +1371,6 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`[bridge] PILOTO Onda 03:        GET|POST /api/lojas/:id/loja-gpt/conversations, GET /api/loja-gpt/conversations/:id, POST /api/loja-gpt/conversations/:id/messages, PATCH /api/loja-gpt/conversations/:id`);
   console.log(`[bridge] PILOTO Onda 04:        GET|POST /api/lojas/:id/analises, POST /api/lojas/:id/analises/processar, POST /api/lojas/:id/analises/:aid/enviar-whatsapp`);
   console.log(`[bridge] G03 Contratos:         POST /api/contratos/:id/enviar-assinatura, POST /api/contratos/:id/link-asaas, POST /api/contratos/sign (público)`);
+  console.log(`[bridge] G03.3 Asaas Webhook:  POST /api/asaas/webhook (público, valida asaas-access-token)`);
   console.log(`[bridge] ASAAS_API_KEY:         ${ASAAS_API_KEY ? '✓' : '✗ /contratos/:id/link-asaas recusará'}`);
 });

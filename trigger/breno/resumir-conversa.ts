@@ -1,6 +1,6 @@
 import { task } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
-import Anthropic from "@anthropic-ai/sdk";
+import { getAnthropic } from "../_shared/claude";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 
@@ -28,7 +28,7 @@ export const brenoResumirConversa = task({
   run: async (payload: unknown, { ctx }) => {
     const start = Date.now();
     const input = InputSchema.parse(payload);
-    const anthropic = new Anthropic();
+    const anthropic = getAnthropic();
     const sb = getSupabase();
 
     const { data: conv } = await sb
@@ -101,7 +101,7 @@ Retorne APENAS JSON:
 
     const rawText = response.content
       .filter((b) => b.type === "text")
-      .map((b) => (b as Anthropic.TextBlock).text)
+      .map((b) => (b as { type: "text"; text: string }).text)
       .join("");
 
     let resumo: z.infer<typeof OutputSchema>["resumo"];

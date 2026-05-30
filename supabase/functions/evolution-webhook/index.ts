@@ -459,7 +459,7 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
 
   // ── Enfileirar invoke se há menção ────────────────────────────────────────
 
-  if (isMentionToBot && mentionedAgent && mentionedAgent !== 'deli') {
+  if (isMentionToBot && mentionedAgent) {
     enqueueAgentInvoke({ mentionedAgent, tenantId, groupId, messageText, wMsgId: wMsg?.id }).catch(err => {
       console.warn('[WEBHOOK] enqueue falhou (não crítico):', err.message);
     });
