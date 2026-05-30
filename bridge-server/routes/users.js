@@ -34,16 +34,18 @@ module.exports = function ({ requireJwt, sbFetch, SUPABASE_URL, SUPABASE_SERVICE
         return res.status(403).json({ error: 'Apenas administradores podem convidar usuários' });
       }
 
-      // Envia convite via Supabase Auth Admin
-      const inviteRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/invite`, {
+      // Envia convite via Supabase Auth — endpoint correto: /auth/v1/invite (não /admin/invite)
+      const inviteRes = await fetch(`${SUPABASE_URL}/auth/v1/invite`, {
         method: 'POST',
         headers: adminHeaders,
         body: JSON.stringify({ email, data: { tenant_id, role } }),
       });
 
-      const inviteData = await inviteRes.json();
+      let inviteData;
+      try { inviteData = await inviteRes.json(); }
+      catch { return res.status(502).json({ error: 'Resposta inválida do serviço de autenticação' }); }
       if (!inviteRes.ok) {
-        const msg = inviteData?.msg || inviteData?.message || 'Erro ao enviar convite';
+        const msg = inviteData?.msg || inviteData?.message || inviteData?.error_description || 'Erro ao enviar convite';
         return res.status(422).json({ error: msg });
       }
 
