@@ -253,7 +253,8 @@ function InviteUserModal({ tenantDbId, onClose, onSuccess }) {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
       body: JSON.stringify({ email: email.trim(), role, tenant_id: tenantDbId }),
     });
-    const json = await res.json();
+    let json;
+    try { json = await res.json(); } catch { json = {}; }
     setSaving(false);
     if (!res.ok) { setError(json.error || 'Erro ao enviar convite'); return; }
     onSuccess();
