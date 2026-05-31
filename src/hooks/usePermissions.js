@@ -1,19 +1,17 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 
-// Session cache — avoids repeated DB calls for the same userId
-const _cache = {};
-
 export function usePermissions(userId) {
-  const cached = _cache[userId];
-  const [permissions, setPermissions] = useState(cached?.permissions ?? new Set());
-  const [roleNames, setRoleNames]     = useState(cached?.roleNames   ?? new Set());
-  const [agentAccess, setAgentAccess] = useState(cached?.agentAccess ?? {});
-  const [screenPerms, setScreenPerms] = useState(cached?.screenPerms ?? new Map());
-  const [loading, setLoading]         = useState(!cached);
+  const [permissions, setPermissions] = useState(new Set());
+  const [roleNames, setRoleNames]     = useState(new Set());
+  const [agentAccess, setAgentAccess] = useState({});
+  const [screenPerms, setScreenPerms] = useState(new Map());
+  const [loading, setLoading]         = useState(true);
 
   useEffect(() => {
-    if (!userId || _cache[userId]) return;
+    if (!userId) { setLoading(false); return; }
+
+    setLoading(true);
 
     (async () => {
       const [{ data: userRoles }, { data: agents }, { data: screens }] = await Promise.all([
@@ -47,7 +45,6 @@ export function usePermissions(userId) {
       const screenMap = new Map();
       (screens ?? []).forEach(s => screenMap.set(s.screen_id, s.allowed));
 
-      _cache[userId] = { permissions: permSet, roleNames: nameSet, agentAccess: agentMap, screenPerms: screenMap };
       setPermissions(permSet);
       setRoleNames(nameSet);
       setAgentAccess(agentMap);
