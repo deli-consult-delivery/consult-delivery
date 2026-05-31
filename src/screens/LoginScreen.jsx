@@ -8,6 +8,24 @@ export default function LoginScreen({ onLogin }) {
   const [pwd, setPwd] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+
+  const sendResetEmail = async (e) => {
+    e.preventDefault();
+    setForgotLoading(true);
+    const { error: err } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim(), {
+      redirectTo: window.location.origin,
+    });
+    setForgotLoading(false);
+    if (err) {
+      setError(err.message);
+    } else {
+      setForgotSent(true);
+    }
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -148,7 +166,13 @@ export default function LoginScreen({ onLogin }) {
           <div style={{ marginTop: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <label className="label" style={{ display: 'block', marginBottom: 6 }}>Senha</label>
-              <a href="#" style={{ fontSize: 12, color: 'var(--red)', fontWeight: 600, textDecoration: 'none' }}>Esqueci a senha</a>
+              <button
+                type="button"
+                onClick={() => { setForgotMode(true); setForgotEmail(email); setForgotSent(false); setError(''); }}
+                style={{ fontSize: 12, color: 'var(--red)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              >
+                Esqueci a senha
+              </button>
             </div>
             <input
               className="input"
@@ -159,6 +183,48 @@ export default function LoginScreen({ onLogin }) {
               required
             />
           </div>
+
+          {forgotMode && (
+            <div style={{
+              marginTop: 16, padding: 16, background: 'var(--g-50)',
+              borderRadius: 8, border: '1px solid var(--g-200)',
+            }}>
+              {forgotSent ? (
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 24, marginBottom: 8 }}>📧</div>
+                  <p style={{ fontSize: 13, color: 'var(--g-700)', fontWeight: 600 }}>Link enviado!</p>
+                  <p style={{ fontSize: 12, color: 'var(--g-500)', marginTop: 4 }}>Verifique sua caixa de entrada e spam.</p>
+                  <button type="button" onClick={() => setForgotMode(false)}
+                    style={{ marginTop: 10, fontSize: 12, color: 'var(--red)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+                    Voltar ao login
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={sendResetEmail}>
+                  <p style={{ fontSize: 13, color: 'var(--g-700)', marginBottom: 10, fontWeight: 600 }}>Recuperar senha</p>
+                  <input
+                    className="input"
+                    type="email"
+                    placeholder="seu@email.com.br"
+                    value={forgotEmail}
+                    onChange={e => setForgotEmail(e.target.value)}
+                    required
+                    style={{ marginBottom: 10 }}
+                  />
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button type="button" onClick={() => setForgotMode(false)}
+                      style={{ flex: 1, padding: '8px 0', fontSize: 13, background: 'none', border: '1px solid var(--g-300)', borderRadius: 6, cursor: 'pointer', color: 'var(--g-600)' }}>
+                      Cancelar
+                    </button>
+                    <button type="submit" disabled={forgotLoading}
+                      style={{ flex: 1, padding: '8px 0', fontSize: 13, background: 'var(--red)', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, opacity: forgotLoading ? 0.7 : 1 }}>
+                      {forgotLoading ? 'Enviando…' : 'Enviar link'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
 
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 20, fontSize: 13, color: 'var(--g-700)', cursor: 'pointer' }}>
             <input type="checkbox" defaultChecked style={{ accentColor: 'var(--red)', width: 16, height: 16 }} />
