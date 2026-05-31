@@ -33,6 +33,7 @@ import ContratosScreen from './screens/Contratos/ContratosScreen.jsx';
 import RecontratacaoScreen from './screens/Recontratacao/RecontratacaoScreen.jsx';
 import OnboardingScreen from './screens/OnboardingScreen.jsx';
 import RequireRole from './components/auth/RequireRole.jsx';
+import ResetPasswordScreen from './screens/ResetPasswordScreen.jsx';
 import InadimplentesScreen from './screens/InadimplentesScreen.jsx';
 import NotificacoesScreen from './screens/NotificacoesScreen.jsx';
 import WhatsappVinculosScreen from './screens/WhatsappVinculosScreen.jsx';
@@ -52,6 +53,8 @@ const TWEAK_DEFAULTS = {
 export default function App() {
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
+  const [isInvite, setIsInvite] = useState(false);
   const [tenantLoading, setTenantLoading] = useState(false);
   const [tenants, setTenants] = useState(TENANTS);
   const [route, setRoute] = useState(() => localStorage.getItem('cd-route') || 'dashboard');
@@ -139,7 +142,19 @@ export default function App() {
       setAuthLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setSession(newSession);
+        setPasswordRecovery(true);
+        setIsInvite(false);
+        return;
+      }
+      if (event === 'SIGNED_IN' && newSession?.user?.app_metadata?.provider === 'email' && !newSession?.user?.last_sign_in_at) {
+        setSession(newSession);
+        setPasswordRecovery(true);
+        setIsInvite(true);
+        return;
+      }
       setSession(prev => {
         if (prev?.user?.id === newSession?.user?.id && prev?.access_token === newSession?.access_token) return prev;
         return newSession;
@@ -262,6 +277,15 @@ export default function App() {
         </svg>
         <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', fontFamily: 'sans-serif' }}>Carregando…</span>
       </div>
+    );
+  }
+
+  if (passwordRecovery && session) {
+    return (
+      <ResetPasswordScreen
+        isInvite={isInvite}
+        onDone={() => setPasswordRecovery(false)}
+      />
     );
   }
 
