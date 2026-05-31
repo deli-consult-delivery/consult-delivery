@@ -13,12 +13,10 @@ export default function LoginScreen({ onLogin }) {
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
 
-  const sendResetEmail = async (e) => {
-    e.preventDefault();
+  const sendResetEmail = async () => {
+    if (!forgotEmail.trim()) return;
     setForgotLoading(true);
-    const { error: err } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim(), {
-      redirectTo: window.location.origin,
-    });
+    const { error: err } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim());
     setForgotLoading(false);
     if (err) {
       setError(err.message);
@@ -200,7 +198,7 @@ export default function LoginScreen({ onLogin }) {
                   </button>
                 </div>
               ) : (
-                <form onSubmit={sendResetEmail}>
+                <div>
                   <p style={{ fontSize: 13, color: 'var(--g-700)', marginBottom: 10, fontWeight: 600 }}>Recuperar senha</p>
                   <input
                     className="input"
@@ -208,7 +206,7 @@ export default function LoginScreen({ onLogin }) {
                     placeholder="seu@email.com.br"
                     value={forgotEmail}
                     onChange={e => setForgotEmail(e.target.value)}
-                    required
+                    onKeyDown={e => e.key === 'Enter' && sendResetEmail()}
                     style={{ marginBottom: 10 }}
                   />
                   <div style={{ display: 'flex', gap: 8 }}>
@@ -216,12 +214,12 @@ export default function LoginScreen({ onLogin }) {
                       style={{ flex: 1, padding: '8px 0', fontSize: 13, background: 'none', border: '1px solid var(--g-300)', borderRadius: 6, cursor: 'pointer', color: 'var(--g-600)' }}>
                       Cancelar
                     </button>
-                    <button type="submit" disabled={forgotLoading}
+                    <button type="button" onClick={sendResetEmail} disabled={forgotLoading}
                       style={{ flex: 1, padding: '8px 0', fontSize: 13, background: 'var(--red)', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, opacity: forgotLoading ? 0.7 : 1 }}>
                       {forgotLoading ? 'Enviando…' : 'Enviar link'}
                     </button>
                   </div>
-                </form>
+                </div>
               )}
             </div>
           )}
