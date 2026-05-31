@@ -3,23 +3,43 @@ import Icon from '../components/Icon.jsx';
 import { supabase } from '../lib/supabase.js';
 import rocketLogo from '/assets/rocket-logo.png';
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function LoginScreen({ onLogin }) {
   const [email, setEmail] = useState('');
   const [pwd, setPwd] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
   const [forgotMode, setForgotMode] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState('');
+
+  const openForgot = () => {
+    setForgotMode(true);
+    setForgotEmail(email);
+    setForgotSent(false);
+    setForgotError('');
+  };
+
+  const closeForgot = () => {
+    setForgotMode(false);
+    setForgotSent(false);
+    setForgotError('');
+  };
 
   const sendResetEmail = async () => {
-    if (!forgotEmail.trim()) return;
+    if (forgotLoading) return;
+    if (!forgotEmail.trim()) { setForgotError('Digite seu e-mail.'); return; }
+    if (!EMAIL_RE.test(forgotEmail.trim())) { setForgotError('E-mail inválido.'); return; }
     setForgotLoading(true);
+    setForgotError('');
     const { error: err } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim());
     setForgotLoading(false);
     if (err) {
-      setError(err.message);
+      setForgotError(err.message);
     } else {
       setForgotSent(true);
     }
@@ -29,21 +49,23 @@ export default function LoginScreen({ onLogin }) {
     e.preventDefault();
     setError('');
     setLoading(true);
-
-    const { data, error: authError } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password: pwd,
-    });
-
-    if (authError) {
-      setError(authError.message === 'Invalid login credentials'
-        ? 'E-mail ou senha incorretos.'
-        : authError.message);
+    try {
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: pwd,
+      });
+      if (authError) {
+        setError(authError.message === 'Invalid login credentials'
+          ? 'E-mail ou senha incorretos.'
+          : authError.message);
+        return;
+      }
+      onLogin(data.session);
+    } catch {
+      setError('Erro de conexão. Tente novamente.');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    onLogin(data.session);
   };
 
   const loginWithGoogle = async () => {
@@ -166,7 +188,7 @@ export default function LoginScreen({ onLogin }) {
               <label className="label" style={{ display: 'block', marginBottom: 6 }}>Senha</label>
               <button
                 type="button"
-                onClick={() => { setForgotMode(true); setForgotEmail(email); setForgotSent(false); setError(''); }}
+                onClick={openForgot}
                 style={{ fontSize: 12, color: 'var(--red)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
               >
                 Esqueci a senha
@@ -192,7 +214,7 @@ export default function LoginScreen({ onLogin }) {
                   <div style={{ fontSize: 24, marginBottom: 8 }}>📧</div>
                   <p style={{ fontSize: 13, color: 'var(--g-700)', fontWeight: 600 }}>Link enviado!</p>
                   <p style={{ fontSize: 12, color: 'var(--g-500)', marginTop: 4 }}>Verifique sua caixa de entrada e spam.</p>
-                  <button type="button" onClick={() => setForgotMode(false)}
+                  <button type="button" onClick={closeForgot}
                     style={{ marginTop: 10, fontSize: 12, color: 'var(--red)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
                     Voltar ao login
                   </button>
@@ -200,17 +222,23 @@ export default function LoginScreen({ onLogin }) {
               ) : (
                 <div>
                   <p style={{ fontSize: 13, color: 'var(--g-700)', marginBottom: 10, fontWeight: 600 }}>Recuperar senha</p>
+                  {forgotError && (
+                    <p style={{ fontSize: 12, color: '#DC2626', marginBottom: 8, padding: '6px 10px', background: '#FEF2F2', borderRadius: 6 }}>
+                      {forgotError}
+                    </p>
+                  )}
                   <input
                     className="input"
                     type="email"
                     placeholder="seu@email.com.br"
                     value={forgotEmail}
                     onChange={e => setForgotEmail(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && sendResetEmail()}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); sendResetEmail(); } }}
+                    autoFocus
                     style={{ marginBottom: 10 }}
                   />
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button type="button" onClick={() => setForgotMode(false)}
+                    <button type="button" onClick={closeForgot}
                       style={{ flex: 1, padding: '8px 0', fontSize: 13, background: 'none', border: '1px solid var(--g-300)', borderRadius: 6, cursor: 'pointer', color: 'var(--g-600)' }}>
                       Cancelar
                     </button>
