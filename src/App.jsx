@@ -350,24 +350,24 @@ export default function App() {
 
         {/* admin + atendimento + marketing */}
         {route === 'chat' && (
-          <RequireRole roles={['admin', 'atendimento', 'marketing']} userId={session?.user?.id}>
+          <RequireRole roles={['admin', 'atendimento', 'marketing']} screenId="chat" userId={session?.user?.id}>
             <ChatScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={setRoute} />
           </RequireRole>
         )}
         {route === 'onboarding' && (
-          <RequireRole roles={['admin', 'atendimento', 'marketing']} userId={session?.user?.id}>
+          <RequireRole roles={['admin', 'atendimento', 'marketing']} screenId="onboarding" userId={session?.user?.id}>
             <OnboardingScreen tenantDbId={tenantDbId} />
           </RequireRole>
         )}
 
         {/* admin + marketing */}
         {route === 'crm' && (
-          <RequireRole roles={['admin', 'marketing']} userId={session?.user?.id}>
+          <RequireRole roles={['admin', 'marketing']} screenId="crm" userId={session?.user?.id}>
             <CRMScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={nav => setRoute(nav)} />
           </RequireRole>
         )}
         {route === 'reports' && (
-          <RequireRole roles={['admin', 'marketing']} userId={session?.user?.id}>
+          <RequireRole roles={['admin', 'marketing']} screenId="reports" userId={session?.user?.id}>
             <ReportsScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />
           </RequireRole>
         )}
@@ -387,39 +387,39 @@ export default function App() {
           </RequireRole>
         )}
         {route === 'tarefas-clientes' && (
-          <RequireRole roles={['admin', 'marketing']} userId={session?.user?.id}>
+          <RequireRole roles={['admin', 'marketing']} screenId="tarefas-clientes" userId={session?.user?.id}>
             <TarefasClientesScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />
           </RequireRole>
         )}
         {route === 'campanhas' && (
-          <RequireRole roles={['admin', 'marketing']} userId={session?.user?.id}>
+          <RequireRole roles={['admin', 'marketing']} screenId="campanhas" userId={session?.user?.id}>
             <CampanhasScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
           </RequireRole>
         )}
         {route === 'drafts-pendentes' && (
-          <RequireRole roles={['admin', 'marketing']} userId={session?.user?.id}>
+          <RequireRole roles={['admin', 'marketing']} screenId="drafts-pendentes" userId={session?.user?.id}>
             <DraftsPendentesScreen tenantId={tenantDbId} userId={session?.user?.id} />
           </RequireRole>
         )}
 
         {/* admin only */}
         {route === 'tarefas' && (
-          <RequireRole roles={['admin']} userId={session?.user?.id}>
+          <RequireRole roles={['admin']} screenId="tarefas" userId={session?.user?.id}>
             <TasksScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />
           </RequireRole>
         )}
         {route === 'contratos' && (
-          <RequireRole roles={['admin']} userId={session?.user?.id}>
+          <RequireRole roles={['admin']} screenId="contratos" userId={session?.user?.id}>
             <ContratosScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
           </RequireRole>
         )}
         {route === 'recontratacao' && (
-          <RequireRole roles={['admin']} userId={session?.user?.id}>
+          <RequireRole roles={['admin']} screenId="recontratacao" userId={session?.user?.id}>
             <RecontratacaoScreen tenantDbId={tenantDbId} />
           </RequireRole>
         )}
         {route === 'agents' && (
-          <RequireRole roles={['admin']} userId={session?.user?.id}>
+          <RequireRole roles={['admin']} screenId="agents" userId={session?.user?.id}>
             <AgentsPage tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />
           </RequireRole>
         )}
@@ -429,7 +429,7 @@ export default function App() {
           </RequireRole>
         )}
         {route === 'settings' && (
-          <RequireRole roles={['admin']} userId={session?.user?.id}>
+          <RequireRole roles={['admin']} screenId="settings" userId={session?.user?.id}>
             <SettingsScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} onTenantChange={async (newSlug) => {
               if (newSlug) {
                 setTenant(newSlug);
@@ -462,7 +462,7 @@ export default function App() {
 
         {/* admin + deli_owner */}
         {route === 'deli' && (
-          <RequireRole roles={['admin', 'deli_owner']} userId={session?.user?.id}>
+          <RequireRole roles={['admin', 'deli_owner']} screenId="deli" userId={session?.user?.id}>
             <DeliScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
           </RequireRole>
         )}
@@ -479,7 +479,7 @@ export default function App() {
           </RequireRole>
         )}
         {route === 'grupos' && (
-          <RequireRole roles={['admin', 'atendimento']} userId={session?.user?.id}>
+          <RequireRole roles={['admin', 'atendimento']} screenId="grupos" userId={session?.user?.id}>
             <GruposScreen tenant={tenant} tenantDbId={tenantDbId} />
           </RequireRole>
         )}
