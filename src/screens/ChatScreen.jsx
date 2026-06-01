@@ -1722,6 +1722,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   // ── Canais internos ───────────────────────────────────────
   const [chanMsgs, setChanMsgs]              = useState({});
   const [chanDraft, setChanDraft]            = useState('');
+  const [editingChanMsgId, setEditingChanMsgId]   = useState(null);
+  const [editingChanMsgText, setEditingChanMsgText] = useState('');
+  const [hoveredChanMsgId, setHoveredChanMsgId]    = useState(null);
   const [showNewChan, setShowNewChan]        = useState(false);
   const [newChanName, setNewChanName]        = useState('');
   const [newChanDesc, setNewChanDesc]        = useState('');
@@ -2781,6 +2784,18 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     } catch { /* ignore */ }
   }
 
+  async function saveEditChanMsg(msgId, newText) {
+    const t = newText.trim();
+    if (!t || !active?.chanId) return;
+    const chanId = active.chanId;
+    const { error } = await supabase.from('channel_messages').update({ text: t }).eq('id', msgId);
+    if (!error) {
+      setChanMsgs(m => ({ ...m, [chanId]: (m[chanId] || []).map(msg => msg.id === msgId ? { ...msg, text: t } : msg) }));
+      setEditingChanMsgId(null);
+      setEditingChanMsgText('');
+    }
+  }
+
   // ── GRAVAÇÃO DE ÁUDIO ─────────────────────────────────────
   const formatRecTime = (s) => `${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`;
 
@@ -3806,7 +3821,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                   const prevMsg = i > 0 ? activeChanMsgs[i - 1] : null;
                   const sameAuthor = prevMsg?.sender_name === msg.sender_name && (new Date(msg.created_at) - new Date(prevMsg.created_at)) < 5 * 60 * 1000;
                   return (
-                    <div key={msg.id} style={{ display: 'flex', gap: 10, padding: sameAuthor ? '1px 20px' : '8px 20px 2px', alignItems: 'flex-start' }}>
+                    <div key={msg.id} style={{ display: 'flex', gap: 10, padding: sameAuthor ? '1px 20px' : '8px 20px 2px', alignItems: 'flex-start', position: 'relative' }} onMouseEnter={() => setHoveredChanMsgId(msg.id)} onMouseLeave={() => setHoveredChanMsgId(null)}>
                       {sameAuthor ? (
                         <div style={{ width: 32, flexShrink: 0 }} />
                       ) : (
@@ -3836,10 +3851,26 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                               📎 {msg.text.replace('📎 ', '')}
                             </a>
                           )
+                        ) : editingChanMsgId === msg.id ? (
+                          <div style={{ marginTop: 2 }}>
+                            <textarea autoFocus value={editingChanMsgText}
+                              onChange={e => { setEditingChanMsgText(e.target.value); const el = e.target; el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 160) + 'px'; }}
+                              onKeyDown={e => { if (e.key === 'Escape') { setEditingChanMsgId(null); setEditingChanMsgText(''); } else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEditChanMsg(msg.id, editingChanMsgText); } }}
+                              style={{ width: '100%', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(183,12,0,0.5)', borderRadius: 6, padding: '6px 8px', fontSize: 14, color: 'rgba(255,255,255,0.9)', outline: 'none', resize: 'none', maxHeight: 160, overflowY: 'auto' }}
+                            />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>Enter salva · Esc cancela</span>
+                              <button onClick={() => saveEditChanMsg(msg.id, editingChanMsgText)} style={{ background: '#B70C00', color: 'white', border: 'none', borderRadius: 4, padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}>Salvar</button>
+                              <button onClick={() => { setEditingChanMsgId(null); setEditingChanMsgText(''); }} style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)', border: 'none', borderRadius: 4, padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}>Cancelar</button>
+                            </div>
+                          </div>
                         ) : (
                           <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.85)', lineHeight: 1.45, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{formatWhatsApp(msg.text)}</div>
                         )}
                       </div>
+                      {hoveredChanMsgId === msg.id && !editingChanMsgId && (msg.sender_id ? msg.sender_id === currentUser?.id : msg.sender_name === currentUser?.name) && (
+                        <button onClick={() => { setEditingChanMsgId(msg.id); setEditingChanMsgText(msg.text); }} style={{ position: 'absolute', top: 4, right: 20, background: 'rgba(30,30,30,0.92)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', color: 'rgba(255,255,255,0.65)', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }} title="Editar mensagem">✏️ Editar</button>
+                      )}
                     </div>
                   );
                 })}
