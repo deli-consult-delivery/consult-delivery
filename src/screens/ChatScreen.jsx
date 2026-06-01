@@ -1426,6 +1426,233 @@ function ImageLightbox({ url, onClose }) {
   );
 }
 
+
+// ─── Protocolos ──────────────────────────────────────────────────
+function ProtocolosScreen({ tenantDbId, onOpenConv }) {
+  const [convs, setConvs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('todos');
+  const [hasMore, setHasMore] = useState(false);
+  const [loadOffset, setLoadOffset] = useState(0);
+  const [depts, setDepts] = useState({});
+  const PAGE = 50;
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(search), 400);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    if (!tenantDbId) return;
+    supabase.from('departments').select('id,name,color').eq('tenant_id', tenantDbId)
+      .then(({ data }) => {
+        if (data) setDepts(Object.fromEntries(data.map(d => [d.id, d])));
+      });
+  }, [tenantDbId]);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(0, true); }, [tenantDbId, statusFilter, searchQuery]);
+
+  async function load(off = 0, reset = false) {
+    if (!tenantDbId) return;
+    if (reset) setLoading(true);
+    let q = supabase.from('conversations')
+      .select('id,push_name,contact_name,group_name,whatsapp_chat_id,status,department_id,created_at')
+      .eq('tenant_id', tenantDbId)
+      .order('updated_at', { ascending: false })
+      .range(off, off + PAGE - 1);
+    if (statusFilter !== 'todos') q = q.eq('status', statusFilter);
+    const s = searchQuery.trim();
+    if (s.length >= 2) q = q.or(`push_name.ilike.%${s}%,contact_name.ilike.%${s}%,whatsapp_chat_id.ilike.%${s}%`);
+    const { data } = await q;
+    const rows = data || [];
+    if (reset) setConvs(rows); else setConvs(prev => [...prev, ...rows]);
+    setHasMore(rows.length === PAGE);
+    setLoadOffset(off + PAGE);
+    setLoading(false);
+  }
+
+  const STATUS_LABELS = {
+    nao_iniciado: 'Não iniciado', aguardando: 'Aguardando',
+    em_atendimento: 'Em atendimento', atendimento_aberto: 'Aberto',
+    automacao: 'Automação', finalizado: 'Finalizado',
+  };
+  const STATUS_DOT = {
+    aguardando: '#F59E0B', em_atendimento: '#3B82F6',
+    atendimento_aberto: '#10B981', finalizado: '#6B7280',
+    automacao: '#8B5CF6', nao_iniciado: '#9CA3AF',
+  };
+
+  function protocolId(id) { return '#' + id.replace(/-/g, '').slice(-6).toUpperCase(); }
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+  }
+
+  const card = { background: '#1A1A1A', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, marginBottom: 14 };
+  const gridCols = '96px 1fr 140px 130px 120px 130px 68px';
+
+  return (
+    <div style={{ maxWidth: 960 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1 }}>
+          <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>Protocolos</h2>
+          <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 4 }}>Histórico completo de atendimentos.</p>
+        </div>
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Buscar contato ou telefone..."
+          style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: 'white', padding: '8px 14px', fontSize: 13, width: 240, outline: 'none' }}
+        />
+      </div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap' }}>
+        {['todos', 'aguardando', 'em_atendimento', 'atendimento_aberto', 'finalizado'].map(s => (
+          <button key={s} onClick={() => setStatusFilter(s)} style={{ background: statusFilter === s ? '#B70C00' : 'rgba(255,255,255,0.06)', border: 'none', borderRadius: 99, color: statusFilter === s ? 'white' : 'rgba(255,255,255,0.5)', padding: '5px 14px', fontSize: 12, cursor: 'pointer', fontWeight: statusFilter === s ? 600 : 400 }}>
+            {s === 'todos' ? 'Todos' : STATUS_LABELS[s]}
+          </button>
+        ))}
+      </div>
+      {loading && <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Carregando…</div>}
+      {!loading && convs.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '48px 24px', color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Nenhum protocolo encontrado.</div>
+      )}
+      {!loading && convs.length > 0 && (
+        <div style={card}>
+          <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 8, padding: '10px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: 11, color: 'rgba(255,255,255,0.35)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+            <span>Protocolo</span><span>Contato</span><span>Telefone</span><span>Status</span><span>Depto</span><span>Iniciado</span><span></span>
+          </div>
+          {convs.map(c => {
+            const name = c.push_name || c.contact_name || c.group_name || '—';
+            const phone = (c.whatsapp_chat_id || '').replace(/@[^@]+$/, '') || '—';
+            const dept = c.department_id ? depts[c.department_id] : null;
+            return (
+              <div key={c.id} style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 8, padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.04)', alignItems: 'center' }}>
+                <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>{protocolId(c.id)}</span>
+                <span style={{ color: 'white', fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11 }}>{phone}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: STATUS_DOT[c.status] || '#6B7280', flexShrink: 0 }} />
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)' }}>{STATUS_LABELS[c.status] || c.status}</span>
+                </span>
+                <span style={{ fontSize: 11, color: dept ? dept.color : 'rgba(255,255,255,0.3)' }}>{dept ? dept.name : '—'}</span>
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{fmtDate(c.created_at)}</span>
+                <button onClick={() => onOpenConv && onOpenConv(c.id)} style={{ background: 'rgba(255,255,255,0.07)', border: 'none', borderRadius: 6, color: 'rgba(255,255,255,0.6)', fontSize: 11, padding: '5px 8px', cursor: 'pointer' }}>Abrir</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {hasMore && (
+        <button onClick={() => load(loadOffset)} style={{ width: '100%', background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: 8, color: 'rgba(255,255,255,0.5)', padding: '10px', fontSize: 13, cursor: 'pointer', marginTop: 4 }}>Carregar mais</button>
+      )}
+    </div>
+  );
+}
+
+// ─── Visualização ─────────────────────────────────────────────────
+function VisualizacaoScreen({ tenantDbId }) {
+  const [stats, setStats] = useState(null);
+  const [daily, setDaily] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!tenantDbId) return;
+    (async () => {
+      const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+      const { data } = await supabase.from('conversations')
+        .select('id,status,created_at')
+        .eq('tenant_id', tenantDbId)
+        .gte('created_at', since);
+      const rows = data || [];
+      const counts = { total: rows.length };
+      ['nao_iniciado','aguardando','em_atendimento','atendimento_aberto','automacao','finalizado'].forEach(s => {
+        counts[s] = rows.filter(r => r.status === s).length;
+      });
+      const days = [];
+      for (let i = 13; i >= 0; i--) {
+        const d = new Date(Date.now() - i * 24 * 3600 * 1000);
+        const dateStr = d.toISOString().split('T')[0];
+        const label = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        days.push({ label, count: rows.filter(r => r.created_at && r.created_at.startsWith(dateStr)).length });
+      }
+      setStats(counts);
+      setDaily(days);
+      setLoading(false);
+    })();
+  }, [tenantDbId]);
+
+  const card = { background: '#1A1A1A', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10 };
+
+  if (loading) return <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Carregando…</div>;
+
+  const metricCards = [
+    { label: 'Total (30 dias)',  value: stats.total,                                                            color: 'white' },
+    { label: 'Aguardando',       value: stats.aguardando || 0,                                                  color: '#F59E0B' },
+    { label: 'Em atendimento',   value: (stats.em_atendimento || 0) + (stats.atendimento_aberto || 0),         color: '#3B82F6' },
+    { label: 'Finalizados',      value: stats.finalizado || 0,                                                  color: '#10B981' },
+  ];
+
+  const maxDay = Math.max(...daily.map(d => d.count), 1);
+
+  const statusBars = [
+    { key: 'aguardando',         label: 'Aguardando',     color: '#F59E0B' },
+    { key: 'em_atendimento',     label: 'Em atendimento', color: '#3B82F6' },
+    { key: 'atendimento_aberto', label: 'Aberto',         color: '#60A5FA' },
+    { key: 'automacao',          label: 'Automação',      color: '#8B5CF6' },
+    { key: 'finalizado',         label: 'Finalizado',     color: '#10B981' },
+    { key: 'nao_iniciado',       label: 'Não iniciado',   color: '#6B7280' },
+  ];
+
+  return (
+    <div style={{ maxWidth: 820 }}>
+      <div style={{ marginBottom: 28 }}>
+        <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>Visualização</h2>
+        <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 4 }}>Métricas dos últimos 30 dias.</p>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 24 }}>
+        {metricCards.map(m => (
+          <div key={m.label} style={{ ...card, padding: '20px 18px' }}>
+            <div style={{ fontSize: 30, fontWeight: 700, color: m.color, marginBottom: 4 }}>{m.value}</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>{m.label}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ ...card, padding: '20px 20px 16px', marginBottom: 14 }}>
+        <div style={{ color: 'white', fontWeight: 600, fontSize: 13, marginBottom: 16 }}>Conversas por dia (últimos 14 dias)</div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, height: 100 }}>
+          {daily.map(d => (
+            <div key={d.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              {d.count > 0 && <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginBottom: 2 }}>{d.count}</div>}
+              <div style={{ width: '100%', height: d.count ? `${Math.round((d.count / maxDay) * 72)}px` : '3px', background: d.count ? '#B70C00' : 'rgba(255,255,255,0.06)', borderRadius: '3px 3px 0 0', minHeight: 3 }} />
+              <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', marginTop: 4, whiteSpace: 'nowrap' }}>{d.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ ...card, padding: '20px' }}>
+        <div style={{ color: 'white', fontWeight: 600, fontSize: 13, marginBottom: 14 }}>Distribuição por status</div>
+        {statusBars.map(s => {
+          const pct = stats.total ? Math.round((stats[s.key] || 0) / stats.total * 100) : 0;
+          return (
+            <div key={s.key} style={{ marginBottom: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{s.label}</span>
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>{stats[s.key] || 0} ({pct}%)</span>
+              </div>
+              <div style={{ height: 6, borderRadius: 99, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${pct}%`, background: s.color, borderRadius: 99 }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════
 // CHAT SCREEN — componente principal
 // ═══════════════════════════════════════════════════════════════
@@ -3225,8 +3452,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         <div style={{ flex: 1, overflow: 'auto', padding: 32, color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>
           {headerTab === 'dept'  && <DepartmentsScreen tenantDbId={tenantDbId} members={members} />}
           {headerTab === 'bots'  && <BotsScreen tenantDbId={tenantDbId} />}
-          {headerTab === 'proto' && <div>Protocolos — em breve</div>}
-          {headerTab === 'viz'   && <div>Visualização — em breve</div>}
+              {headerTab === 'proto' && <ProtocolosScreen tenantDbId={tenantDbId} onOpenConv={id => { setActiveId(id); setHeaderTab('inbox'); loadMsgs(id); }} />}
+              {headerTab === 'viz'   && <VisualizacaoScreen tenantDbId={tenantDbId} />}
         </div>
       </div>
     );
