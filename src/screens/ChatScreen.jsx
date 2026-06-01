@@ -2344,7 +2344,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
   async function loadChanMsgs(chanId) {
     try {
-      const { data } = await supabase.from('channel_messages').select('id, sender_id, sender_name, text, is_pinned, created_at').eq('channel_id', chanId).order('created_at');
+      const { data } = await supabase.from('channel_messages').select('id, sender_id, sender_name, text, media_url, media_type, is_pinned, created_at').eq('channel_id', chanId).order('created_at');
       if (data) setChanMsgs(m => ({ ...m, [chanId]: data }));
     } catch { /* ignore */ }
   }
