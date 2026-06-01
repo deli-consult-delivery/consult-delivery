@@ -2774,6 +2774,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     const tmpMsg = { id: 'tmp-' + Date.now(), sender_name: currentUser?.name || 'Você', text, is_pinned: false, created_at: now.toISOString() };
     setChanMsgs(m => ({ ...m, [chanId]: [...(m[chanId] || []), tmpMsg] }));
     setChanDraft('');
+    if (chanTextareaRef.current) { chanTextareaRef.current.style.height = 'auto'; }
     try {
       const { data } = await supabase.from('channel_messages').insert({ channel_id: chanId, sender_id: currentUser?.id || null, sender_name: currentUser?.name || 'Você', text }).select().single();
       if (data) setChanMsgs(m => ({ ...m, [chanId]: (m[chanId] || []).map(msg => msg.id === tmpMsg.id ? data : msg) }));
@@ -3884,12 +3885,12 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                       <textarea
                         ref={chanTextareaRef}
                         value={chanDraft}
-                        onChange={e => setChanDraft(e.target.value)}
+                        onChange={e => { setChanDraft(e.target.value); const el = e.target; el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 160) + 'px'; }}
                         onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChanMsg(); } }}
                         className="lc-comp-input"
                         placeholder={`Escreva para ${active.name}…`}
                         rows={1}
-                        style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', resize: 'none', padding: 0, fontSize: 14 }}
+                        style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', resize: 'none', padding: 0, fontSize: 14, maxHeight: 160, overflowY: 'auto' }}
                       />
                     </div>
                     {/* Toolbar inferior estilo ClickUp */}
