@@ -3148,7 +3148,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   };
 
   // ── DERIVADOS ─────────────────────────────────────────────
-  const active         = convs.find(c => c.id === activeId) || convs[0];
+  const active         = convs.find(c => c.id === activeId) || searchConvs.find(c => c.id === activeId) || null;
   const activeMsgs     = messages[activeId] || [];
   const isChannel      = !!activeId?.startsWith('chan-');
   const activeChanMsgs = isChannel ? (chanMsgs[active?.chanId] || []) : [];
