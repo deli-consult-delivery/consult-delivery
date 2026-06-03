@@ -11,6 +11,7 @@ import DepartmentSelector from '../components/chat/DepartmentSelector.jsx';
 import ConversationStatusBadge from '../components/chat/ConversationStatusBadge.jsx';
 import LeadPanel from '../components/chat/LeadPanel.jsx';
 import ChatTasksPanel from '../components/chat/ChatTasksPanel.jsx';
+import CustomerNotesSection from '../components/chat/CustomerNotesSection.jsx';
 import ClienteFocoPanel from '../components/cliente-foco/ClienteFocoPanel.jsx';
 import { useLojaPorRemoteJid } from '../hooks/useLojaPorRemoteJid.js';
 
@@ -4593,7 +4594,14 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
                 {/* Notas */}
                 <CollapseSection title="Notas" open={openNotas} onToggle={() => setOpenNotas(v => !v)}>
-                  <textarea className="lc-notes" placeholder="Adicione uma nota interna…" />
+                  <CustomerNotesSection
+                    customerId={activeCustomer?.id}
+                    customerName={activeCustomer?.name}
+                    conversationId={active?.id}
+                    tenantId={tenantDbId}
+                    conversationMsgs={activeMsgs}
+                    currentUserId={currentUser?.id}
+                  />
                 </CollapseSection>
 
                 {/* iFood */}
