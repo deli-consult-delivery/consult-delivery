@@ -167,6 +167,48 @@ function statusFromLastSignIn(ts) {
 
 const BRIDGE_URL = import.meta.env.VITE_BRIDGE_URL || 'http://187.127.25.24:3001';
 
+function EditNameModal({ member, tenantDbId, onClose, onSuccess }) {
+  const [name, setName] = useState(member.full_name || '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleSave() {
+    if (!name.trim()) { setError('Informe o nome'); return; }
+    setSaving(true); setError('');
+    const { error: err } = await supabase.rpc('update_member_display_name', {
+      p_tenant_id: tenantDbId,
+      p_user_id: member.user_id,
+      p_display_name: name.trim(),
+    });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    onSuccess();
+    onClose();
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 14, padding: 28, width: 380, position: 'relative' }}>
+        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--g-400)', cursor: 'pointer', fontSize: 18 }}>✕</button>
+        <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--g-100)' }}>Editar nome</h3>
+        <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--g-400)' }}>{member.email}</p>
+        <input
+          type="text"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="Nome completo"
+          style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #333', borderRadius: 8, color: 'var(--g-100)', fontSize: 14, marginBottom: 16, boxSizing: 'border-box' }}
+        />
+        {error && <div style={{ marginBottom: 12, fontSize: 12, color: '#ef4444', background: '#ef444415', padding: '8px 12px', borderRadius: 6 }}>{error}</div>}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button className="btn-ghost" onClick={onClose}>Cancelar</button>
+          <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Salvando...' : 'Salvar'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EditRoleModal({ member, tenantDbId, onClose, onSuccess }) {
   const [role, setRole] = useState(member.role);
   const [saving, setSaving] = useState(false);
@@ -378,6 +420,7 @@ const UsersSettings = ({ tenantDbId }) => {
   const [loading, setLoading] = useState(true);
   const [activeMenu, setActiveMenu] = useState(null);
   const [editingMember, setEditingMember] = useState(null);
+  const [editingNameMember, setEditingNameMember] = useState(null);
   const [removingMember, setRemovingMember] = useState(null);
   const [inviting, setInviting] = useState(false);
   const [screenPermsMember, setScreenPermsMember] = useState(null);
@@ -444,6 +487,10 @@ const UsersSettings = ({ tenantDbId }) => {
                     {activeMenu === u.user_id && (
                       <div style={{ position: 'absolute', right: 0, top: '100%', zIndex: 1000, background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, minWidth: 180, boxShadow: '0 8px 24px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
                         <button
+                          onClick={() => { setEditingNameMember(u); setActiveMenu(null); }}
+                          style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--g-200)', fontSize: 13, textAlign: 'left', cursor: 'pointer' }}
+                        >Editar nome</button>
+                        <button
                           onClick={() => { setEditingMember(u); setActiveMenu(null); }}
                           style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--g-200)', fontSize: 13, textAlign: 'left', cursor: 'pointer' }}
                         >Editar permissão</button>
@@ -466,6 +513,7 @@ const UsersSettings = ({ tenantDbId }) => {
         </table>
       )}
       {editingMember && <EditRoleModal member={editingMember} tenantDbId={tenantDbId} onClose={() => setEditingMember(null)} onSuccess={loadTeam} />}
+      {editingNameMember && <EditNameModal member={editingNameMember} tenantDbId={tenantDbId} onClose={() => setEditingNameMember(null)} onSuccess={loadTeam} />}
       {removingMember && <RemoveUserModal member={removingMember} tenantDbId={tenantDbId} onClose={() => setRemovingMember(null)} onSuccess={loadTeam} />}
       {inviting && <InviteUserModal tenantDbId={tenantDbId} onClose={() => setInviting(false)} onSuccess={loadTeam} />}
       {screenPermsMember && <ScreenPermissionsModal member={screenPermsMember} tenantDbId={tenantDbId} onClose={() => setScreenPermsMember(null)} />}
