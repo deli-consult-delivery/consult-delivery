@@ -2670,6 +2670,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     const currentReplyTo = replyTo;
     setMessages(m => ({ ...m, [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text, time, _ts: now.toISOString(), agentName, replyTo: currentReplyTo }] }));
     setDraft(''); setReplyTo(null);
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
     if (HAS_EVO && selectedInstance && active.whatsapp_chat_id) {
       setSending(true);
       const textToSend = agentName ? `*${agentName}:*\n${text}` : text;
@@ -3324,6 +3325,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const runCommand = async (cmd) => {
     setShowSlash(false);
     setDraft('');
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
     const BRIDGE_URL = import.meta.env.VITE_BRIDGE_URL || '';
     const AI_CMDS = ['/resumir', '/proxima', '/traduzir', '/tom', '/cobranca'];
@@ -3374,6 +3376,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
   const onDraftChange = (v) => {
     setDraft(v);
+    const el = textareaRef.current;
+    if (el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 160) + 'px'; }
     if (v === '/' || (v.endsWith('/') && (v.length === 1 || v[v.length-2] === ' '))) setShowSlash(true);
     else if (!v.includes('/')) setShowSlash(false);
     if (v.endsWith('@') && (v.length === 1 || v[v.length-2] === ' ')) setShowMention(true);
