@@ -3720,12 +3720,6 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
             ))}
           </div>
 
-          {/* Tabs WhatsApp / Grupos / Interno / Todas */}
-          <div style={{ display: 'flex', gap: 2, padding: 2, background: 'rgba(255,255,255,0.04)', borderRadius: 5, marginBottom: 5 }}>
-            {[{ id: 'wa', label: 'WA' }, { id: 'groups', label: 'Grupos' }, { id: 'int', label: 'Interno' }, { id: 'all', label: 'Todas' }, { id: 'fav', label: '★' }].map(t => (
-              <button key={t.id} onClick={() => setTab(t.id)} title={t.id === 'fav' ? 'Favoritas' : undefined} style={{ flex: t.id === 'fav' ? 'none' : 1, padding: '4px 6px', fontSize: 10, fontWeight: 600, borderRadius: 3, background: tab === t.id ? 'rgba(255,255,255,0.08)' : 'transparent', color: tab === t.id ? (t.id === 'fav' ? '#FBBF24' : 'white') : (t.id === 'fav' ? 'rgba(251,191,36,0.5)' : 'rgba(255,255,255,0.55)') }}>{t.label}</button>
-            ))}
-          </div>
         </div>
 
         {/* AI triage banner */}
@@ -3837,24 +3831,6 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
 
         {/* Lista de conversas */}
         {!showStarredPanel && <div className="lc-list-body dark-scroll">
-          {tab === 'fav' && favConvs.size === 0 && (
-            <div style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
-              <div style={{ fontSize: 28, marginBottom: 8 }}>⭐</div>
-              Nenhuma conversa favorita ainda.<br/>Clique na estrela de uma conversa para favoritar.
-            </div>
-          )}
-          {/* Header canais internos com botão criar */}
-          {tab === 'int' && (
-            <div style={{ padding: '10px 12px 6px', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: 1, flex: 1 }}>Canais</span>
-              <button
-                onClick={() => setShowNewChan(true)}
-                style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 5, padding: '2px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
-              >
-                + Novo Canal
-              </button>
-            </div>
-          )}
 
           {filtered.map(c => (
             <ConvRow
