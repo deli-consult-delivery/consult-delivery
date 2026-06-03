@@ -10,6 +10,7 @@ import ConversationFiltersBar from '../components/chat/ConversationFiltersBar.js
 import DepartmentSelector from '../components/chat/DepartmentSelector.jsx';
 import ConversationStatusBadge from '../components/chat/ConversationStatusBadge.jsx';
 import LeadPanel from '../components/chat/LeadPanel.jsx';
+import ChatTasksPanel from '../components/chat/ChatTasksPanel.jsx';
 import ClienteFocoPanel from '../components/cliente-foco/ClienteFocoPanel.jsx';
 import { useLojaPorRemoteJid } from '../hooks/useLojaPorRemoteJid.js';
 
@@ -1711,6 +1712,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   // ── AI / Composer ─────────────────────────────────────────
   const [aiMode, setAiMode]                  = useState('humano');
   const [showCopilot, setShowCopilot]        = useState(true);
+  const [showTasksPanel, setShowTasksPanel]  = useState(false);
   const [showInspector, setShowInspector]    = useState(false);
   const [showSlash, setShowSlash]            = useState(false);
   const [showMention, setShowMention]        = useState(false);
@@ -3544,6 +3546,10 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           <button className={`lc-head-btn${showCopilot ? ' on' : ''}`} onClick={() => setShowCopilot(v => !v)}>
             <AgentAvatar id="deli" size={14} /> <span className="lc-head-btn-label">Copiloto</span>
           </button>
+          <button className={`lc-head-btn${showTasksPanel ? ' on' : ''}`} onClick={() => setShowTasksPanel(v => !v)}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+            <span className="lc-head-btn-label">Tarefas</span>
+          </button>
         </div>
       </header>
 
@@ -4694,6 +4700,14 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           </div>
         </div>
       </div>
+    )}
+    {showTasksPanel && (
+      <ChatTasksPanel
+        tenantDbId={tenantDbId}
+        members={members}
+        currentUserId={currentUser?.id}
+        onClose={() => setShowTasksPanel(false)}
+      />
     )}
     </>
   );
