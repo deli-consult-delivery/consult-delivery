@@ -9,15 +9,18 @@
 
 ---
 
-## 1. ⚠️ DIVERGÊNCIAS COM A STACK AUTORITATIVA — RESOLVER NO CHECKPOINT 0
+## 1. ⚠️ DIVERGÊNCIAS COM A STACK AUTORITATIVA — ✅ DECIDIDO 2026-06-03
 
-O prompt-base foi escrito assumindo um ambiente (VPS Linux) e uma stack que **conflitam em 3 pontos** com `RESTRUCTURE.md`/`CLAUDE.md`. Por CLAUDE.md+RESTRUCTURE.md §0, o doc autoritativo vence — **nenhum desses pontos pode ser silenciosamente codado do jeito do prompt.** São decisões do Wandson no CHECKPOINT 0.
+O prompt-base foi escrito assumindo um ambiente (VPS Linux) e uma stack que **conflitavam em 3 pontos** com `RESTRUCTURE.md`/`CLAUDE.md`. Por CLAUDE.md+RESTRUCTURE.md §0, o doc autoritativo vence.
+
+> ✅ **DECIDIDO 2026-06-03 pelo Wandson** — ver **`DECISAO-001-runtime-provider-custo.md`** (registro completo: runtime, arquitetura multi-provider BYO-key, fora-de-escopo OAuth, custo por token). Numeração canônica: **D1 = runtime**, **D2 = versão Trigger.dev**, **D3 = ambiente da FASE 0**.
 
 | # | Prompt-base diz | Stack autoritativa diz | Conflito | Resolução proposta (Wandson decide) |
 |---|------------------|------------------------|----------|--------------------------------------|
-| D1 | Runtime = **"Claude Agent SDK nativo"** (`@anthropic-ai/claude-agent-sdk`) | `RESTRUCTURE.md` §3.2 linha 89: runtime oficial = **`@anthropic-ai/sdk`** + `web_search_20250305`. §3.3 linha 100: `@anthropic-ai/claude-agent-sdk` = **"Não usado — Requer binário `claude` instalado — não funciona em Trigger.dev cloud"** | **REAL e bloqueante.** O Agent SDK precisa do binário `claude`; não roda em Trigger.dev cloud. Adotá-lo como "o motor" quebra a arquitetura validada. | (a) **Padrão:** orquestrador usa `@anthropic-ai/sdk` (como hoje), e "Oracle" é orquestração nossa em cima dele — **não** o Agent SDK. (b) Se o Agent SDK for desejado, só roda no **Bridge Server VPS** (onde o binário existe), nunca em Trigger.dev. (c) Reabrir §3.3 formalmente. → **Sem decisão, segue (a).** |
-| D2 | "Trigger.dev **v3**" | `CLAUDE.md` + `RESTRUCTURE.md` §3.2 linha 88: **v4** (`npx trigger.dev@4.4.6 deploy`) | Menor. Versão errada no prompt. | Usar **v4** (a stack já está em v4). Padrões de task/cron/eventos seguem `RESTRUCTURE.md` §7. |
-| D3 | "Replicar o EvoNexus"; EvoNexus como laboratório | `CLAUDE.md` linha 33 + `RESTRUCTURE.md` §2 princ. 8 / §3.3 linha 98: **EvoNexus PROIBIDO** ("UI-driven, não API-first, testado e descartado em 07/05") | **Aparente, reconciliável.** A proibição é do **motor/produto** EvoNexus em produção. O pedido é re-implementar o **paradigma/feature-surface NATIVO** na stack CD — o próprio prompt (princípio 1) diz "Re-implementar o paradigma, NÃO copiar o motor". | **Não viola a proibição.** Documentado aqui: "EvoNexus = referência de features, nunca dependência em runtime". Nenhum binário/serviço EvoNexus entra em prod. |
+| D1 (runtime) | Runtime = **"Claude Agent SDK nativo"** (`@anthropic-ai/claude-agent-sdk`) | `RESTRUCTURE.md` §3.2 linha 89: runtime oficial = **`@anthropic-ai/sdk`** + `web_search_20250305`. §3.3 linha 100: Agent SDK = **"não funciona em Trigger.dev cloud"** | **REAL e bloqueante.** O Agent SDK precisa do binário `claude`; não roda em Trigger.dev cloud. | ✅ **DECIDIDO (a):** orquestrador usa **`@anthropic-ai/sdk`**; "Oracle" é orquestração nossa em cima dele. Agent SDK fica fora do produto (só Bridge VPS, uso pessoal). **+ camada multi-provider** (Anthropic/Ollama/OpenRouter, BYO-key por tenant via Infisical, roteamento por tarefa, fallback). OAuth-de-assinatura embutido = **fora de escopo** (legal/ToS). Ver `DECISAO-001`. |
+| D2 (Trigger) | "Trigger.dev **v3**" | `CLAUDE.md` + `RESTRUCTURE.md` §3.2 linha 88: **v4** (`npx trigger.dev@4.4.6 deploy`) | Menor. Versão errada no prompt. | ✅ **DECIDIDO:** **v4** (a stack já está em v4). Padrões de task/cron/eventos seguem `RESTRUCTURE.md` §7. |
+| D3 (ambiente FASE 0) | FASE 0 lê código do EvoNexus em `/root/cd-evonexus-lab` + repo GitHub | Caminhos Linux/VPS **não acessíveis** deste Windows (§3) | Onde rodar a leitura do motor. | ✅ **DECIDIDO:** FASE 0 roda na **VPS** / `cd-evonexus-lab`, não do Windows local. Ver `DECISAO-001` §1. |
+| — (proibição) | "Replicar o EvoNexus" | `CLAUDE.md` linha 33 / `RESTRUCTURE.md` §3.3 linha 98: **EvoNexus PROIBIDO** | **Aparente, reconciliável** (não era um bloqueio). A proibição é do **motor/produto** em prod; replicar o **paradigma NATIVO** é permitido (princípio 1). | ✅ **Confirmado, não viola.** EvoNexus = referência, nunca dependência em runtime. Nenhum binário/serviço EvoNexus entra em prod. |
 
 **Regra de ouro:** o que entra em produção é stack CD pura (React+Vite+Supabase+Trigger.dev v4+`@anthropic-ai/sdk`+Bridge:3001). EvoNexus e `cd-evonexus-lab` são **fonte de estudo**, fora do runtime.
 
@@ -74,7 +77,7 @@ O prompt assume caminhos Linux/VPS que **não existem nesta máquina** (Windows 
 - ⚠️ **Edit tool falha em match multi-linha por CRLF** → para edições programáticas use scripts `.cjs` (projeto é ESM, `"type":"module"`).
 - `gh pr merge` local falha (worktree `main` travado em `cd-f3`) mas o merge ocorre no GitHub → verificar com `gh pr view N --json state,mergedAt`.
 
-**Conclusão:** FASE 0 (ler código do EvoNexus) depende do lab/VPS. Decidir no CHECKPOINT 0: rodar FASE 0 na VPS, ou pular leitura-do-motor e mapear só pelo feature-surface já capturado na seção 5.
+**Conclusão (✅ DECIDIDO 2026-06-03 — D3):** FASE 0 (ler código do EvoNexus) **roda na VPS** (`187.127.25.24`) / `cd-evonexus-lab` — não deste Windows. Ver `DECISAO-001` §1.
 
 ---
 
@@ -190,7 +193,8 @@ Sem elas o runtime IA parece "trabalhoso"; com elas, criar agente = markdown.
 | Checkpoint | Gate | Status |
 |------------|------|--------|
 | Plano persistido | Este doc + ponteiro no CLAUDE.md | ✅ feito (2026-06-02) |
-| 🛑 CHECKPOINT 0 | Resolver D1/D2/D3 (§1) + ambiente VPS (§3) + inventário técnico | ⏳ aguardando Wandson |
+| Decisão D1/D2/D3 | Runtime + multi-provider + ambiente FASE 0 (`DECISAO-001`) | ✅ DECIDIDO (2026-06-03) |
+| 🛑 CHECKPOINT 0 | Inventário técnico (FASE 0 na VPS) + sign-off | ⏳ FASE 0 ainda não rodada |
 | 🛑 CHECKPOINT 1 | Mapeamento do checklist | — |
 | 🛑 CHECKPOINT 2 | Schema + migrations (mostrar SQL) | — |
 | 🛑 CHECKPOINT 3 | Plano faseado + checklist completude | — |
