@@ -10,6 +10,7 @@ import ConversationFiltersBar from '../components/chat/ConversationFiltersBar.js
 import DepartmentSelector from '../components/chat/DepartmentSelector.jsx';
 import ConversationStatusBadge from '../components/chat/ConversationStatusBadge.jsx';
 import LeadPanel from '../components/chat/LeadPanel.jsx';
+import ChatTasksPanel from '../components/chat/ChatTasksPanel.jsx';
 import ClienteFocoPanel from '../components/cliente-foco/ClienteFocoPanel.jsx';
 import { useLojaPorRemoteJid } from '../hooks/useLojaPorRemoteJid.js';
 
@@ -1225,6 +1226,11 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onSta
   function renderMedia() {
     if (!m.mediaType) return null;
     const url = m.mediaUrl;
+    if (m.mediaType === 'sticker') {
+      return url
+        ? <img src={url} alt="Figurinha" style={{ width: 120, height: 120, objectFit: 'contain', borderRadius: 8 }} />
+        : <span style={{ fontSize: 28 }}>🔖</span>;
+    }
     if (m.mediaType === 'image') {
       return <SmartImage src={url} marginBottom={m.text ? 6 : 0} onViewImage={onViewImage} showDownload={!!url} downloadName={m.text} />;
     }
@@ -1711,6 +1717,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   // ── AI / Composer ─────────────────────────────────────────
   const [aiMode, setAiMode]                  = useState('humano');
   const [showCopilot, setShowCopilot]        = useState(true);
+  const [showTasksPanel, setShowTasksPanel]  = useState(false);
   const [showInspector, setShowInspector]    = useState(false);
   const [showSlash, setShowSlash]            = useState(false);
   const [showMention, setShowMention]        = useState(false);
@@ -2035,7 +2042,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         const time      = new Date(msg.created_at || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
         const isActive  = convId === activeIdRef.current;
         const mediaType = msg.media_type || null;
-        const preview   = text || (mediaType === 'image' ? '🖼 Imagem' : mediaType === 'video' ? '🎬 Vídeo' : mediaType === 'document' ? '📄 Documento' : mediaType?.includes('audio') ? '🎵 Áudio' : '');
+        const preview   = text || (mediaType === 'image' ? '🖼 Imagem' : mediaType === 'video' ? '🎬 Vídeo' : mediaType === 'document' ? '📄 Documento' : mediaType?.includes('audio') ? '🎵 Áudio' : mediaType === 'sticker' ? '🔖 Figurinha' : '');
         setMessages(m => {
           const convMsgs = m[convId] || [];
           if (convMsgs.some(ex => ex.id === msg.id)) return m;
@@ -2434,7 +2441,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         const phone = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
         const name  = c.push_name || c.contact_name || c.group_name || phone || 'Desconhecido';
         const lm    = lastMsgMap[c.id];
-        const preview = lm ? (lm.media_type === 'image' ? '🖼 Imagem' : lm.media_type === 'video' ? '🎬 Vídeo' : lm.media_type === 'document' ? '📄 Documento' : lm.media_type?.includes('audio') ? '🎵 Áudio' : lm.content || lm.body || '') : '';
+        const preview = lm ? (lm.media_type === 'image' ? '🖼 Imagem' : lm.media_type === 'video' ? '🎬 Vídeo' : lm.media_type === 'document' ? '📄 Documento' : lm.media_type?.includes('audio') ? '🎵 Áudio' : lm.media_type === 'sticker' ? '🔖 Figurinha' : lm.content || lm.body || '') : '';
         const previewFrom = lm?.direction === 'inbound' ? 'in' : 'out';
         return { id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null, type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id, preview, previewFrom, time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '', _sortTs: c.updated_at || '', unread: 0, online: false, messages: [], status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null, status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null, breno_paused: c.breno_paused || false, last_breno_handled_at: c.last_breno_handled_at || null, _recentInbound: c._recentInbound || false };
       });
@@ -2559,7 +2566,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           const phone = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
           const name  = c.push_name || c.contact_name || c.group_name || phone || 'Desconhecido';
           const lm    = lastMsgMap[c.id];
-          const preview = lm ? (lm.media_type === 'image' ? '🖼 Imagem' : lm.media_type === 'video' ? '🎬 Vídeo' : lm.media_type === 'document' ? '📄 Documento' : lm.media_type?.includes('audio') ? '🎵 Áudio' : lm.content || lm.body || '') : '';
+          const preview = lm ? (lm.media_type === 'image' ? '🖼 Imagem' : lm.media_type === 'video' ? '🎬 Vídeo' : lm.media_type === 'document' ? '📄 Documento' : lm.media_type?.includes('audio') ? '🎵 Áudio' : lm.media_type === 'sticker' ? '🔖 Figurinha' : lm.content || lm.body || '') : '';
           const previewFrom = lm?.direction === 'inbound' ? 'in' : 'out';
           return { id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null, type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id, preview, previewFrom, time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '', _sortTs: c.updated_at || '', unread: 0, online: false, messages: [], status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null, status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null, breno_paused: c.breno_paused || false, last_breno_handled_at: c.last_breno_handled_at || null };
         });
@@ -2632,7 +2639,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           const phone = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
           const name  = c.push_name || c.contact_name || c.group_name || phone || 'Desconhecido';
           const lm    = lastMsgMap[c.id];
-          const preview = lm ? (lm.media_type === 'image' ? '🖼 Imagem' : lm.media_type === 'video' ? '🎬 Vídeo' : lm.media_type === 'document' ? '📄 Documento' : lm.media_type?.includes('audio') ? '🎵 Áudio' : lm.content || lm.body || '') : '';
+          const preview = lm ? (lm.media_type === 'image' ? '🖼 Imagem' : lm.media_type === 'video' ? '🎬 Vídeo' : lm.media_type === 'document' ? '📄 Documento' : lm.media_type?.includes('audio') ? '🎵 Áudio' : lm.media_type === 'sticker' ? '🔖 Figurinha' : lm.content || lm.body || '') : '';
           const previewFrom = lm?.direction === 'inbound' ? 'in' : 'out';
           mapped.push({ id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null, type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id, preview, previewFrom, time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '', _sortTs: c.updated_at || '', unread: 0, online: false, messages: [], status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null, status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null });
         });
@@ -3544,6 +3551,10 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           <button className={`lc-head-btn${showCopilot ? ' on' : ''}`} onClick={() => setShowCopilot(v => !v)}>
             <AgentAvatar id="deli" size={14} /> <span className="lc-head-btn-label">Copiloto</span>
           </button>
+          <button className={`lc-head-btn${showTasksPanel ? ' on' : ''}`} onClick={() => setShowTasksPanel(v => !v)}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+            <span className="lc-head-btn-label">Tarefas</span>
+          </button>
         </div>
       </header>
 
@@ -3660,7 +3671,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {entry.text || (entry.mediaType === 'image' ? '🖼 Imagem' : entry.mediaType?.includes('audio') ? '🎵 Áudio' : entry.mediaType === 'video' ? '🎬 Vídeo' : '📄 Documento')}
+                          {entry.text || (entry.mediaType === 'image' ? '🖼 Imagem' : entry.mediaType?.includes('audio') ? '🎵 Áudio' : entry.mediaType === 'video' ? '🎬 Vídeo' : entry.mediaType === 'sticker' ? '🔖 Figurinha' : '📄 Documento')}
                         </div>
                         <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>{entry.time}</div>
                       </div>
@@ -4694,6 +4705,14 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
           </div>
         </div>
       </div>
+    )}
+    {showTasksPanel && (
+      <ChatTasksPanel
+        tenantDbId={tenantDbId}
+        members={members}
+        currentUserId={currentUser?.id}
+        onClose={() => setShowTasksPanel(false)}
+      />
     )}
     </>
   );
