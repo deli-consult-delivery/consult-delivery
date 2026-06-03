@@ -130,7 +130,8 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
   const isImage    = !!msgData.message?.imageMessage;
   const isVideo    = !!msgData.message?.videoMessage;
   const isDocument = !!msgData.message?.documentMessage;
-  const isMedia    = isAudio || isImage || isVideo || isDocument;
+  const isSticker  = !!msgData.message?.stickerMessage;
+  const isMedia    = isAudio || isImage || isVideo || isDocument || isSticker;
 
   // ── Reação de emoji WhatsApp ──────────────────────────────────────────────
   const reactionMsg = (msgData.message as Record<string, unknown>)?.reactionMessage as Record<string, unknown> | undefined;
@@ -160,11 +161,13 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
   else if (isImage)    detectedMediaType = 'image';
   else if (isVideo)    detectedMediaType = 'video';
   else if (isDocument) detectedMediaType = 'document';
+  else if (isSticker)  detectedMediaType = 'sticker';
 
   const messageText: string = isAudio    ? '🎵 Áudio'
     : isImage    ? (msgData.message?.imageMessage?.caption    || '🖼 Imagem')
     : isVideo    ? (msgData.message?.videoMessage?.caption    || '🎬 Vídeo')
     : isDocument ? (msgData.message?.documentMessage?.title   || '📄 Documento')
+    : isSticker  ? '🔖 Figurinha'
     : msgData.message?.conversation ||
       msgData.message?.extendedTextMessage?.text ||
       '';
@@ -286,7 +289,7 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
     }).select('id').single();
     console.log('[WEBHOOK][MESSAGES_UPSERT] fromMe: mensagem do celular físico salva', msgId, 'mediaType=', detectedMediaType);
     if (isMedia && fmSavedMsg) {
-      fetchMedia({ inst, instance, msgData, isPtt, isAudio, isImage, isVideo, isDocument, savedMsgId: fmSavedMsg.id });
+      fetchMedia({ inst, instance, msgData, isPtt, isAudio, isImage, isVideo, isDocument, isSticker, savedMsgId: fmSavedMsg.id });
     }
     // Celular físico (DEDUP 1 e 2 não pegaram) → marca conversa como Automação
     // (inclui finalizado: se alguém respondeu pelo celular, conv não está mais finalizada)
@@ -400,7 +403,7 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
     savedMsg = upsertedMsg;
 
     if (isMedia && savedMsg) {
-      fetchMedia({ inst, instance, msgData, isPtt, isAudio, isImage, isVideo, isDocument, savedMsgId: savedMsg.id });
+      fetchMedia({ inst, instance, msgData, isPtt, isAudio, isImage, isVideo, isDocument, isSticker, savedMsgId: savedMsg.id });
     }
 
     // Cliente respondeu enquanto equipe aguardava (em_atendimento) → Em aberto
@@ -691,18 +694,21 @@ async function handleSendMessage({ inst, tenantId, instance, data }: {
   const isImage    = !!msgData.message?.imageMessage;
   const isVideo    = !!msgData.message?.videoMessage;
   const isDocument = !!msgData.message?.documentMessage;
-  const isMedia    = isAudio || isImage || isVideo || isDocument;
+  const isSticker  = !!msgData.message?.stickerMessage;
+  const isMedia    = isAudio || isImage || isVideo || isDocument || isSticker;
 
   let detectedMediaType: string | null = null;
   if (isAudio)         detectedMediaType = 'audio';
   else if (isImage)    detectedMediaType = 'image';
   else if (isVideo)    detectedMediaType = 'video';
   else if (isDocument) detectedMediaType = 'document';
+  else if (isSticker)  detectedMediaType = 'sticker';
 
   const messageText: string = isAudio    ? '🎵 Áudio'
     : isImage    ? (msgData.message?.imageMessage?.caption    || '🖼 Imagem')
     : isVideo    ? (msgData.message?.videoMessage?.caption    || '🎬 Vídeo')
     : isDocument ? (msgData.message?.documentMessage?.title   || '📄 Documento')
+    : isSticker  ? '🔖 Figurinha'
     : (msgData.message?.conversation || msgData.message?.extendedTextMessage?.text || '') as string;
 
   // Idempotência 1: dedup por whatsapp_msg_id
@@ -746,7 +752,7 @@ async function handleSendMessage({ inst, tenantId, instance, data }: {
   }).select('id').single();
   console.log('[WEBHOOK][SEND_MESSAGE] outbound salvo:', msgId, 'mediaType=', detectedMediaType);
   if (isMedia && smSavedMsg && instance) {
-    fetchMedia({ inst, instance, msgData, isPtt, isAudio, isImage, isVideo, isDocument, savedMsgId: smSavedMsg.id });
+    fetchMedia({ inst, instance, msgData, isPtt, isAudio, isImage, isVideo, isDocument, isSticker, savedMsgId: smSavedMsg.id });
   }
 }
 
@@ -883,11 +889,11 @@ async function upsertConversation({ tenantId, instanceId, chatId, isGroup, pushN
 }
 
 // Fire-and-forget: busca mídia sem bloquear a resposta principal
-function fetchMedia({ inst, instance, msgData, isPtt, isAudio, isImage, isVideo, isDocument, savedMsgId }: {
+function fetchMedia({ inst, instance, msgData, isPtt, isAudio, isImage, isVideo, isDocument, isSticker, savedMsgId }: {
   inst: { evolution_url: string; api_key: string };
   instance: string;
   msgData: Record<string, unknown>;
-  isPtt: boolean; isAudio: boolean; isImage: boolean; isVideo: boolean; isDocument: boolean;
+  isPtt: boolean; isAudio: boolean; isImage: boolean; isVideo: boolean; isDocument: boolean; isSticker: boolean;
   savedMsgId: string;
 }) {
   let messageType = '';
@@ -896,6 +902,7 @@ function fetchMedia({ inst, instance, msgData, isPtt, isAudio, isImage, isVideo,
   else if (isImage)    messageType = 'imageMessage';
   else if (isVideo)    messageType = 'videoMessage';
   else if (isDocument) messageType = 'documentMessage';
+  else if (isSticker)  messageType = 'stickerMessage';
 
   const controller = new AbortController();
   const timer      = setTimeout(() => controller.abort(), 10_000);
@@ -914,7 +921,7 @@ function fetchMedia({ inst, instance, msgData, isPtt, isAudio, isImage, isVideo,
       if (!base64) return;
       const msgObj   = (msgData as Record<string, Record<string, unknown>>).message || {};
       const mediaMsg = msgObj.pttMessage || msgObj.audioMessage || msgObj.imageMessage || msgObj.videoMessage || msgObj.documentMessage || {};
-      const defaultMime = isImage ? 'image/jpeg' : isVideo ? 'video/mp4' : isDocument ? 'application/octet-stream' : 'audio/ogg';
+      const defaultMime = isImage ? 'image/jpeg' : isVideo ? 'video/mp4' : isDocument ? 'application/octet-stream' : isSticker ? 'image/webp' : 'audio/ogg';
       const mime = ((mediaMsg as Record<string, string>).mimetype || defaultMime).split(';')[0].trim();
       await supabase.from('messages').update({ media_url: `data:${mime};base64,${base64}` }).eq('id', savedMsgId);
     })
