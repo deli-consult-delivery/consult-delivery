@@ -1796,6 +1796,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const persistingRef          = useRef(new Set());
   const aiModeRef              = useRef('humano');
   const selectedInstanceRef    = useRef(null);
+  const selectedInstanceObjRef = useRef(null);
   const iaPendingRef           = useRef(new Set());
   const hibridoPendingRef      = useRef(new Set());
   const fileInputRef   = useRef(null);
@@ -1856,7 +1857,10 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     return () => window.removeEventListener('cd-open-chat', handle);
   }, [openChatByPhone]);
   useEffect(() => { aiModeRef.current = aiMode; }, [aiMode]);
-  useEffect(() => { selectedInstanceRef.current = selectedInstance; }, [selectedInstance]);
+  useEffect(() => {
+    selectedInstanceRef.current = selectedInstance;
+    selectedInstanceObjRef.current = instances.find(i => i.instance_name === selectedInstance) || null;
+  }, [selectedInstance, instances]);
 
   // ── Status de atendimento ─────────────────────────────────
   const { status: convStatus, loading: statusLoading, refresh: refreshStatus, changeStatus, finish } = useConversationStatus(activeId, tenantDbId, currentUser?.id);
@@ -2252,7 +2256,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   // ── FUNÇÕES DE CARREGAMENTO ────────────────────────────────
   async function loadInstances() {
     try {
-      const { data } = await supabase.from('evolution_instances').select('id, instance_name, status, phone, profile_name').order('created_at');
+      const { data } = await supabase.from('evolution_instances').select('id, instance_name, status, phone, profile_name, evolution_url, api_key').order('created_at');
       if (data?.length) {
         setInstances(data);
         const connected = data.find(i => i.status === 'connected') || data[0];
@@ -2675,7 +2679,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         // encontre a linha e não insira duplicata quando o evento fromMe chegar.
         const { error: insertErr } = await supabase.from('messages').insert({ tenant_id: active.tenant_id || null, conversation_id: active.id, direction: 'outbound', content: text, sender_name: agentName || null, created_at: now.toISOString(), ...(currentReplyTo ? { quoted_content: currentReplyTo } : {}) });
         if (insertErr) console.error('Falha ao salvar mensagem no banco:', insertErr);
-        await sendTextMessage(selectedInstance, active.whatsapp_chat_id, textToSend, waQuoted);
+        const instObj = instances.find(i => i.instance_name === selectedInstance);
+        await sendTextMessage(selectedInstance, active.whatsapp_chat_id, textToSend, waQuoted, instObj?.evolution_url, instObj?.api_key);
         // Equipe enviou → conversa vai para "Em aberto" (atendimento_aberto)
         // Inclui 'finalizado': se time está respondendo, conv não está mais finalizada
         const canUpdateStatus = !['falha', 'archived'].includes(convStatus);
@@ -3063,7 +3068,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       } else if (msg.text) {
         const forwardedText = `↪️ ${msg.text}`;
         await Promise.all(validTargets.map(async (target) => {
-          const r = await sendTextMessage(selectedInstance, target.whatsapp_chat_id, forwardedText);
+          const instFwd = instances.find(i => i.instance_name === selectedInstance);
+          const r = await sendTextMessage(selectedInstance, target.whatsapp_chat_id, forwardedText, null, instFwd?.evolution_url, instFwd?.api_key);
           await persistForwarded(target, forwardedText, null, null, r?.key?.id ?? null);
         }));
       }
@@ -3306,7 +3312,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       });
       const data = await r.json();
       if (data.ok && data.text && selectedInstanceRef.current) {
-        await sendTextMessage(selectedInstanceRef.current, chatId, data.text);
+        const instAi = selectedInstanceObjRef.current;
+        await sendTextMessage(selectedInstanceRef.current, chatId, data.text, null, instAi?.evolution_url, instAi?.api_key);
       }
     } catch { /* silent */ } finally {
       iaPendingRef.current.delete(convId);
