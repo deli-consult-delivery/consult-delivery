@@ -1004,7 +1004,7 @@ async function checkAndSendBotResponse({ inst, tenantId, instance, chatId, convI
 }) {
   const { data: config } = await supabase
     .from('bot_configs')
-    .select('is_active, schedule, message, respond_only_first, timezone')
+    .select('is_active, schedule, message, extra_messages, respond_only_first, timezone')
     .eq('tenant_id', tenantId)
     .maybeSingle();
 
@@ -1037,7 +1037,19 @@ async function checkAndSendBotResponse({ inst, tenantId, instance, chatId, convI
     isInsideHours = currentMinutes >= (sh * 60 + sm) && currentMinutes < (eh * 60 + em);
   }
 
-  if (isInsideHours) return; // dentro do horário → não responde
+  // Verifica se existe um slot extra (ex: almoço) que cobre o horário atual
+  type ExtraSlot = { id: string; days: string[]; start: string; end: string; message: string };
+  const extraMsgs = (config.extra_messages as ExtraSlot[]) || [];
+  let matchedExtra: ExtraSlot | null = null;
+  for (const slot of extraMsgs) {
+    if (!(slot.days || []).includes(dayKey)) continue;
+    const [sh, sm] = (slot.start || '00:00').split(':').map(Number);
+    const [eh, em] = (slot.end   || '00:00').split(':').map(Number);
+    if (currentMinutes >= sh * 60 + sm && currentMinutes < eh * 60 + em) { matchedExtra = slot; break; }
+  }
+
+  // Dentro do horário normal E sem slot extra → silêncio
+  if (!matchedExtra && isInsideHours) return;
 
   // Guard atômico anti-race-condition (respond_only_first=true)
   //
@@ -1068,7 +1080,7 @@ async function checkAndSendBotResponse({ inst, tenantId, instance, chatId, convI
     claimedDate = todayStr;
   }
 
-  const botMessage = (config.message as string) || 'Estamos fora do horário de atendimento. Retornaremos em breve!';
+  const botMessage = matchedExtra?.message || (config.message as string) || 'Estamos fora do horário de atendimento. Retornaremos em breve!';
 
   // Envia via Evolution API
   const r = await fetch(`${inst.evolution_url}/message/sendText/${instance}`, {
