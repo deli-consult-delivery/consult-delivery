@@ -14,6 +14,17 @@ Ao descobrir algo não-óbvio sobre infra/config/decisões → atualizar `memory
 
 ---
 
+## EVONEXUS-REPLICA — PLANO MESTRE (contrato de execução)
+
+> Plano para replicar o **feature-surface do EvoNexus NATIVO** na CD (multi-tenant). Doc completo: **`docs/evonexus-replica/PLANO-MESTRE.md`** — CHECKLIST MESTRE (todas as telas), 5 peças de framework, FASES 0-4 com 🛑 CHECKPOINTS. Ler antes de qualquer build deste tema. **Nada de tela pulada em silêncio — o checklist é o contrato de completude.**
+
+- **Não viola a proibição de EvoNexus.** O proibido é o *motor/produto* EvoNexus em prod (CLAUDE.md acima, RESTRUCTURE §3.3). Aqui re-implementamos o *paradigma* na stack CD. EvoNexus = referência de features, nunca dependência em runtime.
+- **3 conflitos a resolver no CHECKPOINT 0** (não codar do jeito do prompt sem decisão): **(D1)** runtime = `@anthropic-ai/sdk` (NÃO `@anthropic-ai/claude-agent-sdk` — RESTRUCTURE §3.3 linha 100: não roda em Trigger.dev cloud); **(D2)** Trigger.dev **v4.4.5+** (não v3); **(D3)** FASE 0 (ler código EvoNexus) precisa do lab `/root/cd-evonexus-lab` na VPS — não acessível deste Windows.
+- **Reusar, não recriar:** `agents` já tem `tenant_id` + RLS (`agents_tenant_isolation`); `agent_runs`, `agent_memories`, `tenant_agent_config`, `roles`/`role_permissions`, `audit_log` já existem → estender via `ALTER ADD COLUMN IF NOT EXISTS`.
+- **Build é gated:** parar em cada 🛑 CHECKPOINT (Wandson aprova). Plano persistido em 2026-06-02; FASE 0 ainda não iniciada.
+
+---
+
 ## STACK OFICIAL (não mudar sem decisão formal)
 
 | Camada         | Tecnologia                                      |
