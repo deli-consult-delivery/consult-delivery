@@ -785,11 +785,17 @@ function Toggle({ value, onChange, size = 'md' }) {
   );
 }
 
+const EXTRA_DAYS = [
+  { key: 'mon', label: 'Seg' }, { key: 'tue', label: 'Ter' }, { key: 'wed', label: 'Qua' },
+  { key: 'thu', label: 'Qui' }, { key: 'fri', label: 'Sex' }, { key: 'sat', label: 'Sáb' }, { key: 'sun', label: 'Dom' },
+];
+
 function BotsScreen({ tenantDbId }) {
   const [isActive, setIsActive]               = useState(false);
   const [schedule, setSchedule]               = useState(DEFAULT_SCHEDULE);
   const [message, setMessage]                 = useState('Olá! No momento estamos fora do horário de atendimento. Em breve um consultor irá te atender. 🚀');
   const [respondOnlyFirst, setRespondOnlyFirst] = useState(true);
+  const [extraMessages, setExtraMessages]     = useState([]);
   const [saving, setSaving]                   = useState(false);
   const [savedOk, setSavedOk]                 = useState(false);
   const [loading, setLoading]                 = useState(true);
@@ -804,11 +810,39 @@ function BotsScreen({ tenantDbId }) {
         setSchedule(data.schedule ?? DEFAULT_SCHEDULE);
         setMessage(data.message ?? '');
         setRespondOnlyFirst(data.respond_only_first ?? true);
+        setExtraMessages(data.extra_messages ?? []);
       });
   }, [tenantDbId]);
 
   function setDay(key, field, value) {
     setSchedule(prev => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
+  }
+
+  function addExtra() {
+    setExtraMessages(prev => [...prev, {
+      id: crypto.randomUUID(),
+      label: 'Novo horário',
+      days: ['mon', 'tue', 'wed', 'thu', 'fri'],
+      start: '12:00',
+      end: '13:00',
+      message: '',
+    }]);
+  }
+
+  function updateExtra(id, field, value) {
+    setExtraMessages(prev => prev.map(e => e.id === id ? { ...e, [field]: value } : e));
+  }
+
+  function toggleExtraDay(id, dayKey) {
+    setExtraMessages(prev => prev.map(e => {
+      if (e.id !== id) return e;
+      const days = e.days.includes(dayKey) ? e.days.filter(d => d !== dayKey) : [...e.days, dayKey];
+      return { ...e, days };
+    }));
+  }
+
+  function removeExtra(id) {
+    setExtraMessages(prev => prev.filter(e => e.id !== id));
   }
 
   async function save() {
@@ -821,6 +855,7 @@ function BotsScreen({ tenantDbId }) {
         schedule,
         message,
         respond_only_first: respondOnlyFirst,
+        extra_messages:     extraMessages,
         updated_at:         new Date().toISOString(),
       }, { onConflict: 'tenant_id' });
       setSavedOk(true);
@@ -891,6 +926,68 @@ function BotsScreen({ tenantDbId }) {
           placeholder="Mensagem enviada ao cliente fora do horário de atendimento…"
         />
         <div style={{ marginTop: 6, fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>{message.length} caracteres</div>
+      </div>
+
+      {/* Outros horários */}
+      <div style={card}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div>
+            <div style={{ color: 'white', fontWeight: 600, fontSize: 13 }}>Outros horários</div>
+            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginTop: 3 }}>Ex: horário de almoço, feriado específico — cada período com sua própria mensagem</div>
+          </div>
+          <button onClick={addExtra} style={{ background: 'rgba(255,255,255,0.08)', color: 'white', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>+ Adicionar</button>
+        </div>
+        {extraMessages.length === 0 && (
+          <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: 12, textAlign: 'center', padding: '12px 0' }}>Nenhum horário extra configurado</div>
+        )}
+        {extraMessages.map((ex, idx) => (
+          <div key={ex.id} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, padding: '12px 14px', marginBottom: idx < extraMessages.length - 1 ? 10 : 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <input
+                value={ex.label}
+                onChange={e => updateExtra(ex.id, 'label', e.target.value)}
+                placeholder="Nome do horário (ex: Almoço)"
+                style={{ flex: 1, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'white', padding: '5px 10px', fontSize: 12, outline: 'none' }}
+              />
+              <button onClick={() => removeExtra(ex.id)} style={{ background: 'rgba(183,12,0,0.2)', color: '#ff6b6b', border: '1px solid rgba(183,12,0,0.3)', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>Remover</button>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+              {EXTRA_DAYS.map(d => (
+                <label key={d.key} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={ex.days.includes(d.key)}
+                    onChange={() => toggleExtraDay(ex.id, d.key)}
+                    style={{ accentColor: '#B70C00', cursor: 'pointer' }}
+                  />
+                  <span style={{ color: ex.days.includes(d.key) ? 'white' : 'rgba(255,255,255,0.35)', fontSize: 11 }}>{d.label}</span>
+                </label>
+              ))}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <input
+                type="time"
+                value={ex.start}
+                onChange={e => updateExtra(ex.id, 'start', e.target.value)}
+                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'white', padding: '3px 8px', fontSize: 12, colorScheme: 'dark' }}
+              />
+              <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>até</span>
+              <input
+                type="time"
+                value={ex.end}
+                onChange={e => updateExtra(ex.id, 'end', e.target.value)}
+                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'white', padding: '3px 8px', fontSize: 12, colorScheme: 'dark' }}
+              />
+            </div>
+            <textarea
+              value={ex.message}
+              onChange={e => updateExtra(ex.id, 'message', e.target.value)}
+              rows={3}
+              placeholder="Mensagem enviada neste período…"
+              style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: 'white', padding: '8px 10px', fontSize: 12, resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }}
+            />
+          </div>
+        ))}
       </div>
 
       {/* Opção: responder só uma vez */}
