@@ -27,14 +27,20 @@ export async function getInstanceStatus(instanceName, evolutionUrl, apiKey) {
 }
 
 // Enviar mensagem de texto (quoted opcional para respostas)
-export async function sendTextMessage(instanceName, to, text, quoted = null) {
+export async function sendTextMessage(instanceName, to, text, quoted = null, evoUrl, evoKey) {
+  const url = evoUrl || EVO_URL;
+  const key = evoKey || EVO_KEY;
   const body = { number: to, text };
   if (quoted) body.quoted = quoted;
-  const res = await fetch(`${EVO_URL}/message/sendText/${instanceName}`, {
+  const res = await fetch(`${url}/message/sendText/${instanceName}`, {
     method: 'POST',
-    headers,
+    headers: { 'Content-Type': 'application/json', apikey: key },
     body: JSON.stringify(body),
   });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => res.statusText);
+    throw new Error(`Evolution sendText ${res.status}: ${errText}`);
+  }
   return res.json();
 }
 
