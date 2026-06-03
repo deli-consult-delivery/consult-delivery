@@ -3699,6 +3699,16 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                 Filtros
               </button>
               <button
+                className={`lc-stats-more-btn${selectMode ? ' active' : ''}`}
+                title="Selecionar conversas"
+                onClick={() => { setSelectMode(v => !v); if (selectMode) setSelectedConvIds(new Set()); }}
+                style={{ color: selectMode ? '#93C5FD' : undefined }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+                </svg>
+              </button>
+              <button
                 className={`lc-stats-more-btn${showStarredPanel ? ' active' : ''}`}
                 title="Mensagens favoritas"
                 onClick={() => setShowStarredPanel(v => !v)}
@@ -3816,18 +3826,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               style={{ fontSize: 16, color: 'rgba(255,255,255,0.5)', background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1, padding: 2 }}
             >×</button>
           </div>
-        ) : (
-          <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 12px 0' }}>
-            <button
-              onClick={() => setSelectMode(true)}
-              style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, padding: '2px 0' }}
-              title="Selecionar conversas para ações em massa"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-              Selecionar
-            </button>
-          </div>
-        )}
+        ) : null}
 
         {/* Lista de conversas */}
         {!showStarredPanel && <div className="lc-list-body dark-scroll">
