@@ -88,11 +88,37 @@ export const brenoTaskExtractor = schedules.task({
           const parsed = JSON.parse(arrMatch ? arrMatch[0] : "[]");
           const tarefas = Array.isArray(parsed) ? parsed : [];
 
-          // 4. INSERT em tarefas_loja requer loja_id (não disponível via conversation_id diretamente)
-          // Registramos no output do agent_run conforme spec "ou log em agent_runs"
-          allExtracted.push(
-            ...tarefas.map((t: unknown) => ({ ...(t as object), conversation_id: conversationId }))
-          );
+          // 4. Buscar customer_id da conversa para vincular às notas do cliente
+          const { data: convRow } = await sb
+            .from("conversations")
+            .select("customer_id")
+            .eq("id", conversationId)
+            .maybeSingle();
+          const customerId: string | null = convRow?.customer_id ?? null;
+
+          // 5. Persistir em chat_tasks + customer_note_entries
+          for (const t of tarefas as { titulo: string; descricao?: string; prioridade?: string }[]) {
+            const priority =
+              t.prioridade === "alta" ? "high" : t.prioridade === "baixa" ? "low" : "normal";
+            const { data: taskRow } = await sb.from("chat_tasks").insert({
+              tenant_id:   tenantId,
+              title:       t.titulo,
+              description: t.descricao ?? "",
+              priority,
+              created_by:  null,
+            }).select("id").single();
+            if (customerId || conversationId) {
+              await sb.from("customer_note_entries").insert({
+                tenant_id:       tenantId,
+                customer_id:     customerId,
+                conversation_id: conversationId,
+                content:         `${t.titulo}${t.descricao ? `: ${t.descricao}` : ""}`,
+                source:          "breno",
+                chat_task_id:    taskRow?.id ?? null,
+              });
+            }
+            allExtracted.push({ ...t, conversation_id: conversationId, chat_task_id: taskRow?.id ?? null });
+          }
         } catch {
           logger.warn("breno-task-extractor: parse JSON falhou", {
             conversation_id: conversationId,

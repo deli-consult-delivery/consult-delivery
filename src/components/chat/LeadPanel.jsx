@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase.js';
 import CustomSelect from '../CustomSelect.jsx';
 import LeadPanelHeader from './LeadPanelHeader.jsx';
 import LeadProfileSection from './LeadProfileSection.jsx';
-import LeadNotesSection from './LeadNotesSection.jsx';
+
 import LeadAddressSection from './LeadAddressSection.jsx';
 import ReopenButton from './ReopenButton.jsx';
 import TagPicker from './TagPicker.jsx';
@@ -98,10 +98,6 @@ export default function LeadPanel({ conversation, customer, tenantId, members = 
           <div style={sectionLabel}>Listas</div>
           <ListPicker customerId={customer?.id} tenantId={tenantId} />
         </div>
-
-        <Divider />
-
-        <LeadNotesSection customerId={customer?.id} tenantId={tenantId} />
 
         <Divider />
 
