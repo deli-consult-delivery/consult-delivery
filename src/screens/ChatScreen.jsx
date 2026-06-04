@@ -2299,19 +2299,43 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       .channel('conversations-status-rt')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations' }, payload => {
         const c = payload.new;
-        setConvs(prev => prev.map(existing => {
-          if (existing.id !== c.id) return existing;
-          return {
-            ...existing,
-            status: c.status || existing.status,
-            department_id: c.department_id ?? existing.department_id,
-            breno_paused: c.breno_paused ?? existing.breno_paused,
-            last_breno_handled_at: c.last_breno_handled_at || existing.last_breno_handled_at,
-            assigned_to: c.assigned_to ?? existing.assigned_to,
-            ...(c.push_name ? { name: c.push_name, avatar: c.push_name.slice(0, 2).toUpperCase() } : {}),
-            ...(c.push_photo_url ? { photoUrl: c.push_photo_url } : {}),
-          };
-        }));
+        setConvs(prev => {
+          const idx = prev.findIndex(e => e.id === c.id);
+          if (idx !== -1) {
+            return prev.map(existing => existing.id !== c.id ? existing : {
+              ...existing,
+              status: c.status || existing.status,
+              department_id: c.department_id ?? existing.department_id,
+              breno_paused: c.breno_paused ?? existing.breno_paused,
+              last_breno_handled_at: c.last_breno_handled_at || existing.last_breno_handled_at,
+              assigned_to: c.assigned_to ?? existing.assigned_to,
+              ...(c.push_name ? { name: c.push_name, avatar: c.push_name.slice(0, 2).toUpperCase() } : {}),
+              ...(c.push_photo_url ? { photoUrl: c.push_photo_url } : {}),
+            });
+          }
+          if (!['aguardando', 'em_atendimento', 'atendimento_aberto', 'automacao', 'falha'].includes(c.status)) return prev;
+          const phone = c.whatsapp_chat_id?.split('@')[0] || '';
+          const name  = c.push_name || c.contact_name || c.group_name || phone || 'Desconhecido';
+          return [{ id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null,
+            type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id,
+            preview: '', previewFrom: 'in', time: '', _sortTs: c.updated_at || '',
+            unread: 1, online: false, messages: [], status: c.status, department_id: c.department_id || null,
+          }, ...prev];
+        });
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversations' }, payload => {
+        const c = payload.new;
+        if (!['aguardando', 'em_atendimento', 'atendimento_aberto', 'automacao', 'falha'].includes(c.status)) return;
+        const phone = c.whatsapp_chat_id?.split('@')[0] || '';
+        const name  = c.push_name || c.contact_name || c.group_name || phone || 'Desconhecido';
+        setConvs(prev => {
+          if (prev.find(e => e.id === c.id)) return prev;
+          return [{ id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null,
+            type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id,
+            preview: '', previewFrom: 'in', time: '', _sortTs: c.updated_at || '',
+            unread: 1, online: false, messages: [], status: c.status, department_id: c.department_id || null,
+          }, ...prev];
+        });
       })
       .subscribe();
     return () => { supabase.removeChannel(convSub); };
@@ -2706,7 +2730,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   }
 
   // ── REFRESH ACTIVE CONVS ──────────────────────────────────
-  const REFRESH_STATUSES = ['aguardando', 'em_atendimento', 'atendimento_aberto', 'automacao'];
+  const REFRESH_STATUSES = ['aguardando', 'em_atendimento', 'atendimento_aberto', 'automacao', 'falha'];
 
   // Carrega conversas finalizadas/ocultas sob demanda quando filtro é selecionado
   useEffect(() => {
@@ -3821,7 +3845,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               <button
                 key={c.id}
                 className={`lc-stat-pill${statusFilter === c.id ? ' active' : ''}`}
-                onClick={() => setStatusFilter(statusFilter === c.id ? null : c.id)}
+                onClick={() => { const next = statusFilter === c.id ? null : c.id; setStatusFilter(next); if (next && !['finalizado', 'oculto'].includes(next)) refreshPendingConvs(); }}
                 title={c.label}
               >
                 <StatusIcon name={c.icon} size={12} />
