@@ -1488,6 +1488,67 @@ app.use('/api', require('./routes/mia-vinculos')({
   SUPABASE_SERVICE_KEY,
 }));
 
+// ════════════════════════════════════════════════════════════════════════════
+// BRENO Off-Hours — smoke routes
+// ════════════════════════════════════════════════════════════════════════════
+
+function checkOffHoursJS(ts) {
+  const TZ = 'America/Belem';
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: TZ, weekday: 'short', year: 'numeric',
+    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(ts);
+  const get = (type) => (parts.find(p => p.type === type) || {}).value || '';
+  const weekday  = get('weekday').toLowerCase();
+  const hour     = parseInt(get('hour'),   10);
+  const min      = parseInt(get('minute'), 10);
+  const totalMin = hour * 60 + min;
+  const overrides = JSON.parse(process.env.BRENO_FERIADOS_OVERRIDE || '[]');
+  const dateStr = `${get('year')}-${get('month')}-${get('day')}`;
+  if (overrides.includes(dateStr)) return { off_hours: true, motivo: 'feriado' };
+  if (weekday === 'sun')           return { off_hours: true, motivo: 'domingo' };
+  if (weekday === 'sat') {
+    if (totalMin >= 480 && totalMin < 720) return { off_hours: false, motivo: 'expediente' };
+    return { off_hours: true, motivo: 'sabado_tarde' };
+  }
+  if (totalMin >= 540 && totalMin < 720)  return { off_hours: false, motivo: 'expediente' };
+  if (totalMin >= 720 && totalMin < 780)  return { off_hours: true,  motivo: 'almoco' };
+  if (totalMin >= 780 && totalMin < 1080) return { off_hours: false, motivo: 'expediente' };
+  return { off_hours: true, motivo: 'noite' };
+}
+
+// GET /breno/offhours-check[?ts=ISO] — smoke: verifica gate de horário
+app.get('/breno/offhours-check', (req, res) => {
+  const ts = req.query.ts ? new Date(req.query.ts) : new Date();
+  if (isNaN(ts.getTime())) return res.status(400).json({ error: 'ts inválido' });
+  res.json(checkOffHoursJS(ts));
+});
+
+// POST /breno/triage-test — smoke: dispara breno-triagem-offhours via Trigger.dev
+app.post('/breno/triage-test', async (req, res) => {
+  if (!TRIGGER_SECRET_KEY)
+    return res.status(503).json({ error: 'TRIGGER_SECRET_KEY não configurado' });
+  try {
+    const r = await fetch(`${TRIGGER_API_URL}/api/v1/tasks/breno-triagem-offhours/trigger`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${TRIGGER_SECRET_KEY}`,
+      },
+      body: JSON.stringify({ payload: req.body }),
+    });
+    if (!r.ok) {
+      const detail = await r.text();
+      return res.status(r.status).json({ error: 'falha ao acionar triagem', detail });
+    }
+    const data = await r.json();
+    res.json({ run_id: data.id, status: data.status });
+  } catch (err) {
+    console.error('[bridge/breno/triage-test]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 const server = app.listen(PORT, '0.0.0.0', () => {
   // D2: timeout do servidor > 60s para suportar polling síncrono do loja-gpt
   server.timeout = 90_000; // 90s — folga sobre os 60s de poll da task
