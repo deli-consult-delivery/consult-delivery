@@ -71,7 +71,7 @@ export const brenoTriagemOffhours = task({
 
     // 3. Resolver nome/número do cliente
     const phone       = input.remote_jid.split('@')[0];
-    let clienteNome   = input.push_name || phone;
+    let clienteNome   = phone; // fallback: número
     let clienteNumero = `+${phone}`;
 
     if (lojaId) {
@@ -91,6 +91,9 @@ export const brenoTriagemOffhours = task({
         if (cust?.phone) clienteNumero = cust.phone;
       }
     }
+
+    // push_name do WhatsApp sempre vence o nome do DB
+    if (input.push_name) clienteNome = input.push_name;
 
     // 4. Classificar via LLM (llm-client.ts — nunca @anthropic-ai/claude-agent-sdk)
     const minConfianca = parseFloat(process.env.BRENO_CONFIANCA_MINIMA || '0.6');

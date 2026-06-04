@@ -13,6 +13,7 @@ const InputSchema = z.object({
   instance_name:   z.string(),
   sender_jid:      z.string(), // ex: "5511999990000@s.whatsapp.net"
   message_body:    z.string(),
+  push_name:       z.string().optional(), // nome do contato no WhatsApp
   message_id:      z.string().optional(),
   conversation_id: z.string().uuid().optional(), // id na tabela conversations
   triggered_by:    z.string().uuid().optional(),
@@ -52,6 +53,7 @@ export const brenoProcessarWebhook = task({
         remote_jid:    input.sender_jid,
         message_text:  input.message_body,
         message_id:    input.message_id,
+        push_name:     input.push_name,
       });
 
       const result: Output = OutputSchema.parse({
