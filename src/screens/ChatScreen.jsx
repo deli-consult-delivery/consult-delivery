@@ -924,7 +924,7 @@ function BotsScreen({ tenantDbId }) {
           value={message}
           onChange={e => setMessage(e.target.value)}
           rows={4}
-          style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: 'white', padding: '10px 12px', fontSize: 13, resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }}
+          style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: 'white', padding: '10px 12px', fontSize: 13, resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none', whiteSpace: 'pre-wrap' }}
           placeholder="Mensagem enviada ao cliente fora do horário de atendimento…"
         />
         <div style={{ marginTop: 6, fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>{message.length} caracteres</div>
@@ -999,7 +999,7 @@ function BotsScreen({ tenantDbId }) {
               onChange={e => updateExtra(ex.id, 'message', e.target.value)}
               rows={3}
               placeholder="Mensagem enviada neste período…"
-              style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: 'white', padding: '8px 10px', fontSize: 12, resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }}
+              style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: 'white', padding: '8px 10px', fontSize: 12, resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none', whiteSpace: 'pre-wrap' }}
             />
           </div>
         ))}
