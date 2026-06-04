@@ -826,6 +826,7 @@ function BotsScreen({ tenantDbId }) {
       start: '12:00',
       end: '13:00',
       message: '',
+      alwaysOn: false,
     }]);
   }
 
@@ -849,7 +850,7 @@ function BotsScreen({ tenantDbId }) {
     if (!tenantDbId || saving) return;
     setSaving(true);
     try {
-      await supabase.from('bot_configs').upsert({
+      const { error: saveErr } = await supabase.from('bot_configs').upsert({
         tenant_id:          tenantDbId,
         is_active:          isActive,
         schedule,
@@ -858,6 +859,7 @@ function BotsScreen({ tenantDbId }) {
         extra_messages:     extraMessages,
         updated_at:         new Date().toISOString(),
       }, { onConflict: 'tenant_id' });
+      if (saveErr) { alert('Erro ao salvar: ' + saveErr.message); return; }
       setSavedOk(true);
       setTimeout(() => setSavedOk(false), 2500);
     } finally {
@@ -964,21 +966,34 @@ function BotsScreen({ tenantDbId }) {
                 </label>
               ))}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', marginBottom: 10 }}>
               <input
-                type="time"
-                value={ex.start}
-                onChange={e => updateExtra(ex.id, 'start', e.target.value)}
-                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'white', padding: '3px 8px', fontSize: 12, colorScheme: 'dark' }}
+                type="checkbox"
+                checked={!!ex.alwaysOn}
+                onChange={e => updateExtra(ex.id, 'alwaysOn', e.target.checked)}
+                style={{ accentColor: '#B70C00', cursor: 'pointer' }}
               />
-              <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>até</span>
-              <input
-                type="time"
-                value={ex.end}
-                onChange={e => updateExtra(ex.id, 'end', e.target.value)}
-                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'white', padding: '3px 8px', fontSize: 12, colorScheme: 'dark' }}
-              />
-            </div>
+              <span style={{ color: ex.alwaysOn ? 'white' : 'rgba(255,255,255,0.4)', fontSize: 11 }}>
+                Sempre ativo nestes dias (dia todo)
+              </span>
+            </label>
+            {!ex.alwaysOn && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <input
+                  type="time"
+                  value={ex.start}
+                  onChange={e => updateExtra(ex.id, 'start', e.target.value)}
+                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'white', padding: '3px 8px', fontSize: 12, colorScheme: 'dark' }}
+                />
+                <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>até</span>
+                <input
+                  type="time"
+                  value={ex.end}
+                  onChange={e => updateExtra(ex.id, 'end', e.target.value)}
+                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'white', padding: '3px 8px', fontSize: 12, colorScheme: 'dark' }}
+                />
+              </div>
+            )}
             <textarea
               value={ex.message}
               onChange={e => updateExtra(ex.id, 'message', e.target.value)}
