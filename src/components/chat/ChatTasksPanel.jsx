@@ -73,6 +73,14 @@ export default function ChatTasksPanel({ tenantDbId, members = [], currentUserId
     await supabase.from('chat_tasks').delete().eq('id', taskId);
   }
 
+  async function handleTitleEdit(taskId, newTitle) {
+    if (!newTitle.trim()) return;
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, title: newTitle.trim() } : t));
+    await supabase.from('chat_tasks')
+      .update({ title: newTitle.trim(), updated_at: new Date().toISOString() })
+      .eq('id', taskId);
+  }
+
   const pending = tasks.filter(t => t.status !== 'done').length;
 
   const panel = (
@@ -232,6 +240,7 @@ export default function ChatTasksPanel({ tenantDbId, members = [], currentUserId
                     members={members}
                     onStatusChange={handleStatusChange}
                     onDelete={handleDelete}
+                    onTitleEdit={handleTitleEdit}
                   />
                 ))}
               </div>
@@ -245,7 +254,9 @@ export default function ChatTasksPanel({ tenantDbId, members = [], currentUserId
   return ReactDOM.createPortal(panel, document.body);
 }
 
-function TaskCard({ task, members, onStatusChange, onDelete }) {
+function TaskCard({ task, members, onStatusChange, onDelete, onTitleEdit }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(task.title);
   const pm      = PRIORITY_META[task.priority] ?? PRIORITY_META.normal;
   const assignee = members.find(m => m.id === task.assignee_id);
   const today   = new Date().toISOString().slice(0, 10);
@@ -262,11 +273,34 @@ function TaskCard({ task, members, onStatusChange, onDelete }) {
     }}>
       {/* Title row */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-        <span style={{
-          flex: 1, fontSize: 13, color: task.status === 'done' ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.9)',
-          textDecoration: task.status === 'done' ? 'line-through' : 'none',
-          lineHeight: 1.35,
-        }}>{task.title}</span>
+        {editing ? (
+          <input
+            autoFocus
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onBlur={() => { onTitleEdit(task.id, draft); setEditing(false); }}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { e.target.blur(); }
+              if (e.key === 'Escape') { setDraft(task.title); setEditing(false); }
+            }}
+            style={{
+              flex: 1, fontSize: 13, background: 'rgba(255,255,255,0.08)',
+              border: '1px solid rgba(255,255,255,0.2)', borderRadius: 4,
+              color: 'rgba(255,255,255,0.9)', padding: '2px 6px', outline: 'none',
+            }}
+          />
+        ) : (
+          <span
+            onClick={() => { setDraft(task.title); setEditing(true); }}
+            title="Clique para editar"
+            style={{
+              flex: 1, fontSize: 13,
+              color: task.status === 'done' ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.9)',
+              textDecoration: task.status === 'done' ? 'line-through' : 'none',
+              lineHeight: 1.35, cursor: 'text',
+            }}
+          >{task.title}</span>
+        )}
         <button
           onClick={() => onDelete(task.id)}
           style={{
