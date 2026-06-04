@@ -1038,14 +1038,15 @@ async function checkAndSendBotResponse({ inst, tenantId, instance, chatId, convI
   }
 
   // Verifica se existe um slot extra (ex: almoço) que cobre o horário atual
-  type ExtraSlot = { id: string; days: string[]; start: string; end: string; message: string };
+  type ExtraSlot = { id: string; days: string[]; start: string; end: string; message: string; alwaysOn?: boolean };
   const extraMsgs = (config.extra_messages as ExtraSlot[]) || [];
   let matchedExtra: ExtraSlot | null = null;
   for (const slot of extraMsgs) {
     if (!(slot.days || []).includes(dayKey)) continue;
     const [sh, sm] = (slot.start || '00:00').split(':').map(Number);
     const [eh, em] = (slot.end   || '00:00').split(':').map(Number);
-    if (currentMinutes >= sh * 60 + sm && currentMinutes < eh * 60 + em) { matchedExtra = slot; break; }
+    const timeMatch = slot.alwaysOn || (currentMinutes >= sh * 60 + sm && currentMinutes < eh * 60 + em);
+    if (timeMatch) { matchedExtra = slot; break; }
   }
 
   // Dentro do horário normal E sem slot extra → silêncio
@@ -1080,7 +1081,7 @@ async function checkAndSendBotResponse({ inst, tenantId, instance, chatId, convI
     claimedDate = todayStr;
   }
 
-  const botMessage = matchedExtra?.message || (config.message as string) || 'Estamos fora do horário de atendimento. Retornaremos em breve!';
+  const botMessage = (matchedExtra?.message?.trim()) || (config.message as string) || 'Estamos fora do horário de atendimento. Retornaremos em breve!';
 
   // Envia via Evolution API
   const r = await fetch(`${inst.evolution_url}/message/sendText/${instance}`, {
