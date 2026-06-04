@@ -2113,6 +2113,47 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     }).catch(() => { photoCacheRef.current[phone] = false; });
   }, [activeId, selectedInstance]);
 
+  // Background profile picture loader — runs once per instance selection
+  useEffect(() => {
+    if (!HAS_EVO || !selectedInstance) return;
+    let cancelled = false;
+
+    (async () => {
+      await new Promise(r => setTimeout(r, 1500));
+      if (cancelled) return;
+
+      const targets = convsRef.current.filter(
+        c => !c.photoUrl && !c.is_group && c.whatsapp_chat_id
+      );
+
+      for (let i = 0; i < Math.min(targets.length, 40); i++) {
+        if (cancelled) break;
+        const conv = targets[i];
+        const phone = conv.whatsapp_chat_id.split('@')[0].split(':')[0];
+        if (!phone || photoCacheRef.current[phone] !== undefined) continue;
+
+        try {
+          const data = await fetchProfile(selectedInstance, phone);
+          if (cancelled) break;
+          const photoUrl = data?.picture || data?.profilePictureUrl || data?.photo || null;
+          const waName   = data?.name || data?.pushName || null;
+          photoCacheRef.current[phone] = { photoUrl, waName };
+
+          if (photoUrl) {
+            setConvs(prev => prev.map(c => c.id === conv.id ? { ...c, photoUrl } : c));
+            supabase.from('conversations')
+              .update({ push_photo_url: photoUrl, updated_at: new Date().toISOString() })
+              .eq('id', conv.id).catch(() => {});
+          }
+        } catch { photoCacheRef.current[phone] = false; }
+
+        await new Promise(r => setTimeout(r, 350));
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [selectedInstance]);
+
   // Reset ao trocar tenant
   useEffect(() => {
     setConvs([]); setActiveId(null); setMessages({}); setDraft('');
