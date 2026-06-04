@@ -1861,6 +1861,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const audioBlobRef                          = useRef(null);
   const audioElRef                            = useRef(null);
 
+  // ── Voz para texto ────────────────────────────────────────
+  const [voiceActive, setVoiceActive]         = useState(false);
+  const voiceRecRef                           = useRef(null);
+  const voiceFinalRef                         = useRef('');
+
   // ── Painel direito collapse ────────────────────────────────
   const [openPerfil, setOpenPerfil]          = useState(true);
   const [openIA, setOpenIA]                  = useState(true);
@@ -2999,6 +3004,45 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     setRecState('idle');
     setRecSeconds(0);
   };
+
+  function startVoiceInput() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { alert('Seu navegador não suporta reconhecimento de voz.\nUse Chrome ou Edge.'); return; }
+
+    const rec = new SR();
+    rec.lang = 'pt-BR';
+    rec.continuous = true;
+    rec.interimResults = true;
+
+    voiceFinalRef.current = draft;
+
+    rec.onresult = (e) => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const seg = e.results[i][0].transcript;
+        if (e.results[i].isFinal) {
+          voiceFinalRef.current += (voiceFinalRef.current && !voiceFinalRef.current.endsWith(' ') ? ' ' : '') + seg;
+        } else {
+          interim += seg;
+        }
+      }
+      const full = voiceFinalRef.current + (interim ? (voiceFinalRef.current ? ' ' : '') + interim : '');
+      onDraftChange(full.trimStart());
+    };
+
+    rec.onerror = () => stopVoiceInput();
+    rec.onend   = () => setVoiceActive(false);
+
+    voiceRecRef.current = rec;
+    rec.start();
+    setVoiceActive(true);
+  }
+
+  function stopVoiceInput() {
+    voiceRecRef.current?.stop();
+    voiceRecRef.current = null;
+    setVoiceActive(false);
+  }
 
   const toggleStarMsg = (msg) => {
     if (!activeId || !msg?.id) return;
@@ -4529,6 +4573,26 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                     <span className="lc-comp-sep" />
                     <button className="lc-comp-icon" title="Resposta rápida" onClick={() => setShowQR(v => !v)}><Icon name="star" size={15} /></button>
                     <button className="lc-comp-icon ai" title="Comandos IA (/)" onClick={() => setShowSlash(v => !v)}><Icon name="sparkles" size={15} /></button>
+                    <button
+                      className="lc-comp-icon"
+                      onClick={() => voiceActive ? stopVoiceInput() : startVoiceInput()}
+                      title={voiceActive ? 'Parar transcrição' : 'Voz para texto (pt-BR)'}
+                      style={{ color: voiceActive ? '#ef4444' : undefined, position: 'relative' }}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                        <line x1="12" y1="19" x2="12" y2="23"/>
+                        <line x1="8" y1="23" x2="16" y2="23"/>
+                      </svg>
+                      {voiceActive && (
+                        <span style={{
+                          position: 'absolute', top: -3, right: -3,
+                          width: 7, height: 7, borderRadius: '50%',
+                          background: '#ef4444', animation: 'pulse-dot 1s infinite',
+                        }}/>
+                      )}
+                    </button>
                     <div className="lc-comp-input-wrap">
                       <textarea
                         ref={textareaRef}
