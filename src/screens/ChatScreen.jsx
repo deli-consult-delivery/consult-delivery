@@ -3094,7 +3094,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     if (!newName || !activeId) { setEditingConvName(false); return; }
     const field = active.is_group ? 'group_name' : 'contact_name';
     await supabase.from('conversations').update({ [field]: newName }).eq('id', activeId);
-    setConvs(prev => prev.map(c => c.id === activeId ? { ...c, [field]: newName } : c));
+    setConvs(prev => prev.map(c => c.id === activeId ? { ...c, [field]: newName, name: newName } : c));
     setEditingConvName(false);
   }
 
@@ -4037,9 +4037,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                             className="lc-chat-name"
                             title="Clique para renomear"
                             style={{ cursor: 'pointer' }}
-                            onClick={() => { setEditingConvNameDraft(active.contact_name || active.push_name || active.group_name || ''); setEditingConvName(true); }}
+                            onClick={() => { setEditingConvNameDraft(active.is_group ? (active.group_name || active.name) : (active.contact_name || active.name)); setEditingConvName(true); }}
                           >
-                            {active.is_group ? (active.group_name || active.whatsapp_chat_id?.split('@')[0] || 'Grupo') : (active.contact_name || active.push_name || active.whatsapp_chat_id?.split('@')[0] || 'Contato')}
+                            {active.is_group ? (active.group_name || active.name) : (active.contact_name || active.name)}
                           </span>
                         )
                       ) : (
@@ -4259,9 +4259,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                           <span
                             title="Clique para renomear"
                             style={{ cursor: 'pointer' }}
-                            onClick={() => { setEditingConvNameDraft(active.contact_name || active.push_name || active.group_name || ''); setEditingConvName(true); }}
+                            onClick={() => { setEditingConvNameDraft(active.is_group ? (active.group_name || active.name) : (active.contact_name || active.name)); setEditingConvName(true); }}
                           >
-                            {active.is_group ? (active.group_name || active.whatsapp_chat_id?.split('@')[0] || 'Grupo') : (active.contact_name || active.push_name || active.whatsapp_chat_id?.split('@')[0] || 'Contato')}
+                            {active.is_group ? (active.group_name || active.name) : (active.contact_name || active.name)}
                           </span>
                         )
                       ) : active.name}
