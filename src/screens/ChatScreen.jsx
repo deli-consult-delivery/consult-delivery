@@ -2407,6 +2407,10 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     }
   }, [activeId]);
 
+  useEffect(() => {
+    lastScrolledConv.current = null;
+  }, [activeId]);
+
   // Auto-scroll
   useEffect(() => {
     const el = scrollRef.current;
@@ -2426,10 +2430,12 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
       if (activeMsgsList.length > 0) {
         lastScrolledConv.current = activeId;
         requestAnimationFrame(() => {
-          if (scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-            setShowScrollBtn(false);
-          }
+          requestAnimationFrame(() => {
+            if (scrollRef.current) {
+              scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+              setShowScrollBtn(false);
+            }
+          });
         });
       }
       return;
