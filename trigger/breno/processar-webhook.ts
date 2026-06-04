@@ -4,6 +4,8 @@ import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 import { notify } from "../_shared/notify";
 import { brenoResponder } from "./responder";
+import { brenoTriagemOffhours } from "./triagem-offhours";
+import { isBrenoOffHours } from "../_shared/offhours";
 
 // OBRIGATÓRIO: Schema de entrada
 const InputSchema = z.object({
@@ -19,7 +21,7 @@ const InputSchema = z.object({
 // OBRIGATÓRIO: Schema de saída
 const OutputSchema = z.object({
   ok:     z.boolean(),
-  action: z.enum(["ignored", "draft_created", "auto_replied", "human_mode"]),
+  action: z.enum(["ignored", "draft_created", "auto_replied", "human_mode", "triagem_offhours"]),
   reason: z.string(),
   run_id: z.string().optional(),
 });
@@ -34,6 +36,43 @@ export const brenoProcessarWebhook = task({
     // OBRIGATÓRIO: validar input
     const input = InputSchema.parse(payload);
     const start = Date.now();
+
+    // Gate off-hours: se fora do expediente, triagem em vez de resposta
+    const offCheck = isBrenoOffHours();
+    if (offCheck.offHours) {
+      logger.info("breno-processar-webhook: off-hours detectado, acionando triagem", {
+        tenant_id:  input.tenant_id,
+        motivo:     offCheck.motivo,
+        sender_jid: input.sender_jid,
+      });
+
+      await brenoTriagemOffhours.trigger({
+        tenant_id:     input.tenant_id,
+        instance_name: input.instance_name,
+        remote_jid:    input.sender_jid,
+        message_text:  input.message_body,
+        message_id:    input.message_id,
+      });
+
+      const result: Output = OutputSchema.parse({
+        ok:     true,
+        action: "triagem_offhours",
+        reason: `Off-hours (${offCheck.motivo}) — triagem enfileirada em vez de resposta automática`,
+      });
+
+      await logAgentRun({
+        runId:       ctx.run.id,
+        agentSlug:   "breno",
+        tenantId:    input.tenant_id,
+        triggeredBy: input.triggered_by,
+        input,
+        output:      result,
+        durationMs:  Date.now() - start,
+        status:      "success",
+      });
+
+      return result;
+    }
 
     logger.info("breno-processar-webhook: início", {
       tenant_id:    input.tenant_id,
