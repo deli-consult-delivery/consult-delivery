@@ -2308,16 +2308,23 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         setConvs(prev => {
           const idx = prev.findIndex(e => e.id === c.id);
           if (idx !== -1) {
-            return prev.map(existing => existing.id !== c.id ? existing : {
+            return prev.map(existing => {
+            if (existing.id !== c.id) return existing;
+            const updName = c.contact_name || c.group_name || c.push_name || existing.name;
+            return {
               ...existing,
               status: c.status || existing.status,
               department_id: c.department_id ?? existing.department_id,
               breno_paused: c.breno_paused ?? existing.breno_paused,
               last_breno_handled_at: c.last_breno_handled_at || existing.last_breno_handled_at,
               assigned_to: c.assigned_to ?? existing.assigned_to,
-              ...(c.push_name ? { name: c.push_name, avatar: c.push_name.slice(0, 2).toUpperCase() } : {}),
+              contact_name: c.contact_name ?? existing.contact_name,
+              group_name: c.group_name ?? existing.group_name,
+              name: updName,
+              avatar: updName.slice(0, 2).toUpperCase(),
               ...(c.push_photo_url ? { photoUrl: c.push_photo_url } : {}),
-            });
+            };
+          });
           }
           if (!['aguardando', 'em_atendimento', 'atendimento_aberto', 'automacao', 'falha'].includes(c.status)) return prev;
           const phone = c.whatsapp_chat_id?.split('@')[0] || '';
