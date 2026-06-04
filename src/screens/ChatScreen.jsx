@@ -2114,7 +2114,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     function applyProfile(waName, photoUrl) {
       setConvs(prev => prev.map(c => {
         if (c.id !== activeId) return c;
-        const name = waName || c.name;
+        const name = c.contact_name || c.group_name || waName || c.name;
         return {
           ...c,
           name,
