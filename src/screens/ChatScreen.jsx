@@ -1644,7 +1644,9 @@ function ProtocolosScreen({ tenantDbId, onOpenConv }) {
             <span>Protocolo</span><span>Contato</span><span>Telefone</span><span>Status</span><span>Depto</span><span>Iniciado</span><span></span>
           </div>
           {convs.map(c => {
-            const name = c.push_name || c.contact_name || c.group_name || '—';
+            const name = c.is_group
+              ? (c.group_name || c.whatsapp_chat_id?.split('@')[0] || '—')
+              : (c.contact_name || c.push_name || c.whatsapp_chat_id?.split('@')[0] || '—');
             const phone = (c.whatsapp_chat_id || '').replace(/@[^@]+$/, '') || '—';
             const dept = c.department_id ? depts[c.department_id] : null;
             return (
@@ -1880,6 +1882,10 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [voiceActive, setVoiceActive]         = useState(false);
   const voiceRecRef                           = useRef(null);
   const voiceFinalRef                         = useRef('');
+
+  // ── Edição inline de nome de contato/grupo ────────────────
+  const [editingConvName, setEditingConvName]         = useState(false);
+  const [editingConvNameDraft, setEditingConvNameDraft] = useState('');
 
   // ── Painel direito collapse ────────────────────────────────
   const [openPerfil, setOpenPerfil]          = useState(true);
@@ -3083,6 +3089,15 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
     setVoiceActive(false);
   }
 
+  async function saveConvName() {
+    const newName = editingConvNameDraft.trim();
+    if (!newName || !activeId) { setEditingConvName(false); return; }
+    const field = active.is_group ? 'group_name' : 'contact_name';
+    await supabase.from('conversations').update({ [field]: newName }).eq('id', activeId);
+    setConvs(prev => prev.map(c => c.id === activeId ? { ...c, [field]: newName } : c));
+    setEditingConvName(false);
+  }
+
   const toggleStarMsg = (msg) => {
     if (!activeId || !msg?.id) return;
     const key = `${activeId}:${msg.id}`;
@@ -3972,6 +3987,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
               })}
               onClick={() => {
                 setActiveId(c.id);
+                setEditingConvName(false);
                 setMobilePane('chat');
                 if (usingRealData && !c.id.startsWith('chan-')) loadMsgs(c.id);
                 // Zera badge de não lidas ao abrir canal
@@ -4005,7 +4021,30 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <div style={{ width: 8, height: 8, borderRadius: '50%', background: active.color || '#B70C00', flexShrink: 0 }} />
-                      <span className="lc-chat-name">{active.name}</span>
+                      {(active.type === 'whatsapp' || active.type === 'group') ? (
+                        editingConvName ? (
+                          <input
+                            autoFocus
+                            value={editingConvNameDraft}
+                            onChange={e => setEditingConvNameDraft(e.target.value)}
+                            onBlur={saveConvName}
+                            onKeyDown={e => { if (e.key === 'Enter') saveConvName(); if (e.key === 'Escape') setEditingConvName(false); }}
+                            className="lc-chat-name"
+                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 4, color: 'white', padding: '1px 6px', outline: 'none', width: 180 }}
+                          />
+                        ) : (
+                          <span
+                            className="lc-chat-name"
+                            title="Clique para renomear"
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => { setEditingConvNameDraft(active.contact_name || active.push_name || active.group_name || ''); setEditingConvName(true); }}
+                          >
+                            {active.is_group ? (active.group_name || active.whatsapp_chat_id?.split('@')[0] || 'Grupo') : (active.contact_name || active.push_name || active.whatsapp_chat_id?.split('@')[0] || 'Contato')}
+                          </span>
+                        )
+                      ) : (
+                        <span className="lc-chat-name">{active.name}</span>
+                      )}
                     </div>
                     <div className="lc-chat-sub" style={{ marginTop: 1 }}>
                       <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>{active.description || 'Canal interno'}</span>
@@ -4205,7 +4244,28 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
                   </button>
                   <ConvAvatar conv={active} size={28} style={{ flexShrink: 0 }} />
                   <div style={{ minWidth: 0, overflow: 'hidden' }}>
-                    <div className="lc-chat-name">{active.name}</div>
+                    <div className="lc-chat-name">
+                      {(active.type === 'whatsapp' || active.type === 'group') ? (
+                        editingConvName ? (
+                          <input
+                            autoFocus
+                            value={editingConvNameDraft}
+                            onChange={e => setEditingConvNameDraft(e.target.value)}
+                            onBlur={saveConvName}
+                            onKeyDown={e => { if (e.key === 'Enter') saveConvName(); if (e.key === 'Escape') setEditingConvName(false); }}
+                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 4, color: 'white', fontSize: 13, fontWeight: 600, padding: '1px 6px', outline: 'none', width: 200 }}
+                          />
+                        ) : (
+                          <span
+                            title="Clique para renomear"
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => { setEditingConvNameDraft(active.contact_name || active.push_name || active.group_name || ''); setEditingConvName(true); }}
+                          >
+                            {active.is_group ? (active.group_name || active.whatsapp_chat_id?.split('@')[0] || 'Grupo') : (active.contact_name || active.push_name || active.whatsapp_chat_id?.split('@')[0] || 'Contato')}
+                          </span>
+                        )
+                      ) : active.name}
+                    </div>
                     <div className="lc-chat-sub">
                       {active.type === 'whatsapp' && <span className="lc-wa-mini" style={{ flexShrink: 0 }}><Icon name="whatsapp" size={10} /></span>}
                       {active.type === 'group'    && <Icon name="users" size={12} style={{ flexShrink: 0 }} />}
