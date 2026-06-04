@@ -924,7 +924,7 @@ function BotsScreen({ tenantDbId }) {
           value={message}
           onChange={e => setMessage(e.target.value)}
           rows={4}
-          style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: 'white', padding: '10px 12px', fontSize: 13, resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }}
+          style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: 'white', padding: '10px 12px', fontSize: 13, resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none', whiteSpace: 'pre-wrap' }}
           placeholder="Mensagem enviada ao cliente fora do horário de atendimento…"
         />
         <div style={{ marginTop: 6, fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>{message.length} caracteres</div>
@@ -999,7 +999,7 @@ function BotsScreen({ tenantDbId }) {
               onChange={e => updateExtra(ex.id, 'message', e.target.value)}
               rows={3}
               placeholder="Mensagem enviada neste período…"
-              style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: 'white', padding: '8px 10px', fontSize: 12, resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }}
+              style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: 'white', padding: '8px 10px', fontSize: 12, resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none', whiteSpace: 'pre-wrap' }}
             />
           </div>
         ))}
@@ -2308,16 +2308,23 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         setConvs(prev => {
           const idx = prev.findIndex(e => e.id === c.id);
           if (idx !== -1) {
-            return prev.map(existing => existing.id !== c.id ? existing : {
+            return prev.map(existing => {
+            if (existing.id !== c.id) return existing;
+            const updName = c.contact_name || c.group_name || c.push_name || existing.name;
+            return {
               ...existing,
               status: c.status || existing.status,
               department_id: c.department_id ?? existing.department_id,
               breno_paused: c.breno_paused ?? existing.breno_paused,
               last_breno_handled_at: c.last_breno_handled_at || existing.last_breno_handled_at,
               assigned_to: c.assigned_to ?? existing.assigned_to,
-              ...(c.push_name ? { name: c.push_name, avatar: c.push_name.slice(0, 2).toUpperCase() } : {}),
+              contact_name: c.contact_name ?? existing.contact_name,
+              group_name: c.group_name ?? existing.group_name,
+              name: updName,
+              avatar: updName.slice(0, 2).toUpperCase(),
               ...(c.push_photo_url ? { photoUrl: c.push_photo_url } : {}),
-            });
+            };
+          });
           }
           if (!['aguardando', 'em_atendimento', 'atendimento_aberto', 'automacao', 'falha'].includes(c.status)) return prev;
           const phone = c.whatsapp_chat_id?.split('@')[0] || '';
