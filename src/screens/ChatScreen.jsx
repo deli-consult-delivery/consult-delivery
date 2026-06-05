@@ -2687,7 +2687,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
         replyTo: msg.quoted_content || null, reactions: msg.reactions || [],
         deliveryStatus: msg.delivery_status ?? null,
       }));
-      const SHOW_EVENT_TYPES = new Set(['created', 'assigned', 'closed', 'reopened']);
+      const SHOW_EVENT_TYPES = new Set(['closed', 'reopened']);
       // Dedup: trigger SQL + frontend podem inserir o mesmo evento; manter o com actor_name
       const filteredEvts = (evts || []).filter(evt => SHOW_EVENT_TYPES.has(evt.event_type));
       const dedupedEvts = filteredEvts.reduce((acc, evt) => {
@@ -2710,6 +2710,14 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
         return { ...m, [convId]: [...merged, ...tmpMsgs] };
       });
       setMsgHasMore(prev => ({ ...prev, [convId]: rows.length === MSG_PAGE }));
+      if (convId === activeIdRef.current) {
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+            setShowScrollBtn(false);
+          }
+        }));
+      }
     } catch { /* ignore */ }
   }
 
@@ -4382,24 +4390,6 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
                 );
               })()}
 
-              {/* BRENO suggestion banner */}
-              {brenoSuggestion && (
-                <div className="lc-ai-result fade-in" style={{ borderLeft: '3px solid #A855F7' }}>
-                  <button className="lc-ai-result-close" onClick={() => dismissBrenoSuggestion(brenoSuggestion.id)}><Icon name="x" size={12} /></button>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                    <AgentAvatar id="breno" size={28} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, color: '#C084FC', fontWeight: 700, marginBottom: 4 }}>BRENO · Resposta sugerida</div>
-                      <p style={{ margin: 0, fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6 }}>{brenoSuggestion.breno_response}</p>
-                      <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-                        <button className="lc-ai-cta" onClick={() => { setDraft(brenoSuggestion.breno_response); setBrenoSuggestion(null); }}>Usar resposta</button>
-                        <button className="lc-ai-cta ghost" onClick={() => dismissBrenoSuggestion(brenoSuggestion.id)}>Dispensar</button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* Mensagens */}
               <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
               <div ref={scrollRef} className="lc-msgs dark-scroll"
@@ -4511,6 +4501,24 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
                   <button onClick={() => setAiMode('humano')} style={{ color: 'rgba(255,255,255,0.35)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, padding: '2px 6px' }}>
                     Voltar ao Humano
                   </button>
+                </div>
+              )}
+
+              {/* BRENO suggestion banner */}
+              {brenoSuggestion && (
+                <div className="lc-ai-result fade-in" style={{ borderLeft: '3px solid #A855F7' }}>
+                  <button className="lc-ai-result-close" onClick={() => dismissBrenoSuggestion(brenoSuggestion.id)}><Icon name="x" size={12} /></button>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                    <AgentAvatar id="breno" size={28} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, color: '#C084FC', fontWeight: 700, marginBottom: 4 }}>BRENO · Resposta sugerida</div>
+                      <p style={{ margin: 0, fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6 }}>{brenoSuggestion.breno_response}</p>
+                      <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                        <button className="lc-ai-cta" onClick={() => { setDraft(brenoSuggestion.breno_response); setBrenoSuggestion(null); }}>Usar resposta</button>
+                        <button className="lc-ai-cta ghost" onClick={() => dismissBrenoSuggestion(brenoSuggestion.id)}>Dispensar</button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
