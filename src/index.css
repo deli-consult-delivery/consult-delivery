@@ -3074,6 +3074,9 @@ input, textarea { font-family: inherit; }
 
   /* Mensagens: safe area bottom para iPhone */
   .lc-msgs { padding-bottom: 8px; }
+  /* Balões: texto maior e toque mais confortável */
+  .lc-bubble { font-size: 15px !important; padding: 10px 14px !important; }
+  .lc-bubble .lc-ts { font-size: 11px !important; }
 
   /* Composer: safe area para notch do iPhone */
   .lc-composer-bar { padding-bottom: env(safe-area-inset-bottom, 8px); }
