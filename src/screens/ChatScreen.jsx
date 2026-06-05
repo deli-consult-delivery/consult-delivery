@@ -1785,6 +1785,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
   const [convs, setConvs]                    = useState([]);
   const [usingRealData, setUsingRealData]    = useState(false);
   const [members, setMembers]                = useState([]);
+  const [lojas, setLojas]                    = useState([]);
   const [currentUser, setCurrentUser]        = useState(null);
   const [departments, setDepartments]        = useState([]);
   const [activeCustomer, setActiveCustomer]  = useState(null);
@@ -2029,6 +2030,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
     loadMembers();
     loadCurrentUser();
     loadQuickReplies();
+    loadLojas();
   }, []);
 
   useEffect(() => {
@@ -2474,6 +2476,17 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
     try {
       const { data } = await supabase.from('profiles').select('id, full_name, email, avatar_url').order('full_name');
       if (data?.length) setMembers(data);
+    } catch { /* ignore */ }
+  }
+
+  async function loadLojas() {
+    try {
+      const { data } = await supabase
+        .from('lojas')
+        .select('id, nome')
+        .eq('is_active', true)
+        .order('nome');
+      if (data?.length) setLojas(data);
     } catch { /* ignore */ }
   }
 
@@ -5050,6 +5063,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
         members={members}
         currentUserId={currentUser?.id}
         onClose={() => setShowTasksPanel(false)}
+        lojas={lojas}
+        activeLoja={lojaVinculada}
       />
     )}
     </>
