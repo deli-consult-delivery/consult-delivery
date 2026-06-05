@@ -57,7 +57,8 @@ export default function App() {
   const [isInvite, setIsInvite] = useState(false);
   const [tenantLoading, setTenantLoading] = useState(false);
   const [tenants, setTenants] = useState(TENANTS);
-  const [route, setRoute] = useState(() => localStorage.getItem('cd-route') || 'dashboard');
+  const [_deepLinkConvId] = useState(() => new URLSearchParams(window.location.search).get('chat'));
+  const [route, setRoute] = useState(() => _deepLinkConvId ? 'chat' : (localStorage.getItem('cd-route') || 'dashboard'));
   const [tenant, setTenant] = useState(null);
   const [tenantDbId, setTenantDbId] = useState(null);
   const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
@@ -351,7 +352,7 @@ export default function App() {
         {/* admin + atendimento + marketing */}
         {route === 'chat' && (
           <RequireRole roles={['admin', 'atendimento', 'marketing']} screenId="chat" userId={session?.user?.id}>
-            <ChatScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={setRoute} />
+            <ChatScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={setRoute} deepLinkConvId={_deepLinkConvId} />
           </RequireRole>
         )}
         {route === 'onboarding' && (

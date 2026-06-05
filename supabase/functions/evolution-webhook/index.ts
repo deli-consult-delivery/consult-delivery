@@ -990,6 +990,7 @@ async function triggerBrenoIfNeeded({ tenantId, conversationId, messageId, messa
       message_body:    messageText,
       message_id:      messageId,
       conversation_id: conversationId,
+      push_name:       senderName,
     }),
   });
 

@@ -1777,7 +1777,7 @@ function VisualizacaoScreen({ tenantDbId }) {
 // ═══════════════════════════════════════════════════════════════
 // CHAT SCREEN — componente principal
 // ═══════════════════════════════════════════════════════════════
-export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
+export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkConvId }) {
   // ── Dados e instâncias ────────────────────────────────────
   const [instances, setInstances]            = useState([]);
   const [selectedInstance, setSelectedInstance] = useState(null);
@@ -1789,7 +1789,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const [activeCustomer, setActiveCustomer]  = useState(null);
 
   // ── UI state ──────────────────────────────────────────────
-  const [activeId, setActiveId]              = useState(null);
+  const [activeId, setActiveId]              = useState(() => deepLinkConvId ?? null);
   const [headerTab, setHeaderTab]            = useState('inbox');
   const [search, setSearch]                  = useState('');
   const isSearching                          = search.length >= 3;
@@ -1914,6 +1914,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
   const chanScrollRef  = useRef(null);
   const chatTargetRef  = useRef(sessionStorage.getItem('cd-chat-target'));
   const activeIdRef            = useRef(activeId);
+  const deepLinkApplied        = useRef(false);
   const photoCacheRef          = useRef({});
   const convsRef               = useRef(convs);
   const persistingRef          = useRef(new Set());
@@ -2657,7 +2658,13 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate }) {
         return toAdd.length ? [...toAdd, ...prev] : prev;
       });
       setActiveId(prev => prev || mapped[0]?.id);
-      if (!activeIdRef.current && mapped[0]) loadMsgs(mapped[0].id);
+      if (deepLinkConvId && !deepLinkApplied.current) {
+        deepLinkApplied.current = true;
+        loadMsgs(deepLinkConvId);
+        window.history.replaceState({}, '', window.location.pathname);
+      } else if (!activeIdRef.current && mapped[0]) {
+        loadMsgs(mapped[0].id);
+      }
     } catch { /* ignore */ }
   }
 

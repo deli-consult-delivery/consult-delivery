@@ -3,14 +3,17 @@ import { z } from 'zod';
 import { getSupabase } from '../_shared/supabase';
 import { logAgentRun } from '../_shared/audit';
 import { chat } from '../agents/llm-client';
+import { brenoRenotificar } from './renotificar';
 
 const InputSchema = z.object({
-  tenant_id:    z.string().uuid(),
-  instance_name: z.string(),
-  remote_jid:   z.string(),
-  push_name:    z.string().optional(),
-  message_text: z.string(),
-  message_id:   z.string().optional(),
+  tenant_id:       z.string().uuid(),
+  instance_name:   z.string(),
+  remote_jid:      z.string(),
+  push_name:       z.string().optional(),
+  message_text:    z.string(),
+  message_id:      z.string().optional(),
+  fence_at:        z.string().optional(),
+  conversation_id: z.string().uuid().optional(),
 });
 
 const ClassSchema = z.object({
@@ -50,6 +53,37 @@ export const brenoTriagemOffhours = task({
     const sb    = getSupabase();
     const start = Date.now();
 
+    // Effective text/name — overridden by buffer when multiple messages arrive
+    let effectiveText     = input.message_text;
+    let effectivePushName = input.push_name;
+
+    // Debounce: abort if a newer message arrived after this trigger was scheduled
+    if (input.fence_at) {
+      const { data: buf } = await sb
+        .from('breno_message_buffer')
+        .select('buffered_messages, last_message_at, push_name')
+        .eq('tenant_id', input.tenant_id)
+        .eq('remote_jid', input.remote_jid)
+        .maybeSingle();
+
+      if (buf && buf.last_message_at > input.fence_at) {
+        logger.info('breno-triagem-offhours: stale — nova mensagem chegou, abortando', {
+          fence_at:        input.fence_at,
+          last_message_at: buf.last_message_at,
+        });
+        return { triagem_id: null, nivel: 'ignorar', categoria: 'outro', confianca: 0, notificado: false };
+      }
+
+      if (buf?.buffered_messages?.length) {
+        const texts = (buf.buffered_messages as Array<{ text: string }>)
+          .map(m => m.text)
+          .filter(Boolean)
+          .join('\n');
+        if (texts) effectiveText = texts;
+        if (buf.push_name) effectivePushName = buf.push_name;
+      }
+    }
+
     logger.info('breno-triagem-offhours: início', {
       tenant_id:     input.tenant_id,
       remote_jid:    input.remote_jid,
@@ -71,7 +105,7 @@ export const brenoTriagemOffhours = task({
 
     // 3. Resolver nome/número do cliente
     const phone       = input.remote_jid.split('@')[0];
-    let clienteNome   = input.push_name || phone;
+    let clienteNome   = phone; // fallback: número
     let clienteNumero = `+${phone}`;
 
     if (lojaId) {
@@ -92,6 +126,9 @@ export const brenoTriagemOffhours = task({
       }
     }
 
+    // push_name do WhatsApp sempre vence o nome do DB
+    if (effectivePushName) clienteNome = effectivePushName;
+
     // 4. Classificar via LLM (llm-client.ts — nunca @anthropic-ai/claude-agent-sdk)
     const minConfianca = parseFloat(process.env.BRENO_CONFIANCA_MINIMA || '0.6');
 
@@ -99,7 +136,7 @@ export const brenoTriagemOffhours = task({
     try {
       const resp = await chat([
         { role: 'system', content: TRIAGE_SYSTEM_PROMPT },
-        { role: 'user',   content: `Cliente: ${clienteNome} (${clienteNumero})\nMensagem: ${input.message_text}` },
+        { role: 'user',   content: `Cliente: ${clienteNome} (${clienteNumero})\nMensagem: ${effectiveText}` },
       ]);
 
       const raw = JSON.parse(resp.content);
@@ -137,7 +174,7 @@ export const brenoTriagemOffhours = task({
         nivel:          classificacao.nivel,
         categoria:      classificacao.categoria,
         resumo:         classificacao.resumo,
-        mensagem_raw:   input.message_text,
+        mensagem_raw:   effectiveText,
         confianca:      classificacao.confianca,
       })
       .select('id')
@@ -178,6 +215,13 @@ export const brenoTriagemOffhours = task({
             minute:   '2-digit',
           }).format(new Date());
 
+          const appLink = input.conversation_id
+            ? `https://app.consultdelivery.com.br?chat=${input.conversation_id}`
+            : 'https://app.consultdelivery.com.br';
+
+          const supabaseUrl   = process.env.SUPABASE_URL ?? '';
+          const confirmarBase = `${supabaseUrl}/functions/v1/breno-confirmar?triagem_id=${row.id}`;
+
           const texto = [
             `${emoji} — Demanda fora do expediente`,
             `Cliente: ${classificacao.cliente_nome}`,
@@ -187,7 +231,14 @@ export const brenoTriagemOffhours = task({
             ``,
             `Resumo: ${classificacao.resumo}`,
             ``,
-            `Recebido: ${hora} (Belém) · responder pelo número de suporte`,
+            `📱 Conversa: ${appLink}`,
+            ``,
+            `Como deseja tratar?`,
+            `1️⃣ Darei o suporte → ${confirmarBase}&acao=suporte`,
+            `2️⃣ Tratarei amanhã → ${confirmarBase}&acao=amanha`,
+            `3️⃣ Ignorar → ${confirmarBase}&acao=ignorar`,
+            ``,
+            `Recebido: ${hora} (Belém)`,
           ].join('\n');
 
           const sendRes = await fetch(
@@ -207,6 +258,13 @@ export const brenoTriagemOffhours = task({
               .update({ notificado: true, notificado_em: new Date().toISOString() })
               .eq('id', row.id);
 
+            await brenoRenotificar.trigger({
+              triagem_id:    row.id,
+              tenant_id:     input.tenant_id,
+              instance_name: input.instance_name,
+              tentativa:     1,
+            }, { delay: '5m' });
+
             logger.info('breno-triagem-offhours: CEO notificado', {
               nivel:       classificacao.nivel,
               notify_num:  notifyNum,
@@ -218,6 +276,15 @@ export const brenoTriagemOffhours = task({
           }
         }
       }
+    }
+
+    // Limpa buffer desta conversa após triagem processada com sucesso
+    if (input.fence_at) {
+      await sb
+        .from('breno_message_buffer')
+        .delete()
+        .eq('tenant_id', input.tenant_id)
+        .eq('remote_jid', input.remote_jid);
     }
 
     const output = {
