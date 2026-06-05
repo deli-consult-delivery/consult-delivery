@@ -2696,7 +2696,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
         supabase.from('conversation_events').select('id, event_type, actor_name, metadata, ts').eq('conversation_id', convId).order('ts', { ascending: true }),
       ]);
       const rows = data || [];
-      const dbMsgs = rows.reverse().filter(msg => msg.content || msg.body || msg.media_url).map(msg => ({
+      const dbMsgs = rows.reverse().filter(msg => msg.content || msg.body || msg.media_url || msg.media_type).map(msg => ({
         id: msg.id, from: msg.direction === 'outbound' ? 'out' : 'in',
         text: msg.content || msg.body || '',
         time: new Date(msg.created_at || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
@@ -2725,7 +2725,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
       }));
       const merged = [...dbMsgs, ...evtMsgs].sort((a, b) => new Date(a._ts) - new Date(b._ts));
       setMessages(m => {
-        const tmpMsgs = (m[convId] || []).filter(ex => ex.id?.startsWith('tmp-') || ex.id?.startsWith('sys-'));
+        const tmpMsgs = (m[convId] || []).filter(ex => {
+          if (ex.id?.startsWith('sys-')) return true;
+          if (ex.id?.startsWith('tmp-')) return !merged.some(db => db.from === 'out' && db.text === ex.text);
+          return false;
+        });
         return { ...m, [convId]: [...merged, ...tmpMsgs] };
       });
       setMsgHasMore(prev => ({ ...prev, [convId]: rows.length === MSG_PAGE }));
@@ -2757,7 +2761,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
         .order('created_at', { ascending: false })
         .limit(MSG_PAGE);
       const rows = data || [];
-      const olderMsgs = rows.reverse().filter(msg => msg.content || msg.body || msg.media_url).map(msg => ({
+      const olderMsgs = rows.reverse().filter(msg => msg.content || msg.body || msg.media_url || msg.media_type).map(msg => ({
         id: msg.id, from: msg.direction === 'outbound' ? 'out' : 'in',
         text: msg.content || msg.body || '',
         time: new Date(msg.created_at || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
@@ -2905,7 +2909,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
     const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     const currentReplyTo = replyTo;
     setMessages(m => ({ ...m, [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text, time, _ts: now.toISOString(), agentName, replyTo: currentReplyTo }] }));
-    setDraft(''); setReplyTo(null);
+    setDraft(''); setReplyTo(null); voiceFinalRef.current = '';
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     if (HAS_EVO && selectedInstance && active.whatsapp_chat_id) {
       setSending(true);
