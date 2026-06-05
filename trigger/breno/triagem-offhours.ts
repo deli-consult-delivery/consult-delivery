@@ -3,15 +3,17 @@ import { z } from 'zod';
 import { getSupabase } from '../_shared/supabase';
 import { logAgentRun } from '../_shared/audit';
 import { chat } from '../agents/llm-client';
+import { brenoRenotificar } from './renotificar';
 
 const InputSchema = z.object({
-  tenant_id:    z.string().uuid(),
-  instance_name: z.string(),
-  remote_jid:   z.string(),
-  push_name:    z.string().optional(),
-  message_text: z.string(),
-  message_id:   z.string().optional(),
-  fence_at:     z.string().optional(),
+  tenant_id:       z.string().uuid(),
+  instance_name:   z.string(),
+  remote_jid:      z.string(),
+  push_name:       z.string().optional(),
+  message_text:    z.string(),
+  message_id:      z.string().optional(),
+  fence_at:        z.string().optional(),
+  conversation_id: z.string().uuid().optional(),
 });
 
 const ClassSchema = z.object({
@@ -213,6 +215,13 @@ export const brenoTriagemOffhours = task({
             minute:   '2-digit',
           }).format(new Date());
 
+          const appLink = input.conversation_id
+            ? `https://app.consultdelivery.com.br?chat=${input.conversation_id}`
+            : 'https://app.consultdelivery.com.br';
+
+          const supabaseUrl   = process.env.SUPABASE_URL ?? '';
+          const confirmarBase = `${supabaseUrl}/functions/v1/breno-confirmar?triagem_id=${row.id}`;
+
           const texto = [
             `${emoji} — Demanda fora do expediente`,
             `Cliente: ${classificacao.cliente_nome}`,
@@ -222,7 +231,14 @@ export const brenoTriagemOffhours = task({
             ``,
             `Resumo: ${classificacao.resumo}`,
             ``,
-            `Recebido: ${hora} (Belém) · responder pelo número de suporte`,
+            `📱 Conversa: ${appLink}`,
+            ``,
+            `Como deseja tratar?`,
+            `1️⃣ Darei o suporte → ${confirmarBase}&acao=suporte`,
+            `2️⃣ Tratarei amanhã → ${confirmarBase}&acao=amanha`,
+            `3️⃣ Ignorar → ${confirmarBase}&acao=ignorar`,
+            ``,
+            `Recebido: ${hora} (Belém)`,
           ].join('\n');
 
           const sendRes = await fetch(
@@ -241,6 +257,13 @@ export const brenoTriagemOffhours = task({
               .from('breno_triagem')
               .update({ notificado: true, notificado_em: new Date().toISOString() })
               .eq('id', row.id);
+
+            await brenoRenotificar.trigger({
+              triagem_id:    row.id,
+              tenant_id:     input.tenant_id,
+              instance_name: input.instance_name,
+              tentativa:     1,
+            }, { delay: '5m' });
 
             logger.info('breno-triagem-offhours: CEO notificado', {
               nivel:       classificacao.nivel,

@@ -78,13 +78,14 @@ export const brenoProcessarWebhook = task({
 
       const DEBOUNCE_SECS = parseInt(process.env.BRENO_DEBOUNCE_SECS ?? '45');
       await brenoTriagemOffhours.trigger({
-        tenant_id:     input.tenant_id,
-        instance_name: input.instance_name,
-        remote_jid:    input.sender_jid,
-        message_text:  input.message_body,
-        message_id:    input.message_id,
-        push_name:     input.push_name,
-        fence_at:      now,
+        tenant_id:       input.tenant_id,
+        instance_name:   input.instance_name,
+        remote_jid:      input.sender_jid,
+        message_text:    input.message_body,
+        message_id:      input.message_id,
+        push_name:       input.push_name,
+        fence_at:        now,
+        conversation_id: input.conversation_id,
       }, { delay: `${DEBOUNCE_SECS}s` });
 
       const result: Output = OutputSchema.parse({
