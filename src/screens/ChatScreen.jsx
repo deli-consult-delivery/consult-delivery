@@ -1646,7 +1646,7 @@ function ProtocolosScreen({ tenantDbId, onOpenConv }) {
           </div>
           {convs.map(c => {
             const name = c.is_group
-              ? (c.group_name || c.whatsapp_chat_id?.split('@')[0] || '—')
+              ? ((c.group_name && !/^\d{10,}$/.test(c.group_name) ? c.group_name : null) || 'Grupo')
               : (c.contact_name || c.push_name || c.whatsapp_chat_id?.split('@')[0] || '—');
             const phone = (c.whatsapp_chat_id || '').replace(/@[^@]+$/, '') || '—';
             const dept = c.department_id ? depts[c.department_id] : null;
@@ -2333,8 +2333,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
           });
           }
           if (!['aguardando', 'em_atendimento', 'atendimento_aberto', 'automacao', 'falha'].includes(c.status)) return prev;
-          const phone = c.whatsapp_chat_id?.split('@')[0] || '';
-          const name  = c.contact_name || c.group_name || c.push_name || phone || 'Desconhecido';
+          const phone  = c.whatsapp_chat_id?.split('@')[0] || '';
+          const gname  = c.group_name && !/^\d{10,}$/.test(c.group_name) ? c.group_name : null;
+          const name   = c.contact_name || gname || c.push_name || (c.is_group ? 'Grupo' : phone) || 'Desconhecido';
           return [{ id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null,
             type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id,
             preview: '', previewFrom: 'in', time: '', _sortTs: c.updated_at || '',
@@ -2345,8 +2346,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversations' }, payload => {
         const c = payload.new;
         if (!['aguardando', 'em_atendimento', 'atendimento_aberto', 'automacao', 'falha'].includes(c.status)) return;
-        const phone = c.whatsapp_chat_id?.split('@')[0] || '';
-        const name  = c.contact_name || c.group_name || c.push_name || phone || 'Desconhecido';
+        const phone  = c.whatsapp_chat_id?.split('@')[0] || '';
+        const gname  = c.group_name && !/^\d{10,}$/.test(c.group_name) ? c.group_name : null;
+        const name   = c.contact_name || gname || c.push_name || (c.is_group ? 'Grupo' : phone) || 'Desconhecido';
         setConvs(prev => {
           if (prev.find(e => e.id === c.id)) return prev;
           return [{ id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null,
@@ -2661,8 +2663,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
       const lastMsgMap = {};
       lastMsgResults.forEach(({ data }) => { if (data) lastMsgMap[data.conversation_id] = data; });
       const mapped = uniqueRows.map(c => {
-        const phone = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
-        const name  = c.contact_name || c.group_name || c.push_name || phone || 'Desconhecido';
+        const phone  = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
+        const gname  = c.group_name && !/^\d{10,}$/.test(c.group_name) ? c.group_name : null;
+        const name   = c.contact_name || gname || c.push_name || (c.is_group ? 'Grupo' : phone) || 'Desconhecido';
         const lm    = lastMsgMap[c.id];
         const preview = lm ? (lm.media_type === 'image' ? '🖼 Imagem' : lm.media_type === 'video' ? '🎬 Vídeo' : lm.media_type === 'document' ? '📄 Documento' : lm.media_type?.includes('audio') ? '🎵 Áudio' : lm.media_type === 'sticker' ? '🔖 Figurinha' : lm.content || lm.body || '') : '';
         const previewFrom = lm?.direction === 'inbound' ? 'in' : 'out';
@@ -2800,8 +2803,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
         const lastMsgMap = {};
         lastMsgResults.forEach(({ data }) => { if (data) lastMsgMap[data.conversation_id] = data; });
         const mapped = rows.map(c => {
-          const phone = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
-          const name  = c.contact_name || c.group_name || c.push_name || phone || 'Desconhecido';
+          const phone  = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
+          const gname  = c.group_name && !/^\d{10,}$/.test(c.group_name) ? c.group_name : null;
+          const name   = c.contact_name || gname || c.push_name || (c.is_group ? 'Grupo' : phone) || 'Desconhecido';
           const lm    = lastMsgMap[c.id];
           const preview = lm ? (lm.media_type === 'image' ? '🖼 Imagem' : lm.media_type === 'video' ? '🎬 Vídeo' : lm.media_type === 'document' ? '📄 Documento' : lm.media_type?.includes('audio') ? '🎵 Áudio' : lm.media_type === 'sticker' ? '🔖 Figurinha' : lm.content || lm.body || '') : '';
           const previewFrom = lm?.direction === 'inbound' ? 'in' : 'out';
