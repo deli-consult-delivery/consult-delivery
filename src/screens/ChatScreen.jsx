@@ -116,6 +116,7 @@ function StatusIcon({ name, size = 14 }) {
     check: <><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></>,
     alert: <><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></>,
     arch:  <><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></>,
+    users: <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>,
     bot:   <><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M12 2v9"/><circle cx="12" cy="2" r="1"/><path d="M7 15h.01M17 15h.01M12 15h.01"/></>,
   };
   return (
@@ -2000,6 +2001,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
       finalizado:   src.filter(c => c.status === 'finalizado').length,
       falha:        src.filter(c => c.status === 'falha').length,
       oculto:       src.filter(c => c.status === 'archived').length,
+      interno:      src.filter(c => c.id.startsWith('chan-')).reduce((sum, c) => sum + (c.unread || 0), 0),
     };
   }, [isSearching, searchConvs, convs]);
 
@@ -2008,6 +2010,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
     { id: 'aguardando',   icon: 'clock', value: statusCounts.aguardando,   label: 'Aguardando' },
     { id: 'aberto',       icon: 'msg',   value: statusCounts.aberto,       label: 'Em aberto' },
     { id: 'automacao',    icon: 'bot',   value: statusCounts.automacao,    label: 'Automações' },
+    { id: 'interno',      icon: 'users', value: statusCounts.interno,      label: 'Chat Interno' },
     { id: 'finalizado',   icon: 'check', value: statusCounts.finalizado,   label: 'Finalizadas' },
     { id: 'falha',        icon: 'alert', value: statusCounts.falha,        label: 'Falha' },
     { id: 'oculto',       icon: 'arch',  value: statusCounts.oculto,       label: 'Ocultas' },
@@ -3693,6 +3696,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
     // Canais internos aparecem em todas as abas (exceto favoritas, onde exige fav)
     if (c.id.startsWith('chan-')) {
       if (tab === 'fav') return favConvs.has(c.id);
+      if (statusFilter === 'interno') return true;
+      if (c.status === 'finalizado') return false;
       return true;
     }
     if (tab === 'fav'    && !favConvs.has(c.id))   return false;
@@ -4318,7 +4323,17 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
                   )}
                   <span className="lc-protocol">#{active.id?.slice(-5) || '00000'}</span>
                   <span title={realtimeStatus === 'SUBSCRIBED' ? 'Realtime conectado' : 'Realtime desconectado — atualize a página'} style={{ width: 7, height: 7, borderRadius: '50%', background: realtimeStatus === 'SUBSCRIBED' ? '#22C55E' : '#EF4444', flexShrink: 0, display: 'inline-block' }} />
-                  {convStatus === 'finalizado' ? (
+                  {isChannel ? (
+                    active?.status === 'finalizado' ? (
+                      <button className="lc-action-btn" onClick={() => setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: null } : c))}>
+                        <Icon name="refresh" size={13} /> Reabrir
+                      </button>
+                    ) : (
+                      <button className="lc-action-btn primary" onClick={() => setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'finalizado' } : c))}>
+                        <Icon name="check" size={13} /> Finalizar
+                      </button>
+                    )
+                  ) : convStatus === 'finalizado' ? (
                     <button className="lc-action-btn" onClick={async () => { const { error } = await changeStatus('atendimento_aberto'); if (!error) { await insertEvent(activeId, 'reopened'); loadMsgs(activeId); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'atendimento_aberto', status_v2: 'in_progress' } : c)); } }} disabled={statusLoading}>
                       <Icon name="refresh" size={13} /> Reabrir
                     </button>
