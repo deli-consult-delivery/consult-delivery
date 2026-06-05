@@ -11,6 +11,7 @@ const InputSchema = z.object({
   push_name:    z.string().optional(),
   message_text: z.string(),
   message_id:   z.string().optional(),
+  fence_at:     z.string().optional(),
 });
 
 const ClassSchema = z.object({
@@ -49,6 +50,37 @@ export const brenoTriagemOffhours = task({
     const input = InputSchema.parse(payload);
     const sb    = getSupabase();
     const start = Date.now();
+
+    // Effective text/name — overridden by buffer when multiple messages arrive
+    let effectiveText     = input.message_text;
+    let effectivePushName = input.push_name;
+
+    // Debounce: abort if a newer message arrived after this trigger was scheduled
+    if (input.fence_at) {
+      const { data: buf } = await sb
+        .from('breno_message_buffer')
+        .select('buffered_messages, last_message_at, push_name')
+        .eq('tenant_id', input.tenant_id)
+        .eq('remote_jid', input.remote_jid)
+        .maybeSingle();
+
+      if (buf && buf.last_message_at > input.fence_at) {
+        logger.info('breno-triagem-offhours: stale — nova mensagem chegou, abortando', {
+          fence_at:        input.fence_at,
+          last_message_at: buf.last_message_at,
+        });
+        return { triagem_id: null, nivel: 'ignorar', categoria: 'outro', confianca: 0, notificado: false };
+      }
+
+      if (buf?.buffered_messages?.length) {
+        const texts = (buf.buffered_messages as Array<{ text: string }>)
+          .map(m => m.text)
+          .filter(Boolean)
+          .join('\n');
+        if (texts) effectiveText = texts;
+        if (buf.push_name) effectivePushName = buf.push_name;
+      }
+    }
 
     logger.info('breno-triagem-offhours: início', {
       tenant_id:     input.tenant_id,
@@ -93,7 +125,7 @@ export const brenoTriagemOffhours = task({
     }
 
     // push_name do WhatsApp sempre vence o nome do DB
-    if (input.push_name) clienteNome = input.push_name;
+    if (effectivePushName) clienteNome = effectivePushName;
 
     // 4. Classificar via LLM (llm-client.ts — nunca @anthropic-ai/claude-agent-sdk)
     const minConfianca = parseFloat(process.env.BRENO_CONFIANCA_MINIMA || '0.6');
@@ -102,7 +134,7 @@ export const brenoTriagemOffhours = task({
     try {
       const resp = await chat([
         { role: 'system', content: TRIAGE_SYSTEM_PROMPT },
-        { role: 'user',   content: `Cliente: ${clienteNome} (${clienteNumero})\nMensagem: ${input.message_text}` },
+        { role: 'user',   content: `Cliente: ${clienteNome} (${clienteNumero})\nMensagem: ${effectiveText}` },
       ]);
 
       const raw = JSON.parse(resp.content);
@@ -140,7 +172,7 @@ export const brenoTriagemOffhours = task({
         nivel:          classificacao.nivel,
         categoria:      classificacao.categoria,
         resumo:         classificacao.resumo,
-        mensagem_raw:   input.message_text,
+        mensagem_raw:   effectiveText,
         confianca:      classificacao.confianca,
       })
       .select('id')
@@ -221,6 +253,15 @@ export const brenoTriagemOffhours = task({
           }
         }
       }
+    }
+
+    // Limpa buffer desta conversa após triagem processada com sucesso
+    if (input.fence_at) {
+      await sb
+        .from('breno_message_buffer')
+        .delete()
+        .eq('tenant_id', input.tenant_id)
+        .eq('remote_jid', input.remote_jid);
     }
 
     const output = {

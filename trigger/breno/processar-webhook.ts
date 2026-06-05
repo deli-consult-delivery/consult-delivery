@@ -47,6 +47,36 @@ export const brenoProcessarWebhook = task({
         sender_jid: input.sender_jid,
       });
 
+      // Buffer de mensagens para debounce: acumula antes de acionar triagem
+      const sbOff   = getSupabase();
+      const now     = new Date().toISOString();
+      const convKey = input.conversation_id ?? input.sender_jid;
+
+      const { data: existing } = await sbOff
+        .from('breno_message_buffer')
+        .select('id, buffered_messages')
+        .eq('tenant_id', input.tenant_id)
+        .eq('conversation_id', convKey)
+        .maybeSingle();
+
+      const newMsg = {
+        text:        input.message_body,
+        push_name:   input.push_name ?? null,
+        received_at: now,
+      };
+      const msgs = [...((existing?.buffered_messages as Array<unknown>) ?? []), newMsg];
+
+      await sbOff.from('breno_message_buffer').upsert({
+        tenant_id:         input.tenant_id,
+        conversation_id:   convKey,
+        remote_jid:        input.sender_jid,
+        instance_name:     input.instance_name,
+        push_name:         input.push_name ?? null,
+        buffered_messages: msgs,
+        last_message_at:   now,
+      }, { onConflict: 'tenant_id,conversation_id' });
+
+      const DEBOUNCE_SECS = parseInt(process.env.BRENO_DEBOUNCE_SECS ?? '45');
       await brenoTriagemOffhours.trigger({
         tenant_id:     input.tenant_id,
         instance_name: input.instance_name,
@@ -54,12 +84,13 @@ export const brenoProcessarWebhook = task({
         message_text:  input.message_body,
         message_id:    input.message_id,
         push_name:     input.push_name,
-      });
+        fence_at:      now,
+      }, { delay: `${DEBOUNCE_SECS}s` });
 
       const result: Output = OutputSchema.parse({
         ok:     true,
         action: "triagem_offhours",
-        reason: `Off-hours (${offCheck.motivo}) — triagem enfileirada em vez de resposta automática`,
+        reason: `Off-hours (${offCheck.motivo}) — mensagem em buffer, triagem agendada em ${DEBOUNCE_SECS}s`,
       });
 
       await logAgentRun({
