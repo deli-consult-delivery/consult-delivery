@@ -131,7 +131,19 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
   const isVideo    = !!msgData.message?.videoMessage;
   const isDocument = !!msgData.message?.documentMessage;
   const isSticker  = !!msgData.message?.stickerMessage;
-  const isMedia    = isAudio || isImage || isVideo || isDocument || isSticker;
+  // Tipos WhatsApp Business / especiais
+  const isTemplate    = !!msgData.message?.templateMessage;
+  const isInteractive = !!msgData.message?.interactiveMessage;
+  const isButtons     = !!msgData.message?.buttonsMessage;
+  const isList        = !!msgData.message?.listMessage;
+  const isOrder       = !!msgData.message?.orderMessage;
+  const isViewOnce    = !!(
+    (msgData.message as Record<string, unknown>)?.viewOnceMessage?.message?.imageMessage
+    || (msgData.message as Record<string, unknown>)?.viewOnceMessage?.message?.videoMessage
+    || (msgData.message as Record<string, unknown>)?.viewOnceMessageV2?.message?.imageMessage
+    || (msgData.message as Record<string, unknown>)?.viewOnceMessageV2?.message?.videoMessage
+  );
+  const isMedia    = isAudio || isImage || isVideo || isDocument || isSticker || isViewOnce;
 
   // ── Reação de emoji WhatsApp ──────────────────────────────────────────────
   const reactionMsg = (msgData.message as Record<string, unknown>)?.reactionMessage as Record<string, unknown> | undefined;
@@ -162,12 +174,34 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
   else if (isVideo)    detectedMediaType = 'video';
   else if (isDocument) detectedMediaType = 'document';
   else if (isSticker)  detectedMediaType = 'sticker';
+  else if (isViewOnce) detectedMediaType = 'image';
 
+  const msg_ = msgData.message as Record<string, unknown>;
   const messageText: string = isAudio    ? '🎵 Áudio'
     : isImage    ? (msgData.message?.imageMessage?.caption    || '🖼 Imagem')
     : isVideo    ? (msgData.message?.videoMessage?.caption    || '🎬 Vídeo')
     : isDocument ? (msgData.message?.documentMessage?.title   || '📄 Documento')
     : isSticker  ? '🔖 Figurinha'
+    : isViewOnce ? '👁 Mensagem de visualização única'
+    : isTemplate ? (
+        (msg_?.templateMessage as Record<string, unknown>)?.hydratedTemplate?.hydratedContentText as string
+        || (msg_?.templateMessage as Record<string, unknown>)?.hydratedFourRowTemplate?.hydratedContentText as string
+        || '📋 Mensagem de template'
+      )
+    : isInteractive ? (
+        ((msg_?.interactiveMessage as Record<string, unknown>)?.body as Record<string, string>)?.text
+        || '📋 Mensagem interativa'
+      )
+    : isButtons ? (
+        (msg_?.buttonsMessage as Record<string, string>)?.contentText
+        || '📋 Mensagem com botões'
+      )
+    : isList ? (
+        (msg_?.listMessage as Record<string, string>)?.description
+        || (msg_?.listMessage as Record<string, string>)?.title
+        || '📋 Lista de opções'
+      )
+    : isOrder ? '📦 Pedido'
     : msgData.message?.conversation ||
       msgData.message?.extendedTextMessage?.text ||
       '';
@@ -251,7 +285,7 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
       .maybeSingle();
     const recipientName = recipientContact?.display_name || 'Desconhecido';
 
-    const fmConvId = await upsertConversation({ tenantId, instanceId: inst.id, chatId, isGroup, pushName: recipientName });
+    const fmConvId = await upsertConversation({ tenantId, instanceId: inst.id, chatId, isGroup, pushName: recipientName, inst, instanceName: instance });
     if (!fmConvId) return;
 
     // Dedup 2: plataforma salvou sem whatsapp_msg_id — apenas vincula o ID
@@ -377,6 +411,8 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
     chatId,
     isGroup,
     pushName,
+    inst,
+    instanceName: instance,
   });
 
   let savedMsg: { id: string } | null = null;
@@ -695,7 +731,18 @@ async function handleSendMessage({ inst, tenantId, instance, data }: {
   const isVideo    = !!msgData.message?.videoMessage;
   const isDocument = !!msgData.message?.documentMessage;
   const isSticker  = !!msgData.message?.stickerMessage;
-  const isMedia    = isAudio || isImage || isVideo || isDocument || isSticker;
+  const isTemplate    = !!msgData.message?.templateMessage;
+  const isInteractive = !!msgData.message?.interactiveMessage;
+  const isButtons     = !!msgData.message?.buttonsMessage;
+  const isList        = !!msgData.message?.listMessage;
+  const isOrder       = !!msgData.message?.orderMessage;
+  const isViewOnce    = !!(
+    (msgData.message as Record<string, unknown>)?.viewOnceMessage?.message?.imageMessage
+    || (msgData.message as Record<string, unknown>)?.viewOnceMessage?.message?.videoMessage
+    || (msgData.message as Record<string, unknown>)?.viewOnceMessageV2?.message?.imageMessage
+    || (msgData.message as Record<string, unknown>)?.viewOnceMessageV2?.message?.videoMessage
+  );
+  const isMedia    = isAudio || isImage || isVideo || isDocument || isSticker || isViewOnce;
 
   let detectedMediaType: string | null = null;
   if (isAudio)         detectedMediaType = 'audio';
@@ -703,12 +750,34 @@ async function handleSendMessage({ inst, tenantId, instance, data }: {
   else if (isVideo)    detectedMediaType = 'video';
   else if (isDocument) detectedMediaType = 'document';
   else if (isSticker)  detectedMediaType = 'sticker';
+  else if (isViewOnce) detectedMediaType = 'image';
 
+  const sm_ = msgData.message as Record<string, unknown>;
   const messageText: string = isAudio    ? '🎵 Áudio'
     : isImage    ? (msgData.message?.imageMessage?.caption    || '🖼 Imagem')
     : isVideo    ? (msgData.message?.videoMessage?.caption    || '🎬 Vídeo')
     : isDocument ? (msgData.message?.documentMessage?.title   || '📄 Documento')
     : isSticker  ? '🔖 Figurinha'
+    : isViewOnce ? '👁 Mensagem de visualização única'
+    : isTemplate ? (
+        (sm_?.templateMessage as Record<string, unknown>)?.hydratedTemplate?.hydratedContentText as string
+        || (sm_?.templateMessage as Record<string, unknown>)?.hydratedFourRowTemplate?.hydratedContentText as string
+        || '📋 Mensagem de template'
+      )
+    : isInteractive ? (
+        ((sm_?.interactiveMessage as Record<string, unknown>)?.body as Record<string, string>)?.text
+        || '📋 Mensagem interativa'
+      )
+    : isButtons ? (
+        (sm_?.buttonsMessage as Record<string, string>)?.contentText
+        || '📋 Mensagem com botões'
+      )
+    : isList ? (
+        (sm_?.listMessage as Record<string, string>)?.description
+        || (sm_?.listMessage as Record<string, string>)?.title
+        || '📋 Lista de opções'
+      )
+    : isOrder ? '📦 Pedido'
     : (msgData.message?.conversation || msgData.message?.extendedTextMessage?.text || '') as string;
 
   // Idempotência 1: dedup por whatsapp_msg_id
@@ -838,12 +907,42 @@ async function upsertGroup({ tenantId, jid, groupName, overwriteName = true }: {
   return data.id;
 }
 
-async function upsertConversation({ tenantId, instanceId, chatId, isGroup, pushName }: {
+async function resolveGroupName(
+  chatId: string, tenantId: string,
+  inst?: { evolution_url: string; api_key: string }, instanceName?: string
+): Promise<string | null> {
+  const { data: wg } = await supabase
+    .from('whatsapp_groups')
+    .select('group_name')
+    .eq('tenant_id', tenantId)
+    .eq('evolution_jid', chatId)
+    .maybeSingle();
+  if (wg?.group_name) return wg.group_name;
+
+  if (inst?.evolution_url && inst?.api_key && instanceName) {
+    try {
+      const r = await fetch(
+        `${inst.evolution_url}/group/findGroupInfos/${instanceName}?groupJid=${encodeURIComponent(chatId)}`,
+        { headers: { apikey: inst.api_key }, signal: AbortSignal.timeout(3000) }
+      );
+      if (r.ok) {
+        const j = await r.json();
+        const subject = (Array.isArray(j) ? j[0]?.subject : j?.subject) || null;
+        if (subject) return subject as string;
+      }
+    } catch { /* silencioso */ }
+  }
+  return null;
+}
+
+async function upsertConversation({ tenantId, instanceId, chatId, isGroup, pushName, inst, instanceName }: {
   tenantId: string; instanceId: string; chatId: string; isGroup: boolean; pushName: string;
+  inst?: { evolution_url: string; api_key: string };
+  instanceName?: string;
 }): Promise<string | null> {
   const { data: existing } = await supabase
     .from('conversations')
-    .select('id, status, status_v2, is_group')
+    .select('id, status, status_v2, is_group, group_name')
     .eq('whatsapp_chat_id', chatId)
     .eq('instance_id', instanceId)
     .order('created_at', { ascending: false })
@@ -852,8 +951,12 @@ async function upsertConversation({ tenantId, instanceId, chatId, isGroup, pushN
 
   if (existing) {
     const upd: Record<string, string | boolean | null> = { updated_at: new Date().toISOString(), tenant_id: tenantId };
-    if (!isGroup && pushName && pushName !== 'Desconhecido') upd.push_name = pushName;
+    if (!isGroup && pushName && pushName !== 'Desconhecido' && !/^\d+$/.test(pushName)) upd.push_name = pushName;
     if (isGroup && !existing.is_group) upd.is_group = true;
+    if (isGroup && !existing.group_name) {
+      const gn = await resolveGroupName(chatId, tenantId, inst, instanceName);
+      if (gn) upd.group_name = gn;
+    }
     // Reabrir conversa finalizada quando nova mensagem inbound chega (Regra A)
     // Limpa assigned_to para que qualquer atendente possa assumir (sem dono automático)
     if (existing.status === 'finalizado' || existing.status_v2 === 'closed') {
@@ -866,7 +969,8 @@ async function upsertConversation({ tenantId, instanceId, chatId, isGroup, pushN
     return existing.id;
   }
 
-  const validPushName = pushName && pushName !== 'Desconhecido' ? pushName : null;
+  const validPushName = pushName && pushName !== 'Desconhecido' && !/^\d+$/.test(pushName) ? pushName : null;
+  const groupName = isGroup ? (await resolveGroupName(chatId, tenantId, inst, instanceName)) : null;
   const { data: newConv, error } = await supabase
     .from('conversations')
     .insert({
@@ -874,7 +978,7 @@ async function upsertConversation({ tenantId, instanceId, chatId, isGroup, pushN
       instance_id:      instanceId,
       whatsapp_chat_id: chatId,
       is_group:         isGroup,
-      group_name:       isGroup ? chatId.split('@')[0] : null,
+      group_name:       groupName,
       push_name:        isGroup ? null : validPushName,
       status:           'aguardando',
     })
