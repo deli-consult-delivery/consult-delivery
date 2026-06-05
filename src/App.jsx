@@ -58,7 +58,9 @@ export default function App() {
   const [tenantLoading, setTenantLoading] = useState(false);
   const [tenants, setTenants] = useState(TENANTS);
   const [_deepLinkConvId] = useState(() => new URLSearchParams(window.location.search).get('chat'));
+  const [_confirmedAcao]  = useState(() => new URLSearchParams(window.location.search).get('breno_confirmado'));
   const [route, setRoute] = useState(() => _deepLinkConvId ? 'chat' : (localStorage.getItem('cd-route') || 'dashboard'));
+  const [confirmToast, setConfirmToast] = useState(_confirmedAcao);
   const [tenant, setTenant] = useState(null);
   const [tenantDbId, setTenantDbId] = useState(null);
   const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
@@ -270,6 +272,13 @@ export default function App() {
     localStorage.setItem('cd-theme', theme);
   }, [theme]);
 
+  useEffect(() => {
+    if (!_confirmedAcao) return;
+    window.history.replaceState({}, '', window.location.pathname);
+    const t = setTimeout(() => setConfirmToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [_confirmedAcao]);
+
   if (authLoading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, height: '100vh', background: '#0D0D0D' }}>
@@ -323,6 +332,18 @@ export default function App() {
 
   return (
     <div className={`app-shell${route === 'chat' ? ' app-shell--notopbar' : ''}`}>
+      {confirmToast && (
+        <div style={{
+          position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 9999, background: '#166534', color: '#fff',
+          padding: '10px 20px', borderRadius: 8, fontWeight: 600,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.4)', whiteSpace: 'nowrap',
+        }}>
+          {confirmToast === 'suporte' && '✓ Confirmado — Darei o suporte'}
+          {confirmToast === 'amanha'  && '✓ Confirmado — Tratarei amanhã'}
+          {confirmToast === 'ignorar' && '✓ Ignorado'}
+        </div>
+      )}
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
       <Sidebar
         route={route}
