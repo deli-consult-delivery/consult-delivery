@@ -1795,7 +1795,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
   const isSearching                          = search.length >= 3;
   const [searchConvs, setSearchConvs]        = useState([]);
   const searchTimerRef                       = useRef(null);
-  const [statusFilter, setStatusFilter]      = useState(null);
+  const [statusFilter, setStatusFilter]      = useState('nao_iniciado');
   const [statusTab, setStatusTab]            = useState('aberto');
   const [tab, setTab]                        = useState('all');
   const [filters, setFilters]                = useState({ department: null, tag: null, status: null });
@@ -3888,7 +3888,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
               <button
                 key={c.id}
                 className={`lc-stat-pill${statusFilter === c.id ? ' active' : ''}`}
-                onClick={() => { const next = statusFilter === c.id ? null : c.id; setStatusFilter(next); if (next && !['finalizado', 'oculto'].includes(next)) refreshPendingConvs(); }}
+                onClick={() => { if (statusFilter === c.id) return; setStatusFilter(c.id); if (!['finalizado', 'oculto'].includes(c.id)) refreshPendingConvs(); }}
                 title={c.label}
               >
                 <StatusIcon name={c.icon} size={12} />
