@@ -1646,7 +1646,7 @@ function ProtocolosScreen({ tenantDbId, onOpenConv }) {
           </div>
           {convs.map(c => {
             const name = c.is_group
-              ? (c.group_name || c.whatsapp_chat_id?.split('@')[0] || '—')
+              ? ((c.group_name && !/^\d{10,}$/.test(c.group_name) ? c.group_name : null) || 'Grupo')
               : (c.contact_name || c.push_name || c.whatsapp_chat_id?.split('@')[0] || '—');
             const phone = (c.whatsapp_chat_id || '').replace(/@[^@]+$/, '') || '—';
             const dept = c.department_id ? depts[c.department_id] : null;
@@ -2333,8 +2333,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
           });
           }
           if (!['aguardando', 'em_atendimento', 'atendimento_aberto', 'automacao', 'falha'].includes(c.status)) return prev;
-          const phone = c.whatsapp_chat_id?.split('@')[0] || '';
-          const name  = c.contact_name || c.group_name || c.push_name || phone || 'Desconhecido';
+          const phone  = c.whatsapp_chat_id?.split('@')[0] || '';
+          const gname  = c.group_name && !/^\d{10,}$/.test(c.group_name) ? c.group_name : null;
+          const name   = c.contact_name || gname || c.push_name || (c.is_group ? 'Grupo' : phone) || 'Desconhecido';
           return [{ id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null,
             type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id,
             preview: '', previewFrom: 'in', time: '', _sortTs: c.updated_at || '',
@@ -2345,8 +2346,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversations' }, payload => {
         const c = payload.new;
         if (!['aguardando', 'em_atendimento', 'atendimento_aberto', 'automacao', 'falha'].includes(c.status)) return;
-        const phone = c.whatsapp_chat_id?.split('@')[0] || '';
-        const name  = c.contact_name || c.group_name || c.push_name || phone || 'Desconhecido';
+        const phone  = c.whatsapp_chat_id?.split('@')[0] || '';
+        const gname  = c.group_name && !/^\d{10,}$/.test(c.group_name) ? c.group_name : null;
+        const name   = c.contact_name || gname || c.push_name || (c.is_group ? 'Grupo' : phone) || 'Desconhecido';
         setConvs(prev => {
           if (prev.find(e => e.id === c.id)) return prev;
           return [{ id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null,
@@ -2661,8 +2663,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
       const lastMsgMap = {};
       lastMsgResults.forEach(({ data }) => { if (data) lastMsgMap[data.conversation_id] = data; });
       const mapped = uniqueRows.map(c => {
-        const phone = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
-        const name  = c.contact_name || c.group_name || c.push_name || phone || 'Desconhecido';
+        const phone  = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
+        const gname  = c.group_name && !/^\d{10,}$/.test(c.group_name) ? c.group_name : null;
+        const name   = c.contact_name || gname || c.push_name || (c.is_group ? 'Grupo' : phone) || 'Desconhecido';
         const lm    = lastMsgMap[c.id];
         const preview = lm ? (lm.media_type === 'image' ? '🖼 Imagem' : lm.media_type === 'video' ? '🎬 Vídeo' : lm.media_type === 'document' ? '📄 Documento' : lm.media_type?.includes('audio') ? '🎵 Áudio' : lm.media_type === 'sticker' ? '🔖 Figurinha' : lm.content || lm.body || '') : '';
         const previewFrom = lm?.direction === 'inbound' ? 'in' : 'out';
@@ -2693,7 +2696,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
         supabase.from('conversation_events').select('id, event_type, actor_name, metadata, ts').eq('conversation_id', convId).order('ts', { ascending: true }),
       ]);
       const rows = data || [];
-      const dbMsgs = rows.reverse().filter(msg => msg.content || msg.body || msg.media_url).map(msg => ({
+      const dbMsgs = rows.reverse().filter(msg => msg.content || msg.body || msg.media_url || msg.media_type).map(msg => ({
         id: msg.id, from: msg.direction === 'outbound' ? 'out' : 'in',
         text: msg.content || msg.body || '',
         time: new Date(msg.created_at || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
@@ -2722,7 +2725,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
       }));
       const merged = [...dbMsgs, ...evtMsgs].sort((a, b) => new Date(a._ts) - new Date(b._ts));
       setMessages(m => {
-        const tmpMsgs = (m[convId] || []).filter(ex => ex.id?.startsWith('tmp-') || ex.id?.startsWith('sys-'));
+        const tmpMsgs = (m[convId] || []).filter(ex => {
+          if (ex.id?.startsWith('sys-')) return true;
+          if (ex.id?.startsWith('tmp-')) return !merged.some(db => db.from === 'out' && db.text === ex.text);
+          return false;
+        });
         return { ...m, [convId]: [...merged, ...tmpMsgs] };
       });
       setMsgHasMore(prev => ({ ...prev, [convId]: rows.length === MSG_PAGE }));
@@ -2754,7 +2761,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
         .order('created_at', { ascending: false })
         .limit(MSG_PAGE);
       const rows = data || [];
-      const olderMsgs = rows.reverse().filter(msg => msg.content || msg.body || msg.media_url).map(msg => ({
+      const olderMsgs = rows.reverse().filter(msg => msg.content || msg.body || msg.media_url || msg.media_type).map(msg => ({
         id: msg.id, from: msg.direction === 'outbound' ? 'out' : 'in',
         text: msg.content || msg.body || '',
         time: new Date(msg.created_at || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
@@ -2800,8 +2807,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
         const lastMsgMap = {};
         lastMsgResults.forEach(({ data }) => { if (data) lastMsgMap[data.conversation_id] = data; });
         const mapped = rows.map(c => {
-          const phone = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
-          const name  = c.contact_name || c.group_name || c.push_name || phone || 'Desconhecido';
+          const phone  = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
+          const gname  = c.group_name && !/^\d{10,}$/.test(c.group_name) ? c.group_name : null;
+          const name   = c.contact_name || gname || c.push_name || (c.is_group ? 'Grupo' : phone) || 'Desconhecido';
           const lm    = lastMsgMap[c.id];
           const preview = lm ? (lm.media_type === 'image' ? '🖼 Imagem' : lm.media_type === 'video' ? '🎬 Vídeo' : lm.media_type === 'document' ? '📄 Documento' : lm.media_type?.includes('audio') ? '🎵 Áudio' : lm.media_type === 'sticker' ? '🔖 Figurinha' : lm.content || lm.body || '') : '';
           const previewFrom = lm?.direction === 'inbound' ? 'in' : 'out';
@@ -2901,7 +2909,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
     const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     const currentReplyTo = replyTo;
     setMessages(m => ({ ...m, [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text, time, _ts: now.toISOString(), agentName, replyTo: currentReplyTo }] }));
-    setDraft(''); setReplyTo(null);
+    setDraft(''); setReplyTo(null); voiceFinalRef.current = '';
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     if (HAS_EVO && selectedInstance && active.whatsapp_chat_id) {
       setSending(true);
