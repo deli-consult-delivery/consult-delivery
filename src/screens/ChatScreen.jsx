@@ -4098,7 +4098,18 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
                     </div>
                   </div>
                 </div>
-                <button className="lc-action-btn" onClick={() => onNavigate?.('grupos')} style={{ fontSize: 11 }}><Icon name="users" size={12} /> Membros</button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {active?.status === 'finalizado' ? (
+                    <button className="lc-action-btn" onClick={() => setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: null } : c))}>
+                      <Icon name="refresh" size={13} /> Reabrir
+                    </button>
+                  ) : (
+                    <button className="lc-action-btn primary" onClick={() => setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'finalizado' } : c))}>
+                      <Icon name="check" size={13} /> Finalizar
+                    </button>
+                  )}
+                  <button className="lc-action-btn" onClick={() => onNavigate?.('grupos')} style={{ fontSize: 11 }}><Icon name="users" size={12} /> Membros</button>
+                </div>
               </header>
 
               {/* Divider com nome do canal */}
