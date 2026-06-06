@@ -14,6 +14,7 @@ import ChatTasksPanel from '../components/chat/ChatTasksPanel.jsx';
 import CustomerNotesSection from '../components/chat/CustomerNotesSection.jsx';
 import ClienteFocoPanel from '../components/cliente-foco/ClienteFocoPanel.jsx';
 import { useLojaPorRemoteJid } from '../hooks/useLojaPorRemoteJid.js';
+import { getMuted, isMuted, toggleMute } from '../lib/mutedConvs.js';
 
 const HAS_EVO = !!(
   import.meta.env.VITE_EVOLUTION_URL && import.meta.env.VITE_EVOLUTION_KEY
@@ -1842,6 +1843,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
   const [showEmoji, setShowEmoji]            = useState(false);
   const [aiAction, setAiAction]              = useState(null);
   const [resolved, setResolved]              = useState({});
+  const [mutedConvs, setMutedConvs]          = useState(() => getMuted());
 
   // ── Canais internos ───────────────────────────────────────
   const [chanMsgs, setChanMsgs]              = useState({});
@@ -2257,7 +2259,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
              : conv.status === 'em_atendimento' ? { status: 'atendimento_aberto' }
              : {})
             : {};
-          const updated = { ...conv, preview, time, _sortTs: msg.created_at || new Date().toISOString(), previewFrom: isInbound ? 'in' : 'out', unread: isActive ? 0 : (conv.unread || 0) + (isInbound ? 1 : 0), ...statusUpdate };
+          const updated = { ...conv, preview, time, _sortTs: msg.created_at || new Date().toISOString(), previewFrom: isInbound ? 'in' : 'out', unread: isActive ? 0 : isMuted(convId) ? (conv.unread || 0) : (conv.unread || 0) + (isInbound ? 1 : 0), ...statusUpdate };
           // Only move to top for inbound — outbound sends should not reorder the list
           if (!isInbound) { const next = [...prev]; next[idx] = updated; return next; }
           return [updated, ...prev.filter(c => c.id !== convId)];
@@ -4384,6 +4386,14 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
                       {active.breno_paused ? '▶ Liberar BRENO' : '⏸ Pausar BRENO'}
                     </button>
                   )}
+                  <button
+                    className="lc-icon-btn-dark"
+                    title={mutedConvs.has(active?.id) ? 'Ativar notificações desta conversa' : 'Silenciar notificações desta conversa'}
+                    onClick={() => { toggleMute(active.id); setMutedConvs(getMuted()); }}
+                    style={mutedConvs.has(active?.id) ? { color: '#FBBF24' } : {}}
+                  >
+                    <Icon name={mutedConvs.has(active?.id) ? 'belloff' : 'bell'} size={15} />
+                  </button>
                   <button className="lc-icon-btn-dark" title="Mais"><Icon name="chevdown" size={16} style={{ transform: 'rotate(90deg)' }} /></button>
                 </div>
               </header>
