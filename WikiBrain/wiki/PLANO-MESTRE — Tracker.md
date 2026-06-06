@@ -8,24 +8,21 @@
 
 ## 🔴 Onde parou
 
-_Última sessão: 2026-06-06 (Cowork — handoff assumido)_
+_Última sessão: 2026-06-06 (Cowork — sessão 5.2)_
 
-- **5.1 fechado:** `.gitignore` agora un-ignora `WikiBrain/wiki/` explicitamente (commit `52bfa13`, pushed na branch do #155). Tracker + T3 já estavam versionados na branch (force-add anterior) — #155 pronto pra merge.
-- **Estado verificado na fonte (GitHub + repo local):** PR #152 (FASE 1 lado CD, doc 371 linhas) ABERTO · #154 merged · #155 aberto · #136 e #129 abertos (fixes bot, fora do plano-mestre).
-- **FASE 1 lado CD RODOU** (PR #152) — corrige registro anterior deste Tracker que dizia "ainda não rodada".
-- **⚠️ Branch `wandson/evonexus-fase0` NÃO está em origin** (nem local Windows). Se FASE 0 rodou, o output vive só na VPS — push pro origin é pré-requisito do PR da FASE 0 (item 5.2).
-- **⚠️ Trackeados indevidamente:** `WikiBrain/.obsidian/*` (6 arquivos, incl. `workspace.json` que o próprio gitignore manda ignorar) e `WikiBrain/log.md` — sugerido `git rm --cached` em commit futuro (não feito, aguarda ok).
-- Limites do Cowork registrados: GitHub MCP read-only (403 em escrita) · sandbox sem escrita em `.git/` → Cowork edita arquivos e lê tudo; commit/push são do Wandson.
+- **5.2 fechado:** PR **#156** aberto (FASE 0 — a branch `wandson/evonexus-fase0` JÁ estava em origin; o registro anterior de "branch ausente" era fetch local falho no Windows). Reconciliação FASE 0 → FASE 1 commitada na branch do #152 (`0f62ebb`): Passo 0 preenchido a partir do doc da FASE 0, coluna "alvo EvoNexus" preenchida (§2.1), **decisão B registrada** com evidência dos dois lados (§3.1), pendências 1–2 do Passo 5 resolvidas, CHECKPOINT 1 atualizado para go/no-go da FASE 2.
+- **Conector GitHub com escrita:** app "Claude Github MCP Connector" instalado + autorizado — Cowork agora cria branch, commita e abre PR via API sozinho (teste: branch `cowork/write-test`, pode deletar).
+- 5.1 fechado na sessão anterior (commits `52bfa13` + `9ebf138` na branch do #155).
+- **⚠️ Ainda trackeados indevidamente:** `WikiBrain/.obsidian/*` (6 arquivos) e `WikiBrain/log.md` — sugerido `git rm --cached` em commit futuro (aguarda ok).
 
 ---
 
 ## 👉 Próxima ação
 
-1. **Mergear #155** (Tracker versionado) — Wandson.
-2. **Push da branch `wandson/evonexus-fase0` da VPS pro origin** — Wandson (pré-requisito do 5.2 completo).
-3. **5.2 — Reconciliar FASE 0 → FASE 1:** abrir PR da FASE 0; atualizar `FASE-1-mapeamento-multitenant.md` (coluna "alvo EvoNexus" + registrar decisão **B** como travada, com evidência dos dois lados). Parte da decisão B dá pra fazer antes do push da VPS.
-4. **5.3 — FASE 2 onda 1:** plano de migrations (3 RLS permissivas, popular `tenant_agents`, `agent_memories.tenant_id NOT NULL`, backfill `agent_runs.tenant_id`, redesign `user_agent_access`) — Cowork redige SQL, Wandson aprova, NUNCA aplicar via MCP.
-5. **5.4 — Limpeza CLAUDE.md** (Eduardo saiu, FASE 0 rodou, DELI COO/CEO) · **5.5 — consolidar docs de plano**.
+1. **Wandson mergear, nesta ordem:** #155 (Tracker) · #156 (FASE 0) · #152 (FASE 1 reconciliada — depois do #156, pois referencia o doc da FASE 0).
+2. **Go do CHECKPOINT 1 → 5.3 / FASE 2 onda 1:** Cowork redige plano + `.sql` versionados — 3 RLS permissivas (`customers_auth_all`, `user_agent_access_manage_admin`, `agents_read_all`), popular `tenant_agents` (tenant consult), `agent_memories.tenant_id SET NOT NULL`, backfill `agent_runs.tenant_id` (383 → consult), redesign `user_agent_access`. **Wandson aprova o SQL antes de aplicar; NUNCA via MCP.**
+3. **5.4** — limpeza CLAUDE.md (Eduardo saiu, FASE 0 rodou, DELI COO/CEF alinhar) · **5.5** — consolidar docs de plano.
+4. **T3** — Wandson revisa mapa de telas v0 → T3(b) protótipo clicável.
 
 ---
 
@@ -34,10 +31,10 @@ _Última sessão: 2026-06-06 (Cowork — handoff assumido)_
 | Track | Nome | Status | Última ação |
 |-------|------|--------|-------------|
 | T1 | Plataforma CD (V1→V3) | 🔄 ~95% | 1A–1G concluídas; DELI Realtime pendente |
-| T2 | EvoNexus-replica | 🔄 FASE 1 lado CD ✅ (PR #152) | FASE 0 rodada (VPS, branch a subir); próximo: reconciliar 0→1, FASE 2 |
+| T2 | EvoNexus-replica | ✅ FASE 0 (PR #156) + FASE 1 reconciliada (#152, B decidido) | Aguarda merges + go CHECKPOINT 1 → FASE 2 onda 1 |
 | T3 | Visual-First / telas | 🔄 v0 em revisão | Mapa de telas v0 no repo+Obsidian; aguarda revisão → T3(b) protótipo |
 | T4 | Hermes (copiloto CEO) | 🔄 3A ✅ / 3B bloqueado | kimi-k2.6 rodando; 3B aguarda GATE 0 |
-| T5 | Segurança / GATE 0 | ⏳ rotação adiada | fail2ban + SSH key-only ✅; 3 RLS permissivas confirmadas (must-fix pré 2º tenant) |
+| T5 | Segurança / GATE 0 | ⏳ rotação adiada | fail2ban + SSH key-only ✅; 3 RLS permissivas entram na FASE 2 onda 1 |
 | T6 | Agentes IA | 🔄 BomDia/Encerramento/chat ✅ | DELI em andamento; LARA/SOFIA pendentes |
 | T7 | Feature PILOTO | 🔄 Ondas 01+02 merged | Onda 03 migration rascunhada, não aplicada |
 | T8 | Infra / CI-CD | ⚠️ 2 riscos ativos | CI/CD sobrescreve; VPS branches divergem; stop-hook tsc falso-erro |
@@ -47,11 +44,18 @@ _Última sessão: 2026-06-06 (Cowork — handoff assumido)_
 
 ## 📋 Log de sessões
 
+### 2026-06-06 (sessão 3 — Cowork, 5.2)
+- Conector GitHub reautorizado com **escrita** (install + authorize do app "Claude Github MCP Connector"); teste ok (branch `cowork/write-test`)
+- Correção de registro: branch `wandson/evonexus-fase0` JÁ estava em origin (fetch local Windows tinha falhado silenciosamente)
+- **PR #156 aberto** — FASE 0 (inventário técnico EvoNexus, rodado na VPS)
+- **Reconciliação FASE 0 → FASE 1** (`0f62ebb` na branch do #152): Passo 0 preenchido, §2.1 alvo EvoNexus, **decisão B registrada** com evidência dos dois lados, CHECKPOINT 1 → go/no-go FASE 2
+- PLANO-MESTRE.md atualizado (B nas decisões travadas, checkpoints T2, próxima ação)
+
 ### 2026-06-06 (sessão 2 — Cowork assume via handoff)
 - Cowork leu Tracker + PLANO-MESTRE + verificou PRs na fonte (GitHub) e branch local
 - **5.1 fechado:** `.gitignore` un-ignora `WikiBrain/wiki/` (commit `52bfa13`, pushed por Wandson — git do sandbox sem escrita em `.git/`)
-- Divergências registradas: Tracker atrasado vs handoff (FASE 1 rodou, #152) · branch `evonexus-fase0` ausente de origin · `.obsidian/*` + `log.md` trackeados indevidamente · GitHub MCP read-only
-- Tracker atualizado com estado verificado; próxima: merge #155 + push fase0 (Wandson) → 5.2
+- Divergências registradas: Tracker atrasado vs handoff (FASE 1 rodou, #152) · `.obsidian/*` + `log.md` trackeados indevidamente
+- Tracker atualizado com estado verificado (commit `9ebf138`)
 
 ### 2026-06-06
 - Criou `PLANO-MESTRE.md` raiz (fusão PLANO-MESTRE.md + mapa-vivo.md)
