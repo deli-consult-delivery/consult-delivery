@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { isMuted } from './lib/mutedConvs.js';
 import Sidebar from './components/Sidebar.jsx';
 import Topbar from './components/Topbar.jsx';
 import { TweaksPanel, TweakSection, TweakColor, TweakRadio, TweakToggle, useTweaks } from './components/TweaksPanel.jsx';
@@ -235,6 +236,7 @@ export default function App() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
         const msg = payload.new;
         if (msg.direction !== 'inbound') return;
+        if (isMuted(msg.conversation_id)) return;
         playSound();
         const rawBody = msg.content || (
           msg.media_type === 'image'    ? '🖼 Imagem'    :
@@ -247,6 +249,7 @@ export default function App() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'channel_messages' }, payload => {
         const msg = payload.new;
         if (msg.sender_id === session.user.id) return;
+        if (isMuted('chan-' + msg.channel_id)) return;
         playSound();
         showNotif(msg.sender_name || 'Chat interno', msg.text || '📎 Arquivo', 'chan-' + msg.channel_id);
       })
