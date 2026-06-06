@@ -34,6 +34,8 @@ Ao trabalhar em **qualquer tarefa ligada ao PLANO-MESTRE** (tracks T1–T9, EvoN
 
 **Nunca terminar uma sessão sem atualizar o Tracker.** É o que garante que a próxima sessão sabe exatamente onde retomar.
 
+**Mandato Cowork (D5, 2026-06-06):** sessões Cowork executam direto tudo que conseguirem (ler repo/DB, branch, commit, PR, docs, redigir `.sql` sem aplicar). Reservado ao Wandson: merge em `main` · aprovar e aplicar migrations (nunca via MCP) · `DROP` · mensagens a clientes (drafts) · 🛑 CHECKPOINTS / decisões travadas · credenciais e VPS. → detalhe: `PLANO-MESTRE.md` §Decisões travadas (D5) + Tracker §Mandato Cowork.
+
 ---
 
 ## EVONEXUS-REPLICA — PLANO MESTRE (contrato de execução)
@@ -42,8 +44,9 @@ Ao trabalhar em **qualquer tarefa ligada ao PLANO-MESTRE** (tracks T1–T9, EvoN
 
 - **Não viola a proibição de EvoNexus.** O proibido é o *motor/produto* EvoNexus em prod (CLAUDE.md acima, RESTRUCTURE §3.3). Aqui re-implementamos o *paradigma* na stack CD. EvoNexus = referência de features, nunca dependência em runtime.
 - **3 conflitos ✅ DECIDIDOS em 2026-06-03** (`docs/evonexus-replica/DECISAO-001-runtime-provider-custo.md`): **(D1)** runtime = `@anthropic-ai/sdk` (NÃO `@anthropic-ai/claude-agent-sdk` — RESTRUCTURE §3.3 linha 100: não roda em Trigger.dev cloud) **+ camada multi-provider** (Anthropic/Ollama/OpenRouter, BYO-key por tenant via Infisical, roteamento por tarefa, fallback); **OAuth-de-assinatura embutido = fora de escopo** (legal/ToS); **(D2)** Trigger.dev **v4.4.5+** (não v3); **(D3)** FASE 0 roda na **VPS** / `cd-evonexus-lab`, não do Windows.
+- **(D4) Fork A vs B em `agents` = B ✅ DECIDIDO em 2026-06-06:** catálogo global + habilitação por tenant via `tenant_agents`/`tenant_agent_config`. Evidência dos dois lados em `docs/evonexus-replica/FASE-1-mapeamento-multitenant.md` §3.1.
 - **Reusar, não recriar:** `agents` já tem `tenant_id` + RLS (`agents_tenant_isolation`); `agent_runs`, `agent_memories`, `tenant_agent_config`, `roles`/`role_permissions`, `audit_log` já existem → estender via `ALTER ADD COLUMN IF NOT EXISTS`.
-- **Build é gated:** parar em cada 🛑 CHECKPOINT (Wandson aprova). Plano persistido em 2026-06-02; FASE 0 ainda não iniciada.
+- **Build é gated:** parar em cada 🛑 CHECKPOINT (Wandson aprova). Plano persistido em 2026-06-02. **Status 2026-06-06:** FASE 0 ✅ rodada na VPS (`docs/evonexus-replica/FASE-0-inventario-evonexus.md`, PR #156) · FASE 1 ✅ completa e reconciliada (PR #152) · próximo: go do CHECKPOINT 1 → FASE 2 (migrations).
 
 ---
 
@@ -90,10 +93,10 @@ VPS Bridge: `git pull && pm2 restart bridge-server` (ver memory/vps-infra.md)
 ## EQUIPE
 
 - **Wandson Silva** — CEO, único dev, aprova decisões
-- **Eduardo** — atendimento e suporte (role: `atendimento`)
 - **Wélida** — marketing e CRM (role: `marketing`)
 - **DELI** — COO digital, agente IA (Trigger.dev)
 
+Equipe = **2 pessoas** (Wandson + Wélida). Eduardo saiu (jun/2026); Yasmin saiu (mai/2026 — branch `yasmin/dev` pode ser deletada).  
 Emails: @consultdelivery.com.br | Bot Telegram: @DeliConsultBot (analista-ifood)
 
 ---
