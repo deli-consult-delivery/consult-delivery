@@ -17,9 +17,9 @@
 
 ## 👉 PRÓXIMA AÇÃO (retomar aqui)
 
-1. **FASE 1 / lado CD** — rodar Passos 1–4 na instância Claude Code, com a trava: todo count/DDL no doc vem com **output bruto colado**. (Track T2)
-2. **Visual-first / Mapa de telas** — primeira entrega da nova track de design (ver as telas antes de codar). (Track T3)
-3. **Sessão VPS** — FASE 0 (inventário EvoNexus em `/root/cd-evonexus-lab`) + rotação de credenciais do GATE 0. (Tracks T2 + T5)
+1. **Mergear PRs (Wandson):** #155 (Tracker versionado) · #156 (FASE 0) · #152 (FASE 1 reconciliada — mergear depois do #156, pois referencia o doc da FASE 0). (Track T2)
+2. **Go do CHECKPOINT 1 → FASE 2 onda 1** — plano de migrations versionadas: 3 RLS permissivas (`customers_auth_all`, `user_agent_access_manage_admin`, `agents_read_all`), popular `tenant_agents` (tenant consult), `agent_memories.tenant_id SET NOT NULL`, backfill `agent_runs.tenant_id` (383), redesign `user_agent_access`. SQL mostrado e aprovado antes de aplicar; **nunca via MCP**. (Tracks T2 + T5)
+3. **Visual-first / Mapa de telas** — Wandson revisa o mapa v0 → T3(b) protótipo clicável. (Track T3)
 
 ---
 
@@ -48,6 +48,7 @@
 - [x] **D1 (runtime):** `@anthropic-ai/sdk` (não Agent SDK — não roda em Trigger.dev cloud) + camada multi-provider (Anthropic/Ollama/OpenRouter, BYO-key por tenant via Infisical). ✅ 2026-06-03 — ver `docs/evonexus-replica/DECISAO-001-runtime-provider-custo.md`.
 - [x] **D2 (Trigger.dev):** v4 (`npx trigger.dev@4.4.6 deploy`), não v3. ✅ 2026-06-03.
 - [x] **D3 (ambiente FASE 0):** FASE 0 roda na **VPS** (`187.127.25.24`) / `cd-evonexus-lab`, não do Windows. ✅ 2026-06-03.
+- [x] **D4 (fork A vs B em `agents`): B** — catálogo global + habilitação por tenant via `tenant_agents`/`tenant_agent_config`. Não troca a PK de `agents`, não mexe nas 8 FKs. ✅ 2026-06-06 — evidência dos dois lados em `docs/evonexus-replica/FASE-1-mapeamento-multitenant.md` §3.1 (FASE 0 §4–5 + extração ao vivo CD).
 
 ---
 
@@ -87,8 +88,8 @@
 |------------|------|--------|
 | Plano persistido | Este doc + ponteiro no CLAUDE.md | ✅ feito (2026-06-02) |
 | Decisão D1/D2/D3 | Runtime + multi-provider + ambiente FASE 0 (`DECISAO-001`) | ✅ DECIDIDO (2026-06-03) |
-| 🛑 CHECKPOINT 0 | Inventário técnico (FASE 0 na VPS) + sign-off | ⏳ FASE 0 ainda não rodada |
-| 🛑 CHECKPOINT 1 | Mapeamento do checklist | — |
+| 🛑 CHECKPOINT 0 | Inventário técnico (FASE 0 na VPS) + sign-off | ✅ FASE 0 rodada na VPS (PR #156, 2026-06-06); sign-off = merge |
+| 🛑 CHECKPOINT 1 | Mapeamento do checklist | ✅ mapeamento completo — FASE 1 reconciliada c/ FASE 0, B decidido (#152, commit `0f62ebb`); aguarda go do Wandson p/ FASE 2 |
 | 🛑 CHECKPOINT 2 | Schema + migrations (mostrar SQL antes de aplicar) | — |
 | 🛑 CHECKPOINT 3 | Plano faseado + checklist de completude | — |
 | FASE 4 | Build incremental + sign-off final | — |
@@ -96,13 +97,13 @@
 ### Próximos itens
 
 - [x] CHECKPOINT 0 — reconciliação analítica (convergência das leituras) ✅
-- [ ] ⏳ Commitar a versão atualizada do CHECKPOINT 0 (3 adjudicações) — via Claude Code
-- [ ] 🔒 **FASE 0** — inventário EvoNexus: bloqueado fora da VPS (`/root/cd-evonexus-lab`)
-- [ ] 🔄 **FASE 1 — mapeamento multi-tenant**
-  - [x] Lado CD (Passos 1–4): ✅ rodado — PR #152 aberto (`docs/evonexus-replica/FASE-1-mapeamento-multitenant.md`, 371 linhas, output bruto colado)
-  - [ ] 👉 Lado EvoNexus (Passo 0): pendente sessão VPS — sem preencher de memória
-  - Branch: `wandson/evonexus-fase1-mapeamento` → PR (sem merge automático)
-- [ ] ⏳ FASE 2 — migrations versionadas (só depois do go no CHECKPOINT 1)
+- [x] Commitar a versão atualizada do CHECKPOINT 0 — adjudicações registradas na FASE 1 §3.1 e §Passo 5 (commit `0f62ebb`) ✅
+- [x] **FASE 0** — inventário EvoNexus: ✅ rodada na VPS, doc `FASE-0-inventario-evonexus.md` (PR #156)
+- [x] **FASE 1 — mapeamento multi-tenant** ✅
+  - [x] Lado CD (Passos 1–4): ✅ rodado — PR #152 (`docs/evonexus-replica/FASE-1-mapeamento-multitenant.md`, output bruto colado)
+  - [x] Lado EvoNexus (Passo 0): ✅ preenchido a partir da FASE 0 (commit `0f62ebb` — zero linhas de memória)
+  - Branch: `wandson/evonexus-fase1-mapeamento` → PR #152 (sem merge automático)
+- [ ] 👉 FASE 2 — migrations versionadas (aguarda go do CHECKPOINT 1; escopo da onda 1 na §PRÓXIMA AÇÃO)
 
 ### Ground truth — o que já existe na CD (estender, não recriar)
 
@@ -212,8 +213,8 @@ RLS `agents_tenant_isolation`: global visível a todos; custom só ao tenant via
 
 ### Fases detalhadas
 
-- **FASE 0** — Inventário técnico (read-only). Ler código do EvoNexus (oracle, orquestrador, skills, memória, heartbeats, dashboard). Para cada item do checklist, confirmar COMO o EvoNexus implementa. Listar código CD existente. Saída: `docs/evonexus-replica/inventario-tecnico.md` com output bruto. ⚠️ Depende da VPS (D3). **🛑 CHECKPOINT 0.**
-- **FASE 1** — Mapeamento. Para CADA linha do checklist, confirmar/ajustar categoria + alvo CD + nota multi-tenant. Nenhuma linha sem destino. **🛑 CHECKPOINT 1.**
+- **FASE 0** — Inventário técnico (read-only). ✅ RODADA (2026-06-06, VPS): saída real = `docs/evonexus-replica/FASE-0-inventario-evonexus.md` (PR #156). **🛑 CHECKPOINT 0 ✅.**
+- **FASE 1** — Mapeamento. ✅ COMPLETA (lado CD PR #152 + Passo 0 reconciliado, commit `0f62ebb`). Nenhuma linha sem destino. **🛑 CHECKPOINT 1 — aguarda go.**
 - **FASE 2** — Desenho do framework + schema. As 5 peças detalhadas + migrations (ALTER only) + contratos. **🛑 CHECKPOINT 2** (mostrar SQL antes de aplicar).
 - **FASE 3** — Plano faseado + checklist de completude. Tabela rastreando CADA tela → status + critério de validado. CORE primeiro, ADAPTA depois, DEPOIS por último; NATIVO = só wiring. **🛑 CHECKPOINT 3.**
 - **FASE 4** — Build incremental. Uma feature por vez, na ordem. Migrations ALTER (backup antes). Testar com `tenant_id` real provando isolamento (A não vê B). Output bruto. Ao final: verificação de completude — cruzar build × checklist, listar o que ficou pra depois com motivo, pedir sign-off do Wandson.
@@ -254,6 +255,7 @@ RLS `agents_tenant_isolation`: global visível a todos; custom só ao tenant via
   - [ ] Rotacionar token Telegram (BotFather)
   - [ ] Limpar cópias em texto na VPS (`.git-credentials`, history, `.claude/*.jsonl`)
 - [ ] ⏳ Hardening: gateway root → usuário dedicado · remover `claude-debug` key · fail2ban `bantime.increment`
+- [ ] 👉 **3 RLS permissivas** (`customers_auth_all`, `user_agent_access_manage_admin`, `agents_read_all`) — corrigir na FASE 2 onda 1 (must-fix antes do 2º tenant real). Evidência: FASE 1 §1.3/§Passo 5.
 
 ---
 
@@ -305,6 +307,7 @@ RLS `agents_tenant_isolation`: global visível a todos; custom só ao tenant via
 
 ### Histórico de atualizações
 
+- 2026-06-06 (v2.1) — FASE 0 publicada (PR #156); FASE 1 reconciliada com a FASE 0 (decisão **B** travada como D4, alvo EvoNexus preenchido — commit `0f62ebb` no #152); CHECKPOINT 0 ✅ e CHECKPOINT 1 aguardando go.
 - 2026-06-06 (v2) — fusão PLANO-MESTRE.md (EvoNexus-replica) + mapa-vivo; arquivo movido para raiz; antigo `docs/evonexus-replica/PLANO-MESTRE.md` tombstonado.
 - 2026-06-06 (v1-semente) — mapa-vivo criado; Hermes 3A fechado com evidência; FASE 1 lado CD aprovada pra executar.
 - 2026-06-03 — D1/D2/D3 decididos (`DECISAO-001-runtime-provider-custo.md`).
