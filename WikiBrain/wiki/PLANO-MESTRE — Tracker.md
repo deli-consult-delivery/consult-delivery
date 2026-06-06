@@ -26,22 +26,20 @@
 
 _Última sessão: 2026-06-06 (Cowork — sessão 5.2 + merges)_
 
-- **Merged em main (aprovação explícita do Wandson na conversa):** #156 (FASE 0, `de81b88`) e #152 (FASE 1 reconciliada, `893e97e`).
-- **#155 tinha conflito** (branch reusada carregava commits já squashados em main via #150/#151/#154) → reconstruído como branch limpa `cowork/tracker-protocolo-v2` a partir de main; **#155 e #157 serão fechados** em favor do PR novo.
-- Conteúdo do PR novo: .gitignore (un-ignore WikiBrain/wiki/), CLAUDE.md (protocolo + mandato + fatos corrigidos), PLANO-MESTRE (D4/D5, checkpoints), Tracker, T3 mapa de telas, remoção de 11 docs stale do WikiBrain.
+- **Merged em main (aprovação explícita do Wandson na conversa):** #156 (FASE 0, `de81b88`), #152 (FASE 1 reconciliada, `893e97e`) e #158 (Tracker/protocolo/T3/fatos, `aa79035`).
+- **#155 tinha conflito** (branch reusada carregava commits já squashados em main via #150/#151/#154) → reconstruído como #158; #155 e #157 fechados.
 - **Decisão B (D4) e mandato Cowork (D5) registrados.**
-- **⚠️ Ainda trackeados indevidamente:** `WikiBrain/.obsidian/*` e `WikiBrain/log.md` — aguarda ok do Wandson p/ `git rm --cached`.
+- Windows sincronizado: branch `trabalho` = main (`aa79035`); `cowork/write-test` deletada. ⚠️ `main` local é presa pelo worktree `cd-f3`; existe branch local falsa chamada `origin/main` (deletar: `git branch -D "origin/main"`).
+- **⚠️ Ainda trackeados indevidamente:** `WikiBrain/.obsidian/*` e `WikiBrain/log.md` — aguarda ok do Wandson p/ remoção do índice.
 
 ---
 
 ## 👉 Próxima ação
 
-1. **Mergear o PR `cowork/tracker-protocolo-v2`** (substitui #155/#157) — aprovação do Wandson.
-2. **Go do CHECKPOINT 1 → 5.3 / FASE 2 onda 1:** Cowork redige plano + `.sql` versionados — 3 RLS permissivas, popular `tenant_agents`, `agent_memories.tenant_id SET NOT NULL`, backfill `agent_runs.tenant_id` (383), redesign `user_agent_access`. **Wandson aprova o SQL antes de aplicar; NUNCA via MCP.**
-3. **5.5** — consolidar docs de plano redundantes (`docs/evonexus-replica/PLANO-MESTRE-mapa-vivo.md` etc).
-4. **T3** — Wandson revisa mapa de telas v0 → T3(b) protótipo clicável.
-5. Decisão pendente: DELI “COO” vs “CEO” digital (1 commit quando decidir).
-6. No Windows: `git checkout main && git pull` (branches locais ficaram para trás) · deletar `cowork/write-test`.
+1. **Go do CHECKPOINT 1 → 5.3 / FASE 2 onda 1:** Cowork redige plano + `.sql` versionados — 3 RLS permissivas, popular `tenant_agents`, `agent_memories.tenant_id SET NOT NULL`, backfill `agent_runs.tenant_id` (383), redesign `user_agent_access`. **Wandson aprova o SQL antes de aplicar; NUNCA via MCP.**
+2. **5.5** — consolidar docs de plano redundantes (`docs/evonexus-replica/PLANO-MESTRE-mapa-vivo.md` etc).
+3. **T3** — Wandson revisa mapa de telas v0 → T3(b) protótipo clicável.
+4. Decisão pendente: DELI “COO” vs “CEO” digital (1 commit quando decidir).
 
 ---
 
@@ -51,7 +49,7 @@ _Última sessão: 2026-06-06 (Cowork — sessão 5.2 + merges)_
 |-------|------|--------|-------------|
 | T1 | Plataforma CD (V1→V3) | 🔄 ~95% | 1A–1G concluídas; DELI Realtime pendente |
 | T2 | EvoNexus-replica | ✅ FASE 0 + FASE 1 **merged em main** | CHECKPOINT 1 aguarda go → FASE 2 onda 1 |
-| T3 | Visual-First / telas | 🔄 v0 em revisão | Mapa de telas v0 no PR do Tracker; aguarda revisão → T3(b) protótipo |
+| T3 | Visual-First / telas | 🔄 v0 em revisão | Mapa de telas v0 em main; aguarda revisão → T3(b) protótipo |
 | T4 | Hermes (copiloto CEO) | 🔄 3A ✅ / 3B bloqueado | kimi-k2.6 rodando; 3B aguarda GATE 0 |
 | T5 | Segurança / GATE 0 | ⏳ rotação adiada | fail2ban + SSH key-only ✅; 3 RLS permissivas entram na FASE 2 onda 1 |
 | T6 | Agentes IA | 🔄 BomDia/Encerramento/chat ✅ | DELI em andamento; LARA/SOFIA pendentes |
@@ -64,12 +62,13 @@ _Última sessão: 2026-06-06 (Cowork — sessão 5.2 + merges)_
 ## 📋 Log de sessões
 
 ### 2026-06-06 (sessão 3 — Cowork, 5.2 + merges + mandato)
-- Conector GitHub reautorizado com **escrita**; teste ok (`cowork/write-test`)
-- **PR #156 aberto e merged** (`de81b88`) · **#152 reconciliado (`0f62ebb`) e merged** (`893e97e`) — merges com aprovação explícita do Wandson
-- Decisão **B registrada (D4)** com evidência dos dois lados; **mandato Cowork registrado (D5)**
-- #155 com conflito (reuso de branch vs squash) → reconstruído em `cowork/tracker-protocolo-v2`; #157 absorvido
+- Conector GitHub reautorizado com **escrita**; teste ok
+- **PR #156 aberto e merged** (`de81b88`) · **#152 reconciliado (`0f62ebb`) e merged** (`893e97e`) · **#158 merged** (`aa79035`) — merges com aprovação explícita do Wandson
+- Decisão **B registrada (D4)**; **mandato Cowork registrado (D5)**
+- #155 com conflito (reuso de branch vs squash) → reconstruído em #158; #157 absorvido; regra nova: branch nova por entrega
 - 5.4 executada: CLAUDE.md corrigido (Eduardo saiu, FASE 0/1 rodadas, D4/D5)
-- Correção de registro: branch `wandson/evonexus-fase0` JÁ estava em origin (fetch local Windows falho)
+- Windows sincronizado na branch `trabalho` (= main)
+- **Nota — validação externa:** post “Harness Engineering” (@leandro.zuck) analisado a pedido do Wandson. Conclusão: descreve exatamente o que T2/T3 já constroem — observabilidade de runs/custo (`agent_runs` → telas S-10/S-26), orquestração paralela (DELI + Trigger.dev), tools com limites (RBAC + drafts + semáforo), branches isoladas, eficiência de tokens (Graphify + modelo por tarefa). **Sem ação nova; sem ferramenta externa.** Reforça a prioridade da sequência FASE 2 → T3(b). Hábito adotado: sessões de IA paralelas sempre em branches próprias.
 
 ### 2026-06-06 (sessão 2 — Cowork assume via handoff)
 - **5.1 fechado:** `.gitignore` un-ignora `WikiBrain/wiki/` (commit `52bfa13`)
