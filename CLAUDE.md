@@ -46,7 +46,7 @@ Ao trabalhar em **qualquer tarefa ligada ao PLANO-MESTRE** (tracks T1–T9, EvoN
 - **3 conflitos ✅ DECIDIDOS em 2026-06-03** (`docs/evonexus-replica/DECISAO-001-runtime-provider-custo.md`): **(D1)** runtime = `@anthropic-ai/sdk` (NÃO `@anthropic-ai/claude-agent-sdk` — RESTRUCTURE §3.3 linha 100: não roda em Trigger.dev cloud) **+ camada multi-provider** (Anthropic/Ollama/OpenRouter, BYO-key por tenant via Infisical, roteamento por tarefa, fallback); **OAuth-de-assinatura embutido = fora de escopo** (legal/ToS); **(D2)** Trigger.dev **v4.4.5+** (não v3); **(D3)** FASE 0 roda na **VPS** / `cd-evonexus-lab`, não do Windows.
 - **(D4) Fork A vs B em `agents` = B ✅ DECIDIDO em 2026-06-06:** catálogo global + habilitação por tenant via `tenant_agents`/`tenant_agent_config`. Evidência dos dois lados em `docs/evonexus-replica/FASE-1-mapeamento-multitenant.md` §3.1.
 - **Reusar, não recriar:** `agents` já tem `tenant_id` + RLS (`agents_tenant_isolation`); `agent_runs`, `agent_memories`, `tenant_agent_config`, `roles`/`role_permissions`, `audit_log` já existem → estender via `ALTER ADD COLUMN IF NOT EXISTS`.
-- **Build é gated:** parar em cada 🛑 CHECKPOINT (Wandson aprova). Plano persistido em 2026-06-02. **Status 2026-06-06:** FASE 0 ✅ rodada na VPS (`docs/evonexus-replica/FASE-0-inventario-evonexus.md`, PR #156) · FASE 1 ✅ completa e reconciliada (PR #152) · próximo: go do CHECKPOINT 1 → FASE 2 (migrations).
+- **Build é gated:** parar em cada 🛑 CHECKPOINT (Wandson aprova). Plano persistido em 2026-06-02. **Status 2026-06-06:** FASE 0 ✅ rodada na VPS (`docs/evonexus-replica/FASE-0-inventario-evonexus.md`, PR #156) · FASE 1 ✅ completa e reconciliada (PR #152) · CHECKPOINT 1 ✅ go dado → FASE 2 onda 1 em redação (migrations: 3 RLS permissivas + cabear `tenant_agents`).
 
 ---
 
@@ -92,11 +92,10 @@ VPS Bridge: `git pull && pm2 restart bridge-server` (ver memory/vps-infra.md)
 
 ## EQUIPE
 
-- **Wandson Silva** — CEO, único dev, aprova decisões
-- **Wélida** — marketing e CRM (role: `marketing`)
-- **DELI** — COO digital, agente IA (Trigger.dev)
+- **Wandson Silva** — CEO, único dev e único humano da equipe, aprova decisões
+- **DELI** — COO digital, agente IA (Trigger.dev) — e demais agentes cobrem as funções da empresa
 
-Equipe = **2 pessoas** (Wandson + Wélida). Eduardo saiu (jun/2026); Yasmin saiu (mai/2026 — branch `yasmin/dev` pode ser deletada).  
+Equipe humana = **1 pessoa** (Wandson). Wélida saiu (jun/2026); Eduardo saiu (jun/2026); Yasmin saiu (mai/2026 — branch `yasmin/dev` pode ser deletada). Os agentes IA (DELI, LARA, VERA, BRENO, CORA, SOFIA, MAX) assumem as funções de operação, marketing, atendimento e cobrança.  
 Emails: @consultdelivery.com.br | Bot Telegram: @DeliConsultBot (analista-ifood)
 
 ---
@@ -113,7 +112,7 @@ Emails: @consultdelivery.com.br | Bot Telegram: @DeliConsultBot (analista-ifood)
 | SOFIA  | SDR/prospecção                | futuro              |
 | MAX    | consultor técnico             | futuro              |
 
-**DELI:** COO, não chatbot. Monitora tudo, aciona especialistas, semáforo Verde/Amarelo/Vermelho. NUNCA responde clientes.  
+**DELI:** COO (título travado ✅ 2026-06-06), não chatbot. Monitora tudo, aciona especialistas, semáforo Verde/Amarelo/Vermelho. NUNCA responde clientes.  
 **Todo agente novo → `trigger/` (Trigger.dev).** Nunca OpenClaw/n8n/EvoNexus.
 
 LARA refs: `docs/fluxos/lara-regua.md` | `bridge-server/docs/lara-endpoints.md` | `supabase/migrations/20260506_001_lara_regua.sql`
