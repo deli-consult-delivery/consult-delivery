@@ -48,6 +48,11 @@ export default function ChatTasksPanel({ tenantDbId, members = [], currentUserId
   const [saving, setSaving]     = useState(false);
   const [formErr, setFormErr]   = useState('');
 
+  // Drag-and-drop state
+  const [dragId, setDragId]     = useState(null);
+  const [hoverCol, setHoverCol] = useState(null);
+  const [ghostPos, setGhostPos] = useState(null);
+
   useEffect(() => { loadTasks(); }, [tenantDbId]);
 
   async function loadTasks() {
@@ -106,6 +111,39 @@ export default function ChatTasksPanel({ tenantDbId, members = [], currentUserId
       .eq('id', taskId);
   }
 
+  // Drag handlers
+  function onDragStart(e, id) {
+    setDragId(id);
+    e.dataTransfer.effectAllowed = 'move';
+    const img = new Image();
+    img.src = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
+    e.dataTransfer.setDragImage(img, 0, 0);
+  }
+
+  function onDrag(e) {
+    if (e.clientX === 0 && e.clientY === 0) return;
+    setGhostPos({ x: e.clientX, y: e.clientY });
+  }
+
+  function onDragEnd() {
+    setDragId(null);
+    setHoverCol(null);
+    setGhostPos(null);
+  }
+
+  function onColDragOver(e, colKey) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (hoverCol !== colKey) setHoverCol(colKey);
+  }
+
+  function onColDrop(e, colKey) {
+    e.preventDefault();
+    if (!dragId) return;
+    handleStatusChange(dragId, colKey);
+    onDragEnd();
+  }
+
   const tasksByStatus = Object.fromEntries(COLUMNS.map(c => [c.key, []]));
   tasks.forEach(t => {
     const key = t.status || 'todo';
@@ -114,6 +152,9 @@ export default function ChatTasksPanel({ tenantDbId, members = [], currentUserId
 
   const lojaMap = Object.fromEntries(lojas.map(l => [l.id, l]));
   const totalPending = tasks.filter(t => !['done', 'canceled'].includes(t.status)).length;
+
+  // Ghost card label
+  const dragTask = dragId ? tasks.find(t => t.id === dragId) : null;
 
   const board = (
     <div style={{
@@ -179,57 +220,81 @@ export default function ChatTasksPanel({ tenantDbId, members = [], currentUserId
           flex: 1, overflowX: 'auto', overflowY: 'hidden',
           display: 'flex', gap: 12, padding: '16px 20px',
         }} className="dark-scroll">
-          {COLUMNS.map(col => (
-            <div key={col.key} style={{
-              minWidth: 272, maxWidth: 272,
-              display: 'flex', flexDirection: 'column',
-              background: 'rgba(255,255,255,0.03)',
-              borderRadius: 10,
-              border: '1px solid rgba(255,255,255,0.07)',
-              overflow: 'hidden',
-              flexShrink: 0,
-            }}>
-              {/* Column header */}
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 7,
-                padding: '10px 12px',
-                borderBottom: '1px solid rgba(255,255,255,0.06)',
-                flexShrink: 0,
-              }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: col.color, flexShrink: 0 }} />
-                <span style={{ fontSize: 12, fontWeight: 700, color: col.color, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  {col.label}
-                </span>
-                <span style={{ marginLeft: 'auto', fontSize: 11, color: 'rgba(255,255,255,0.3)', fontWeight: 600 }}>
-                  {tasksByStatus[col.key].length}
-                </span>
-              </div>
+          {COLUMNS.map(col => {
+            const isHover = hoverCol === col.key;
+            return (
+              <div
+                key={col.key}
+                onDragOver={(e) => onColDragOver(e, col.key)}
+                onDragLeave={() => setHoverCol(null)}
+                onDrop={(e) => onColDrop(e, col.key)}
+                style={{
+                  minWidth: 272, maxWidth: 272,
+                  display: 'flex', flexDirection: 'column',
+                  background: isHover ? `${col.color}12` : 'rgba(255,255,255,0.03)',
+                  borderRadius: 10,
+                  border: isHover
+                    ? `1px solid ${col.color}66`
+                    : '1px solid rgba(255,255,255,0.07)',
+                  borderTop: isHover
+                    ? `3px solid ${col.color}`
+                    : `1px solid rgba(255,255,255,0.07)`,
+                  overflow: 'hidden',
+                  flexShrink: 0,
+                  transition: 'background 0.15s, border-color 0.15s',
+                }}
+              >
+                {/* Column header */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 7,
+                  padding: '10px 12px',
+                  borderBottom: '1px solid rgba(255,255,255,0.06)',
+                  flexShrink: 0,
+                }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: col.color, flexShrink: 0 }} />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: col.color, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    {col.label}
+                  </span>
+                  <span style={{ marginLeft: 'auto', fontSize: 11, color: 'rgba(255,255,255,0.3)', fontWeight: 600 }}>
+                    {tasksByStatus[col.key].length}
+                  </span>
+                </div>
 
-              {/* Cards */}
-              <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }} className="dark-scroll">
-                {tasksByStatus[col.key].length === 0 ? (
-                  <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.18)', fontSize: 12, marginTop: 24 }}>
-                    {col.isAI ? 'Sem sugestões no momento' : 'Vazio'}
-                  </div>
-                ) : (
-                  tasksByStatus[col.key].map(task => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      col={col}
-                      members={members}
-                      lojaMap={lojaMap}
-                      columns={COLUMNS}
-                      onStatusChange={handleStatusChange}
-                      onAcceptAI={handleAcceptAI}
-                      onDelete={handleDelete}
-                      onTitleEdit={handleTitleEdit}
-                    />
-                  ))
-                )}
+                {/* Cards */}
+                <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }} className="dark-scroll">
+                  {tasksByStatus[col.key].length === 0 ? (
+                    <div style={{
+                      textAlign: 'center', color: 'rgba(255,255,255,0.18)', fontSize: 12, marginTop: 24,
+                      border: isHover ? `2px dashed ${col.color}55` : '2px dashed transparent',
+                      borderRadius: 8, padding: '20px 8px',
+                      transition: 'border-color 0.15s',
+                    }}>
+                      {col.isAI ? 'Sem sugestões no momento' : 'Solte aqui'}
+                    </div>
+                  ) : (
+                    tasksByStatus[col.key].map(task => (
+                      <TaskCard
+                        key={task.id}
+                        task={task}
+                        col={col}
+                        members={members}
+                        lojaMap={lojaMap}
+                        columns={COLUMNS}
+                        isDragging={dragId === task.id}
+                        onDragStart={onDragStart}
+                        onDrag={onDrag}
+                        onDragEnd={onDragEnd}
+                        onStatusChange={handleStatusChange}
+                        onAcceptAI={handleAcceptAI}
+                        onDelete={handleDelete}
+                        onTitleEdit={handleTitleEdit}
+                      />
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -322,13 +387,39 @@ export default function ChatTasksPanel({ tenantDbId, members = [], currentUserId
           </div>
         </div>
       )}
+
+      {/* Ghost card ao arrastar */}
+      {dragTask && ghostPos && ReactDOM.createPortal(
+        <div style={{
+          position: 'fixed',
+          left: ghostPos.x + 14,
+          top: ghostPos.y - 18,
+          zIndex: 9999,
+          background: '#1e1e2e',
+          border: '1px solid rgba(255,255,255,0.15)',
+          borderLeft: `3px solid ${(PRIORITY_META[dragTask.priority] ?? PRIORITY_META.normal).color}`,
+          borderRadius: 8,
+          padding: '8px 12px',
+          color: 'rgba(255,255,255,0.9)',
+          fontSize: 13,
+          pointerEvents: 'none',
+          maxWidth: 220,
+          opacity: 0.93,
+          boxShadow: '0 8px 30px rgba(0,0,0,0.6)',
+          fontFamily: 'inherit',
+          lineHeight: 1.4,
+        }}>
+          {dragTask.title}
+        </div>,
+        document.body
+      )}
     </div>
   );
 
   return ReactDOM.createPortal(board, document.body);
 }
 
-function TaskCard({ task, col, members, lojaMap, columns, onStatusChange, onAcceptAI, onDelete, onTitleEdit }) {
+function TaskCard({ task, col, members, lojaMap, columns, isDragging, onDragStart, onDrag, onDragEnd, onStatusChange, onAcceptAI, onDelete, onTitleEdit }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft]     = useState(task.title);
   const pm       = PRIORITY_META[task.priority] ?? PRIORITY_META.normal;
@@ -338,14 +429,24 @@ function TaskCard({ task, col, members, lojaMap, columns, onStatusChange, onAcce
   const overdue  = task.due_date && task.due_date < today && task.status !== 'done';
 
   return (
-    <div style={{
-      background: '#1e1e1e',
-      borderRadius: 8,
-      borderLeft: `3px solid ${pm.color}`,
-      padding: '10px 11px',
-      marginBottom: 8,
-      display: 'flex', flexDirection: 'column', gap: 7,
-    }}>
+    <div
+      draggable={!editing}
+      onDragStart={(e) => !editing && onDragStart(e, task.id)}
+      onDrag={onDrag}
+      onDragEnd={onDragEnd}
+      style={{
+        background: isDragging ? 'rgba(255,255,255,0.04)' : '#1e1e1e',
+        borderRadius: 8,
+        borderLeft: `3px solid ${pm.color}`,
+        padding: '10px 11px',
+        marginBottom: 8,
+        display: 'flex', flexDirection: 'column', gap: 7,
+        opacity: isDragging ? 0.45 : 1,
+        cursor: editing ? 'default' : 'grab',
+        transition: 'opacity 0.15s, background 0.15s',
+        boxShadow: isDragging ? 'none' : '0 1px 4px rgba(0,0,0,0.3)',
+      }}
+    >
       {/* Loja badge */}
       {loja && (
         <div style={{
