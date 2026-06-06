@@ -49,6 +49,7 @@
 - [x] **D2 (Trigger.dev):** v4 (`npx trigger.dev@4.4.6 deploy`), não v3. ✅ 2026-06-03.
 - [x] **D3 (ambiente FASE 0):** FASE 0 roda na **VPS** (`187.127.25.24`) / `cd-evonexus-lab`, não do Windows. ✅ 2026-06-03.
 - [x] **D4 (fork A vs B em `agents`): B** — catálogo global + habilitação por tenant via `tenant_agents`/`tenant_agent_config`. Não troca a PK de `agents`, não mexe nas 8 FKs. ✅ 2026-06-06 — evidência dos dois lados em `docs/evonexus-replica/FASE-1-mapeamento-multitenant.md` §3.1 (FASE 0 §4–5 + extração ao vivo CD).
+- [x] **D5 (mandato Cowork):** Cowork executa direto tudo que conseguir — ler repo/DB, branch, commit, PR, comentários, docs, redigir planos e `.sql` (sem aplicar) — sem pedir caso a caso. **Reservado ao Wandson:** merge em `main` · aprovar e **aplicar** migrations (nunca via MCP) · `DROP`/destrutivo · mensagens a clientes (drafts) · reabrir decisões travadas / 🛑 CHECKPOINTS · credenciais e VPS. ✅ 2026-06-06 (autorização do Wandson na sessão; detalhe no Tracker §Mandato Cowork).
 
 ---
 
@@ -307,6 +308,7 @@ RLS `agents_tenant_isolation`: global visível a todos; custom só ao tenant via
 
 ### Histórico de atualizações
 
+- 2026-06-06 (v2.2) — **D5 registrada:** mandato Cowork (autorização do Wandson; limites preservados — merge, migrations, DROP, drafts, checkpoints, credenciais/VPS continuam com o Wandson).
 - 2026-06-06 (v2.1) — FASE 0 publicada (PR #156); FASE 1 reconciliada com a FASE 0 (decisão **B** travada como D4, alvo EvoNexus preenchido — commit `0f62ebb` no #152); CHECKPOINT 0 ✅ e CHECKPOINT 1 aguardando go.
 - 2026-06-06 (v2) — fusão PLANO-MESTRE.md (EvoNexus-replica) + mapa-vivo; arquivo movido para raiz; antigo `docs/evonexus-replica/PLANO-MESTRE.md` tombstonado.
 - 2026-06-06 (v1-semente) — mapa-vivo criado; Hermes 3A fechado com evidência; FASE 1 lado CD aprovada pra executar.
