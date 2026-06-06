@@ -1,6 +1,6 @@
 # Consult Delivery — Reestruturação Completa
 
-**Documento mestre — versão 1.0**
+**Documento mestre — versão 1.2**
 **Data:** 12/05/2026
 **Autor das decisões:** Wandson Silva (CEO/Fundador)
 **Status:** Aprovado para execução
@@ -28,6 +28,8 @@ Este documento é a **fonte autoritativa** da reestruturação. Em qualquer dive
 | Plataforma em produção pra clientes | ❌ Não — apenas uso interno |
 | Equipe dev | Wandson sozinho (Yasmin saiu) |
 | Equipe ops | Wélida (marketing/CRM), Eduardo (atendimento) |
+
+> ⚠️ Snapshot histórico de 11/05/2026. **Estado em 06/06/2026:** equipe humana = só Wandson (Wélida e Eduardo saíram em jun/2026); os agentes IA cobrem as funções — ver fatos canônicos em `PLANO-MESTRE.md`/`CLAUDE.md`.
 
 ### 1.2 Dores que motivaram esta reestruturação
 
@@ -181,7 +183,7 @@ Schema RBAC já existe (`roles`, `user_roles`, `role_permissions`, `user_agent_a
 | viewer | Dashboard + Relatórios (read-only) |
 | deli_owner | DELI + tudo (variante de admin) |
 
-DELI por padrão é admin-only; Wandson libera Wélida/Eduardo quando quiser via `user_agent_access`.
+DELI por padrão é admin-only; Wandson libera acesso a outros papéis quando quiser via `user_agent_access`. *(Nomes entre parênteses são exemplos históricos; papéis continuam válidos para futuros usuários.)*
 
 ---
 
@@ -192,7 +194,7 @@ Aprovado em 12/05/2026.
 ```
 INÍCIO
 ├── Dashboard
-└── DELI                         ← nova, CEO digital
+└── DELI                         ← nova, COO digital
 
 OPERAÇÃO
 ├── Chat Ao Vivo
@@ -223,7 +225,7 @@ ADMIN
 
 | Ação | Item | Detalhe |
 |---|---|---|
-| **Novo** | Página DELI | Chat direto com CEO digital |
+| **Novo** | Página DELI | Chat direto com COO digital |
 | **Novo grupo** | AGENTES IA | Consolida todos os agentes |
 | **Renomeia** | Régua de Disparo → Disparos | |
 | **Renomeia** | Clientes / CRM → Clientes | |
@@ -312,11 +314,11 @@ Mesmo nível de critério para preview, reply, copiloto, etc.
 
 ### Fase 2 — DELI + Análise iFood (3-4 semanas) — SLICE PILOTO
 
-**Objetivo:** Primeira combinação CEO digital + agente especialista funcionando ponta-a-ponta na nova stack. Valida arquitetura inteira.
+**Objetivo:** Primeira combinação COO digital + agente especialista funcionando ponta-a-ponta na nova stack. Valida arquitetura inteira.
 
 **Entregáveis:**
 
-**DELI (CEO Digital):**
+**DELI (COO Digital):**
 1. Página `/deli` (chat dedicado)
 2. Acesso default: admin only (Wandson)
 3. Task Trigger.dev `deli-conversa` (responde mensagens)
@@ -401,20 +403,20 @@ CREATE TABLE agent_memories (
 
 ### Fase 3 — LARA · Marketing (2-3 semanas)
 
-**Objetivo:** Cobrir gargalo nº 1 (Marketing). Wélida ganha braço de IA.
+**Objetivo:** Cobrir gargalo nº 1 (Marketing). A operação ganha braço de IA.
 
 **Entregáveis:**
 1. Migração da LARA do OpenClaw pra Trigger.dev + SDK
-2. Página `/agentes/lara` (acesso Wélida + admin)
+2. Página `/agentes/lara` (acesso papel marketing + admin)
 3. Tasks:
    - `lara-pesquisar-loja` (já testada em 11/05)
    - `lara-gerar-conteudo` (post Instagram, texto WhatsApp, e-mail)
    - `lara-analisar-tendencia` (pesquisa tendências do mercado)
-4. Integração com Campanhas (LARA sugere conteúdo, Wélida aprova/edita)
+4. Integração com Campanhas (LARA sugere conteúdo, humano aprova/edita)
 5. Audit + custos via `agent_runs`
 
 **Critério de aceite:**
-- [ ] Wélida usa LARA pra gerar 5 conteúdos de campanha em < 30min
+- [ ] Operador usa LARA pra gerar 5 conteúdos de campanha em < 30min
 - [ ] Output validado por Zod (sem alucinação de cidade/nome/dado)
 - [ ] DELI consegue delegar tarefa pra LARA via task composition
 - [ ] LARA respeita modo do tenant (humano = só rascunha; IA = pode publicar)
@@ -451,7 +453,7 @@ CREATE TABLE agent_memories (
 
 **Entregáveis:**
 1. Agente NOVA: ajuda a desenhar automações IA pra clientes finais
-2. Página `/agentes/nova` (acesso Wandson + Wélida)
+2. Página `/agentes/nova` (acesso admin)
 3. Tasks:
    - `nova-discovery` (entrevista cliente, mapeia caso de uso)
    - `nova-blueprint` (gera blueprint da automação)
@@ -660,7 +662,7 @@ Antes de avançar pra próxima fase, Wandson valida:
 
 | Agente | Função | Fase | Acessa quem |
 |---|---|---|---|
-| **DELI** | CEO digital, orquestradora | 2 | admin |
+| **DELI** | COO digital, orquestradora | 2 | admin |
 | **Análise iFood** | Análise de loja iFood | 2 | admin + marketing |
 | **LARA** | Marketing & Conteúdo | 3 | marketing + admin |
 | **MAX** | Suporte técnico a sistemas | 4 | atendimento + admin |
@@ -723,6 +725,7 @@ Documentação completa: [`docs/piloto/PILOTO-02-IMPLEMENTACAO.md`](docs/piloto/
 |---|---|---|
 | 1.0 | 12/05/2026 | Documento inicial após reestruturação completa decidida no chat de 11-12/05 |
 | 1.1 | 20/05/2026 | Seção 14 adicionada — Tarefas por loja (Piloto Onda 02 implementada) |
+| 1.2 | 06/06/2026 | DELI: título CEO digital → **COO digital** (decisão Wandson, D travada no PLANO-MESTRE). Nota de equipe atualizada em §1.1 (Wélida/Eduardo saíram jun/2026; equipe humana = Wandson). Referências nominais em §4.4/Fases 3-5 generalizadas para papéis. |
 
 ---
 

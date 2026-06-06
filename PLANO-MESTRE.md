@@ -17,16 +17,16 @@
 
 ## 👉 PRÓXIMA AÇÃO (retomar aqui)
 
-1. **Go do CHECKPOINT 1 → FASE 2 onda 1** — plano de migrations versionadas: 3 RLS permissivas (`customers_auth_all`, `user_agent_access_manage_admin`, `agents_read_all`), popular `tenant_agents` (tenant consult), `agent_memories.tenant_id SET NOT NULL`, backfill `agent_runs.tenant_id` (383), redesign `user_agent_access`. SQL mostrado e aprovado antes de aplicar; **nunca via MCP**. (Tracks T2 + T5)
-2. **Mergear PR `cowork/tracker-protocolo-v2`** — Tracker/protocolo/T3/fatos CLAUDE.md (substitui #155 e #157, que tinham conflito por reuso de branch). (Track T2/T3)
-3. **Visual-first / Mapa de telas** — Wandson revisa o mapa v0 → T3(b) protótipo clicável. (Track T3)
+1. **FASE 2 onda 1 🔄 EM REDAÇÃO (go do CHECKPOINT 1 dado em 2026-06-06)** — Cowork redige plano + `.sql` versionados: 3 RLS permissivas (`customers_auth_all`, `user_agent_access_manage_admin`, `agents_read_all`), popular `tenant_agents` (tenant consult), `agent_memories.tenant_id SET NOT NULL`, backfill `agent_runs.tenant_id` (383), redesign `user_agent_access`. **🛑 CHECKPOINT 2 = Wandson aprova o SQL antes de aplicar; nunca via MCP.** (Tracks T2 + T5)
+2. **Visual-first / Mapa de telas** — Wandson revisa o mapa v0 → T3(b) protótipo clicável. (Track T3)
+3. **5.5** — consolidar docs de plano redundantes. (Track T2)
 
 ---
 
 ## 📌 Fatos canônicos (corrigem valores antigos em circulação)
 
 - **Empresa:** Parauapebas-PA *(não Imperatriz-MA)*.
-- **Equipe:** Wandson + Wélida (2 pessoas). Eduardo saiu (jun/2026); Yasmin saiu (mai/2026 — branch `yasmin/dev` pode ser deletada).
+- **Equipe humana = 1 pessoa: Wandson.** Os agentes IA cobrem as demais funções da empresa. Wélida saiu (jun/2026); Eduardo saiu (jun/2026); Yasmin saiu (mai/2026 — branch `yasmin/dev` pode ser deletada).
 - **VPS:** `187.127.25.24` *(a antiga `45.39.210.183` não é mais usada)*.
 - **Supabase:** ref `czyanilrverorwenikqw` · tenant `consult` = `9079bd4d-4df7-4023-90fb-d79c8ba7e900`.
 - **Engine de agente:** `@anthropic-ai/sdk` via **Messages API** *(não OpenClaw/Agent SDK como motor)*.
@@ -44,7 +44,7 @@
 - [x] **FASE 1:** escopo do *mapa* = tudo (CORE + operacional + ADAPTA). *Implementação* fatiada: CORE → operacional → ADAPTA.
 - [x] Tabelas que a CD já tem: re-desenhar o schema-**alvo** onde precisa, via **migração não-destrutiva** (expand/contract). **Nunca DROP em produção.**
 - [x] Toda mudança de schema = **migration versionada** em Git.
-- [x] **DELI** = nome travado do orquestrador. Copy: usar **"oferta"**, nunca "promoção".
+- [x] **DELI** = nome travado do orquestrador; título **COO digital** ✅ travado 2026-06-06 (RESTRUCTURE.md alinhado no mesmo PR). Copy: usar **"oferta"**, nunca "promoção".
 - [x] **D1 (runtime):** `@anthropic-ai/sdk` (não Agent SDK — não roda em Trigger.dev cloud) + camada multi-provider (Anthropic/Ollama/OpenRouter, BYO-key por tenant via Infisical). ✅ 2026-06-03 — ver `docs/evonexus-replica/DECISAO-001-runtime-provider-custo.md`.
 - [x] **D2 (Trigger.dev):** v4 (`npx trigger.dev@4.4.6 deploy`), não v3. ✅ 2026-06-03.
 - [x] **D3 (ambiente FASE 0):** FASE 0 roda na **VPS** (`187.127.25.24`) / `cd-evonexus-lab`, não do Windows. ✅ 2026-06-03.
@@ -91,8 +91,8 @@
 | Plano persistido | Este doc + ponteiro no CLAUDE.md | ✅ feito (2026-06-02) |
 | Decisão D1/D2/D3 | Runtime + multi-provider + ambiente FASE 0 (`DECISAO-001`) | ✅ DECIDIDO (2026-06-03) |
 | 🛑 CHECKPOINT 0 | Inventário técnico (FASE 0 na VPS) + sign-off | ✅ FASE 0 merged em main (#156, `de81b88`) |
-| 🛑 CHECKPOINT 1 | Mapeamento do checklist | ✅ FASE 1 completa e merged em main (#152, `893e97e`; B decidido); **aguarda go do Wandson p/ FASE 2** |
-| 🛑 CHECKPOINT 2 | Schema + migrations (mostrar SQL antes de aplicar) | — |
+| 🛑 CHECKPOINT 1 | Mapeamento do checklist | ✅ **GO dado (2026-06-06)** — FASE 1 merged (#152, `893e97e`; B decidido) |
+| 🛑 CHECKPOINT 2 | Schema + migrations (mostrar SQL antes de aplicar) | 🔄 onda 1 em redação (Cowork) → aguardará aprovação do SQL |
 | 🛑 CHECKPOINT 3 | Plano faseado + checklist de completude | — |
 | FASE 4 | Build incremental + sign-off final | — |
 
@@ -102,7 +102,7 @@
 - [x] Commitar a versão atualizada do CHECKPOINT 0 — adjudicações registradas na FASE 1 §3.1 e §Passo 5 (commit `0f62ebb`) ✅
 - [x] **FASE 0** — inventário EvoNexus: ✅ merged (`docs/evonexus-replica/FASE-0-inventario-evonexus.md`, #156)
 - [x] **FASE 1 — mapeamento multi-tenant** ✅ merged (#152): lado CD + Passo 0 reconciliado + decisão B (§3.1)
-- [ ] 👉 FASE 2 — migrations versionadas (aguarda go do CHECKPOINT 1; escopo da onda 1 na §PRÓXIMA AÇÃO)
+- [ ] 🔄 **FASE 2 onda 1** — migrations versionadas em redação (go dado 2026-06-06); 🛑 CHECKPOINT 2 = aprovação do SQL
 
 ### Ground truth — o que já existe na CD (estender, não recriar)
 
@@ -214,8 +214,8 @@ RLS `agents_tenant_isolation`: global visível a todos; custom só ao tenant via
 ### Fases detalhadas
 
 - **FASE 0** — Inventário técnico (read-only). ✅ MERGED (#156): `docs/evonexus-replica/FASE-0-inventario-evonexus.md`. **🛑 CHECKPOINT 0 ✅.**
-- **FASE 1** — Mapeamento. ✅ MERGED (#152): lado CD + Passo 0 reconciliado + B decidido. **🛑 CHECKPOINT 1 — aguarda go.**
-- **FASE 2** — Desenho do framework + schema. As 5 peças detalhadas + migrations (ALTER only) + contratos. **🛑 CHECKPOINT 2** (mostrar SQL antes de aplicar).
+- **FASE 1** — Mapeamento. ✅ MERGED (#152): lado CD + Passo 0 reconciliado + B decidido. **🛑 CHECKPOINT 1 ✅ go dado (2026-06-06).**
+- **FASE 2** — Desenho do framework + schema. As 5 peças detalhadas + migrations (ALTER only) + contratos. 🔄 onda 1 em redação. **🛑 CHECKPOINT 2** (mostrar SQL antes de aplicar).
 - **FASE 3** — Plano faseado + checklist de completude. Tabela rastreando CADA tela → status + critério de validado. CORE primeiro, ADAPTA depois, DEPOIS por último; NATIVO = só wiring. **🛑 CHECKPOINT 3.**
 - **FASE 4** — Build incremental. Uma feature por vez, na ordem. Migrations ALTER (backup antes). Testar com `tenant_id` real provando isolamento (A não vê B). Output bruto. Ao final: verificação de completude — cruzar build × checklist, listar o que ficou pra depois com motivo, pedir sign-off do Wandson.
 
@@ -255,7 +255,7 @@ RLS `agents_tenant_isolation`: global visível a todos; custom só ao tenant via
   - [ ] Rotacionar token Telegram (BotFather)
   - [ ] Limpar cópias em texto na VPS (`.git-credentials`, history, `.claude/*.jsonl`)
 - [ ] ⏳ Hardening: gateway root → usuário dedicado · remover `claude-debug` key · fail2ban `bantime.increment`
-- [ ] 👉 **3 RLS permissivas** (`customers_auth_all`, `user_agent_access_manage_admin`, `agents_read_all`) — corrigir na FASE 2 onda 1 (must-fix antes do 2º tenant real). Evidência: FASE 1 §1.3/§Passo 5.
+- [ ] 🔄 **3 RLS permissivas** (`customers_auth_all`, `user_agent_access_manage_admin`, `agents_read_all`) — migrations em redação na FASE 2 onda 1 (must-fix antes do 2º tenant real). Evidência: FASE 1 §1.3/§Passo 5.
 
 ---
 
@@ -307,8 +307,9 @@ RLS `agents_tenant_isolation`: global visível a todos; custom só ao tenant via
 
 ### Histórico de atualizações
 
-- 2026-06-06 (v2.3) — **#156 e #152 merged em main** (`de81b88`, `893e97e`) com aprovação explícita do Wandson; #155/#157 reconstruídos em `cowork/tracker-protocolo-v2` (conflito por reuso de branch pós-squash); regra dura nova: branch nova por entrega.
-- 2026-06-06 (v2.2) — **D5 registrada:** mandato Cowork (autorização do Wandson; limites preservados).
+- 2026-06-06 (v2.4) — **Fatos:** equipe humana = 1 pessoa (Wélida saiu jun/2026); **DELI título COO travado** (RESTRUCTURE.md alinhado). **CHECKPOINT 1 ✅ go dado** → FASE 2 onda 1 em redação pelo Cowork.
+- 2026-06-06 (v2.3) — **#156 e #152 merged em main** (`de81b88`, `893e97e`); #155/#157 reconstruídos em #158; regra dura nova: branch nova por entrega.
+- 2026-06-06 (v2.2) — **D5 registrada:** mandato Cowork.
 - 2026-06-06 (v2.1) — FASE 0 publicada (PR #156); FASE 1 reconciliada (decisão **B** travada como D4 — commit `0f62ebb`).
 - 2026-06-06 (v2) — fusão PLANO-MESTRE.md (EvoNexus-replica) + mapa-vivo; arquivo movido para raiz.
 - 2026-06-06 (v1-semente) — mapa-vivo criado; Hermes 3A fechado com evidência; FASE 1 lado CD aprovada pra executar.
