@@ -35,7 +35,9 @@ backup_*.sql
 .openclaw/openclaw.json
 
 # Pastas pessoais e extrações (não pertencem ao repo)
-WikiBrain/
+# WikiBrain ignorado, EXCETO WikiBrain/wiki/ (Tracker + docs de track versionados)
+WikiBrain/*
+!WikiBrain/wiki/
 Plataforma Consult Delivery-handoff*/
 _handoff_extracted/
 
