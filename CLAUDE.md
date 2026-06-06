@@ -1,5 +1,5 @@
 # CONSULT DELIVERY — CLAUDE.md
-Última revisão: 2026-05-24 | Status: APROVADO
+Última revisão: 2026-06-06 | Status: APROVADO
 
 ## MEMÓRIA — LER PRIMEIRO
 
@@ -14,9 +14,31 @@ Ao descobrir algo não-óbvio sobre infra/config/decisões → atualizar `memory
 
 ---
 
+## PLANO-MESTRE — PROTOCOLO DE SESSÃO (obrigatório)
+
+Ao trabalhar em **qualquer tarefa ligada ao PLANO-MESTRE** (tracks T1–T9, EvoNexus-replica, agentes, infra, feature PILOTO, Hermes):
+
+### ANTES de começar
+1. Ler `WikiBrain/wiki/PLANO-MESTRE — Tracker.md` — onde parou, próxima ação, status de cada track
+2. Ler `PLANO-MESTRE.md` (raiz) — detalhe da track afetada (checklist, fases, decisões)
+3. Confirmar em qual track/item o trabalho se enquadra antes de qualquer código
+
+### AO TERMINAR
+1. Atualizar `WikiBrain/wiki/PLANO-MESTRE — Tracker.md`:
+   - **"Onde parou"** → data + o que foi feito nesta sessão
+   - **"Próxima ação"** → próximo passo concreto (com track vinculada)
+   - **"Status por track"** → linha da track afetada
+   - **"Log de sessões"** → append com data + bullet points do que foi feito
+2. Atualizar `PLANO-MESTRE.md` → marcar `[x]` nos itens concluídos, ajustar status
+3. Commitar ambos no mesmo PR/commit da sessão
+
+**Nunca terminar uma sessão sem atualizar o Tracker.** É o que garante que a próxima sessão sabe exatamente onde retomar.
+
+---
+
 ## EVONEXUS-REPLICA — PLANO MESTRE (contrato de execução)
 
-> Plano para replicar o **feature-surface do EvoNexus NATIVO** na CD (multi-tenant). Doc completo: **`docs/evonexus-replica/PLANO-MESTRE.md`** — CHECKLIST MESTRE (todas as telas), 5 peças de framework, FASES 0-4 com 🛑 CHECKPOINTS. Ler antes de qualquer build deste tema. **Nada de tela pulada em silêncio — o checklist é o contrato de completude.**
+> Plano para replicar o **feature-surface do EvoNexus NATIVO** na CD (multi-tenant). Doc completo: **`PLANO-MESTRE.md`** (raiz) — CHECKLIST MESTRE (todas as telas), 5 peças de framework, FASES 0-4 com 🛑 CHECKPOINTS. Ler antes de qualquer build deste tema. **Nada de tela pulada em silêncio — o checklist é o contrato de completude.**
 
 - **Não viola a proibição de EvoNexus.** O proibido é o *motor/produto* EvoNexus em prod (CLAUDE.md acima, RESTRUCTURE §3.3). Aqui re-implementamos o *paradigma* na stack CD. EvoNexus = referência de features, nunca dependência em runtime.
 - **3 conflitos ✅ DECIDIDOS em 2026-06-03** (`docs/evonexus-replica/DECISAO-001-runtime-provider-custo.md`): **(D1)** runtime = `@anthropic-ai/sdk` (NÃO `@anthropic-ai/claude-agent-sdk` — RESTRUCTURE §3.3 linha 100: não roda em Trigger.dev cloud) **+ camada multi-provider** (Anthropic/Ollama/OpenRouter, BYO-key por tenant via Infisical, roteamento por tarefa, fallback); **OAuth-de-assinatura embutido = fora de escopo** (legal/ToS); **(D2)** Trigger.dev **v4.4.5+** (não v3); **(D3)** FASE 0 roda na **VPS** / `cd-evonexus-lab`, não do Windows.

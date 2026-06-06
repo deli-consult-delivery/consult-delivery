@@ -44,6 +44,12 @@ _(agentes IA da plataforma — identidade, status e artefatos)_
 
 _(synthesized answers to questions you've asked, filed back as pages)_
 
+## Project Tracking
+
+_(acompanhamento de execução de projetos e sessões)_
+
+- [[PLANO-MESTRE — Tracker]] — handoff entre sessões: onde parou, próxima ação, status T1–T9
+
 ---
 
 *This index is maintained by Claude via `/wiki-brain`. Do not edit by hand unless you know what you're doing.*
