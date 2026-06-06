@@ -8,21 +8,24 @@
 
 ## 🔴 Onde parou
 
-_Última sessão: 2026-06-06_
+_Última sessão: 2026-06-06 (Cowork — handoff assumido)_
 
-- **T3 iniciada:** mapa de telas v0 (console interno, 32 telas, shortlist de 14 do MVP) entrou no repo + Obsidian em `WikiBrain/wiki/T3 — Mapa de Telas (Console Interno).md` — aguardando Wandson revisar/marcar antes de virar código
-- Criou `PLANO-MESTRE.md` na raiz (fusão mapa-vivo + EvoNexus-replica)
-- Mergeu PR #154 em `main`
-- Hermes 3A fechado (kimi-k2.6 via Ollama Cloud, Docker na VPS)
-- FASE 1 lado CD: aprovada para executar, ainda não rodada
+- **5.1 fechado:** `.gitignore` agora un-ignora `WikiBrain/wiki/` explicitamente (commit `52bfa13`, pushed na branch do #155). Tracker + T3 já estavam versionados na branch (force-add anterior) — #155 pronto pra merge.
+- **Estado verificado na fonte (GitHub + repo local):** PR #152 (FASE 1 lado CD, doc 371 linhas) ABERTO · #154 merged · #155 aberto · #136 e #129 abertos (fixes bot, fora do plano-mestre).
+- **FASE 1 lado CD RODOU** (PR #152) — corrige registro anterior deste Tracker que dizia "ainda não rodada".
+- **⚠️ Branch `wandson/evonexus-fase0` NÃO está em origin** (nem local Windows). Se FASE 0 rodou, o output vive só na VPS — push pro origin é pré-requisito do PR da FASE 0 (item 5.2).
+- **⚠️ Trackeados indevidamente:** `WikiBrain/.obsidian/*` (6 arquivos, incl. `workspace.json` que o próprio gitignore manda ignorar) e `WikiBrain/log.md` — sugerido `git rm --cached` em commit futuro (não feito, aguarda ok).
+- Limites do Cowork registrados: GitHub MCP read-only (403 em escrita) · sandbox sem escrita em `.git/` → Cowork edita arquivos e lê tudo; commit/push são do Wandson.
 
 ---
 
 ## 👉 Próxima ação
 
-1. **T2 / FASE 1 lado CD** — rodar Passos 1–4 com output bruto colado no doc. Branch: `wandson/evonexus-fase1-mapeamento`.
-2. **T3 / Mapa de telas** — Wandson revisa/marca o mapa v0 no Obsidian; quando estiver com a cara dele → **T3(b)** = protótipo clicável em React das 14 telas do MVP (dados fake, navegável, antes de banco/código).
-3. **T2 / FASE 0** — sessão VPS (`187.127.25.24`), inventário em `/root/cd-evonexus-lab`.
+1. **Mergear #155** (Tracker versionado) — Wandson.
+2. **Push da branch `wandson/evonexus-fase0` da VPS pro origin** — Wandson (pré-requisito do 5.2 completo).
+3. **5.2 — Reconciliar FASE 0 → FASE 1:** abrir PR da FASE 0; atualizar `FASE-1-mapeamento-multitenant.md` (coluna "alvo EvoNexus" + registrar decisão **B** como travada, com evidência dos dois lados). Parte da decisão B dá pra fazer antes do push da VPS.
+4. **5.3 — FASE 2 onda 1:** plano de migrations (3 RLS permissivas, popular `tenant_agents`, `agent_memories.tenant_id NOT NULL`, backfill `agent_runs.tenant_id`, redesign `user_agent_access`) — Cowork redige SQL, Wandson aprova, NUNCA aplicar via MCP.
+5. **5.4 — Limpeza CLAUDE.md** (Eduardo saiu, FASE 0 rodou, DELI COO/CEO) · **5.5 — consolidar docs de plano**.
 
 ---
 
@@ -31,18 +34,24 @@ _Última sessão: 2026-06-06_
 | Track | Nome | Status | Última ação |
 |-------|------|--------|-------------|
 | T1 | Plataforma CD (V1→V3) | 🔄 ~95% | 1A–1G concluídas; DELI Realtime pendente |
-| T2 | EvoNexus-replica | 🔒 FASE 0 bloqueada | CHECKPOINT 0 ✅; FASE 1 lado CD aprovada |
-| T3 | Visual-First / telas | 🔄 v0 em revisão | Mapa de telas v0 no Obsidian; aguarda revisão → T3(b) protótipo |
+| T2 | EvoNexus-replica | 🔄 FASE 1 lado CD ✅ (PR #152) | FASE 0 rodada (VPS, branch a subir); próximo: reconciliar 0→1, FASE 2 |
+| T3 | Visual-First / telas | 🔄 v0 em revisão | Mapa de telas v0 no repo+Obsidian; aguarda revisão → T3(b) protótipo |
 | T4 | Hermes (copiloto CEO) | 🔄 3A ✅ / 3B bloqueado | kimi-k2.6 rodando; 3B aguarda GATE 0 |
-| T5 | Segurança / GATE 0 | ⏳ rotação adiada | fail2ban + SSH key-only ✅ |
+| T5 | Segurança / GATE 0 | ⏳ rotação adiada | fail2ban + SSH key-only ✅; 3 RLS permissivas confirmadas (must-fix pré 2º tenant) |
 | T6 | Agentes IA | 🔄 BomDia/Encerramento/chat ✅ | DELI em andamento; LARA/SOFIA pendentes |
 | T7 | Feature PILOTO | 🔄 Ondas 01+02 merged | Onda 03 migration rascunhada, não aplicada |
-| T8 | Infra / CI-CD | ⚠️ 2 riscos ativos | CI/CD sobrescreve; VPS branches divergem |
+| T8 | Infra / CI-CD | ⚠️ 2 riscos ativos | CI/CD sobrescreve; VPS branches divergem; stop-hook tsc falso-erro |
 | T9 | Negócio | contexto | Primeiro cliente real = PRIORIDADE |
 
 ---
 
 ## 📋 Log de sessões
+
+### 2026-06-06 (sessão 2 — Cowork assume via handoff)
+- Cowork leu Tracker + PLANO-MESTRE + verificou PRs na fonte (GitHub) e branch local
+- **5.1 fechado:** `.gitignore` un-ignora `WikiBrain/wiki/` (commit `52bfa13`, pushed por Wandson — git do sandbox sem escrita em `.git/`)
+- Divergências registradas: Tracker atrasado vs handoff (FASE 1 rodou, #152) · branch `evonexus-fase0` ausente de origin · `.obsidian/*` + `log.md` trackeados indevidamente · GitHub MCP read-only
+- Tracker atualizado com estado verificado; próxima: merge #155 + push fase0 (Wandson) → 5.2
 
 ### 2026-06-06
 - Criou `PLANO-MESTRE.md` raiz (fusão PLANO-MESTRE.md + mapa-vivo.md)

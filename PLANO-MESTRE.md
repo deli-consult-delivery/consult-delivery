@@ -99,7 +99,7 @@
 - [ ] ⏳ Commitar a versão atualizada do CHECKPOINT 0 (3 adjudicações) — via Claude Code
 - [ ] 🔒 **FASE 0** — inventário EvoNexus: bloqueado fora da VPS (`/root/cd-evonexus-lab`)
 - [ ] 🔄 **FASE 1 — mapeamento multi-tenant**
-  - [ ] Lado CD (Passos 1–4): aprovado pra executar, com trava de output bruto
+  - [x] Lado CD (Passos 1–4): ✅ rodado — PR #152 aberto (`docs/evonexus-replica/FASE-1-mapeamento-multitenant.md`, 371 linhas, output bruto colado)
   - [ ] 👉 Lado EvoNexus (Passo 0): pendente sessão VPS — sem preencher de memória
   - Branch: `wandson/evonexus-fase1-mapeamento` → PR (sem merge automático)
 - [ ] ⏳ FASE 2 — migrations versionadas (só depois do go no CHECKPOINT 1)
