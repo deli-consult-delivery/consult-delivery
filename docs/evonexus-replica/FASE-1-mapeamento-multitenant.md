@@ -1,8 +1,8 @@
 # FASE 1 — Mapeamento Multi-Tenant
 
-> **Status:** PARCIAL — apenas o **lado CD / Supabase** (Passos 1–5). O **lado EvoNexus (Passo 0)
-> está pendente de leitura na VPS** (FASE 0) e foi deixado **vazio de propósito** — nenhuma linha
-> preenchida de memória.
+> **Status:** COMPLETO — lado CD / Supabase (Passos 1–5, extração ao vivo 2026-06-06) + **lado
+> EvoNexus (Passo 0) preenchido em 2026-06-06** a partir da FASE 0 rodada na VPS
+> (`docs/evonexus-replica/FASE-0-inventario-evonexus.md`, branch `wandson/evonexus-fase0`, PR #156).
 > **Data da extração:** 2026-06-06 | **Branch:** `wandson/evonexus-fase1-mapeamento`
 > **Banco:** Supabase `czyanilrverorwenikqw` (extração ao vivo via MCP `execute_sql`, **read-only**).
 > **🛑 CHECKPOINT 1** ao final — go/no-go do Wandson.
@@ -27,19 +27,18 @@
 
 ---
 
-## 🛑 Passo 0 — Inventário EvoNexus (NÃO ACESSÍVEL — pendente VPS / FASE 0)
+## Passo 0 — Inventário EvoNexus (✅ CONCLUÍDO — FASE 0 rodada na VPS, 2026-06-06)
 
-**Este bloco está intencionalmente vazio.** O lado EvoNexus vive em `/root/cd-evonexus-lab` na VPS
-`187.127.25.24` e **não é acessível deste ambiente Windows**. Nenhuma linha foi preenchida de memória
-(regra dura). `PLANO-MESTRE.md §8` marca **CHECKPOINT 0 como "⏳ FASE 0 ainda não rodada"** — coerente.
+> **Fonte:** `docs/evonexus-replica/FASE-0-inventario-evonexus.md` (branch `wandson/evonexus-fase0`,
+> PR #156). Produzido read-only na VPS: lab `/root/cd-evonexus-lab/` + container `8ff65637fbfb`
+> via `docker exec`. Nada abaixo foi preenchido de memória — cada item referencia a seção do
+> doc-fonte, que carrega a evidência arquivo:linha.
 
-**Checklist para a próxima sessão na VPS (a preencher lá, com output bruto):**
-
-- [ ] Entidades file-based: `agents`, `skills`, `memória`, `templates`, `rotinas`, `providers`, `custos` — 1 linha cada + premissa single-tenant.
-- [ ] ~23 tabelas operacionais: `grep -rn "__tablename__"` no código + desempate `sqlite3 dashboard/data/evonexus.db ".tables"`.
-- [ ] ADAPTA incl. `plugin_scan_cache`, `plugin_audit_log`.
-- [ ] Para cada entidade EvoNexus: mapear o **alvo CD** (qual tabela/coluna recebe, com `tenant_id`).
-- [ ] Preencher a coluna "alvo EvoNexus" da tabela de classificação (§Passo 2), hoje toda "pendente VPS".
+- [x] **Entidades file-based** (FASE 0 §1): **agents** — 40 arquivos `.claude/agents/{name}.md`, frontmatter `name/description/model/color/memory/tools`, sem tenant; **skills** — ~200 diretórios `SKILL.md` (doc-driven vs turnkey), sem tenant; **memória** — global `/workspace/memory/` (ifood-kb + lojas/) + por-agente `.claude/agent-memory/{agent}/`, sem tenant; **templates** — `.claude/templates/html/` com placeholders `{{X}}`; **rotinas** — ADWs Python + `scheduler.py`; **providers** — `config/providers.json` (anthropic ativo); **custos** — `ADWs/logs/metrics.json` + `heartbeat_runs`. **Premissa single-tenant confirmada em todas: isolamento = workspace inteiro.**
+- [x] **Tabelas operacionais:** 21 tabelas SQLite levantadas via `models.py` (FASE 0 §2). Nota: `sqlite3 .tables` não rodou — binário ausente no host e `.db` só existe no container; o levantamento via `models.py` (inventário canônico 2026-06-03) é a fonte.
+- [x] **ADAPTA:** `plugin_scan_cache` / `plugin_audit_log` **não aparecem** como classes SQLAlchemy explícitas — registrados como gap aceito, baixa prioridade (FASE 0 §3 e §7).
+- [x] **Mapa entidade EvoNexus → alvo CD:** FASE 0 §6 — 22 entidades mapeadas com nota multi-tenant cada.
+- [x] **Coluna "alvo EvoNexus"** da tabela de classificação: preenchida em **§Passo 2.1** abaixo.
 
 ---
 
@@ -280,11 +279,33 @@ Padrão de referência = **`roles`**: PK uuid + `tenant_id NOT NULL` + `UNIQUE(t
 | `loja_gpt_conversations` | sem coluna | via `loja_id→lojas` | RLS join lojas | ✅ correto (cadeia FK) |
 | `loja_gpt_messages` | sem coluna | via `conversation_id→…→loja` | RLS join | ✅ correto (cadeia FK) |
 | `loja_metricas_snapshot` | sem coluna | via `loja_id→lojas` | RLS join lojas | ✅ correto (cadeia FK) |
-| `agents` | `tenant_id` **nullable, 15/15 NULL** | RLS OR `IS NULL` | catálogo global hoje | ❗ **redesign (§3.1)** |
+| `agents` | `tenant_id` **nullable, 15/15 NULL** | RLS OR `IS NULL` | catálogo global hoje | ❗ **redesign (§3.1)** — ✅ **B decidido** |
 | `agent_runs` | `tenant_id` nullable, 383 NULL | RLS por tenant + view global p/ NULL | dados de produção | ⚠️ backfill (§4) |
 | `agent_memories` | `tenant_id` nullable, 0 linhas | RLS por tenant | tabela vazia | ⚠️ apertar NOT NULL barato (§4) |
 | `user_agent_access` | **sem `tenant_id`, PK (user_id, agent_name text)** | nenhuma cadeia FK | `agent_name` texto livre | ❗ **redesign (§3.2)** |
-| **alvo EvoNexus** (todas) | — | — | — | ⏳ **pendente VPS (Passo 0)** |
+| **alvo EvoNexus** (todas) | — | — | — | ✅ **preenchido (§2.1)** |
+
+### 2.1 — Alvo EvoNexus por tabela CD (preenchido a partir da FASE 0)
+
+> Mapeamento reverso da FASE 0 §6 (entidade EvoNexus → alvo CD), com a referência da evidência.
+> No EvoNexus o tenant é **implícito** (workspace inteiro = 1 cliente); a coluna "nota" indica o
+> que a CD adiciona para o mundo multi-tenant.
+
+| Tabela CD | Equivalente EvoNexus | Evidência (FASE 0) | Nota multi-tenant CD |
+|-----------|---------------------|--------------------|-----------------------|
+| `agents` | `.claude/agents/{name}.md` — catálogo file-based global (40 agentes), carregado por nome | §1.1, §4.1–4.2 | catálogo global (`tenant_id NULL`) + custom por tenant; habilitação via `tenant_agents` |
+| `tenant_agents` / `tenant_agent_config` | **sem equivalente** — no EvoNexus basta o arquivo existir no workspace | §5 ("o que o EvoNexus NÃO tem") | é o gap que a CD cobre para multi-tenant; cabear na FASE 2 |
+| `agent_runs` | `ADWs/logs/metrics.json` (rotinas) + `heartbeat_runs` (SQLite) | §1.8, §2 | log unificado com `tenant_id`; custo agregado por tenant |
+| `agent_memories` | `memory/` global (ifood-kb, lojas/) + `.claude/agent-memory/{agent}/` | §1.3 | memória por agente+tenant; KB iFood portada como global |
+| `roles` / `role_permissions` / `user_roles` | `roles` SQLite (permissions_json + agent_access_json + workspace_folders_json) | §2 | CD normaliza em 3 tabelas relacionais, scoped por tenant via `roles.tenant_id` |
+| `user_agent_access` | `role.agent_access_json` — filtro por camada/lista de slugs por papel | §5 (evidência 4) | CD dá acesso por usuário; redesign §3.2 adiciona tenant + FK real |
+| `audit_log` | `audit_log` SQLite (user_id, action, resource, detail, ip) | §2 | NATIVO na CD; estender ações, scoped tenant |
+| `customers` / `lojas` | `memory/lojas/{loja}/` (perfil.md, analises/, inputs/) — "loja" é diretório de memória | §1.3 | CD tem entidade relacional com `tenant_id NOT NULL` (mais forte) |
+| `tenants` / `tenant_members` | **sem equivalente** — single-tenant implícito (workspace = o tenant) | §5 (evidência 5) | base do isolamento CD; já correta |
+| `loja_gpt_conversations` / `loja_gpt_messages` | path CHAT: `chat-bridge.js` (sessões de chat por agente, `loadAgentFile` + systemPrompt preset) | §4.2 | CD persiste em tabelas com cadeia FK → loja → tenant |
+| `loja_metricas` / `loja_metricas_snapshot` | outputs de rotinas ADW (relatórios em `plans/delivery/{loja}/`) | §1.4–1.5 | CD estrutura em tabelas; scoped tenant/loja |
+| `loja_whatsapp_vinculo` | canais (Telegram/Discord/iMessage via background services) | §2 / checklist SISTEMA | CD usa Evolution/WhatsApp; vínculo por `tenant_id` + `remote_jid` |
+| *(FASE 2 — novas)* `skills`, `goals`, `tickets`, `templates`, `shares` | `.claude/skills/{slug}/SKILL.md` · `missions/projects/goals/goal_tasks` · `tickets/ticket_comments/ticket_activity` · `.claude/templates/html/` · `file_shares` | §1.2, §1.4, §2 | tabelas novas na FASE 2, todas com `tenant_id` desde o dia 1 |
 
 ---
 
@@ -323,17 +344,23 @@ tenant_agent_config.agent_id  → agents.id   CASCADE
 tenant_agents.agent_id        → agents.id   CASCADE
 ```
 
-**Interpretação (decisão a tomar no CHECKPOINT):** existem **duas arquiteturas possíveis** e o DB já tem peças da segunda:
+**Interpretação:** existem **duas arquiteturas possíveis** e o DB já tem peças da segunda:
 - **(A) Agente por-tenant:** trocar PK por uuid surrogate + `UNIQUE(tenant_id, slug)` (espelhando `roles`), tornar `tenant_id NOT NULL`, e propagar a nova PK uuid nas 8 FKs. Caro: 8 FKs, sendo 2 de produção viva (`agent_runs` 1677, `agent_memories` 0).
 - **(B) Catálogo global + habilitação por-tenant:** manter `agents` global e usar `tenant_agents` / `tenant_agent_config` (que **já existem**, CASCADE em tenants) para escopar quais agentes cada tenant vê/configura. Muito mais barato; nenhuma troca de PK.
 
-> **Recomendação para go/no-go:** validar `tenant_agents`/`tenant_agent_config` na FASE 2 antes de optar por (A). O paradigma EvoNexus (Passo 0, pendente VPS) pode decidir entre (A) e (B) — **não decidir agora**.
+> **✅ DECIDIDO (2026-06-06): B — catálogo global + habilitação por tenant.** Evidência dos dois lados:
+>
+> - **Lado EvoNexus (FASE 0 §4–§5):** agentes são file-based e carregados **por nome** nos dois paths — `runner.py` (`--agent {name}`, linhas 130–143) e `chat-bridge.js` (`loadAgentFile(agentName, cwd)`, linhas 47–57). Frontmatter sem `tenant_id`/`owner`/`scope`; custom separado por prefixo `custom-`, não por tenant. O paradigma é **catálogo global com tenant implícito** (workspace = 1 cliente).
+> - **Lado CD (§1.5 + acima):** 15/15 agentes com `tenant_id NULL`; `tenant_agents` e `tenant_agent_config` **já existem** com estrutura certa + RLS (0 linhas — escafoldado, não cabeado).
+> - **Custo:** B **não troca a PK** de `agents` e **não mexe nas 8 FKs** (incl. `agent_runs` com 1.677 linhas de produção).
+>
+> O que o EvoNexus não tem e a CD precisa — "habilitar agente X para tenant Y" — é exatamente o que `tenant_agents` cobre (FASE 0 §5). **FASE 2 cabeia:** popular `tenant_agents` para o tenant `consult` + substituir `agents_read_all (true)` por gating via `tenant_agents.enabled`.
 
 ### 3.2 — `user_agent_access` (PK composta com texto, sem tenant)
 
 **Fato:** PK = `(user_id, agent_name text)`. `agent_name` é **texto livre, não-FK**; **não há `tenant_id`** nem cadeia FK para tenant. A RLS `user_agent_access_manage_admin` concede a **admin de qualquer tenant** (`EXISTS tenant_members WHERE role='admin'`, sem casar tenant) → vazamento cross-tenant potencial num mundo multi-tenant.
 
-**Redesign:** adicionar `tenant_id`, trocar `agent_name text` por FK ao `agents` (uuid, se §3.1-A) ou ao par (tenant, slug), e reescrever a policy admin para casar o tenant. Não é `ADD COLUMN` simples — muda a PK e a semântica da policy.
+**Redesign:** adicionar `tenant_id`, trocar `agent_name text` por FK ao `agents` — com B decidido (§3.1), a FK é direta ao slug `agents.id` — e reescrever a policy admin para casar o tenant. Não é `ADD COLUMN` simples — muda a PK e a semântica da policy.
 
 ### 3.3 — Tabelas que isolam só por cadeia de FK (confirmar na origem)
 
@@ -349,8 +376,8 @@ Princípio: **expand** (coluna nullable nova / tabela v2 paralela) → **backfil
 |------|--------|----------|---------|----------|
 | `agent_runs.tenant_id` (383 NULL) | já existe nullable | `UPDATE … SET tenant_id=consult WHERE tenant_id IS NULL` (383 linhas) | manter view global p/ runs de sistema OU migrar policy | depois: `SET NOT NULL` (se decidir) |
 | `agent_memories.tenant_id` | já existe nullable; **tabela vazia** | nada a backfillar | — | `SET NOT NULL` barato (0 linhas) |
-| `agents` (§3.1) | **decisão A vs B pendente** | se A: backfill `tenant_id=consult` nas 15 + gerar uuids; se B: popular `tenant_agents` | propagar nas 8 FKs (A) ou só habilitação (B) | só após validar 8 dependentes |
-| `user_agent_access` (§3.2) | `ADD tenant_id` nullable + nova coluna FK agente | backfill `tenant_id=consult` nas 7 linhas | nova PK paralela | aposentar PK antiga `(user_id, agent_name)` |
+| `agents` (§3.1) | **✅ B decidido** — PK e FKs intactas | popular `tenant_agents` para o tenant `consult` (habilitar os agentes certos) | RLS: trocar `agents_read_all (true)` por gating via `tenant_agents.enabled` | aposentar `agents_read_all` |
+| `user_agent_access` (§3.2) | `ADD tenant_id` nullable + FK real ao agente (slug, dado B) | backfill `tenant_id=consult` nas 7 linhas | nova PK paralela + policy admin com escopo de tenant | aposentar PK antiga `(user_id, agent_name)` |
 
 **Dados vivos a preservar:** `lojas` 1173, `customers` 1169, `agent_runs` 1677, `role_permissions` 112, `audit_log` 98. Nenhuma estratégia acima destrói linhas.
 
@@ -358,14 +385,16 @@ Princípio: **expand** (coluna nullable nova / tabela v2 paralela) → **backfil
 
 ## Passo 5 — Evidência faltante / pendências (para o CHECKPOINT)
 
-1. **Todo o lado EvoNexus (Passo 0)** — não acessível deste Windows; pendente leitura na VPS `/root/cd-evonexus-lab` (FASE 0). Coluna "alvo EvoNexus" da §Passo 2 vazia por isso.
-2. **Decisão A vs B em `agents`** (§3.1) — não tomada de propósito; depende de inspecionar `tenant_agents`/`tenant_agent_config` (conteúdo + uso no código) e do paradigma EvoNexus.
+1. ~~**Todo o lado EvoNexus (Passo 0)** — não acessível deste Windows; pendente leitura na VPS.~~ → ✅ **RESOLVIDO (2026-06-06):** FASE 0 rodada na VPS (`FASE-0-inventario-evonexus.md`, PR #156); Passo 0 e §2.1 preenchidos.
+2. ~~**Decisão A vs B em `agents`** (§3.1) — não tomada de propósito.~~ → ✅ **RESOLVIDO (2026-06-06): B decidido** com evidência dos dois lados (§3.1).
 3. **Definição das funções `is_member_of` / `is_admin_of`** não foi extraída (presumida SECURITY DEFINER) — confirmar na FASE 2.
-4. **Policy `customers_auth_all (true)`** e **`user_agent_access_manage_admin` sem escopo de tenant** — possíveis vazamentos cross-tenant; auditar na FASE 2.
+4. **Policy `customers_auth_all (true)`** e **`user_agent_access_manage_admin` sem escopo de tenant** — possíveis vazamentos cross-tenant; corrigir na FASE 2 onda 1 (junto com `agents_read_all`).
 5. Tabelas fora do escopo das 18 que também referenciam `lojas`/`customers`/`tenants` (vistas na §3.1) **não foram inventariadas individualmente** — só suas FKs. Inventário completo se/quando o redesign as tocar.
 
 ---
 
 ## 🛑 CHECKPOINT 1 — go/no-go
 
-Lado CD mapeado com output bruto (Passos 1–5). **Lado EvoNexus pendente VPS.** Nenhuma migration escrita, nada tocou produção. Aguardando decisão do Wandson para seguir à FASE 0 (VPS) ou FASE 2 (migrations CD).
+**Os dois lados mapeados com output bruto:** lado CD (Passos 1–5, extração ao vivo) + lado EvoNexus (Passo 0 via FASE 0/PR #156). Fork A vs B: **✅ B decidido** (§3.1). Nenhuma migration escrita, nada tocou produção.
+
+**Aguardando go do Wandson para a FASE 2 (onda 1):** plano de migrations versionadas — corrigir as 3 RLS permissivas (`customers_auth_all`, `user_agent_access_manage_admin`, `agents_read_all`), popular `tenant_agents` para o tenant `consult`, `agent_memories.tenant_id SET NOT NULL`, backfill `agent_runs.tenant_id` (383 → consult), redesign `user_agent_access` (§3.2). SQL mostrado e aprovado antes de aplicar; **nunca via MCP**.
