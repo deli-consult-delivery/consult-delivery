@@ -17,9 +17,9 @@
 
 ## 👉 PRÓXIMA AÇÃO (retomar aqui)
 
-1. **FASE 1 / lado CD** — rodar Passos 1–4 na instância Claude Code, com a trava: todo count/DDL no doc vem com **output bruto colado**. (Track T2)
-2. **Visual-first / Mapa de telas** — primeira entrega da nova track de design (ver as telas antes de codar). (Track T3)
-3. **Sessão VPS** — FASE 0 (inventário EvoNexus em `/root/cd-evonexus-lab`) + rotação de credenciais do GATE 0. (Tracks T2 + T5)
+1. **Go do CHECKPOINT 1 → FASE 2 onda 1** — plano de migrations versionadas: 3 RLS permissivas (`customers_auth_all`, `user_agent_access_manage_admin`, `agents_read_all`), popular `tenant_agents` (tenant consult), `agent_memories.tenant_id SET NOT NULL`, backfill `agent_runs.tenant_id` (383), redesign `user_agent_access`. SQL mostrado e aprovado antes de aplicar; **nunca via MCP**. (Tracks T2 + T5)
+2. **Mergear PR `cowork/tracker-protocolo-v2`** — Tracker/protocolo/T3/fatos CLAUDE.md (substitui #155 e #157, que tinham conflito por reuso de branch). (Track T2/T3)
+3. **Visual-first / Mapa de telas** — Wandson revisa o mapa v0 → T3(b) protótipo clicável. (Track T3)
 
 ---
 
@@ -48,6 +48,8 @@
 - [x] **D1 (runtime):** `@anthropic-ai/sdk` (não Agent SDK — não roda em Trigger.dev cloud) + camada multi-provider (Anthropic/Ollama/OpenRouter, BYO-key por tenant via Infisical). ✅ 2026-06-03 — ver `docs/evonexus-replica/DECISAO-001-runtime-provider-custo.md`.
 - [x] **D2 (Trigger.dev):** v4 (`npx trigger.dev@4.4.6 deploy`), não v3. ✅ 2026-06-03.
 - [x] **D3 (ambiente FASE 0):** FASE 0 roda na **VPS** (`187.127.25.24`) / `cd-evonexus-lab`, não do Windows. ✅ 2026-06-03.
+- [x] **D4 (fork A vs B em `agents`): B** — catálogo global + habilitação por tenant via `tenant_agents`/`tenant_agent_config`. Não troca a PK de `agents`, não mexe nas 8 FKs. ✅ 2026-06-06 — evidência dos dois lados em `docs/evonexus-replica/FASE-1-mapeamento-multitenant.md` §3.1 (FASE 0 §4–5 + extração ao vivo CD).
+- [x] **D5 (mandato Cowork):** Cowork executa direto tudo que conseguir — ler repo/DB, branch, commit, PR, comentários, docs, redigir planos e `.sql` (sem aplicar) — sem pedir caso a caso. **Reservado ao Wandson:** merge em `main` (exceto com aprovação explícita dele na conversa) · aprovar e **aplicar** migrations (nunca via MCP) · `DROP`/destrutivo · mensagens a clientes (drafts) · reabrir decisões travadas / 🛑 CHECKPOINTS · credenciais e VPS. ✅ 2026-06-06 (autorização do Wandson na sessão; detalhe no Tracker §Mandato Cowork).
 
 ---
 
@@ -60,6 +62,7 @@
 - Doc autoritativo / DB / código **vence** memória — e a divergência é registrada.
 - **Edit tool falha em match multi-linha por CRLF** → para edições programáticas usar scripts `.cjs`.
 - `gh pr merge` local pode falhar (worktree `main` travado) → verificar com `gh pr view N --json state,mergedAt`.
+- **Não reusar branch que já entrou em main por squash** — gera conflito fantasma (caso #155). Branch nova por entrega.
 
 ---
 
@@ -87,8 +90,8 @@
 |------------|------|--------|
 | Plano persistido | Este doc + ponteiro no CLAUDE.md | ✅ feito (2026-06-02) |
 | Decisão D1/D2/D3 | Runtime + multi-provider + ambiente FASE 0 (`DECISAO-001`) | ✅ DECIDIDO (2026-06-03) |
-| 🛑 CHECKPOINT 0 | Inventário técnico (FASE 0 na VPS) + sign-off | ⏳ FASE 0 ainda não rodada |
-| 🛑 CHECKPOINT 1 | Mapeamento do checklist | — |
+| 🛑 CHECKPOINT 0 | Inventário técnico (FASE 0 na VPS) + sign-off | ✅ FASE 0 merged em main (#156, `de81b88`) |
+| 🛑 CHECKPOINT 1 | Mapeamento do checklist | ✅ FASE 1 completa e merged em main (#152, `893e97e`; B decidido); **aguarda go do Wandson p/ FASE 2** |
 | 🛑 CHECKPOINT 2 | Schema + migrations (mostrar SQL antes de aplicar) | — |
 | 🛑 CHECKPOINT 3 | Plano faseado + checklist de completude | — |
 | FASE 4 | Build incremental + sign-off final | — |
@@ -96,17 +99,14 @@
 ### Próximos itens
 
 - [x] CHECKPOINT 0 — reconciliação analítica (convergência das leituras) ✅
-- [ ] ⏳ Commitar a versão atualizada do CHECKPOINT 0 (3 adjudicações) — via Claude Code
-- [ ] 🔒 **FASE 0** — inventário EvoNexus: bloqueado fora da VPS (`/root/cd-evonexus-lab`)
-- [ ] 🔄 **FASE 1 — mapeamento multi-tenant**
-  - [ ] Lado CD (Passos 1–4): aprovado pra executar, com trava de output bruto
-  - [ ] 👉 Lado EvoNexus (Passo 0): pendente sessão VPS — sem preencher de memória
-  - Branch: `wandson/evonexus-fase1-mapeamento` → PR (sem merge automático)
-- [ ] ⏳ FASE 2 — migrations versionadas (só depois do go no CHECKPOINT 1)
+- [x] Commitar a versão atualizada do CHECKPOINT 0 — adjudicações registradas na FASE 1 §3.1 e §Passo 5 (commit `0f62ebb`) ✅
+- [x] **FASE 0** — inventário EvoNexus: ✅ merged (`docs/evonexus-replica/FASE-0-inventario-evonexus.md`, #156)
+- [x] **FASE 1 — mapeamento multi-tenant** ✅ merged (#152): lado CD + Passo 0 reconciliado + decisão B (§3.1)
+- [ ] 👉 FASE 2 — migrations versionadas (aguarda go do CHECKPOINT 1; escopo da onda 1 na §PRÓXIMA AÇÃO)
 
 ### Ground truth — o que já existe na CD (estender, não recriar)
 
-Confirmado no schema real (`docs/deli-memory/recon/schema-inventory.md`, 2026-05-24) e nas migrations.
+Confirmado no schema real (`docs/deli-memory/recon/schema-inventory.md`, 2026-05-24), nas migrations e na extração ao vivo da FASE 1 (counts 2026-06-06: `agents` 15 · `agent_runs` 1677 · `lojas` 1173 · `customers` 1169).
 
 **Tabela `agents`** (após `20260512_003_create_agents.sql` + `20260603_004_agents_custom.sql`):
 
@@ -120,20 +120,20 @@ Confirmado no schema real (`docs/deli-memory/recon/schema-inventory.md`, 2026-05
 | `custom_prompt`, `custom_model`, `custom_max_tokens` | text/int | ALTER 004 |
 | `tenant_id` | uuid REFERENCES tenants(id) (NULL = global) | ALTER 004 |
 
-RLS `agents_tenant_isolation`: global visível a todos; custom só ao tenant via `tenant_members`. Multi-tenant do registro **já resolvido**. ⚠️ Inserir o agent ANTES de `logAgentRun` (FK).
+RLS `agents_tenant_isolation`: global visível a todos; custom só ao tenant via `tenant_members`. ⚠️ `agents_read_all (true)` será substituída por gating via `tenant_agents.enabled` (FASE 2, D4). ⚠️ Inserir o agent ANTES de `logAgentRun` (FK).
 
 **Outras tabelas a reusar:**
 
 | Tabela | Estado | Papel |
 |--------|--------|-------|
-| `agent_runs` | 12 cols, 171 linhas ✅ | Log unificado de execução (Atividade + Custos) |
+| `agent_runs` | 12 cols, 1677 linhas (383 c/ tenant NULL) ✅ | Log unificado de execução (Atividade + Custos) |
 | `tenant_agent_config` | 5 cols, 0 linhas (TD#42) | Config/modo por tenant+agente |
-| `tenant_agents` | 6 cols | Habilitação de agente por tenant |
+| `tenant_agents` | 6 cols, 0 linhas | Habilitação de agente por tenant (D4 cabeia na FASE 2) |
 | `agent_memories` | 9 cols, 0 linhas | Memória por agente/tenant — ativar |
 | `agent_drafts` | 19 cols, 0 linhas | Fluxo de aprovação já existe |
-| `roles` / `role_permissions` / `user_roles` | 0 linhas (TD#50) | RBAC — schema existe, falta popular |
-| `audit_log` | ✅ | Auditoria — estender ações |
-| `customers` | 1168 linhas | ⚠️ usar `customers`, **`clientes` não existe** |
+| `roles` / `role_permissions` / `user_roles` | 9 / 112 / 4 linhas | RBAC — schema existe e populado parcial |
+| `audit_log` | 98 linhas ✅ | Auditoria — estender ações |
+| `customers` | 1169 linhas | ⚠️ usar `customers`, **`clientes` não existe** |
 | `tenants`, `tenant_members`, `lojas` (+filhas) | ✅ | Base do isolamento multi-tenant |
 | `internal_channels` / `channel_messages` | ✅ | Chat por agente |
 | pgvector | extensão ativa | RAG (Conhecimento) e MemPalace |
@@ -142,6 +142,7 @@ RLS `agents_tenant_isolation`: global visível a todos; custom só ao tenant via
 ### Checklist Mestre — feature surface completo
 
 > **CORE** = paradigma, fiel, prioridade · **NATIVO** = CD já tem, usar o da CD · **ADAPTA** = mesma capacidade, mecanismo CD · **DEPOIS** = v2+
+> Mapeamento completo linha a linha (com alvo EvoNexus + evidência): `docs/evonexus-replica/FASE-1-mapeamento-multitenant.md` §2.1 + `FASE-0-inventario-evonexus.md` §6.
 
 #### PRINCIPAL
 | Tela | EvoNexus faz | Cat | Alvo CD |
@@ -212,8 +213,8 @@ RLS `agents_tenant_isolation`: global visível a todos; custom só ao tenant via
 
 ### Fases detalhadas
 
-- **FASE 0** — Inventário técnico (read-only). Ler código do EvoNexus (oracle, orquestrador, skills, memória, heartbeats, dashboard). Para cada item do checklist, confirmar COMO o EvoNexus implementa. Listar código CD existente. Saída: `docs/evonexus-replica/inventario-tecnico.md` com output bruto. ⚠️ Depende da VPS (D3). **🛑 CHECKPOINT 0.**
-- **FASE 1** — Mapeamento. Para CADA linha do checklist, confirmar/ajustar categoria + alvo CD + nota multi-tenant. Nenhuma linha sem destino. **🛑 CHECKPOINT 1.**
+- **FASE 0** — Inventário técnico (read-only). ✅ MERGED (#156): `docs/evonexus-replica/FASE-0-inventario-evonexus.md`. **🛑 CHECKPOINT 0 ✅.**
+- **FASE 1** — Mapeamento. ✅ MERGED (#152): lado CD + Passo 0 reconciliado + B decidido. **🛑 CHECKPOINT 1 — aguarda go.**
 - **FASE 2** — Desenho do framework + schema. As 5 peças detalhadas + migrations (ALTER only) + contratos. **🛑 CHECKPOINT 2** (mostrar SQL antes de aplicar).
 - **FASE 3** — Plano faseado + checklist de completude. Tabela rastreando CADA tela → status + critério de validado. CORE primeiro, ADAPTA depois, DEPOIS por último; NATIVO = só wiring. **🛑 CHECKPOINT 3.**
 - **FASE 4** — Build incremental. Uma feature por vez, na ordem. Migrations ALTER (backup antes). Testar com `tenant_id` real provando isolamento (A não vê B). Output bruto. Ao final: verificação de completude — cruzar build × checklist, listar o que ficou pra depois com motivo, pedir sign-off do Wandson.
@@ -224,7 +225,7 @@ RLS `agents_tenant_isolation`: global visível a todos; custom só ao tenant via
 
 > A track que você pediu: ver/ajustar as telas **antes** de codar ou mexer no banco.
 
-- [ ] ⏳ **(a) Mapa de telas** — cada tela, função, elementos-chave, fluxo entre telas
+- [x] **(a) Mapa de telas** — v0 entregue: `WikiBrain/wiki/T3 — Mapa de Telas (Console Interno).md` (32 telas, shortlist MVP = 14) — aguarda revisão do Wandson
 - [ ] ⏳ **(b) Protótipo clicável** (React, dados fake, sem backend) — navegar, mudar cor/botão/layout, aprovar
 - [ ] ⏳ Travar inventário de telas + fluxos — só então parte pra código/DB
 
@@ -254,6 +255,7 @@ RLS `agents_tenant_isolation`: global visível a todos; custom só ao tenant via
   - [ ] Rotacionar token Telegram (BotFather)
   - [ ] Limpar cópias em texto na VPS (`.git-credentials`, history, `.claude/*.jsonl`)
 - [ ] ⏳ Hardening: gateway root → usuário dedicado · remover `claude-debug` key · fail2ban `bantime.increment`
+- [ ] 👉 **3 RLS permissivas** (`customers_auth_all`, `user_agent_access_manage_admin`, `agents_read_all`) — corrigir na FASE 2 onda 1 (must-fix antes do 2º tenant real). Evidência: FASE 1 §1.3/§Passo 5.
 
 ---
 
@@ -305,7 +307,10 @@ RLS `agents_tenant_isolation`: global visível a todos; custom só ao tenant via
 
 ### Histórico de atualizações
 
-- 2026-06-06 (v2) — fusão PLANO-MESTRE.md (EvoNexus-replica) + mapa-vivo; arquivo movido para raiz; antigo `docs/evonexus-replica/PLANO-MESTRE.md` tombstonado.
+- 2026-06-06 (v2.3) — **#156 e #152 merged em main** (`de81b88`, `893e97e`) com aprovação explícita do Wandson; #155/#157 reconstruídos em `cowork/tracker-protocolo-v2` (conflito por reuso de branch pós-squash); regra dura nova: branch nova por entrega.
+- 2026-06-06 (v2.2) — **D5 registrada:** mandato Cowork (autorização do Wandson; limites preservados).
+- 2026-06-06 (v2.1) — FASE 0 publicada (PR #156); FASE 1 reconciliada (decisão **B** travada como D4 — commit `0f62ebb`).
+- 2026-06-06 (v2) — fusão PLANO-MESTRE.md (EvoNexus-replica) + mapa-vivo; arquivo movido para raiz.
 - 2026-06-06 (v1-semente) — mapa-vivo criado; Hermes 3A fechado com evidência; FASE 1 lado CD aprovada pra executar.
 - 2026-06-03 — D1/D2/D3 decididos (`DECISAO-001-runtime-provider-custo.md`).
 - 2026-06-02 — plano persistido (prompt-base verbatim preservado em `docs/evonexus-replica/PLANO-MESTRE-legado.md`).
