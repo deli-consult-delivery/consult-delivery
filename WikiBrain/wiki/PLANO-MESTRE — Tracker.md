@@ -6,12 +6,29 @@
 
 ---
 
+## 🔓 Mandato Cowork (registrado 2026-06-06 — autorização do Wandson na sessão)
+
+> "Você está autorizado por mim, a partir de agora, fazer por aqui mesmo tudo aquilo que você conseguir."
+
+**Liberado sem pedir caso a caso:** ler repo/DB · criar branch · commitar · abrir/atualizar PRs e comentários via API · editar docs/código em branch · atualizar Tracker/PLANO-MESTRE · redigir planos e `.sql` de migration (sem aplicar).
+
+**Continua reservado ao Wandson (protege produção — fora do mandato):**
+- Merge em `main` (review humano)
+- **Aplicar** migrations — SQL mostrado e aprovado antes; **NUNCA via MCP**
+- `DROP`/destrutivo em produção (proibido sempre)
+- Mensagens a clientes (fluxo drafts)
+- Reabrir decisões travadas · 🛑 CHECKPOINTS de fase
+- Credenciais/rotação · comandos na VPS
+
+---
+
 ## 🔴 Onde parou
 
 _Última sessão: 2026-06-06 (Cowork — sessão 5.2)_
 
 - **5.2 fechado:** PR **#156** aberto (FASE 0 — a branch `wandson/evonexus-fase0` JÁ estava em origin; o registro anterior de "branch ausente" era fetch local falho no Windows). Reconciliação FASE 0 → FASE 1 commitada na branch do #152 (`0f62ebb`): Passo 0 preenchido a partir do doc da FASE 0, coluna "alvo EvoNexus" preenchida (§2.1), **decisão B registrada** com evidência dos dois lados (§3.1), pendências 1–2 do Passo 5 resolvidas, CHECKPOINT 1 atualizado para go/no-go da FASE 2.
 - **Conector GitHub com escrita:** app "Claude Github MCP Connector" instalado + autorizado — Cowork agora cria branch, commita e abre PR via API sozinho (teste: branch `cowork/write-test`, pode deletar).
+- **Mandato Cowork registrado** (seção acima + D5 no PLANO-MESTRE).
 - 5.1 fechado na sessão anterior (commits `52bfa13` + `9ebf138` na branch do #155).
 - **⚠️ Ainda trackeados indevidamente:** `WikiBrain/.obsidian/*` (6 arquivos) e `WikiBrain/log.md` — sugerido `git rm --cached` em commit futuro (aguarda ok).
 
@@ -21,7 +38,7 @@ _Última sessão: 2026-06-06 (Cowork — sessão 5.2)_
 
 1. **Wandson mergear, nesta ordem:** #155 (Tracker) · #156 (FASE 0) · #152 (FASE 1 reconciliada — depois do #156, pois referencia o doc da FASE 0).
 2. **Go do CHECKPOINT 1 → 5.3 / FASE 2 onda 1:** Cowork redige plano + `.sql` versionados — 3 RLS permissivas (`customers_auth_all`, `user_agent_access_manage_admin`, `agents_read_all`), popular `tenant_agents` (tenant consult), `agent_memories.tenant_id SET NOT NULL`, backfill `agent_runs.tenant_id` (383 → consult), redesign `user_agent_access`. **Wandson aprova o SQL antes de aplicar; NUNCA via MCP.**
-3. **5.4** — limpeza CLAUDE.md (Eduardo saiu, FASE 0 rodou, DELI COO/CEF alinhar) · **5.5** — consolidar docs de plano.
+3. **5.4** — limpeza CLAUDE.md (Eduardo saiu, FASE 0 rodou, DELI COO/CEO alinhar) · **5.5** — consolidar docs de plano.
 4. **T3** — Wandson revisa mapa de telas v0 → T3(b) protótipo clicável.
 
 ---
@@ -49,7 +66,8 @@ _Última sessão: 2026-06-06 (Cowork — sessão 5.2)_
 - Correção de registro: branch `wandson/evonexus-fase0` JÁ estava em origin (fetch local Windows tinha falhado silenciosamente)
 - **PR #156 aberto** — FASE 0 (inventário técnico EvoNexus, rodado na VPS)
 - **Reconciliação FASE 0 → FASE 1** (`0f62ebb` na branch do #152): Passo 0 preenchido, §2.1 alvo EvoNexus, **decisão B registrada** com evidência dos dois lados, CHECKPOINT 1 → go/no-go FASE 2
-- PLANO-MESTRE.md atualizado (B nas decisões travadas, checkpoints T2, próxima ação)
+- PLANO-MESTRE.md atualizado (B como D4 nas decisões travadas, checkpoints T2, próxima ação)
+- **Mandato Cowork registrado** (autorização do Wandson; seção no topo deste Tracker + D5 no PLANO-MESTRE)
 
 ### 2026-06-06 (sessão 2 — Cowork assume via handoff)
 - Cowork leu Tracker + PLANO-MESTRE + verificou PRs na fonte (GitHub) e branch local
