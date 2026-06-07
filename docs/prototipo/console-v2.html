@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Consult Delivery · Console v2 — Protótipo T3(b)</title>
+<style>
+:root{--bg:#0b0f1a;--panel:#111827;--panel2:#0e1424;--line:#1e2a44;--tx:#e6ecf7;--tx2:#8b9bb8;--ac:#00ffa7;--ac2:#00c281;--red:#ea1d2c;--amber:#fbbf24;--blue:#60a5fa;--purple:#c084fc}
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,-apple-system,sans-serif}
+body{background:var(--bg);color:var(--tx);font-size:14px;overflow:hidden}
+#app{display:flex;height:100vh}
+/* sidebar */
+#sb{width:232px;min-width:232px;background:var(--panel2);border-right:1px solid var(--line);display:flex;flex-direction:column;overflow-y:auto}
+#sb .brand{display:flex;align-items:center;gap:10px;padding:16px 14px;border-bottom:1px solid var(--line)}
+#sb .brand .logo{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--red),#ff6b35);display:flex;align-items:center;justify-content:center;font-size:16px}
+#sb .brand b{font-size:14px}.brand small{display:block;color:var(--ac);font-size:10px;letter-spacing:1px}
+#sb .grp{padding:14px 14px 4px;font-size:10px;letter-spacing:1.5px;color:var(--tx2);text-transform:uppercase}
+#sb a{display:flex;align-items:center;gap:9px;padding:7px 14px;color:var(--tx2);text-decoration:none;font-size:13px;border-left:2px solid transparent}
+#sb a:hover{color:var(--tx);background:#131c30}
+#sb a.on{color:var(--ac);background:#0f1f1e;border-left-color:var(--ac)}
+#sb a .ic{width:16px;text-align:center;opacity:.9}
+#sb .cred{margin-top:auto;padding:12px 14px;border-top:1px solid var(--line);font-size:11px;color:var(--tx2)}
+#sb .cred .bar{height:5px;background:#1a2440;border-radius:3px;margin-top:6px}#sb .cred .bar i{display:block;height:5px;width:34%;background:var(--ac);border-radius:3px}
+/* topbar */
+#main{flex:1;display:flex;flex-direction:column;min-width:0}
+#tb{display:flex;align-items:center;gap:14px;padding:10px 20px;border-bottom:1px solid var(--line);background:var(--panel2)}
+#tb .crumb{color:var(--tx2);font-size:13px}#tb .crumb b{color:var(--tx)}
+#tb .search{flex:1;max-width:480px;background:#0d1322;border:1px solid var(--line);border-radius:8px;padding:7px 12px;color:var(--tx2);font-size:13px}
+#tb select{background:#0d1322;color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:13px}
+#tb .pill{background:#0d1322;border:1px solid var(--line);border-radius:20px;padding:5px 12px;font-size:12px;color:var(--tx2)}
+#tb .pill b{color:var(--ac)}
+/* content */
+#ct{flex:1;overflow-y:auto;padding:22px 26px}
+h1{font-size:20px;margin-bottom:2px}h1 .tm{color:var(--ac)}
+.sub{color:var(--tx2);font-size:13px;margin-bottom:18px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:18px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+.kpi .v{font-size:22px;font-weight:700;margin:4px 0}.kpi .l{color:var(--tx2);font-size:12px}.kpi .d{font-size:11px;color:var(--ac)}
+.kpi .d.neg{color:var(--red)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+.card h3{font-size:14px;margin-bottom:10px}
+.grid{display:grid;gap:12px}.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{color:var(--tx2);font-weight:500;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:7px 10px;border-bottom:1px solid var(--line)}
+td{padding:9px 10px;border-bottom:1px solid #16203a}
+tr:hover td{background:#131c30}
+.bdg{display:inline-block;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:600}
+.b-ok{background:#06291f;color:var(--ac)}.b-warn{background:#2b2208;color:var(--amber)}.b-err{background:#2b0d10;color:#ff8a93}.b-info{background:#0d1f33;color:var(--blue)}.b-mut{background:#161e33;color:var(--tx2)}
+.btn{display:inline-block;background:var(--ac);color:#04110c;border:none;border-radius:8px;padding:7px 14px;font-size:12.5px;font-weight:700;cursor:pointer}
+.btn.sec{background:#152038;color:var(--tx);border:1px solid var(--line)}
+.btn.danger{background:#2b0d10;color:#ff8a93;border:1px solid #4a1a20}
+.btn.sm{padding:4px 10px;font-size:11.5px}
+.btn:hover{filter:brightness(1.15)}
+/* agent cards */
+.acard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;cursor:pointer;position:relative;transition:border .15s}
+.acard:hover{border-color:var(--ac2)}
+.acard .av{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;color:#04110c;margin-bottom:10px}
+.acard b{font-size:14px}.acard p{color:var(--tx2);font-size:12px;margin:4px 0 10px;min-height:30px}
+.acard .ft{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--tx2)}
+.tag{position:absolute;top:12px;right:12px;font-size:10px;color:var(--tx2);background:#0d1322;padding:2px 8px;border-radius:8px}
+/* toggle */
+.tgl{position:relative;width:36px;height:20px;background:#1a2440;border-radius:10px;cursor:pointer;transition:.15s;flex:none}
+.tgl.on{background:var(--ac2)}
+.tgl i{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:8px;background:#fff;transition:.15s}
+.tgl.on i{left:18px}
+.row{display:flex;align-items:center;gap:10px}
+.spread{display:flex;justify-content:space-between;align-items:center}
+/* bars chart */
+.bars{display:flex;align-items:flex-end;gap:8px;height:120px;padding:6px 0}
+.bars .b{flex:1;background:linear-gradient(180deg,var(--ac),var(--ac2));border-radius:4px 4px 0 0;min-height:4px;position:relative}
+.bars .b span{position:absolute;bottom:-18px;left:0;right:0;text-align:center;font-size:10px;color:var(--tx2)}
+.tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.tabs button{background:#0d1322;border:1px solid var(--line);color:var(--tx2);border-radius:8px;padding:6px 14px;font-size:12.5px;cursor:pointer}
+.tabs button.on{color:var(--ac);border-color:var(--ac2);background:#0f1f1e}
+.note{background:#0d1f33;border:1px solid #1b3a5c;border-radius:10px;padding:10px 14px;font-size:12.5px;color:#9fc6ef;margin-bottom:14px}
+.empty{color:var(--tx2);font-size:13px;padding:30px;text-align:center}
+/* login */
+#login{position:fixed;inset:0;background:radial-gradient(700px 500px at 70% 20%,#13203a 0%,var(--bg) 60%);display:flex;align-items:center;justify-content:center;z-index:50}
+#login .box{width:380px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:28px}
+#login input{width:100%;background:#0d1322;border:1px solid var(--line);border-radius:8px;padding:10px 12px;color:var(--tx);margin:6px 0 12px;font-size:13px}
+.proto{position:fixed;bottom:10px;right:14px;font-size:10px;color:#3d4d72;z-index:60}
+::-webkit-scrollbar{width:9px}::-webkit-scrollbar-thumb{background:#1b2742;border-radius:5px}
+</style>
+</head>
+<body>
+<div id="login">
+  <div class="box">
+    <div class="row" style="gap:12px;margin-bottom:18px"><div class="logo" style="width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,var(--red),#ff6b35);display:flex;align-items:center;justify-content:center;font-size:20px">🚀</div><div><b style="font-size:16px">Consult Delivery</b><div style="color:var(--ac);font-size:10px;letter-spacing:2px">CONSOLE v2 · PROTÓTIPO</div></div></div>
+    <label style="font-size:12px;color:var(--tx2)">E-mail</label>
+    <input value="wandson@consultdelivery.com.br">
+    <label style="font-size:12px;color:var(--tx2)">Senha</label>
+    <input type="password" value="••••••••••">
+    <label style="font-size:12px;color:var(--tx2)">Operar como (tenant)</label>
+    <select id="loginTenant" style="width:100%;background:#0d1322;border:1px solid var(--line);border-radius:8px;padding:10px;color:var(--tx);margin:6px 0 16px"></select>
+    <button class="btn" style="width:100%" onclick="doLogin()">Entrar no console</button>
+    <div style="text-align:center;margin-top:12px;font-size:11px;color:var(--tx2)">S-00 · Login + seleção de tenant · RLS define o que cada um vê</div>
+  </div>
+</div>
+<div id="app" style="display:none">
+  <nav id="sb"></nav>
+  <div id="main">
+    <div id="tb">
+      <span class="crumb">Plataforma › <b id="crumb">Visão Geral</b></span>
+      <input class="search" placeholder="🔍  Buscar clientes, lojas, agentes, runs…">
+      <span class="pill">Créditos <b id="cred">6,5k</b></span>
+      <select id="tenantSel" onchange="setTenant(this.value)"></select>
+      <span class="pill">🔔 <b>3</b></span>
+      <span class="pill" style="background:linear-gradient(135deg,var(--red),#ff6b35);color:#fff;border:none"><b style="color:#fff">WS</b></span>
+    </div>
+    <div id="ct"></div>
+  </div>
+</div>
+<div class="proto">PROTÓTIPO T3(b) · dados fictícios · nada aqui toca o sistema real</div>
+<script>
+/* ================= DADOS FAKE ================= */
+const TENANTS=[
+ {id:'consult',nome:'Consult Delivery',cor:'#ea1d2c',plano:'Interno',lojas:['Uraka Burger','Salgados da Mônica','Pizza Forte','Açaí do Vale'],agentes:'todos'},
+ {id:'uraka',nome:'Uraka Burger (cliente)',cor:'#fbbf24',plano:'Performance',lojas:['Uraka Burger — Centro','Uraka Burger — Cidade Nova'],agentes:['deli','breno','cora','analise-ifood','bom-dia','encerramento']},
+ {id:'monica',nome:'Salgados da Mônica (cliente)',cor:'#60a5fa',plano:'Light',lojas:['Salgados da Mônica'],agentes:['breno','analise-ifood','bom-dia']}
+];
+const AGENTS=[
+ {id:'deli',n:'DELI',d:'COO digital — orquestração e monitoramento',cat:'orquestrador',cor:'#ea1d2c',runs:42,t:'~1 min'},
+ {id:'lara',n:'LARA',d:'CRM food service + régua de disparo',cat:'especialista',cor:'#e879f9',runs:12,t:'~45s'},
+ {id:'vera',n:'VERA',d:'BI e relatórios semanais',cat:'especialista',cor:'#34d399',runs:8,t:'~1 min'},
+ {id:'breno',n:'BRENO',d:'Atendimento e suporte ao cliente',cat:'especialista',cor:'#60a5fa',runs:36,t:'~20s'},
+ {id:'cora',n:'CORA',d:'Cobrança inteligente e régua de inadimplência',cat:'especialista',cor:'#4ade80',runs:9,t:'~30s'},
+ {id:'sofia',n:'SOFIA',d:'SDR / prospecção de novos clientes',cat:'especialista',cor:'#c084fc',runs:4,t:'~2 min'},
+ {id:'max',n:'MAX',d:'Consultor técnico e auditoria de cardápio',cat:'especialista',cor:'#fbbf24',runs:2,t:'~2 min'},
+ {id:'nova',n:'NOVA',d:'Desenho de automações IA para clientes',cat:'especialista',cor:'#f8fafc',runs:1,t:'~1 min'},
+ {id:'analise-ifood',n:'Análise iFood',d:'Análise completa de loja iFood',cat:'especialista',cor:'#fb7185',runs:31,t:'~4 min'},
+ {id:'bom-dia',n:'Bom Dia',d:'Imagens e mensagens de abertura',cat:'rotina',cor:'#fde047',runs:214,t:'~15s'},
+ {id:'encerramento',n:'Encerramento',d:'Fechamento de expediente',cat:'rotina',cor:'#94a3b8',runs:198,t:'~15s'},
+ {id:'loja-gpt',n:'Loja-GPT',d:'Chat com contexto da loja',cat:'especialista',cor:'#5eead4',runs:16,t:'~40s'}
+];
+const APROV=[
+ {id:1,ag:'CORA',tipo:'Mensagem de cobrança',alvo:'Uraka Burger — fatura R$ 890 (12d atraso)',origem:'régua D+12',risco:'amarelo',txt:'Oi, tudo bem? Notamos que a fatura de março segue em aberto…'},
+ {id:2,ag:'MIA',tipo:'Sugestão de resposta',alvo:'Conversa WhatsApp — Salgados da Mônica',origem:'monitor 15min',risco:'verde',txt:'Cliente perguntou sobre prazo de entrega da campanha…'},
+ {id:3,ag:'LARA',tipo:'Post de oferta',alvo:'Campanha junho — Açaí do Vale',origem:'calendário editorial',risco:'verde',txt:'🌟 Oferta da semana: açaí 500ml com 20% off…'},
+ {id:4,ag:'BRENO',tipo:'Resposta off-hours',alvo:'Pizza Forte — cliente final',origem:'webhook 23:40',risco:'verde',txt:'Nosso horário de atendimento é das 18h às 23h…'},
+ {id:5,ag:'CORA',tipo:'Escalonamento',alvo:'Salgados da Mônica — fatura R$ 450 (31d)',origem:'régua D+30',risco:'vermelho',txt:'Sugestão: pausar serviços e acionar contato direto…'}
+];
+const SKILLS=[['create-agent','Cria agente novo guiado','global'],['analise-cardapio','Audita cardápio iFood','global'],['regua-cobranca','Régua de inadimplência D+3/7/12/30','global'],['post-oferta','Gera post de oferta (nunca “promoção”)','global'],['resumo-semanal','Resumo BI da semana','global'],['boas-vindas-uraka','Onboarding custom Uraka','tenant']];
+const ROTINAS=[['bom-dia','Diária 06:00','Última: hoje 06:00 · ok',true],['encerramento','Diária 23:30','Última: ontem 23:30 · ok',true],['mia-batch','A cada 15 min','Última: há 4 min · ok',true],['vera-semanal','Seg 08:00','Última: seg · ok',true],['cora-regua','Diária 09:00','Última: hoje 09:00 · 2 aprovações geradas',true],['backup-kb','Dom 03:00','Última: dom · ok',false]];
+const RUNS=[['deli-conversa','DELI','consult','ok','$0.04','38s','há 12 min'],['breno-responder','BRENO','uraka','ok','$0.01','9s','há 26 min'],['mia-batch','MIA','consult','ok','$0.02','71s','há 4 min'],['analise-ifood-run','Análise iFood','monica','ok','$0.31','3m52s','há 2 h'],['cora-analisar','CORA','uraka','ok','$0.03','24s','há 3 h'],['vera-snapshot','VERA','consult','falha','$0.00','2s','há 5 h'],['bom-dia','Bom Dia','consult','ok','$0.01','12s','hoje 06:00']];
+const CUSTOS=[['Seg',2.1],['Ter',3.4],['Qua',2.8],['Qui',4.9],['Sex',3.2],['Sáb',1.4],['Dom',1.1]];
+const USERS=[['Wandson Silva','wandson@consultdelivery.com.br','admin','agora'],['DELI (service)','deli@consultdelivery.com.br','deli_owner','há 4 min']];
+let enab={};TENANTS.forEach(t=>{enab[t.id]={};AGENTS.forEach(a=>{enab[t.id][a.id]=(t.agentes==='todos')||t.agentes.includes(a.id)})});
+let TEN='consult',aprovados=[],rejeitados=[];
+const $=id=>document.getElementById(id);
+const ten=()=>TENANTS.find(t=>t.id===TEN);
+/* ================= TELAS ================= */
+const kpi=(l,v,d,neg)=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="d ${neg?'neg':''}">${d||''}</div></div>`;
+const tbl=(cols,rows)=>`<table><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</table>`;
+const bOK='<span class="bdg b-ok">ativo</span>',bMut='<span class="bdg b-mut">—</span>';
+function generic(t,desc,kpis,cols,rows,acao){return `<h1>${t}</h1><div class="sub">${desc}</div>${kpis?`<div class="kpis">${kpis}</div>`:''}<div class="card"><div class="spread" style="margin-bottom:10px"><h3 style="margin:0">${t}</h3>${acao?`<button class="btn sm">${acao}</button>`:''}</div>${tbl(cols,rows)}</div>`}
+const SCREENS={
+ dashboard:{l:'Visão Geral',g:'INÍCIO',ic:'▦',r:()=>{const ag=AGENTS.filter(a=>enab[TEN][a.id]);const pend=APROV.filter(a=>!aprovados.includes(a.id)&&!rejeitados.includes(a.id));return `<h1>Visão Geral <span class="tm">· ${ten().nome}</span></h1><div class="sub">O pulso do negócio em uma tela — paridade EvoNexus “Visão geral”, escopado por tenant.</div>
+ <div class="kpis">${kpi('Agentes habilitados',ag.length,'de '+AGENTS.length+' no catálogo')}${kpi('Execuções (7d)','312','+18% vs semana ant.')}${kpi('Custo IA (7d)','$ 18,90','dentro do orçamento')}${kpi('Aprovações pendentes',pend.length,pend.length>2?'ação necessária':'sob controle',pend.length>2)}${kpi('Lojas ativas',ten().lojas.length,'')}${kpi('Alertas','2','churn · inadimplência',true)}</div>
+ <div class="grid g2"><div class="card"><div class="spread"><h3>⚡ Fila de aprovações (propõe-e-aprova)</h3><a href="#aprovacoes" class="btn sm sec">abrir fila</a></div>${pend.slice(0,3).map(a=>`<div class="spread" style="padding:9px 0;border-bottom:1px solid #16203a"><div><b>${a.ag}</b> · ${a.tipo}<div style="color:var(--tx2);font-size:12px">${a.alvo}</div></div><span class="bdg ${a.risco==='vermelho'?'b-err':a.risco==='amarelo'?'b-warn':'b-ok'}">${a.risco}</span></div>`).join('')||'<div class="empty">Fila limpa ✅</div>'}</div>
+ <div class="card"><h3>📈 Custo IA por dia</h3><div class="bars">${CUSTOS.map(c=>`<div class="b" style="height:${c[1]*18}px"><span>${c[0]}</span></div>`).join('')}</div><div style="margin-top:22px;font-size:12px;color:var(--tx2)">Detalhe por agente em <a href="#custos" style="color:var(--ac)">Custos</a></div></div></div>
+ <div class="card"><h3>🕒 Atividade recente</h3>${tbl(['Task','Agente','Status','Custo','Quando'],RUNS.slice(0,5).map(r=>[r[0],r[1],r[3]==='ok'?'<span class="bdg b-ok">ok</span>':'<span class="bdg b-err">falha</span>',r[4],r[6]]))}</div>`}},
+ deli:{l:'DELI · COO',g:'INÍCIO',ic:'🚀',r:()=>`<h1>DELI <span class="tm">Hub™</span></h1><div class="sub">Sua equipe de agentes IA. Pergunte, delegue, e veja acontecer.</div>
+ <div class="card" style="border-color:#3b1e5e;background:linear-gradient(135deg,#131027,#0e1424)"><div style="display:flex;gap:10px"><input class="search" style="max-width:none;flex:1" placeholder="Descreva uma tarefa pra DELI orquestrar entre seus agentes…"><button class="btn">Delegar →</button></div><div style="margin-top:10px;font-size:12px;color:var(--tx2)">Semáforo: <span class="bdg b-ok">verde executa</span> <span class="bdg b-warn">amarelo propõe</span> <span class="bdg b-err">vermelho exige APROVADO</span></div></div>
+ <div class="card"><h3>Decisões recentes da DELI</h3>${tbl(['Quando','Decisão','Semáforo','Resultado'],[['há 12 min','Acionou CORA para régua D+12 da Uraka','🟡 amarelo','aguardando aprovação'],['há 2 h','Disparou Análise iFood — Salgados da Mônica','🟢 verde','concluída · $0.31'],['hoje 06:02','Validou rotina Bom Dia (4 lojas)','🟢 verde','ok'],['ontem','Sugeriu pausar campanha de baixa conversão','🔴 vermelho','rejeitada por Wandson']])}</div>`},
+ hub:{l:'Agentes (catálogo)',g:'AGENTES IA',ic:'◈',r:()=>{const t=ten();return `<h1>Painel de Agentes <span class="tm">· ${t.nome}</span></h1><div class="sub">Catálogo global + <b style="color:var(--ac)">habilitação por tenant</b> (tenant_agents — já cabeada no banco). Troque o tenant no topo e veja a lista mudar.</div>
+ <div class="note">🔐 O que está desligado aqui é invisível para o cliente — RLS <code>agents_select_gated</code> em produção desde a onda 1.</div>
+ <div class="grid g3">${AGENTS.map(a=>{const on=enab[TEN][a.id];return `<div class="acard" style="${on?'':'opacity:.45'}"><span class="tag">${a.t}</span><div class="av" style="background:${a.cor}">${a.n[0]}</div><b>${a.n}</b><p>${a.d}</p><div class="ft"><span>${on?a.runs+' execuções':'desabilitado'}</span><div class="row"><span style="font-size:10px">${on?'ON':'OFF'}</span><div class="tgl ${on?'on':''}" onclick="event.stopPropagation();tg('${a.id}')"><i></i></div></div></div></div>`}).join('')}</div>`}},
+ agente:{l:'Agente · config',g:'AGENTES IA',ic:'⚙',r:()=>`<h1>DELI <span class="tm">· configuração</span></h1><div class="sub">Perfil · modo de operação · provider · limites — por tenant (tenant_agent_config).</div>
+ <div class="tabs"><button class="on">Config</button><button>Perfil/Prompt</button><button>Memória</button><button>Runs</button><button>Chat</button></div>
+ <div class="grid g2"><div class="card"><h3>Modo de operação (override do tenant)</h3>
+ ${['humano — só sugere, humano executa','híbrido — age no seguro, pede aprovação no sensível','IA pura — age sozinho, humano monitora'].map((m,i)=>`<label class="row" style="padding:8px 0;cursor:pointer"><input type="radio" name="modo" ${i===1?'checked':''}> <span style="font-size:13px">${m}</span></label>`).join('')}
+ <div style="margin-top:8px;font-size:12px;color:var(--tx2)">Herdado do tenant: <b>híbrido</b></div></div>
+ <div class="card"><h3>Provider & custos (D1 multi-provider)</h3>
+ <label style="font-size:12px;color:var(--tx2)">Provider</label><br><select style="width:100%;background:#0d1322;border:1px solid var(--line);border-radius:8px;padding:9px;color:var(--tx);margin:6px 0 12px"><option>Anthropic · claude-sonnet-4-6 (BYO-key via Infisical)</option><option>Ollama Cloud · kimi-k2.6</option><option>OpenRouter · fallback</option></select>
+ <label style="font-size:12px;color:var(--tx2)">Limite de custo/mês</label><br><input class="search" style="width:100%;margin:6px 0 12px" value="$ 50,00">
+ <div class="row"><div class="tgl on"><i></i></div><span style="font-size:13px">Alertar a 80% do limite</span></div></div></div>
+ <div class="card"><h3>Ferramentas permitidas (RBAC)</h3><div class="grid g3">${['ler lojas','ler métricas','disparar análise','criar draft','enviar telegram interno','escrever memória'].map((f,i)=>`<div class="row spread" style="background:#0d1322;border:1px solid var(--line);border-radius:8px;padding:8px 12px"><span style="font-size:12.5px">${f}</span><div class="tgl ${i<5?'on':''}"><i></i></div></div>`).join('')}</div></div>
+ <button class="btn">Salvar configuração</button> <button class="btn sec">Testar agente</button>`},
+ skills:{l:'Habilidades (Skills)',g:'AGENTES IA',ic:'✎',r:()=>generic('Habilidades','Markdown-as-tool — paridade EvoNexus Skills. Globais (catálogo CD) vs custom por tenant.',kpi('Skills globais','5')+kpi('Custom deste tenant','1')+kpi('Em uso por agentes','9'),['Skill','Descrição','Escopo','Ações'],SKILLS.map(s=>[`<b>${s[0]}</b>`,s[1],s[2]==='global'?'<span class="bdg b-info">global</span>':'<span class="bdg b-ok">tenant</span>','<button class="btn sm sec">editar</button>']),'+ Nova skill')},
+ rotinas:{l:'Rotinas',g:'AGENTES IA',ic:'⏱',r:()=>generic('Rotinas (cron)','Trigger.dev v4 — paridade EvoNexus Routines. Métricas por tenant.',kpi('Ativas','5')+kpi('Execuções hoje','38')+kpi('Falhas 7d','1','vera-snapshot',true),['Rotina','Agenda','Status','Ativa'],ROTINAS.map(r=>[`<b>${r[0]}</b>`,r[1],r[2],`<div class="tgl ${r[3]?'on':''}"><i></i></div>`]),'+ Nova rotina')},
+ tarefas:{l:'Tarefas (one-off)',g:'AGENTES IA',ic:'☑',r:()=>generic('Tarefas agendadas','Ações únicas agendadas — paridade EvoNexus Tasks.',null,['Tarefa','Agente','Quando','Status'],[['Reanalisar cardápio pós-mudança','MAX','amanhã 09:00','<span class="bdg b-info">agendada</span>'],['Exportar relatório mensal','VERA','01/07 08:00','<span class="bdg b-info">agendada</span>'],['Migrar KB iFood do lab','DELI','concluída ontem','<span class="bdg b-ok">ok</span>']],'+ Nova tarefa')},
+ gatilhos:{l:'Gatilhos',g:'AGENTES IA',ic:'⚡',r:()=>generic('Gatilhos (webhooks & eventos)','Edge Functions + Trigger.dev events — paridade EvoNexus Triggers.',null,['Gatilho','Fonte','Ação','Execuções 7d'],[['mensagem-whatsapp','Evolution webhook','BRENO responder / MIA registrar','412'],['fatura-vencida','Asaas webhook','CORA analisar devedor','9'],['novo-pedido-ifood','poll 5min','atualizar métricas da loja','188']],'+ Novo gatilho')},
+ heartbeats:{l:'Heartbeats',g:'AGENTES IA',ic:'❤',r:()=>generic('Heartbeats','Agentes proativos: acorda → decide → age/dorme — paridade EvoNexus.',null,['Heartbeat','Agente','Intervalo','Decisão mais recente','Ativo'],[['deli-4h','DELI','4h','“work” — revisou pipeline de aprovações','<div class="tgl on"><i></i></div>'],['cora-diario','CORA','24h','“work” — 2 cobranças propostas','<div class="tgl on"><i></i></div>'],['vera-6h','VERA','6h','“skip” — sem anomalias','<div class="tgl"><i></i></div>']],'+ Novo heartbeat')},
+ atividade:{l:'Atividade (Runs)',g:'AGENTES IA',ic:'☰',r:()=>generic('Atividade','Log unificado de execuções (agent_runs — 1.686 reais em prod). Filtros por data/status/agente.',kpi('Runs hoje','38')+kpi('Custo hoje','$ 2,84')+kpi('Taxa de sucesso','97%')+kpi('Duração média','41s'),['Task','Agente','Tenant','Status','Custo','Duração','Quando'],RUNS.map(r=>[r[0],r[1],r[2],r[3]==='ok'?'<span class="bdg b-ok">ok</span>':'<span class="bdg b-err">falha</span>',r[4],r[5],r[6]]))},
+ metas:{l:'Metas',g:'AGENTES IA',ic:'◎',r:()=>generic('Metas','Hierarquia Missão → Projeto → Meta → Task — paridade EvoNexus Goals.',null,['Meta','Hierarquia','Progresso','Prazo'],[['Onboardar 1º cliente real','S2 Combustível › Vendas','<span class="bdg b-warn">70%</span>','jun/2026'],['Reduzir churn p/ 20%','S2 › Retenção','<span class="bdg b-warn">45%</span>','jul/2026'],['Console v2 multi-tenant','S3 Pivotagem › Produto','<span class="bdg b-ok">FASE 2</span>','ago/2026']],'+ Nova meta')},
+ topicos:{l:'Tópicos (Tickets)',g:'AGENTES IA',ic:'⚑',r:()=>generic('Tópicos','Fila de trabalho com título/status/prioridade/responsável — paridade EvoNexus Topics. Export CSV.',null,['Título','Prioridade','Responsável','Status'],[['Cardápio Uraka desatualizado no iFood','<span class="bdg b-err">alta</span>','MAX','aberto'],['Cliente Mônica pediu 2ª via de relatório','<span class="bdg b-warn">média</span>','VERA','em andamento'],['Ajustar horário do Bom Dia (feriado)','<span class="bdg b-mut">baixa</span>','DELI','aberto']],'+ Novo tópico')},
+ modelos:{l:'Modelos (Templates)',g:'AGENTES IA',ic:'⧉',r:()=>generic('Modelos','Templates reusáveis de mensagem, oferta e relatório — paridade EvoNexus Templates. Sempre “oferta”, nunca “promoção”.',null,['Modelo','Tipo','Usado por','Ações'],[['oferta-semanal.md','post','LARA','<button class="btn sm sec">editar</button>'],['cobranca-gentil.md','mensagem','CORA','<button class="btn sm sec">editar</button>'],['relatorio-cliente.html','relatório','VERA · Análise iFood','<button class="btn sm sec">editar</button>'],['boas-vindas.md','mensagem','BRENO','<button class="btn sm sec">editar</button>']],'+ Novo modelo')},
+ clientes:{l:'Clientes',g:'OPERAÇÃO',ic:'☺',r:()=>generic('Clientes','CRM — domínio CD (além do EvoNexus). Tier, risco de churn, lojas vinculadas.',kpi('Ativos','47')+kpi('Risco de churn','5','ação da CORA/LARA',true)+kpi('MRR','R$ 28.4k','+R$ 2.1k este mês'),['Cliente','Tier','Lojas','Saúde','Churn'],[['Uraka Burger','Performance','2','<span class="bdg b-ok">boa</span>','baixo'],['Salgados da Mônica','Light','1','<span class="bdg b-warn">atenção</span>','médio'],['Pizza Forte','Enterprise','3','<span class="bdg b-ok">boa</span>','baixo'],['Açaí do Vale','Automação IA','1','<span class="bdg b-err">crítica</span>','alto']],'+ Novo cliente')},
+ lojas:{l:'Lojas',g:'OPERAÇÃO',ic:'⌂',r:()=>{const t=ten();return generic('Lojas · '+t.nome,'Escopadas pelo tenant ativo — troque no topo e veja a lista mudar.',kpi('Lojas',t.lojas.length)+kpi('Pedidos 30d','1.240')+kpi('Ticket médio','R$ 38,20'),['Loja','Canal','Status','Pedidos 30d','Ações'],t.lojas.map((l,i)=>[`<b>${l}</b>`,['iFood','iFood + 99Food','iFood','próprio'][i%4],bOK,String(420-i*97),'<button class="btn sm sec">abrir</button>']),'+ Nova loja')}},
+ chat:{l:'Chat ao Vivo',g:'OPERAÇÃO',ic:'✉',r:()=>`<h1>Chat ao Vivo</h1><div class="sub">JÁ EXISTE e é maduro no app atual — entra no console v2 com a mesma base (referência, não redesenho).</div><div class="note">✅ Tela preservada do app atual: áudio, reply, bots, departamentos, Kanban de tarefas, BRENO copiloto. O redesign v2 só troca o chrome (sidebar/topbar) — o miolo continua.</div><div class="card"><div class="empty">[ ChatScreen atual renderiza aqui ]</div></div>`},
+ mia:{l:'Conversas · MIA',g:'OPERAÇÃO',ic:'◉',r:()=>generic('Monitor de Conversas (MIA)','Análise batch 15min das conversas WhatsApp vinculadas a lojas.',kpi('Conversas monitoradas','38')+kpi('Sinais hoje','6')+kpi('Sugestões geradas','3','vão para a Fila de Aprovações'),['Conversa','Loja','Sinal','Sugestão'],[['Grupo Uraka — oper.','Uraka Centro','🟡 reclamação de atraso','resposta proposta → fila'],['Cliente final — Mônica','Salgados da Mônica','🟢 elogio','registrar no timeline'],['Grupo Pizza Forte','Pizza Forte','🔴 ameaça de cancelamento','escalonar p/ Wandson']])},
+ aprovacoes:{l:'Aprovações',g:'OPERAÇÃO',ic:'✓',r:()=>{const pend=APROV.filter(a=>!aprovados.includes(a.id)&&!rejeitados.includes(a.id));return `<h1>Fila de Aprovações <span class="tm">· fila única</span></h1><div class="sub">TUDO que agentes propõem num lugar só (drafts · sugestões MIA · cobranças · posts). Os botões funcionam — testa.</div>
+ <div class="kpis">${kpi('Pendentes',pend.length,'',pend.length>2)}${kpi('Aprovadas agora',aprovados.length)}${kpi('Rejeitadas agora',rejeitados.length)}</div>
+ ${pend.map(a=>`<div class="card"><div class="spread"><div><span class="bdg ${a.risco==='vermelho'?'b-err':a.risco==='amarelo'?'b-warn':'b-ok'}">${a.risco}</span> <b style="margin-left:6px">${a.ag}</b> · ${a.tipo}<div style="color:var(--tx2);font-size:12px;margin-top:3px">${a.alvo} · origem: ${a.origem}</div><div style="background:#0d1322;border:1px solid var(--line);border-radius:8px;padding:9px 12px;margin-top:8px;font-size:13px;max-width:640px">“${a.txt}”</div></div>
+ <div class="row"><button class="btn sm" onclick="aprovar(${a.id})">Aprovar</button><button class="btn sm sec">Editar</button><button class="btn sm danger" onclick="rejeitar(${a.id})">Rejeitar</button></div></div></div>`).join('')||'<div class="card"><div class="empty">🎉 Fila limpa — nada esperando você.</div></div>'}`}},
+ cobranca:{l:'Cobrança',g:'OPERAÇÃO',ic:'$',r:()=>generic('Cobrança (CORA + Asaas)','Faturas, inadimplência e régua — domínio CD.',kpi('A receber','R$ 12.480')+kpi('Em atraso','R$ 1.340','2 clientes',true)+kpi('Recuperado pela CORA (mês)','R$ 3.890','✅'),['Cliente','Fatura','Vencimento','Status','Régua'],[['Uraka Burger','R$ 890','12d atraso','<span class="bdg b-warn">atrasada</span>','D+12 → proposta na fila'],['Salgados da Mônica','R$ 450','31d atraso','<span class="bdg b-err">crítica</span>','D+30 → escalonada'],['Pizza Forte','R$ 1.200','em dia','<span class="bdg b-ok">ok</span>','—']])},
+ workspace:{l:'Workspace',g:'DADOS',ic:'▤',r:()=>generic('Workspace','Explorador de arquivos por tenant (Supabase Storage, prefixo tenant_id/) — paridade EvoNexus.',null,['Arquivo','Pasta','Tamanho','Modificado'],[['relatorio-uraka-jun.pdf','/relatorios','1.2 MB','hoje'],['cardapio-monica-v3.xlsx','/cardapios','340 KB','ontem'],['kb-ifood-metricas.md','/conhecimento','18 KB','seg'],['oferta-acai-arte.png','/campanhas','2.1 MB','seg']],'↑ Upload')},
+ links:{l:'Links compartilhados',g:'DADOS',ic:'⧄',r:()=>generic('Links compartilhados','URLs públicas com expiração e contagem de views — paridade EvoNexus Shares.',null,['Arquivo','Link','Expira','Views'],[['relatorio-uraka-jun.pdf','cd.app/s/x7Kq2','em 6 dias','14'],['proposta-acai.pdf','cd.app/s/p9Lm1','em 29 dias','3']],'+ Novo link')},
+ memoria:{l:'Memória',g:'DADOS',ic:'✸',r:()=>generic('Memória dos agentes','Global (KB iFood) + por agente + por loja — agent_memories com tenant obrigatório (onda 1).',kpi('Fatos globais','14','KB iFood')+kpi('Memórias DELI','23')+kpi('Por loja','41'),['Memória','Agente','Tipo','Importância'],[['Wandson prefere relatórios às segundas','DELI','preferência','8'],['Uraka: horário de pico 19h-21h','Análise iFood','fato/loja','9'],['Mônica respondeu melhor à régua gentil','CORA','feedback','7'],['Taxa iFood subiu em mai/2026','KB global','fato','10']])},
+ conhecimento:{l:'Conhecimento (RAG)',g:'DADOS',ic:'✿',r:()=>generic('Conhecimento','Base vetorial (pgvector) por tenant — NATIVO, já existe no Supabase.',null,['Coleção','Docs','Última ingestão','Usada por'],[['ifood-kb','38','seg','Análise iFood · MAX'],['playbooks-cd','12','há 3 dias','DELI · NOVA'],['cardapios-uraka','6','ontem','MAX']],'+ Ingerir docs')},
+ custos:{l:'Custos',g:'DADOS',ic:'$',r:()=>`<h1>Custos de IA <span class="tm">· ${ten().nome}</span></h1><div class="sub">Agregação de agent_runs.cost_usd por dia/agente/rotina — paridade EvoNexus Costs. É a base do teu preço por tenant.</div>
+ <div class="kpis">${kpi('Este mês','$ 61,40','orçamento $ 150')}${kpi('Hoje','$ 2,84')}${kpi('Custo/run médio','$ 0,036')}${kpi('Projeção do mês','$ 88','dentro do limite')}</div>
+ <div class="grid g2"><div class="card"><h3>Por dia (7d)</h3><div class="bars">${CUSTOS.map(c=>`<div class="b" style="height:${c[1]*18}px"><span>${c[0]}</span></div>`).join('')}</div></div>
+ <div class="card"><h3>Por agente (mês)</h3>${tbl(['Agente','Runs','Custo'],[['Análise iFood','31','$ 22,10'],['DELI','42','$ 14,80'],['BRENO','36','$ 8,90'],['MIA (batch)','188','$ 7,40'],['VERA','8','$ 4,20'],['outros','67','$ 4,00']])}</div></div>`},
+ config:{l:'Configurações',g:'SISTEMA',ic:'⚙',r:()=>generic('Configurações do tenant','Nome, fuso, idioma, modo padrão, white-label (V3).',null,['Configuração','Valor','Ação'],[['Nome',ten().nome,'<button class="btn sm sec">editar</button>'],['Plano',ten().plano,'—'],['Modo padrão dos agentes','híbrido','<button class="btn sm sec">mudar</button>'],['Fuso','America/Belem','<button class="btn sm sec">mudar</button>'],['Logo/cores (white-label)','V3','<span class="bdg b-mut">em breve</span>']])},
+ sistemas:{l:'Sistemas',g:'SISTEMA',ic:'▣',r:()=>generic('Sistemas externos','Registro de apps/URLs por tenant — paridade EvoNexus Systems.',null,['Sistema','URL','Tipo'],[['Painel iFood','portal.ifood.com.br','canal'],['Asaas','asaas.com','pagamento'],['Evolution Manager','vps:8080','infra']],'+ Registrar')},
+ provedores:{l:'Provedores',g:'SISTEMA',ic:'⛭',r:()=>generic('Provedores de IA','Multi-provider BYO-key por tenant via Infisical (D1).',null,['Provider','Modelo padrão','Key','Status'],[['Anthropic','claude-sonnet-4-6','•••• via Infisical','<span class="bdg b-ok">ATIVO</span>'],['Ollama Cloud','kimi-k2.6','••••','<span class="bdg b-info">fallback</span>'],['OpenRouter','—','não configurada','<span class="bdg b-mut">off</span>']],'+ Adicionar')},
+ integracoes:{l:'Integrações',g:'SISTEMA',ic:'⎄',r:()=>generic('Integrações','Conectores por tenant; credenciais no Infisical — paridade EvoNexus Integrations.',null,['Integração','Status','Usada por'],[['Evolution API (WhatsApp)',bOK,'BRENO · MIA · Bom Dia'],['Asaas',bOK,'CORA'],['iFood (scraping autorizado)',bOK,'Análise iFood'],['Google Drive',bOK,'relatórios'],['Telegram interno',bOK,'DELI · alertas'],['Omie / Bling','<span class="bdg b-mut">disponível</span>','—']],'+ Conectar')},
+ servicos:{l:'Serviços & Canais',g:'SISTEMA',ic:'☎',r:()=>generic('Serviços & Canais','Processos de fundo e canais de comunicação — paridade EvoNexus Services.',null,['Serviço','Tipo','Status'],[['Bridge Server (VPS :3001)','backend',bOK],['Trigger.dev worker','orquestrador',bOK],['Canal WhatsApp (Evolution)','canal',bOK],['Canal Telegram (@DeliConsultBot)','canal',bOK],['evolution-webhook (Edge)','webhook',bOK]])},
+ backups:{l:'Backups',g:'SISTEMA',ic:'↻',r:()=>generic('Backups','Supabase backups + export por tenant — paridade EvoNexus Backups.',null,['Backup','Escopo','Quando','Ação'],[['Snapshot diário Supabase','banco inteiro','hoje 03:00','<button class="btn sm sec">restaurar</button>'],['Export tenant consult','dados do tenant','dom','<button class="btn sm sec">baixar</button>'],['Git mirror (docs/migrations)','repositório','contínuo','—']],'↓ Export agora')},
+ usuarios:{l:'Usuários',g:'ADMIN',ic:'♟',r:()=>generic('Usuários','Supabase Auth + tenant_members — multi-tenant nativo (melhor que o EvoNexus).',null,['Usuário','E-mail','Papel','Último acesso'],USERS.map(u=>[`<b>${u[0]}</b>`,u[1],`<span class="bdg b-info">${u[2]}</span>`,u[3]]),'+ Convidar')},
+ papeis:{l:'Papéis (RBAC)',g:'ADMIN',ic:'❖',r:()=>generic('Papéis & Permissões','7 papéis · 112 permissões — NATIVO da CD, escopado por tenant.',null,['Papel','Permissões','Membros'],[['admin','todas (51)','1'],['dev','técnico (38)','0'],['marketing','LARA · campanhas · disparos (22)','0'],['atendimento','chat · BRENO · clientes (18)','0'],['financeiro','CORA · relatórios (14)','0'],['viewer','leitura (8)','0'],['deli_owner','DELI + tudo','1']],'+ Novo papel')},
+ acesso:{l:'Acesso a agentes',g:'ADMIN',ic:'⚿',r:()=>generic('Acesso a agentes por usuário','user_agent_access — com tenant e FK reais desde a onda 1. Quem pode invocar/ver/aprovar cada agente.',null,['Usuário','Agente','Invocar','Histórico','Aprovar drafts'],[['Wandson','deli','✅','✅','✅'],['Wandson','analise-ifood','✅','✅','✅'],['Wandson','lara','✅','✅','✅'],['(ex-membro · P-5)','analista-ifood','<span class="bdg b-mut">aposentar onda 2</span>','—','—']],'+ Conceder')},
+ auditoria:{l:'Auditoria',g:'ADMIN',ic:'⚖',r:()=>generic('Audit Log','Toda ação de humano e agente — audit_log já existe (98+ eventos), faltava a tela.',null,['Quando','Quem','Ação','Recurso','IP'],[['há 2 min','Wandson','aprovou draft','CORA · cobrança Uraka','170.231.…'],['há 12 min','DELI (agente)','acionou agente','cora-analisar','—'],['hoje 06:00','sistema','rotina executada','bom-dia × 4 lojas','—'],['ontem','Wandson','alterou RLS','migrations onda 1','170.231.…']])}
+};
+/* ================= SHELL ================= */
+const GROUPS=['INÍCIO','OPERAÇÃO','AGENTES IA','DADOS','SISTEMA','ADMIN'];
+function sidebar(){const cur=location.hash.replace('#','')||'dashboard';$('sb').innerHTML=`<div class="brand"><div class="logo">🚀</div><div><b>Consult Delivery</b><small>CONSOLE v2 · PROTÓTIPO</small></div></div>`+GROUPS.map(g=>`<div class="grp">${g}</div>`+Object.entries(SCREENS).filter(([k,s])=>s.g===g).map(([k,s])=>`<a href="#${k}" class="${cur===k?'on':''}"><span class="ic">${s.ic}</span>${s.l}</a>`).join('')).join('')+`<div class="cred">Créditos do tenant · <b style="color:var(--ac)">6,5k</b> restantes<div class="bar"><i></i></div><div style="margin-top:10px;font-size:10px">32 telas · paradigma EvoNexus · multi-tenant</div></div>`}
+function render(){const k=location.hash.replace('#','')||'dashboard';const s=SCREENS[k]||SCREENS.dashboard;$('crumb').textContent=s.l;$('ct').innerHTML=s.r();$('ct').scrollTop=0;sidebar()}
+function setTenant(v){TEN=v;render()}
+function tg(aid){enab[TEN][aid]=!enab[TEN][aid];render()}
+function aprovar(id){aprovados.push(id);render()}
+function rejeitar(id){rejeitados.push(id);render()}
+function doLogin(){TEN=$('loginTenant').value;$('login').style.display='none';$('app').style.display='flex';fillTenants();render()}
+function fillTenants(){$('tenantSel').innerHTML=TENANTS.map(t=>`<option value="${t.id}" ${t.id===TEN?'selected':''}>🚀 ${t.nome}</option>`).join('')}
+$('loginTenant').innerHTML=TENANTS.map(t=>`<option value="${t.id}">${t.nome} — ${t.plano}</option>`).join('');
+window.addEventListener('hashchange',render);
+</script>
+</body>
+</html>
