@@ -24,22 +24,22 @@
 
 ## 🔴 Onde parou
 
-_Última sessão: 2026-06-06 (Cowork — sessão 5.2 + merges)_
+_Última sessão: 2026-06-06 (Cowork — sessão 4: fatos + FASE 2 onda 1)_
 
-- **Merged em main (aprovação explícita do Wandson na conversa):** #156 (FASE 0, `de81b88`), #152 (FASE 1 reconciliada, `893e97e`) e #158 (Tracker/protocolo/T3/fatos, `aa79035`).
-- **#155 tinha conflito** (branch reusada carregava commits já squashados em main via #150/#151/#154) → reconstruído como #158; #155 e #157 fechados.
-- **Decisão B (D4) e mandato Cowork (D5) registrados.**
-- Windows sincronizado: branch `trabalho` = main (`aa79035`); `cowork/write-test` deletada. ⚠️ `main` local é presa pelo worktree `cd-f3`; existe branch local falsa chamada `origin/main` (deletar: `git branch -D "origin/main"`).
-- **⚠️ Ainda trackeados indevidamente:** `WikiBrain/.obsidian/*` e `WikiBrain/log.md` — aguarda ok do Wandson p/ remoção do índice.
+- **Fatos atualizados (#160 merged, `544a697`):** equipe humana = 1 pessoa (Wandson; Wélida saiu jun/2026) · **DELI = COO digital travado** (RESTRUCTURE.md v1.2 alinhado, 5 menções).
+- **CHECKPOINT 1 ✅ go dado pelo Wandson** → 5.3 executada: **PR #161** com 5 migrations da onda 1 + `docs/evonexus-replica/FASE-2-onda1-plano.md` (evidência ao vivo). **NADA aplicado ao banco.**
+- **🛑 CHECKPOINT 2 ABERTO:** Wandson revisa o SQL do #161 → aprova → mergeia → aplica manualmente (SQL Editor, ordem 001→005) → validações + smoke test.
+- **Achados da verificação ao vivo:** brecha EXTRA em `agents_tenant_isolation` (membro podia ESCREVER agente global — corrigida na 002) · `user_agent_access` tem slugs órfãos (`analista-ifood`→mapeado p/ `analise-ifood`; `main`→**pendência P-1**) · `agent_runs` = 1684 · funções `is_member_of`/`is_admin_of` confirmadas SECURITY DEFINER.
+- **⚠️ Ainda trackeados indevidamente:** `WikiBrain/.obsidian/*` e `WikiBrain/log.md` — aguarda ok.
 
 ---
 
 ## 👉 Próxima ação
 
-1. **Go do CHECKPOINT 1 → 5.3 / FASE 2 onda 1:** Cowork redige plano + `.sql` versionados — 3 RLS permissivas, popular `tenant_agents`, `agent_memories.tenant_id SET NOT NULL`, backfill `agent_runs.tenant_id` (383), redesign `user_agent_access`. **Wandson aprova o SQL antes de aplicar; NUNCA via MCP.**
-2. **5.5** — consolidar docs de plano redundantes (`docs/evonexus-replica/PLANO-MESTRE-mapa-vivo.md` etc).
-3. **T3** — Wandson revisa mapa de telas v0 → T3(b) protótipo clicável.
-4. Decisão pendente: DELI “COO” vs “CEO” digital (1 commit quando decidir).
+1. **Wandson — 🛑 CHECKPOINT 2:** revisar os 5 `.sql` do **PR #161** → aprovar/mergear → **aplicar manualmente** na ordem 001→005 (Supabase SQL Editor; nunca MCP) → rodar validações de cada arquivo + smoke test (painel agentes = 15, chat abre, runs NULL = 0).
+2. **Decisão P-1:** grant `agent_name='main'` — mapear p/ `deli` ou aposentar (onda 2).
+3. **5.5** — consolidar docs de plano redundantes (Cowork faz direto).
+4. **T3** — Wandson revisa mapa de telas v0 → T3(b) protótipo clicável.
 
 ---
 
@@ -48,38 +48,34 @@ _Última sessão: 2026-06-06 (Cowork — sessão 5.2 + merges)_
 | Track | Nome | Status | Última ação |
 |-------|------|--------|-------------|
 | T1 | Plataforma CD (V1→V3) | 🔄 ~95% | 1A–1G concluídas; DELI Realtime pendente |
-| T2 | EvoNexus-replica | ✅ FASE 0 + FASE 1 **merged em main** | CHECKPOINT 1 aguarda go → FASE 2 onda 1 |
-| T3 | Visual-First / telas | 🔄 v0 em revisão | Mapa de telas v0 em main; aguarda revisão → T3(b) protótipo |
+| T2 | EvoNexus-replica | 🔄 FASE 2 onda 1 redigida (PR #161) | 🛑 CHECKPOINT 2: aguarda aprovação do SQL pelo Wandson |
+| T3 | Visual-First / telas | 🔄 v0 em revisão | Mapa em main; aguarda revisão → T3(b) protótipo |
 | T4 | Hermes (copiloto CEO) | 🔄 3A ✅ / 3B bloqueado | kimi-k2.6 rodando; 3B aguarda GATE 0 |
-| T5 | Segurança / GATE 0 | ⏳ rotação adiada | fail2ban + SSH key-only ✅; 3 RLS permissivas entram na FASE 2 onda 1 |
+| T5 | Segurança / GATE 0 | 🔄 RLS na onda 1 (PR #161) | + brecha de escrita em agents achada e corrigida no SQL; rotação segue adiada |
 | T6 | Agentes IA | 🔄 BomDia/Encerramento/chat ✅ | DELI em andamento; LARA/SOFIA pendentes |
 | T7 | Feature PILOTO | 🔄 Ondas 01+02 merged | Onda 03 migration rascunhada, não aplicada |
 | T8 | Infra / CI-CD | ⚠️ 2 riscos ativos | CI/CD sobrescreve; VPS branches divergem; stop-hook tsc falso-erro |
-| T9 | Negócio | contexto | Primeiro cliente real = PRIORIDADE |
+| T9 | Negócio | contexto | Primeiro cliente real = PRIORIDADE · equipe humana = 1 (agentes cobrem funções) |
 
 ---
 
 ## 📋 Log de sessões
 
+### 2026-06-06 (sessão 4 — Cowork: fatos + FASE 2 onda 1)
+- **#160 merged** (`544a697`): equipe = 1 pessoa; DELI = COO (RESTRUCTURE v1.2); CHECKPOINT 1 go registrado
+- **5.3a:** verificação ao vivo no Supabase (policies DDL, PKs, counts, funções RLS, 7 grants) — output bruto no plano
+- **5.3b:** **PR #161** — 5 migrations (`20260607_001..005`) + `FASE-2-onda1-plano.md`; brecha extra de ESCRITA em agents corrigida; pendências P-1..P-4 registradas
+- 🛑 CHECKPOINT 2 aberto — aguardando SQL-ok do Wandson; **nada aplicado**
+
 ### 2026-06-06 (sessão 3 — Cowork, 5.2 + merges + mandato)
-- Conector GitHub reautorizado com **escrita**; teste ok
-- **PR #156 aberto e merged** (`de81b88`) · **#152 reconciliado (`0f62ebb`) e merged** (`893e97e`) · **#158 merged** (`aa79035`) — merges com aprovação explícita do Wandson
-- Decisão **B registrada (D4)**; **mandato Cowork registrado (D5)**
-- #155 com conflito (reuso de branch vs squash) → reconstruído em #158; #157 absorvido; regra nova: branch nova por entrega
-- 5.4 executada: CLAUDE.md corrigido (Eduardo saiu, FASE 0/1 rodadas, D4/D5)
-- Windows sincronizado na branch `trabalho` (= main)
-- **Nota — validação externa:** post “Harness Engineering” (@leandro.zuck) analisado a pedido do Wandson. Conclusão: descreve exatamente o que T2/T3 já constroem — observabilidade de runs/custo (`agent_runs` → telas S-10/S-26), orquestração paralela (DELI + Trigger.dev), tools com limites (RBAC + drafts + semáforo), branches isoladas, eficiência de tokens (Graphify + modelo por tarefa). **Sem ação nova; sem ferramenta externa.** Reforça a prioridade da sequência FASE 2 → T3(b). Hábito adotado: sessões de IA paralelas sempre em branches próprias.
+- Conector GitHub com escrita; #156/#152/#158/#159 merged; #155/#157 reconstruídos
+- D4 (B) e D5 (mandato) registradas; 5.4 CLAUDE.md; nota Harness Engineering
 
 ### 2026-06-06 (sessão 2 — Cowork assume via handoff)
-- **5.1 fechado:** `.gitignore` un-ignora `WikiBrain/wiki/` (commit `52bfa13`)
-- Divergências registradas: Tracker atrasado vs handoff · `.obsidian/*` + `log.md` trackeados indevidamente
-- Tracker atualizado com estado verificado (commit `9ebf138`)
+- 5.1 fechado (`52bfa13`); divergências registradas; Tracker atualizado (`9ebf138`)
 
 ### 2026-06-06
-- Criou `PLANO-MESTRE.md` raiz (fusão PLANO-MESTRE.md + mapa-vivo.md)
-- PR #154 → merged em main
-- Hermes 3A fechado com evidência (kimi-k2.6 ✅, Docker ✅, Telegram ✅)
-- **T3 v0:** mapa de telas (console interno) — 32 telas, shortlist MVP = 14
+- PLANO-MESTRE raiz criado; PR #154 merged; Hermes 3A fechado; T3 v0 (32 telas, MVP=14)
 
 ---
 
