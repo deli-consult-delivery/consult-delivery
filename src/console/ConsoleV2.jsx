@@ -1,12 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
 import './console.css';
 
 // ============================================================
 // Console v2 · F1 — Defesa Comercial (copiloto)  [D6 aprovada 2026-06-07]
-// PR2b: KPIs por COUNT exato (PostgREST corta selects em 1000 linhas —
-// padrão P5 no qa-knowledge). Custo busca só linhas com cost_usd > 0.
-// Defesa e Radar seguem com DADOS DE EXEMPLO até PR4/PR6.
+// PR5: fila REAL — tela Defesa lê defesa_casos sob RLS; Aprovar/
+// Editar/Descartar atualizam o caso (auditoria preservada, sem DELETE).
+// Radar segue com DADOS DE EXEMPLO até PR6.
 // ============================================================
 
 const GRUPOS = [
@@ -22,16 +22,8 @@ const GRUPOS = [
   { label: 'Admin', locked: true, items: [{ id: 'x5', label: 'White-label' }] },
 ];
 
-const CASOS_EXEMPLO = [
-  { id: 1, tipo: 'cancelamento', loja: 'Uraka Burger — Centro', valor: 89.0, motivo: 'Cliente alegou item errado; foto anexada não mostra erro', risco: 'alta chance de reversão',
-    draft: 'Prezados, contestamos o cancelamento do pedido #4821. A foto anexada pelo cliente mostra o item conforme descrito no cardápio (combo casal, 2 acompanhamentos). Solicitamos revisão e estorno do valor de R$ 89,00 ao estabelecimento.' },
-  { id: 2, tipo: 'avaliacao', loja: 'Uraka Burger — Centro', valor: 0, motivo: 'Avaliação 1 estrela: “demorou demais” — atraso foi do entregador do app', risco: 'responder em até 2h protege ranking',
-    draft: 'Olá! Sentimos muito pela demora. Verificamos que seu pedido saiu da loja em 18 minutos — dentro do prazo — e o atraso ocorreu na etapa de entrega do aplicativo. Já reportamos à plataforma. Adoraríamos te receber de novo: seu próximo combo tem cortesia da casa.' },
-  { id: 3, tipo: 'cancelamento', loja: 'Salgados da Mônica', valor: 45.5, motivo: 'Pedido cancelado após preparo iniciado (12 min)', risco: 'média chance',
-    draft: 'Contestamos o cancelamento do pedido #1077: o preparo já estava iniciado há 12 minutos quando o cancelamento ocorreu, conforme registro do KDS. Solicitamos o ressarcimento integral de R$ 45,50 conforme política da plataforma.' },
-];
-
 const OK_STATUSES = ['ok', 'completed', 'success'];
+const fmtBRL = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 function useKpisReais(tenantDbId) {
   const [kpis, setKpis] = useState(null);
@@ -43,22 +35,32 @@ function useKpisReais(tenantDbId) {
       try {
         const desde = new Date(Date.now() - 30 * 86400000).toISOString();
         const base = () => supabase.from('agent_runs').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantDbId).gte('created_at', desde);
+        const mesAtual = new Date(); mesAtual.setUTCDate(1); mesAtual.setUTCHours(0, 0, 0, 0);
         const [
           { count: total, error: e1 },
           { count: ok, error: e2 },
           { data: comCusto, error: e3 },
           { count: agentes, error: e4 },
+          { data: metricas, error: e5 },
         ] = await Promise.all([
           base(),
           base().in('status', OK_STATUSES),
           supabase.from('agent_runs').select('cost_usd').eq('tenant_id', tenantDbId).gte('created_at', desde).gt('cost_usd', 0),
           supabase.from('tenant_agents').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantDbId),
+          supabase.from('defesa_metricas_mensal').select('*').eq('tenant_id', tenantDbId).gte('mes', mesAtual.toISOString()),
         ]);
-        if (e1 || e2 || e3 || e4) throw (e1 || e2 || e3 || e4);
+        if (e1 || e2 || e3 || e4 || e5) throw (e1 || e2 || e3 || e4 || e5);
         const t = total ?? 0;
         const o = ok ?? 0;
         const custo = (comCusto ?? []).reduce((s, r) => s + (Number(r.cost_usd) || 0), 0);
-        if (alive) setKpis({ total: t, ok: o, falhas: t - o, taxa: t ? Math.round((o / t) * 100) : null, custo, agentes: agentes ?? 0 });
+        const m = (metricas ?? [])[0] || {};
+        if (alive) setKpis({
+          total: t, ok: o, falhas: t - o,
+          taxa: t ? Math.round((o / t) * 100) : null,
+          custo, agentes: agentes ?? 0,
+          defendidoCentavos: Number(m.defendido_centavos) || 0,
+          aguardandoOk: Number(m.aguardando_ok) || 0,
+        });
       } catch (err) {
         if (alive) setErro(err?.message || 'erro ao carregar');
       }
@@ -78,7 +80,7 @@ function Kpi({ l, v, d, neg, mut }) {
   );
 }
 
-function VisaoGeral({ tenantNome, tenantDbId }) {
+function VisaoGeral({ tenantNome, tenantDbId, onIrDefesa }) {
   const { kpis, erro } = useKpisReais(tenantDbId);
   const fmt = n => (n ?? 0).toLocaleString('pt-BR');
   return (
@@ -91,51 +93,119 @@ function VisaoGeral({ tenantNome, tenantDbId }) {
         <Kpi l="Taxa de sucesso" v={kpis ? (kpis.taxa != null ? `${kpis.taxa}%` : '—') : '…'} d={kpis && kpis.taxa != null ? (kpis.taxa >= 95 ? 'saudável' : 'investigar falhas') : ''} mut />
         <Kpi l="Custo de IA (30d)" v={kpis ? `US$ ${kpis.custo.toFixed(4)}` : '…'} d="todos os agentes" mut />
         <Kpi l="Agentes habilitados" v={kpis ? fmt(kpis.agentes) : '…'} d="neste workspace" mut />
-        <Kpi l="R$ defendido no mês" v="—" d="agente Defesa entra no PR4" mut />
-        <Kpi l="Casos aguardando seu OK" v="—" d="agente Defesa entra no PR4" mut />
+        <Kpi l="R$ defendido no mês" v={kpis ? fmtBRL(kpis.defendidoCentavos) : '…'} d="casos ganhos" />
+        <Kpi l="Casos aguardando seu OK" v={kpis ? fmt(kpis.aguardandoOk) : '…'} d="abrir Defesa Comercial" neg={kpis ? kpis.aguardandoOk > 0 : false} />
       </div>
       <div className="cv2-card">
         <h3>Como funciona o copiloto</h3>
         <div style={{ fontSize: 13, color: 'var(--tx2)', lineHeight: 1.8 }}>
-          1. Os agentes vigiam cancelamentos e avaliações das suas lojas · 2. Preparam a contestação ou a resposta com a melhor chance de vitória · 3. <b style={{ color: 'var(--ink)' }}>Você só dá o OK</b> (aqui ou pelo WhatsApp) · 4. O painel mostra o dinheiro defendido, mês a mês.
+          1. Os agentes vigiam cancelamentos e avaliações das suas lojas · 2. Preparam a contestação ou a resposta com a melhor chance de vitória · 3. <b style={{ color: 'var(--ink)' }}>Você só dá o OK</b> · 4. O painel mostra o dinheiro defendido, mês a mês.
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <button className="cv2-btn" onClick={onIrDefesa}>Abrir fila de Defesa</button>
         </div>
       </div>
     </div>
   );
 }
 
-function Defesa() {
-  const [aprovados, setAprovados] = useState([]);
-  const [descartados, setDescartados] = useState([]);
-  const pend = CASOS_EXEMPLO.filter(c => !aprovados.includes(c.id) && !descartados.includes(c.id));
+function Defesa({ tenantDbId, userId }) {
+  const [casos, setCasos] = useState(null);
+  const [erro, setErro] = useState(null);
+  const [editando, setEditando] = useState(null);   // id do caso em edição
+  const [textoEdit, setTextoEdit] = useState('');
+  const [agindo, setAgindo] = useState(null);        // id do caso com ação em curso
+
+  const carregar = useCallback(async () => {
+    if (!tenantDbId) return;
+    const { data, error } = await supabase
+      .from('defesa_casos')
+      .select('id, tipo, canal, pedido_ref, valor_centavos, motivo, analise, draft_resposta, status, created_at')
+      .eq('tenant_id', tenantDbId)
+      .eq('status', 'aguardando_ok')
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (error) { setErro(error.message); return; }
+    setCasos(data ?? []);
+  }, [tenantDbId]);
+
+  useEffect(() => { carregar(); }, [carregar]);
+
+  async function mudarStatus(caso, novoStatus, extras = {}) {
+    setAgindo(caso.id);
+    const { error } = await supabase
+      .from('defesa_casos')
+      .update({ status: novoStatus, updated_at: new Date().toISOString(), ...extras })
+      .eq('id', caso.id);
+    setAgindo(null);
+    if (error) { setErro(error.message); return; }
+    setCasos(cs => cs.filter(c => c.id !== caso.id));
+  }
+
+  const aprovar = (caso) => mudarStatus(caso, 'aprovado', { aprovado_por: userId ?? null, aprovado_em: new Date().toISOString() });
+  const descartar = (caso) => mudarStatus(caso, 'descartado');
+
+  async function salvarEdicao(caso) {
+    setAgindo(caso.id);
+    const { error } = await supabase
+      .from('defesa_casos')
+      .update({ draft_resposta: textoEdit, updated_at: new Date().toISOString() })
+      .eq('id', caso.id);
+    setAgindo(null);
+    if (error) { setErro(error.message); return; }
+    setCasos(cs => cs.map(c => c.id === caso.id ? { ...c, draft_resposta: textoEdit } : c));
+    setEditando(null);
+  }
+
   return (
     <div>
-      <h1>Defesa Comercial <span className="cv2-mock">DADOS DE EXEMPLO · agente real no PR4</span></h1>
+      <h1>Defesa Comercial <span className="cv2-mock" style={{ background: 'var(--green-soft)', color: 'var(--green)' }}>FILA REAL</span></h1>
       <div className="cv2-rule" />
-      <div className="cv2-sub">Casos preparados pelos agentes — revise e dê o OK. Nada é enviado sem a sua aprovação.</div>
+      <div className="cv2-sub">Casos preparados pelo agente — revise e dê o OK. Nada é enviado sem a sua aprovação.{erro ? ` · erro: ${erro}` : ''}</div>
       <div className="cv2-kpis">
-        <Kpi l="Pendentes" v={pend.length} d="aguardando OK" neg={pend.length > 0} />
-        <Kpi l="Aprovados agora" v={aprovados.length} d="serão enviados" mut />
-        <Kpi l="Descartados" v={descartados.length} d="" mut />
+        <Kpi l="Aguardando seu OK" v={casos ? casos.length : '…'} d="nesta fila" neg={casos ? casos.length > 0 : false} />
       </div>
-      {pend.map(c => (
-        <div key={c.id} className="cv2-caso">
-          <div className="cv2-spread">
-            <div>
-              <span className={`cv2-bdg ${c.tipo === 'cancelamento' ? 'err' : 'warn'}`}>{c.tipo === 'cancelamento' ? `cancelamento · R$ ${c.valor.toFixed(2)}` : 'avaliação'}</span>
-              <b style={{ marginLeft: 8, fontSize: 13 }}>{c.loja}</b>
-              <div style={{ color: 'var(--tx2)', fontSize: 12, marginTop: 3 }}>{c.motivo} · <i>{c.risco}</i></div>
+      {casos && casos.map(c => {
+        const an = c.analise || {};
+        const emEdicao = editando === c.id;
+        return (
+          <div key={c.id} className="cv2-caso">
+            <div className="cv2-spread">
+              <div style={{ minWidth: 0 }}>
+                <span className={`cv2-bdg ${c.tipo === 'cancelamento' ? 'err' : 'warn'}`}>{c.tipo === 'cancelamento' ? `cancelamento · ${fmtBRL(c.valor_centavos)}` : 'avaliação'}</span>
+                {an.chance_vitoria && <span className={`cv2-bdg ${an.chance_vitoria === 'alta' ? 'ok' : an.chance_vitoria === 'media' ? 'warn' : 'mut'}`} style={{ marginLeft: 6 }}>chance {an.chance_vitoria}</span>}
+                <b style={{ marginLeft: 8, fontSize: 13 }}>{an.loja_nome || c.pedido_ref || c.canal}</b>
+                <div style={{ color: 'var(--tx2)', fontSize: 12, marginTop: 3 }}>{c.motivo}</div>
+                {Array.isArray(an.fundamentos) && an.fundamentos.length > 0 && (
+                  <div style={{ color: 'var(--tx2)', fontSize: 11.5, marginTop: 4 }}><b>Fundamentos:</b> {an.fundamentos.join(' · ')}</div>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                <button className="cv2-btn" disabled={agindo === c.id} onClick={() => aprovar(c)}>Aprovar</button>
+                <button className="cv2-btn sec" disabled={agindo === c.id} onClick={() => { setEditando(emEdicao ? null : c.id); setTextoEdit(c.draft_resposta || ''); }}>{emEdicao ? 'Cancelar' : 'Editar'}</button>
+                <button className="cv2-btn danger" disabled={agindo === c.id} onClick={() => descartar(c)}>Descartar</button>
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button className="cv2-btn" onClick={() => setAprovados(a => [...a, c.id])}>Aprovar</button>
-              <button className="cv2-btn sec">Editar</button>
-              <button className="cv2-btn danger" onClick={() => setDescartados(d => [...d, c.id])}>Descartar</button>
-            </div>
+            {emEdicao ? (
+              <div style={{ marginTop: 8 }}>
+                <textarea
+                  value={textoEdit}
+                  onChange={e => setTextoEdit(e.target.value)}
+                  rows={8}
+                  style={{ width: '100%', fontFamily: 'inherit', fontSize: 12.5, padding: 10, border: '1px solid var(--line)', borderRadius: 4, resize: 'vertical' }}
+                />
+                <div style={{ marginTop: 8 }}>
+                  <button className="cv2-btn" disabled={agindo === c.id} onClick={() => salvarEdicao(c)}>Salvar texto</button>
+                </div>
+              </div>
+            ) : (
+              <div className="draft" style={{ whiteSpace: 'pre-wrap' }}>{c.draft_resposta}</div>
+            )}
           </div>
-          <div className="draft">“{c.draft}”</div>
-        </div>
-      ))}
-      {!pend.length && <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>Fila limpa — nenhum caso esperando você.</div>}
+        );
+      })}
+      {casos && !casos.length && <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>Fila limpa — nenhum caso esperando você.</div>}
+      {!casos && !erro && <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>Carregando fila…</div>}
     </div>
   );
 }
@@ -205,8 +275,8 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
           <span className="cv2-pill"><b>BETA F1</b></span>
         </div>
         <div className="cv2-ct">
-          {tela === 'visao' && <VisaoGeral tenantNome={tenantNome} tenantDbId={tenantDbId} />}
-          {tela === 'defesa' && <Defesa />}
+          {tela === 'visao' && <VisaoGeral tenantNome={tenantNome} tenantDbId={tenantDbId} onIrDefesa={() => setTela('defesa')} />}
+          {tela === 'defesa' && <Defesa tenantDbId={tenantDbId} userId={userId} />}
           {tela === 'radar' && <Radar tenantNome={tenantNome} />}
         </div>
       </div>
