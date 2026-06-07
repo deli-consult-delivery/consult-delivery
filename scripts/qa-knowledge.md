@@ -46,9 +46,39 @@ SELECT policyname, cmd, qual FROM pg_policies WHERE tablename = '<tabela>';
 -- Garantir que SELECT está coberto para tenant_members
 ```
 
+### P6 — Cap de 1.000 linhas do PostgREST (contagens/somas erradas na UI)
+```text
+Sintoma: número na tela MENOR que o real (trava perto de 1.000).
+Causa: PostgREST corta qualquer select de linhas em 1000 (db-max-rows).
+Regra: NUNCA contar/somar buscando linhas no cliente.
+  - Contagem → .select('*', { count: 'exact', head: true })
+  - Soma     → filtrar no banco (ex.: .gt('cost_usd', 0)) se poucas linhas,
+               ou criar RPC/view de agregação.
+Verificação: comparar com SQL direto (count(*)/sum) no mesmo filtro.
+```
+
 ---
 
 ## Casos Resolvidos
+
+### [2026-06-07] Console v2 — KPIs da Visão Geral não batiam com o banco
+**Arquivo:** `src/console/ConsoleV2.jsx` (hook `useKpisReais`)  
+**Sintoma:** Tela mostrava ~1.000 execuções; SQL direto retornava 1.704  
+**Causa raiz:** padrão P6 — select de linhas + soma no cliente sofre o cap de 1.000 do PostgREST. RLS foi descartada por impersonação (`set local role authenticated` + jwt do usuário → via 1.704)  
+**Fix (#173):** counts exatos (`count: 'exact', head: true`) para total/ok; custo busca apenas `cost_usd > 0` (7 linhas)  
+**Teste de regressão:**
+```sql
+SELECT count(*),
+       count(*) FILTER (WHERE status IN ('ok','completed','success')),
+       COALESCE(sum(cost_usd),0)
+FROM agent_runs
+WHERE tenant_id = '9079bd4d-4df7-4023-90fb-d79c8ba7e900'
+  AND created_at >= now() - interval '30 days';
+-- Comparar com os 3 KPIs da Visão Geral (devem ser idênticos)
+```
+**Lição:** agregação SEMPRE no banco. Atenção extra: testes de impersonação RLS exigem `BEGIN; SET LOCAL role ...; SET LOCAL request.jwt.claims ...;` — o truque de `set_config` dentro de CTE NÃO aplica o papel (gera falso positivo de vazamento).
+
+---
 
 ### [2026-05-20] BomDia — Grupos não carregavam em "Enviar nos grupos"
 **Arquivo:** `src/screens/BomDiaScreen.jsx` linha ~444  
@@ -90,6 +120,10 @@ LIMIT 3;
 
 ### tenant_members
 `id, tenant_id, user_id, role, created_at`
+
+### defesa_casos (F1 — criada 2026-06-07, migration 20260607_006)
+`id, tenant_id, loja_id, canal, tipo, pedido_ref, valor_centavos, motivo, analise, draft_resposta, status, resultado_valor_centavos, criado_por_agente, aprovado_por, aprovado_em, enviado_em, created_at, updated_at`  
+Estados: `rascunho → aguardando_ok → aprovado → enviado → ganho|perdido` (ou `descartado`). Sem DELETE por RLS. View: `defesa_metricas_mensal`.
 
 ---
 
