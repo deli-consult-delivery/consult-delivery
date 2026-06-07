@@ -42,7 +42,7 @@ function useKpisReais(tenantDbId) {
     (async () => {
       try {
         const desde = new Date(Date.now() - 30 * 86400000).toISOString();
-        const base = () => supabase.from('agent_runs').select('*', { count: 'exact', head: true })\n          .eq('tenant_id', tenantDbId).gte('created_at', desde);
+        const base = () => supabase.from('agent_runs').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantDbId).gte('created_at', desde);
         const [
           { count: total, error: e1 },
           { count: ok, error: e2 },
