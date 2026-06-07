@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase.js';
 import './console.css';
 
 // ============================================================
 // Console v2 · F1 — Defesa Comercial (copiloto)  [D6 aprovada 2026-06-07]
-// PR1: shell + telas com DADOS DE EXEMPLO (wiring real: PR2+).
-// Grupos F2+ visíveis porém travados — regra anti-dispersão da D6.
+// PR2: Visão Geral ligada a dados reais (agent_runs / tenant_agents).
+// Defesa e Radar seguem com DADOS DE EXEMPLO até PR4/PR6.
 // ============================================================
 
 const GRUPOS = [
@@ -29,6 +30,35 @@ const CASOS_EXEMPLO = [
     draft: 'Contestamos o cancelamento do pedido #1077: o preparo já estava iniciado há 12 minutos quando o cancelamento ocorreu, conforme registro do KDS. Solicitamos o ressarcimento integral de R$ 45,50 conforme política da plataforma.' },
 ];
 
+const OK_STATUSES = ['ok', 'completed', 'success'];
+
+function useKpisReais(tenantDbId) {
+  const [kpis, setKpis] = useState(null);
+  const [erro, setErro] = useState(null);
+  useEffect(() => {
+    if (!tenantDbId) return;
+    let alive = true;
+    (async () => {
+      try {
+        const desde = new Date(Date.now() - 30 * 86400000).toISOString();
+        const [{ data: runs, error: e1 }, { count: agentes, error: e2 }] = await Promise.all([
+          supabase.from('agent_runs').select('status, cost_usd').eq('tenant_id', tenantDbId).gte('created_at', desde),
+          supabase.from('tenant_agents').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantDbId),
+        ]);
+        if (e1 || e2) throw (e1 || e2);
+        const total = runs?.length ?? 0;
+        const ok = (runs ?? []).filter(r => OK_STATUSES.includes(r.status)).length;
+        const custo = (runs ?? []).reduce((s, r) => s + (Number(r.cost_usd) || 0), 0);
+        if (alive) setKpis({ total, ok, falhas: total - ok, taxa: total ? Math.round((ok / total) * 100) : null, custo, agentes: agentes ?? 0 });
+      } catch (err) {
+        if (alive) setErro(err?.message || 'erro ao carregar');
+      }
+    })();
+    return () => { alive = false; };
+  }, [tenantDbId]);
+  return { kpis, erro };
+}
+
 function Kpi({ l, v, d, neg, mut }) {
   return (
     <div className="cv2-kpi">
@@ -39,18 +69,21 @@ function Kpi({ l, v, d, neg, mut }) {
   );
 }
 
-function VisaoGeral({ tenantNome }) {
+function VisaoGeral({ tenantNome, tenantDbId }) {
+  const { kpis, erro } = useKpisReais(tenantDbId);
+  const fmt = n => (n ?? 0).toLocaleString('pt-BR');
   return (
     <div>
-      <h1>Visão Geral <span className="cv2-mock">DADOS DE EXEMPLO · PR2 liga ao banco</span></h1>
+      <h1>Visão Geral <span className="cv2-mock" style={{ background: 'var(--green-soft)', color: 'var(--green)' }}>DADOS REAIS · ÚLTIMOS 30 DIAS</span></h1>
       <div className="cv2-rule" />
-      <div className="cv2-sub">{tenantNome} · últimos 30 dias</div>
+      <div className="cv2-sub">{tenantNome}{erro ? ` · erro ao carregar: ${erro}` : ''}</div>
       <div className="cv2-kpis">
-        <Kpi l="R$ defendido no mês" v="R$ 1.240" d="8,4x a mensalidade" />
-        <Kpi l="Contestações ganhas" v="9 de 21" d="43% de vitória" />
-        <Kpi l="Avaliações respondidas" v="34" d="tempo médio 11 min" />
-        <Kpi l="Casos aguardando seu OK" v="3" d="abrir Defesa Comercial" neg />
-        <Kpi l="Horas de gerente poupadas" v="~12h" d="≈ R$ 480 em mão de obra" mut />
+        <Kpi l="Execuções de agentes" v={kpis ? fmt(kpis.total) : '…'} d={kpis ? `${fmt(kpis.ok)} ok · ${fmt(kpis.falhas)} falhas` : 'carregando'} neg={kpis ? kpis.falhas > 0 : false} />
+        <Kpi l="Taxa de sucesso" v={kpis ? (kpis.taxa != null ? `${kpis.taxa}%` : '—') : '…'} d={kpis && kpis.taxa != null ? (kpis.taxa >= 95 ? 'saudável' : 'investigar falhas') : ''} mut />
+        <Kpi l="Custo de IA (30d)" v={kpis ? `US$ ${kpis.custo.toFixed(4)}` : '…'} d="todos os agentes" mut />
+        <Kpi l="Agentes habilitados" v={kpis ? fmt(kpis.agentes) : '…'} d="neste workspace" mut />
+        <Kpi l="R$ defendido no mês" v="—" d="agente Defesa entra no PR4" mut />
+        <Kpi l="Casos aguardando seu OK" v="—" d="agente Defesa entra no PR4" mut />
       </div>
       <div className="cv2-card">
         <h3>Como funciona o copiloto</h3>
@@ -163,7 +196,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
           <span className="cv2-pill"><b>BETA F1</b></span>
         </div>
         <div className="cv2-ct">
-          {tela === 'visao' && <VisaoGeral tenantNome={tenantNome} />}
+          {tela === 'visao' && <VisaoGeral tenantNome={tenantNome} tenantDbId={tenantDbId} />}
           {tela === 'defesa' && <Defesa />}
           {tela === 'radar' && <Radar tenantNome={tenantNome} />}
         </div>
