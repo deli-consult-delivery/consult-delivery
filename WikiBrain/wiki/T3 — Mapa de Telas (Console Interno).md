@@ -1,143 +1,65 @@
-# 🖥️ T3 — Mapa de Telas · Console Interno (rascunho v0)
+# 🖥️ T3 — Mapa de Telas · Console Interno (v1 — revisado contra o app real)
 
-> **Pra você marcar e mudar ANTES de codar.** Isto é proposta, não decisão. Risca, renomeia, move, corta — é justamente pra ajustar barato agora.
-> Vive no repo + Obsidian (igual ao Mapa Vivo).
+> **v1 (2026-06-06, Cowork):** o v0 partia de "32 telas a construir". Revisão contra o **código real**
+> (`src/screens/`, `Sidebar.jsx`) + screenshot do **DELI Hub** em produção mostrou que **~70% já existe**.
+> O v1 reclassifica cada tela e muda o foco do protótipo: **não redesenhar o que funciona — prototipar os 8 gaps reais.**
+> v0 completo no histórico git deste arquivo.
 
-**Decisões desta track:** persona = **console interno** (time CD opera os clientes) · fidelidade = **mista** (estrutura do paradigma EvoNexus, telas-chave redesenhadas pro domínio CD).
+**Legenda:** ✅ JÁ EXISTE (evoluir) · 🔧 PARCIAL (gap específico) · 🆕 NOVA · 🟢 prioridade MVP · 🟡 V2 · 🔵 V3+
 
-**Legenda de prioridade:** 🟢 MVP · 🟡 V2 · 🔵 V3+
-
----
-
-## 🗺️ Mapa de navegação
-
-```mermaid
-flowchart TD
-  Login[S-00 Login / Tenant] --> Dash[S-01 Dashboard]
-
-  Dash --> Clientes[S-03 Clientes]
-  Dash --> Lojas[S-05 Lojas]
-  Dash --> Agentes[S-08 Agentes]
-  Dash --> Conversas[S-12 Conversas / MIA]
-  Dash --> Aprovacoes[S-11 Aprovacoes]
-  Dash --> Cobranca[S-15 Cobranca]
-  Dash --> Admin[S-29 Usuarios e Papeis]
-
-  Clientes --> ClienteDet[S-04 Cliente detalhe]
-  ClienteDet --> Lojas
-  Lojas --> LojaDet[S-06 Loja detalhe]
-  LojaDet --> Metricas[S-07 Metricas]
-
-  Agentes --> AgenteDet[S-09 Agente config]
-  AgenteDet --> Runs[S-10 Runs]
-  Conversas --> ChatVivo[S-13 Chat ao vivo]
-  Conversas --> Aprovacoes
-
-  Dash -.-> DELI[S-02 DELI Orquestrador]
-  AgenteDet -.-> Skills[S-17 Skills]
-  AgenteDet -.-> Memoria[S-19 Memoria]
-  AgenteDet -.-> Providers[S-24 Providers]
-  Dash -.-> Rotinas[S-22 Rotinas]
-  Dash -.-> Templates[S-20 Templates]
-  Dash -.-> Custos[S-26 Custos]
-  Dash -.-> Prospeccao[S-27 SOFIA]
-  Dash -.-> Marketing[S-28 LARA]
-  Admin -.-> Acesso[S-30 Acesso a agentes]
-  Admin -.-> Audit[S-31 Audit log]
-  Admin -.-> Config[S-32 Config]
-```
-
-*(linha cheia = fluxo MVP · linha pontilhada = telas V2/V3)*
+**Vocabulário real do app (usar este, não o do v0):** “DELI Hub” (catálogo+orquestração) · “Superagentes” · “Painel Agentes” · “Espaços” (tarefas-clientes) · “Disparos” · créditos no rodapé da sidebar · busca global no topo · tenant switcher no topo.
 
 ---
 
-## 📋 Inventário de telas
+## 1. O que JÁ EXISTE (não prototipar — só evoluir onde indicado)
 
-### 0. Acesso
-- **S-00 · Login / Seleção de tenant** 🟢
-  Login + (se multi-tenant) escolher qual cliente operar. Define o contexto de tenant pro resto da sessão.
+| v0 | Tela real (código) | Estado | Evolução sugerida |
+|----|--------------------|--------|--------------------|
+| S-00 Login | `LoginScreen` + `ResetPasswordScreen` | ✅ | tenant switcher já existe na topbar |
+| S-01 Dashboard | `DashboardScreen` | 🔧 | dar destaque à fila de aprovações + alertas (churn/inadimplência/erro de agente) |
+| S-02 DELI | `DeliScreen` + `DeliPainel` + prompt do DELI Hub | ✅ | — |
+| S-03/04 Clientes | `CRMScreen` + `Contratos/` + `Recontratacao/` + `OnboardingScreen` | ✅ | flag de risco de churn + tier no card |
+| S-05/06/07 Lojas | `lojas/` (detalhe c/ abas) | ✅ | métricas/snapshots 🟡 |
+| S-08 Agentes | `AgentsPage` = **DELI Hub** (Superagentes, Meus/Todos, cards c/ exec e tempo) | 🔧 | **GAP-1: toggle de habilitação por tenant** — `tenant_agents` já cabeada no banco (onda 1), UI não expõe |
+| S-09 Agente config | `AgentBuilderScreen` | 🔧 | **GAP-2:** modo (humano/híbrido/IA via `tenant_agent_config`), provider, custo — hoje só prompt/básico |
+| S-10 Runs | `AgentRunsScreen` + “Atividade” na sidebar do Hub | ✅ | custo agregado vai pra GAP-4 (Custos) |
+| S-11 Aprovações | `ApprovalsScreen` + `DraftsPendentesScreen` + `AgentInboxScreen` + `SugestaoModal` | 🔧 | **GAP-3: consolidar 3–4 superfícies numa FILA ÚNICA de aprovação** (coração do propõe-e-aprova) |
+| S-12 MIA | `MiaAuditScreen` | ✅ | — |
+| S-13 Chat | `ChatScreen` (+ bots, departamentos, Kanban de tarefas) | ✅ | maduro — não tocar |
+| S-15/16 Cobrança | `InadimplentesScreen` + `CoraScreen` | ✅ | — |
+| S-19 Memória | `MemoriesScreen` + `KnowledgeBaseScreen` (RAG) | ✅ | — |
+| S-22/23 Rotinas | `AutomacoesScreen` + `HeartbeatsScreen` + `BomDiaScreen` + `EncerramentoScreen` | ✅ | EvoNexus-parity já melhor que o esperado |
+| S-27 SOFIA | `SofiaScreen` + `Sofia/` | ✅ (v0 dizia 🔵 futuro — errado) | — |
+| S-28 LARA | `LaraScreen` + `LaraEditorial/` + `campanhas/` | ✅ (idem) | — |
+| S-32 Config | `SettingsScreen` + `Settings/` + `DepartmentManagementPage` | ✅ | — |
+| (sem nº no v0) | `GoalsScreen` (Metas!), `KanbanScreen`, `TasksScreen`, `TarefasClientesScreen` (Espaços), `NotificacoesScreen`, `GruposScreen`, `WhatsappVinculosScreen`, `AnaliseiFoodScreen`, `BrenoScreen`, `MaxScreen`, `NovaScreen`, `VeraScreen`, `ReportsScreen` | ✅ | o v0 nem listava — já cobrem Metas/Tickets/Relatórios do checklist EvoNexus |
 
-### 1. Núcleo / Orquestração *(oracle → DELI)*
-- **S-01 · Dashboard** 🟢
-  Home do operador. KPIs da plataforma, clientes ativos, agentes rodando agora, **fila de aprovações pendentes** em destaque, alertas (churn, inadimplência, erro de agente).
-- **S-02 · DELI — Orquestrador** 🟡
-  O que o DELI está coordenando: fila de tarefas, handoffs entre agentes, decisões recentes.
+## 2. GAPS REAIS — escopo do protótipo clicável T3(b)
 
-### 2. Clientes & Lojas *(domínio CD)*
-- **S-03 · Clientes (lista)** 🟢
-  Clientes da CD. Status (`is_active`), tier (Light/Performance/Enterprise), flag de risco de churn. Filtro + busca.
-- **S-04 · Cliente — detalhe** 🟢
-  Dados, contrato/tier, lojas vinculadas, saúde da conta, histórico.
-- **S-05 · Lojas (lista)** 🟢
-  Todas as lojas (escopo por tenant). Canal (iFood/99Food/Rappi/Keeta/próprio), status, métrica-resumo.
-- **S-06 · Loja — detalhe** 🟢
-  Núcleo operacional da loja: consultores, vínculo WhatsApp, GPT da loja, child tables. Abas pra cada bloco.
-- **S-07 · Métricas da loja** 🟡
-  Gráficos (pedidos, ticket, evolução), snapshots históricos.
+> Só isto entra no protótipo. 8 telas/pedaços, não 32.
 
-### 3. Agentes *(paradigma EvoNexus)*
-- **S-08 · Agentes (catálogo)** 🟢
-  DELI, CORA, MIA, Analista iFood, BomDia, Encerramento, LARA, SOFIA, BRENO. Status, modo (ia/híbrido), habilitação por tenant.
-- **S-09 · Agente — config** 🟢
-  Prompt/role, modo, tools habilitadas (RBAC), provider, custo, habilitação por tenant (`tenant_agents`/`tenant_agent_config`).
-- **S-10 · Runs do agente** 🟢
-  Histórico de execuções (`agent_runs`): tokens, custo, resultado, status, timestamp.
-- **S-11 · Fila de aprovações (propõe-e-aprova)** 🟢
-  Sugestões da IA aguardando humano (`sugestoes_ia`). Ações: aprovar · editar · rejeitar. Coração do modelo "agente propõe, humano aprova".
+| GAP | Tela/pedaço | Por que | Prio |
+|-----|-------------|---------|------|
+| **GAP-1** | **Habilitação de agentes por tenant** — toggle no DELI Hub/Painel Agentes (liga/desliga agente por cliente, lê/escreve `tenant_agents`) | Banco já pronto (onda 1); é A feature SaaS multi-tenant | 🟢 |
+| **GAP-2** | **Agente config completo** — modo humano/híbrido/IA (`tenant_agent_config`), provider (D1 multi-provider), limites de custo | Completa o S-09; paridade EvoNexus “Provedores” sem tela separada | 🟢 |
+| **GAP-3** | **Fila única de aprovações** — funde Approvals + DraftsPendentes + AgentInbox + sugestões MIA num só lugar com filtros (origem/agente/loja) | Hoje 4 lugares; humano-no-loop precisa de UM ponto | 🟢 |
+| **GAP-4** | **Custos** — agregação por agente/dia/tenant a partir de `agent_runs.cost_usd` (1686 runs já logados); evolui o widget de créditos da sidebar | Paridade EvoNexus “Custos” (CORE); controle de margem | 🟢 |
+| **GAP-5** | **Skills** — lista + editor (markdown-as-tool, globais vs por-tenant) | Único CORE do EvoNexus sem NENHUMA tela | 🟡 |
+| **GAP-6** | **Audit log** — viewer de `audit_log` (quem/quê/quando/IP, filtros) | Tabela tem dados, zero UI; compliance multi-tenant | 🟡 |
+| **GAP-7** | **Acesso a agentes por usuário** — UI de `user_agent_access` (agora com FK/tenant da onda 1) | Hoje só via SQL | 🟡 |
+| **GAP-8** | **Templates** — lista + editor (mensagens e **ofertas**) | Paridade EvoNexus “Modelos”; LARA consome | 🟡 |
 
-### 4. Conversas & Atendimento
-- **S-12 · Monitor de conversas (MIA)** 🟢
-  Conversas WhatsApp monitoradas, análise batch (15min), sinais/alertas. Só conversas vinculadas a `loja_id`.
-- **S-13 · Chat ao vivo** 🟢
-  Atendimento humano + agente (BomDia/Encerramento). Visão da conversa, assumir/devolver.
+**Recorte do protótipo MVP = GAP-1 a GAP-4** (os 🟢): 4 telas/pedaços em React com dados fake, navegação entre eles, no visual do app atual (dark, sidebar, cards — referenciar o DELI Hub).
 
-### 5. Cobrança *(CORA / Asaas)*
-- **S-15 · Cobrança — visão geral** 🟢
-  Faturas, status, inadimplência. CORA restrito por papel.
-- **S-16 · Fatura — detalhe** 🟡
+## 3. NÃO entra (decisão herdada do checklist FASE 1)
 
-### 6. Skills *(paradigma)*
-- **S-17 · Skills (lista)** 🟡 — skills disponíveis, por agente.
-- **S-18 · Skill — editor** 🟡 — editar a skill (markdown-as-tool).
+MemPalace · Terminal embutido · MCP Servers · Plugins/Marketplace · Docs · Sistemas → **DEPOIS** (v2+). Workspace/file-browser e Links compartilhados → 🟡 avaliar depois dos GAPs.
 
-### 7. Memória *(paradigma)*
-- **S-19 · Memória** 🟡 — ver/editar/limpar memória por agente e por tenant (`agent_memories`).
+## 4. Divergência registrada (doc vence memória)
 
-### 8. Templates *(paradigma)*
-- **S-20 · Templates (lista)** 🟡 — mensagens e **ofertas** (nunca "promoção").
-- **S-21 · Template — editor** 🟡
-
-### 9. Rotinas / Automações *(paradigma → Trigger.dev)*
-- **S-22 · Rotinas (lista)** 🟡 — BomDia, Encerramento, MIA 15min, drips. Status, próxima execução.
-- **S-23 · Rotina — config** 🟡 — schedule, agente, condições.
-
-### 10. Providers *(paradigma → multi-provider)*
-- **S-24 · Providers (lista)** 🟡 — Claude, Ollama/Kimi, OpenRouter por tenant; Evolution, Asaas.
-- **S-25 · Provider — config** 🟡 — key (via Infisical), base_url, modelo default.
-
-### 11. Custos *(paradigma)*
-- **S-26 · Custos** 🟡 — por tenant / agente / provider / período.
-
-### 12. Prospecção & Marketing *(agentes futuros)*
-- **S-27 · Prospecção (SOFIA)** 🔵 — pipeline, leads, ICP.
-- **S-28 · Marketing & Conteúdo (LARA)** 🔵 — drips 90 dias, calendário CRM.
-
-### 13. Administração / RBAC
-- **S-29 · Usuários & papéis** 🟢 — RBAC (7 papéis: admin, dev, marketing, atendimento, financeiro, viewer, deli_owner).
-- **S-30 · Acesso a agentes** 🟡 — `user_agent_access`.
-- **S-31 · Audit log** 🟡 — `audit_log`.
-- **S-32 · Config da plataforma/tenant** 🟡 — `is_active`, settings, white-label (V3).
-
----
-
-## 🎯 Shortlist MVP (🟢 — o que o time CD precisa pra operar já)
-
-`S-00 Login` · `S-01 Dashboard` · `S-03 Clientes` · `S-04 Cliente detalhe` · `S-05 Lojas` · `S-06 Loja detalhe` · `S-08 Agentes` · `S-09 Agente config` · `S-10 Runs` · `S-11 Aprovações` · `S-12 MIA` · `S-13 Chat ao vivo` · `S-15 Cobrança` · `S-29 Usuários & papéis`
-
-≈ 14 telas. Sugestão de possível merge: **S-11** (aprovações) e a aba de sugestões dentro de **S-12** podem ser a mesma fila filtrada — decidir no protótipo.
-
----
+- Screenshot mostra **NOVA = “Agente de novidades e conteúdo”** e **MAX = “consultor técnico e auditoria de cardápio”** — descrições divergem do RESTRUCTURE §11 (NOVA = automação vendida a clientes; MAX = suporte a sistemas). Não bloqueia T3; alinhar descrições quando tocar no catálogo.
+- Sidebar real não tem grupo “Admin” do v0; Config/Grupos vivem em “Sistema”.
 
 ## ▶️ Próximo passo
 
-Quando você revisar e ajustar este mapa, a **T3(b)** é o **protótipo clicável em React** das 14 telas do MVP — com dados fake, navegável, pra você ver layout/botão/cor e mudar antes de qualquer código ou banco. Aí sim vira o esqueleto real depois.
+Wandson bate o olho neste v1 (especialmente §2) → com o ok, Cowork constrói o **protótipo clicável dos GAP-1..4** (React, dados fake, navegação, visual DELI Hub). Aprovado o protótipo → vira código real por gap, um PR por vez.
