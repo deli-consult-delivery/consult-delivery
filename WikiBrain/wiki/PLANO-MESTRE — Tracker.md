@@ -16,29 +16,30 @@
 
 ## 🔒 D6 — Direcionamento SaaS (APROVADA pelo Wandson em 2026-06-07)
 
-**F1 = "Defesa Comercial iFood — modo copiloto" a R$147/loja/mês.** Carteira de consultoria INTOCADA (beta não-pagante; venda só a lojas novas). ROI em cesta "R$ defendido". **Gate D+90** (metas em `docs/estrategia/DIRECIONAMENTO-SAAS-2026-06.md` §5) antes de qualquer F2 (Análise/Cardápio/Keeta/99Food/white-label). **Regra anti-dispersão aprovada.** Kill-switch da Cris pré-escrito (§6). Início do build: **imediato** (2026-06-07). Plano de PRs: `docs/estrategia/F1-BUILD-PLAN.md`.
-*Pendência de registro: gravar D6 também na seção de decisões do `PLANO-MESTRE.md` (raiz) na próxima sessão.*
+**F1 = "Defesa Comercial iFood — modo copiloto" a R$147/loja/mês.** Carteira INTOCADA (beta não-pagante; venda só a lojas novas). ROI em cesta "R$ defendido". **Gate D+90** (`docs/estrategia/DIRECIONAMENTO-SAAS-2026-06.md` §5) antes de qualquer F2. Anti-dispersão aprovada. Kill-switch da Cris (§6). Plano: `docs/estrategia/F1-BUILD-PLAN.md`.
+*Pendência: gravar D6 também no `PLANO-MESTRE.md` (raiz).*
 
 ---
 
 ## 🔴 Onde parou
 
-_Última sessão: 2026-06-07 (Cowork — sessão 10: VIGIA automático — cancelamentos caem na fila sozinhos)_
+_Última sessão: 2026-06-07 (Cowork — sessão 11: **F1 COMPLETA — PR1..PR7 entregues e aceitos**)_
 
-- **PR5c ✅ ACEITO (#179):** task `defesa-vigia` (cron 5min) varre `messages` inbound (Supabase fonte primária, P3), detecta menção `@defesa` ou padrões de cancelamento, deduplica por `origem_message_id`, resolve loja pelo grupo, extrai valor R$ do texto e dispara `defesa-analisar-caso`. **Teste real:** mensagem plantada 20:15:57 → caso na fila 20:20:44 (4m47s) · valor R$ 62,50 extraído sozinho · loja "Cannoli" identificada pelo contexto do grupo · **dedupe provado** (2ª varredura não duplicou). Modelo WhatsApp preservado (vigia nunca responde na conversa).
-- Sessão 9: F1 PR2→PR5 aceitos (fila real; aprovação do Wandson gravada no banco; padrão P6 qa-knowledge).
-- Sessões 6-8: benchmark #167 · direcionamento #168 · D6 · PR1 #169.
-- **F1 operacional ponta-a-ponta SEM toque humano na entrada:** WhatsApp → vigia → análise IA → fila → OK do Wandson → auditoria. Falta só o lado do envio/resultado.
-- **⚠️ Pendentes antigos:** `.obsidian/*`/`log.md` trackeados · grants órfãos P-5 · rotação credenciais · 2 ajustes do protótipo Claude Design · registrar D6 no PLANO-MESTRE.md · vincular grupos→lojas (`whatsapp_groups.loja_id` está 100% nulo; onboarding PR7).
+- **PR6 ✅ (#181):** seção "Em andamento" — Marcar enviado → **Ganho** (valor recuperado inline) / **Perdido**; `resultado_valor_centavos` alimenta a view → cartão "R$ defendido" acumula. Sem SQL novo.
+- **PR5b ✅ (#182):** **OK pelo WhatsApp** — vigia entende `@defesa ok|aprovo|aprovar` e `@defesa descartar` na MESMA conversa do caso (idempotente; rastro via/quem na analise; nenhum agente envia nada). **Prova e2e em produção:** caso #9034 R$ 41,90 criado pelo vigia 22:05 → "@defesa ok" 22:09:32 → **aprovado 22:10:12 (40s)** com `via=whatsapp` + nome de quem mandou.
+- **PR7 ✅ (#183):** onboarding self-service "**Ativar loja**" — cadastro + **qualificação D6 ao vivo** (≥300 pedidos/mês OU ≥6 cancelamentos/mês) + **vínculo grupo→loja** (`whatsapp_groups.loja_id`, zera gap dos grupos órfãos) + instruções do fluxo + lista de lojas ativadas. Sem SQL novo.
+- Bundle final verificado: `index-Di3-s9E7.js` contém PR6+PR7; worker com vigia v2.
+- **F1 — PLACAR FINAL: PR1–PR7 ✅ · 12+ PRs · 2 migrations aplicadas · agente DEFESA + VIGIA vivos · ciclo completo: WhatsApp → caso automático → análise IA (US$0,014) → OK (painel ou "@defesa ok") → enviado → ganho/perdido → R$ defendido.**
+- Fora do escopo F1 (registrado): Radar real (sem fonte de dados ainda — tela com exemplo rotulado) · allowlist de quem pode aprovar via WhatsApp (hoje: qualquer participante, com rastro) · ativação multi-tenant self-service (depende de signup público).
+- **⚠️ Pendentes antigos:** `.obsidian/*`/`log.md` · grants órfãos P-5 · rotação credenciais · D6 no PLANO-MESTRE.md · 2 ajustes protótipo Claude Design.
 
 ---
 
 ## 👉 Próxima ação
 
-1. **PR6:** transição enviado→ganho/perdido com `resultado_valor_centavos` (alimenta "R$ defendido") + Radar real (rotina semanal).
-2. **PR5b:** reply-loop de OK pelo WhatsApp (webhook Evolution + `parse-resposta-cliente`).
-3. **PR7:** onboarding self-service + vínculo grupos→lojas + qualificação por volume.
-4. Docs: D6 no `PLANO-MESTRE.md` · 5.5 consolidar docs · FASE 2 onda 2 (P-2/P-3/P-5).
+1. **Wandson valida a F1 no uso real:** ativar 1 loja real na tela "Ativar loja" · vincular o grupo · deixar o vigia rodar 1 semana · registrar ganhos/perdidos. É o ensaio do beta.
+2. **Beta D+90 (D6):** recrutar primeiras lojas FORA da carteira (meta §5: 10-12 pagantes, ativação ≥80%, R$ defendido ≥2x mensalidade em 50%, churn<8%).
+3. Técnico em paralelo: limpar casos de teste · allowlist aprovadores WhatsApp · Radar real quando houver fonte · FASE 2 onda 2 · D6 no PLANO-MESTRE.md · 5.5.
 
 ---
 
@@ -46,37 +47,28 @@ _Última sessão: 2026-06-07 (Cowork — sessão 10: VIGIA automático — cance
 
 | Track | Nome | Status | Última ação |
 |-------|------|--------|-------------|
-| T1 | Plataforma CD (V1→V3) | 🔄 | Console v2: Visão Geral + Defesa REAIS (#171-#179) |
-| T2 | EvoNexus-replica | ✅ onda 1 aplicada | onda 2 a redigir |
-| T3 | Visual-First / telas | ✅ | F1 no design definitivo |
-| T4 | Hermes | 🔄 3A ✅ / 3B bloqueado | aguarda GATE 0 |
-| T5 | Segurança | ✅ | defesa_casos com RLS provada |
-| T6 | Agentes IA | 🔄 | **DEFESA + VIGIA vivos** (entrada automática de casos funcionando) |
+| T1 | Plataforma CD (V1→V3) | 🔄 | Console v2 F1 completo (4 telas reais) |
+| T2 | EvoNexus-replica | ✅ onda 1 | onda 2 a redigir |
+| T3 | Visual-First / telas | ✅ | F1 concluída no design definitivo |
+| T4 | Hermes | 🔄 | aguarda GATE 0 |
+| T5 | Segurança | ✅ | RLS defesa_casos provada |
+| T6 | Agentes IA | ✅ F1 | DEFESA+VIGIA em produção com ciclo completo |
 | T7 | PILOTO | 🔄 | Onda 03 não aplicada |
-| T8 | Infra/CI | ⚠️ 2 riscos | deploy-trigger automático validado 2x |
-| T9 | Negócio | 🔒 D6 travada | produto F1 com entrada automática — pronto p/ beta na carteira |
+| T8 | Infra/CI | ⚠️ | deploy duplo (Pages+Trigger) validado em série |
+| T9 | Negócio | 🔒 D6 | **PRODUTO F1 PRONTO → próximo: beta D+90** |
 
 ---
 
 ## 📋 Log de sessões
 
-### 2026-06-07 (sessão 10 — Cowork: vigia automático PR5c)
-- #179: defesa-vigia (cron 5min, Supabase P3, dedupe origem_message_id, valor R$ extraído, loja por grupo)
-- Aceite com output bruto: caso automático em 4m47s · R$ 62,50 · loja Cannoli · dedupe 1 caso após 2 varreduras
+### 2026-06-07 (sessão 11 — Cowork: F1 COMPLETA — PR6 + PR5b + PR7)
+- PR6 #181 ganho/perdido c/ valor → R$ defendido acumula; PR5b #182 OK pelo WhatsApp (prova: aprovação em 40s, via/quem rastreados); PR7 #183 Ativar loja (qualificação D6 + vínculo grupo)
+- F1 PR1..PR7 ✅ — ciclo completo em produção, custo US$≈0,014/caso
 
-### 2026-06-07 (sessão 9 — Cowork: build F1 PR2→PR5)
-- PR2 #171 dados reais + bug cap-1000 (achado pelo Wandson) → fix #173 + padrão P6 #174
-- PR3 migration 006 aplicada (isolamento provado); PR4 #175 agente + seed 007 (#176); e2e 23s US$0,0139
-- PR5 #177 fila real + draft/sino/DELI; aceite: aprovação do Wandson gravada (20:05 UTC)
-
-### 2026-06-07 (sessões 6-8 — Cowork: benchmark → D6 → build F1 PR1)
-- Benchmark #167 + Gemini; método adversarial → DIRECIONAMENTO-SAAS #168; **D6 aprovada**; PR1 #169 em produção
-
-### 2026-06-06 (sessão 5) — mapa v1 #163; protótipo 32 telas #164
-### 2026-06-06 (sessão 4) — FASE 2 onda 1 APLICADA; isolamento 0/0/0; D5 v2
-### 2026-06-06 (sessão 3) — conector GitHub escrita; #156/#152/#158/#159; D4+D5; 5.4
-### 2026-06-06 (sessão 2) — 5.1 fechado
-### 2026-06-06 (sessão 1) — PLANO-MESTRE raiz; #154; Hermes 3A; T3 v0
+### 2026-06-07 (sessão 10) — vigia automático #179 (caso em 4m47s; dedupe provado)
+### 2026-06-07 (sessão 9) — PR2..PR5 (#171-#177): dados reais, P6, migration 006, agente, fila real
+### 2026-06-07 (sessões 6-8) — benchmark #167 · direcionamento #168 · **D6 aprovada** · PR1 #169
+### 2026-06-06 (sessões 1-5) — protocolo, FASE 0-2 onda 1, D4/D5, protótipo 32 telas
 
 ---
 
