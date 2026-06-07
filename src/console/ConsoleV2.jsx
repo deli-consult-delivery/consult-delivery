@@ -4,9 +4,9 @@ import './console.css';
 
 // ============================================================
 // Console v2 · F1 — Defesa Comercial (copiloto)  [D6 aprovada 2026-06-07]
-// PR5: fila REAL — tela Defesa lê defesa_casos sob RLS; Aprovar/
-// Editar/Descartar atualizam o caso (auditoria preservada, sem DELETE).
-// Radar segue com DADOS DE EXEMPLO até PR6.
+// PR6: ciclo completo do caso — aguardando_ok → aprovado → enviado →
+// ganho (com valor recuperado) | perdido. "R$ defendido" acumula via view.
+// Radar segue com DADOS DE EXEMPLO (sem fonte de dados ainda).
 // ============================================================
 
 const GRUPOS = [
@@ -59,6 +59,7 @@ function useKpisReais(tenantDbId) {
           taxa: t ? Math.round((o / t) * 100) : null,
           custo, agentes: agentes ?? 0,
           defendidoCentavos: Number(m.defendido_centavos) || 0,
+          ganhos: Number(m.ganhos) || 0,
           aguardandoOk: Number(m.aguardando_ok) || 0,
         });
       } catch (err) {
@@ -93,7 +94,7 @@ function VisaoGeral({ tenantNome, tenantDbId, onIrDefesa }) {
         <Kpi l="Taxa de sucesso" v={kpis ? (kpis.taxa != null ? `${kpis.taxa}%` : '—') : '…'} d={kpis && kpis.taxa != null ? (kpis.taxa >= 95 ? 'saudável' : 'investigar falhas') : ''} mut />
         <Kpi l="Custo de IA (30d)" v={kpis ? `US$ ${kpis.custo.toFixed(4)}` : '…'} d="todos os agentes" mut />
         <Kpi l="Agentes habilitados" v={kpis ? fmt(kpis.agentes) : '…'} d="neste workspace" mut />
-        <Kpi l="R$ defendido no mês" v={kpis ? fmtBRL(kpis.defendidoCentavos) : '…'} d="casos ganhos" />
+        <Kpi l="R$ defendido no mês" v={kpis ? fmtBRL(kpis.defendidoCentavos) : '…'} d={kpis ? `${fmt(kpis.ganhos)} casos ganhos` : ''} />
         <Kpi l="Casos aguardando seu OK" v={kpis ? fmt(kpis.aguardandoOk) : '…'} d="abrir Defesa Comercial" neg={kpis ? kpis.aguardandoOk > 0 : false} />
       </div>
       <div className="cv2-card">
@@ -109,52 +110,76 @@ function VisaoGeral({ tenantNome, tenantDbId, onIrDefesa }) {
   );
 }
 
+function CasoCard({ c, children }) {
+  const an = c.analise || {};
+  return (
+    <div className="cv2-caso">
+      <div className="cv2-spread">
+        <div style={{ minWidth: 0 }}>
+          <span className={`cv2-bdg ${c.tipo === 'cancelamento' ? 'err' : 'warn'}`}>{c.tipo === 'cancelamento' ? `cancelamento · ${fmtBRL(c.valor_centavos)}` : 'avaliação'}</span>
+          {c.status !== 'aguardando_ok' && <span className="cv2-bdg mut" style={{ marginLeft: 6 }}>{c.status}</span>}
+          {an.chance_vitoria && <span className={`cv2-bdg ${an.chance_vitoria === 'alta' ? 'ok' : an.chance_vitoria === 'media' ? 'warn' : 'mut'}`} style={{ marginLeft: 6 }}>chance {an.chance_vitoria}</span>}
+          <b style={{ marginLeft: 8, fontSize: 13 }}>{an.loja_nome || c.pedido_ref || c.canal}</b>
+          <div style={{ color: 'var(--tx2)', fontSize: 12, marginTop: 3 }}>{c.motivo}</div>
+          {Array.isArray(an.fundamentos) && an.fundamentos.length > 0 && c.status === 'aguardando_ok' && (
+            <div style={{ color: 'var(--tx2)', fontSize: 11.5, marginTop: 4 }}><b>Fundamentos:</b> {an.fundamentos.join(' · ')}</div>
+          )}
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function Defesa({ tenantDbId, userId }) {
-  const [casos, setCasos] = useState(null);
+  const [fila, setFila] = useState(null);          // aguardando_ok
+  const [andamento, setAndamento] = useState(null); // aprovado | enviado
   const [erro, setErro] = useState(null);
-  const [editando, setEditando] = useState(null);   // id do caso em edição
+  const [editando, setEditando] = useState(null);
   const [textoEdit, setTextoEdit] = useState('');
-  const [agindo, setAgindo] = useState(null);        // id do caso com ação em curso
+  const [ganhoDe, setGanhoDe] = useState(null);     // id do caso com input de valor aberto
+  const [valorGanho, setValorGanho] = useState('');
+  const [agindo, setAgindo] = useState(null);
 
   const carregar = useCallback(async () => {
     if (!tenantDbId) return;
-    const { data, error } = await supabase
-      .from('defesa_casos')
-      .select('id, tipo, canal, pedido_ref, valor_centavos, motivo, analise, draft_resposta, status, created_at')
-      .eq('tenant_id', tenantDbId)
-      .eq('status', 'aguardando_ok')
-      .order('created_at', { ascending: false })
-      .limit(50);
-    if (error) { setErro(error.message); return; }
-    setCasos(data ?? []);
+    const cols = 'id, tipo, canal, pedido_ref, valor_centavos, motivo, analise, draft_resposta, status, created_at';
+    const [{ data: f, error: e1 }, { data: a, error: e2 }] = await Promise.all([
+      supabase.from('defesa_casos').select(cols).eq('tenant_id', tenantDbId).eq('status', 'aguardando_ok').order('created_at', { ascending: false }).limit(50),
+      supabase.from('defesa_casos').select(cols).eq('tenant_id', tenantDbId).in('status', ['aprovado', 'enviado']).order('created_at', { ascending: false }).limit(50),
+    ]);
+    if (e1 || e2) { setErro((e1 || e2).message); return; }
+    setFila(f ?? []);
+    setAndamento(a ?? []);
   }, [tenantDbId]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  async function mudarStatus(caso, novoStatus, extras = {}) {
+  async function atualizar(caso, patch) {
     setAgindo(caso.id);
-    const { error } = await supabase
-      .from('defesa_casos')
-      .update({ status: novoStatus, updated_at: new Date().toISOString(), ...extras })
-      .eq('id', caso.id);
+    const { error } = await supabase.from('defesa_casos').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', caso.id);
     setAgindo(null);
-    if (error) { setErro(error.message); return; }
-    setCasos(cs => cs.filter(c => c.id !== caso.id));
+    if (error) { setErro(error.message); return false; }
+    await carregar();
+    return true;
   }
 
-  const aprovar = (caso) => mudarStatus(caso, 'aprovado', { aprovado_por: userId ?? null, aprovado_em: new Date().toISOString() });
-  const descartar = (caso) => mudarStatus(caso, 'descartado');
+  const aprovar = c => atualizar(c, { status: 'aprovado', aprovado_por: userId ?? null, aprovado_em: new Date().toISOString() });
+  const descartar = c => atualizar(c, { status: 'descartado' });
+  const marcarEnviado = c => atualizar(c, { status: 'enviado', enviado_em: new Date().toISOString() });
+  const marcarPerdido = c => atualizar(c, { status: 'perdido', resultado_valor_centavos: 0 });
+
+  async function confirmarGanho(c) {
+    const normalizado = String(valorGanho).replace(/\./g, '').replace(',', '.');
+    const reais = Number(normalizado);
+    if (!Number.isFinite(reais) || reais < 0) { setErro('valor inválido'); return; }
+    const ok = await atualizar(c, { status: 'ganho', resultado_valor_centavos: Math.round(reais * 100) });
+    if (ok) { setGanhoDe(null); setValorGanho(''); }
+  }
 
   async function salvarEdicao(caso) {
-    setAgindo(caso.id);
-    const { error } = await supabase
-      .from('defesa_casos')
-      .update({ draft_resposta: textoEdit, updated_at: new Date().toISOString() })
-      .eq('id', caso.id);
-    setAgindo(null);
-    if (error) { setErro(error.message); return; }
-    setCasos(cs => cs.map(c => c.id === caso.id ? { ...c, draft_resposta: textoEdit } : c));
-    setEditando(null);
+    const ok = await atualizar(caso, { draft_resposta: textoEdit });
+    if (ok) setEditando(null);
   }
 
   return (
@@ -163,49 +188,64 @@ function Defesa({ tenantDbId, userId }) {
       <div className="cv2-rule" />
       <div className="cv2-sub">Casos preparados pelo agente — revise e dê o OK. Nada é enviado sem a sua aprovação.{erro ? ` · erro: ${erro}` : ''}</div>
       <div className="cv2-kpis">
-        <Kpi l="Aguardando seu OK" v={casos ? casos.length : '…'} d="nesta fila" neg={casos ? casos.length > 0 : false} />
+        <Kpi l="Aguardando seu OK" v={fila ? fila.length : '…'} d="revisar agora" neg={fila ? fila.length > 0 : false} />
+        <Kpi l="Em andamento" v={andamento ? andamento.length : '…'} d="aprovados/enviados — registre o resultado" mut />
       </div>
-      {casos && casos.map(c => {
-        const an = c.analise || {};
+
+      {fila && fila.map(c => {
         const emEdicao = editando === c.id;
         return (
-          <div key={c.id} className="cv2-caso">
-            <div className="cv2-spread">
-              <div style={{ minWidth: 0 }}>
-                <span className={`cv2-bdg ${c.tipo === 'cancelamento' ? 'err' : 'warn'}`}>{c.tipo === 'cancelamento' ? `cancelamento · ${fmtBRL(c.valor_centavos)}` : 'avaliação'}</span>
-                {an.chance_vitoria && <span className={`cv2-bdg ${an.chance_vitoria === 'alta' ? 'ok' : an.chance_vitoria === 'media' ? 'warn' : 'mut'}`} style={{ marginLeft: 6 }}>chance {an.chance_vitoria}</span>}
-                <b style={{ marginLeft: 8, fontSize: 13 }}>{an.loja_nome || c.pedido_ref || c.canal}</b>
-                <div style={{ color: 'var(--tx2)', fontSize: 12, marginTop: 3 }}>{c.motivo}</div>
-                {Array.isArray(an.fundamentos) && an.fundamentos.length > 0 && (
-                  <div style={{ color: 'var(--tx2)', fontSize: 11.5, marginTop: 4 }}><b>Fundamentos:</b> {an.fundamentos.join(' · ')}</div>
-                )}
-              </div>
+          <div key={c.id}>
+            <CasoCard c={c}>
               <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                 <button className="cv2-btn" disabled={agindo === c.id} onClick={() => aprovar(c)}>Aprovar</button>
                 <button className="cv2-btn sec" disabled={agindo === c.id} onClick={() => { setEditando(emEdicao ? null : c.id); setTextoEdit(c.draft_resposta || ''); }}>{emEdicao ? 'Cancelar' : 'Editar'}</button>
                 <button className="cv2-btn danger" disabled={agindo === c.id} onClick={() => descartar(c)}>Descartar</button>
               </div>
-            </div>
+            </CasoCard>
             {emEdicao ? (
-              <div style={{ marginTop: 8 }}>
-                <textarea
-                  value={textoEdit}
-                  onChange={e => setTextoEdit(e.target.value)}
-                  rows={8}
-                  style={{ width: '100%', fontFamily: 'inherit', fontSize: 12.5, padding: 10, border: '1px solid var(--line)', borderRadius: 4, resize: 'vertical' }}
-                />
-                <div style={{ marginTop: 8 }}>
-                  <button className="cv2-btn" disabled={agindo === c.id} onClick={() => salvarEdicao(c)}>Salvar texto</button>
-                </div>
+              <div style={{ margin: '-6px 0 10px' }}>
+                <textarea value={textoEdit} onChange={e => setTextoEdit(e.target.value)} rows={8}
+                  style={{ width: '100%', fontFamily: 'inherit', fontSize: 12.5, padding: 10, border: '1px solid var(--line)', borderRadius: 4, resize: 'vertical' }} />
+                <div style={{ marginTop: 6 }}><button className="cv2-btn" disabled={agindo === c.id} onClick={() => salvarEdicao(c)}>Salvar texto</button></div>
               </div>
             ) : (
-              <div className="draft" style={{ whiteSpace: 'pre-wrap' }}>{c.draft_resposta}</div>
+              <div className="cv2-caso" style={{ marginTop: -6, borderTop: 'none', borderTopLeftRadius: 0, borderTopRightRadius: 0, paddingTop: 0 }}>
+                <div className="draft" style={{ whiteSpace: 'pre-wrap', marginTop: 0 }}>{c.draft_resposta}</div>
+              </div>
             )}
           </div>
         );
       })}
-      {casos && !casos.length && <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>Fila limpa — nenhum caso esperando você.</div>}
-      {!casos && !erro && <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>Carregando fila…</div>}
+      {fila && !fila.length && <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>Fila limpa — nenhum caso esperando você.</div>}
+
+      <h1 style={{ fontSize: 15, marginTop: 22 }}>Em andamento — registre o resultado</h1>
+      <div className="cv2-rule" />
+      <div className="cv2-sub">Quando o marketplace responder, marque <b>Ganho</b> (informe o valor recuperado — alimenta o painel “R$ defendido”) ou <b>Perdido</b>.</div>
+      {andamento && andamento.map(c => (
+        <div key={c.id}>
+          <CasoCard c={c}>
+            <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center' }}>
+              {c.status === 'aprovado' && <button className="cv2-btn sec" disabled={agindo === c.id} onClick={() => marcarEnviado(c)}>Marcar enviado</button>}
+              {ganhoDe === c.id ? (
+                <>
+                  <span style={{ fontSize: 12, color: 'var(--tx2)' }}>R$</span>
+                  <input value={valorGanho} onChange={e => setValorGanho(e.target.value)} autoFocus
+                    style={{ width: 90, padding: '6px 8px', border: '1px solid var(--line)', borderRadius: 4, fontFamily: 'inherit', fontSize: 12.5 }} />
+                  <button className="cv2-btn" disabled={agindo === c.id} onClick={() => confirmarGanho(c)}>Confirmar</button>
+                  <button className="cv2-btn sec" onClick={() => { setGanhoDe(null); setValorGanho(''); }}>Cancelar</button>
+                </>
+              ) : (
+                <>
+                  <button className="cv2-btn" disabled={agindo === c.id} onClick={() => { setGanhoDe(c.id); setValorGanho((c.valor_centavos / 100).toFixed(2).replace('.', ',')); }}>Ganho</button>
+                  <button className="cv2-btn danger" disabled={agindo === c.id} onClick={() => marcarPerdido(c)}>Perdido</button>
+                </>
+              )}
+            </div>
+          </CasoCard>
+        </div>
+      ))}
+      {andamento && !andamento.length && <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>Nada em andamento.</div>}
     </div>
   );
 }
@@ -213,7 +253,7 @@ function Defesa({ tenantDbId, userId }) {
 function Radar({ tenantNome }) {
   return (
     <div>
-      <h1>Radar <span className="cv2-mock">DADOS DE EXEMPLO · rotina semanal no PR6</span></h1>
+      <h1>Radar <span className="cv2-mock">DADOS DE EXEMPLO · rotina semanal futura</span></h1>
       <div className="cv2-rule" />
       <div className="cv2-sub">Diagnóstico semanal gratuito — mostra quanto dinheiro está vazando antes de você contratar a Defesa.</div>
       <div className="cv2-kpis">
