@@ -23,23 +23,22 @@
 
 ## 🔴 Onde parou
 
-_Última sessão: 2026-06-07 (Cowork — sessão 9: build F1 PR2→PR5, agente Defesa VIVO em produção)_
+_Última sessão: 2026-06-07 (Cowork — sessão 10: VIGIA automático — cancelamentos caem na fila sozinhos)_
 
-- **PR2 ✅ (#171 + fix #173):** Visão Geral com dados reais (`agent_runs`/`tenant_agents`). Bug achado pelo Wandson (números não batiam) → causa provada: **cap de 1.000 linhas do PostgREST** (não era RLS — impersonação provou 1.704 visíveis) → fix com counts exatos → **padrão P6** registrado no `scripts/qa-knowledge.md` (#174). Aceite: tela = SQL (1.704 · 1.677 ok · 27 falhas · US$0,0811 · 15 agentes).
-- **PR3 ✅ aplicado (migration 20260607_006):** `defesa_casos` (estados rascunho→aguardando_ok→aprovado→enviado→ganho/perdido/descartado, centavos, sem DELETE) + view `defesa_metricas_mensal`. **Isolamento provado** (membro 1/1 · intruso 0/0). ⚠️ Lição: impersonação RLS exige `BEGIN; SET LOCAL role/claims` — set_config em CTE dá falso positivo.
-- **PR4 ✅ (#175 + seed 007 aplicada/#176):** agente **`defesa-analisar-caso`** (Trigger.dev, sonnet-4-6, custo real no log). **Teste ponta-a-ponta em produção:** run Completed 23s · caso `51b31690` gravado `aguardando_ok` · chance alta · recomendação contestar · custo US$0,0139. Seed: nota — `agents.category` só aceita orchestrator|specialist.
-- **PR5 ✅ (#177):** tela Defesa = **FILA REAL** (Aprovar/Editar/Descartar sob RLS) · Visão Geral com "R$ defendido" e "aguardando OK" reais (view) · agente cria draft oficial (`agent_drafts` canal painel) + sino + feed DELI. **Aceite fechado:** Wandson aprovou o caso de R$ 89 na tela → banco gravou `aprovado_por=wandson@` + `aprovado_em=20:05 UTC`.
-- Sessões 6-8 (mesmo dia): benchmark #167 · direcionamento adversarial #168 · D6 aprovada · PR1 #169.
-- **⚠️ Pendentes antigos:** `.obsidian/*`/`log.md` trackeados · grants órfãos P-5 · rotação credenciais · 2 ajustes do protótipo Claude Design.
+- **PR5c ✅ ACEITO (#179):** task `defesa-vigia` (cron 5min) varre `messages` inbound (Supabase fonte primária, P3), detecta menção `@defesa` ou padrões de cancelamento, deduplica por `origem_message_id`, resolve loja pelo grupo, extrai valor R$ do texto e dispara `defesa-analisar-caso`. **Teste real:** mensagem plantada 20:15:57 → caso na fila 20:20:44 (4m47s) · valor R$ 62,50 extraído sozinho · loja "Cannoli" identificada pelo contexto do grupo · **dedupe provado** (2ª varredura não duplicou). Modelo WhatsApp preservado (vigia nunca responde na conversa).
+- Sessão 9: F1 PR2→PR5 aceitos (fila real; aprovação do Wandson gravada no banco; padrão P6 qa-knowledge).
+- Sessões 6-8: benchmark #167 · direcionamento #168 · D6 · PR1 #169.
+- **F1 operacional ponta-a-ponta SEM toque humano na entrada:** WhatsApp → vigia → análise IA → fila → OK do Wandson → auditoria. Falta só o lado do envio/resultado.
+- **⚠️ Pendentes antigos:** `.obsidian/*`/`log.md` trackeados · grants órfãos P-5 · rotação credenciais · 2 ajustes do protótipo Claude Design · registrar D6 no PLANO-MESTRE.md · vincular grupos→lojas (`whatsapp_groups.loja_id` está 100% nulo; onboarding PR7).
 
 ---
 
 ## 👉 Próxima ação
 
-1. **PR5b:** reply-loop de OK pelo WhatsApp (webhook Evolution + `parse-resposta-cliente`) — aprovar respondendo "ok".
-2. **PR6:** Radar real (rotina semanal Trigger.dev `schedules` + tela) e transição enviado→ganho/perdido (registrar `resultado_valor_centavos` → alimenta "R$ defendido").
-3. **PR7:** onboarding self-service + qualificação por volume. Em paralelo: entrada de casos automática (webhook/forward) — hoje o caso entra por trigger manual.
-4. Docs: registrar D6 no `PLANO-MESTRE.md` · 5.5 consolidar docs · FASE 2 onda 2 (P-2/P-3/P-5).
+1. **PR6:** transição enviado→ganho/perdido com `resultado_valor_centavos` (alimenta "R$ defendido") + Radar real (rotina semanal).
+2. **PR5b:** reply-loop de OK pelo WhatsApp (webhook Evolution + `parse-resposta-cliente`).
+3. **PR7:** onboarding self-service + vínculo grupos→lojas + qualificação por volume.
+4. Docs: D6 no `PLANO-MESTRE.md` · 5.5 consolidar docs · FASE 2 onda 2 (P-2/P-3/P-5).
 
 ---
 
@@ -47,40 +46,36 @@ _Última sessão: 2026-06-07 (Cowork — sessão 9: build F1 PR2→PR5, agente D
 
 | Track | Nome | Status | Última ação |
 |-------|------|--------|-------------|
-| T1 | Plataforma CD (V1→V3) | 🔄 | Console v2: Visão Geral + Defesa REAIS (#171-#177) |
+| T1 | Plataforma CD (V1→V3) | 🔄 | Console v2: Visão Geral + Defesa REAIS (#171-#179) |
 | T2 | EvoNexus-replica | ✅ onda 1 aplicada | onda 2 a redigir |
-| T3 | Visual-First / telas | ✅ | F1: 5 de 7 PRs entregues no design definitivo |
+| T3 | Visual-First / telas | ✅ | F1 no design definitivo |
 | T4 | Hermes | 🔄 3A ✅ / 3B bloqueado | aguarda GATE 0 |
-| T5 | Segurança | ✅ | defesa_casos com RLS provada (membro 1 / intruso 0) |
-| T6 | Agentes IA | 🔄 | **DEFESA vivo em produção** (16º agente; US$0,0139/caso) |
+| T5 | Segurança | ✅ | defesa_casos com RLS provada |
+| T6 | Agentes IA | 🔄 | **DEFESA + VIGIA vivos** (entrada automática de casos funcionando) |
 | T7 | PILOTO | 🔄 | Onda 03 não aplicada |
-| T8 | Infra/CI | ⚠️ 2 riscos | deploy-trigger automático validado na prática |
-| T9 | Negócio | 🔒 D6 travada | produto F1 operável ponta-a-ponta (falta entrada automática de casos) |
+| T8 | Infra/CI | ⚠️ 2 riscos | deploy-trigger automático validado 2x |
+| T9 | Negócio | 🔒 D6 travada | produto F1 com entrada automática — pronto p/ beta na carteira |
 
 ---
 
 ## 📋 Log de sessões
 
+### 2026-06-07 (sessão 10 — Cowork: vigia automático PR5c)
+- #179: defesa-vigia (cron 5min, Supabase P3, dedupe origem_message_id, valor R$ extraído, loja por grupo)
+- Aceite com output bruto: caso automático em 4m47s · R$ 62,50 · loja Cannoli · dedupe 1 caso após 2 varreduras
+
 ### 2026-06-07 (sessão 9 — Cowork: build F1 PR2→PR5)
-- PR2 #171 dados reais + bug do cap-1000 (achado pelo Wandson) → fix #173 + padrão P6 no qa-knowledge #174
-- PR3 migration 006 aplicada (defesa_casos + view; isolamento provado); PR4 #175 agente defesa-analisar-caso + seed 007 (#176); teste ponta-a-ponta: 23s, US$0,0139, caso aguardando_ok
-- PR5 #177 fila real + draft oficial/sino/feed DELI; aceite: aprovação do Wandson gravada no banco (20:05 UTC)
-- Aprovações do Wandson na sessão: PR3 SQL · seed 007 · D6 segue travada
+- PR2 #171 dados reais + bug cap-1000 (achado pelo Wandson) → fix #173 + padrão P6 #174
+- PR3 migration 006 aplicada (isolamento provado); PR4 #175 agente + seed 007 (#176); e2e 23s US$0,0139
+- PR5 #177 fila real + draft/sino/DELI; aceite: aprovação do Wandson gravada (20:05 UTC)
 
 ### 2026-06-07 (sessões 6-8 — Cowork: benchmark → D6 → build F1 PR1)
-- Benchmark BR+exterior (#167) + Gemini Deep Research; tese do quadrante vazio confirmada
-- Método adversarial (estrategista × advogado do diabo × síntese) → DIRECIONAMENTO-SAAS (#168)
-- **D6 aprovada pelo Wandson:** F1 Defesa copiloto R$147 · carteira intocada · gate D+90 · anti-dispersão · início imediato
-- **PR1 #169 merged e EM PRODUÇÃO:** Console v2 (rota isolada) + 3 telas F1 + F1-BUILD-PLAN.md
+- Benchmark #167 + Gemini; método adversarial → DIRECIONAMENTO-SAAS #168; **D6 aprovada**; PR1 #169 em produção
 
-### 2026-06-06 (sessão 5 — Cowork: T3 revisão + protótipo console v2)
-- Mapa v1 (#163); decisão Wandson: escopo total 32 telas; **protótipo entregue (#164)**
-
-### 2026-06-06 (sessão 4 — fatos + FASE 2 onda 1 redigida E APLICADA)
-- #160/#161/#162; 4 brechas RLS corrigidas; isolamento provado (intruso 0/0/0); D5 v2; P-1 main→deli
-
+### 2026-06-06 (sessão 5) — mapa v1 #163; protótipo 32 telas #164
+### 2026-06-06 (sessão 4) — FASE 2 onda 1 APLICADA; isolamento 0/0/0; D5 v2
 ### 2026-06-06 (sessão 3) — conector GitHub escrita; #156/#152/#158/#159; D4+D5; 5.4
-### 2026-06-06 (sessão 2) — 5.1 fechado; divergências registradas
+### 2026-06-06 (sessão 2) — 5.1 fechado
 ### 2026-06-06 (sessão 1) — PLANO-MESTRE raiz; #154; Hermes 3A; T3 v0
 
 ---
