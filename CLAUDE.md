@@ -34,7 +34,7 @@ Ao trabalhar em **qualquer tarefa ligada ao PLANO-MESTRE** (tracks T1–T9, EvoN
 
 **Nunca terminar uma sessão sem atualizar o Tracker.** É o que garante que a próxima sessão sabe exatamente onde retomar.
 
-**Mandato Cowork (D5, 2026-06-06):** sessões Cowork executam direto tudo que conseguirem (ler repo/DB, branch, commit, PR, docs, redigir `.sql` sem aplicar). Reservado ao Wandson: merge em `main` · aprovar e aplicar migrations (nunca via MCP) · `DROP` · mensagens a clientes (drafts) · 🛑 CHECKPOINTS / decisões travadas · credenciais e VPS. → detalhe: `PLANO-MESTRE.md` §Decisões travadas (D5) + Tracker §Mandato Cowork.
+**Mandato Cowork (D5 v2, 2026-06-06):** sessões Cowork executam direto tudo que conseguirem — incluindo merge de PRs e **aplicar migrations cujo SQL foi aprovado pelo Wandson** (sempre: SQL versionado em git antes · 1 arquivo por vez · validação com output bruto · parar no 1º erro · teste de isolamento quando tocar RLS). **Reservado ao Wandson:** aprovar o SQL antes de aplicar · `DROP`/destrutivo · mensagens a clientes (drafts) · 🛑 CHECKPOINTS / decisões travadas · credenciais e VPS. → detalhe: `PLANO-MESTRE.md` §D5 + Tracker §Mandato Cowork.
 
 ---
 
@@ -44,9 +44,9 @@ Ao trabalhar em **qualquer tarefa ligada ao PLANO-MESTRE** (tracks T1–T9, EvoN
 
 - **Não viola a proibição de EvoNexus.** O proibido é o *motor/produto* EvoNexus em prod (CLAUDE.md acima, RESTRUCTURE §3.3). Aqui re-implementamos o *paradigma* na stack CD. EvoNexus = referência de features, nunca dependência em runtime.
 - **3 conflitos ✅ DECIDIDOS em 2026-06-03** (`docs/evonexus-replica/DECISAO-001-runtime-provider-custo.md`): **(D1)** runtime = `@anthropic-ai/sdk` (NÃO `@anthropic-ai/claude-agent-sdk` — RESTRUCTURE §3.3 linha 100: não roda em Trigger.dev cloud) **+ camada multi-provider** (Anthropic/Ollama/OpenRouter, BYO-key por tenant via Infisical, roteamento por tarefa, fallback); **OAuth-de-assinatura embutido = fora de escopo** (legal/ToS); **(D2)** Trigger.dev **v4.4.5+** (não v3); **(D3)** FASE 0 roda na **VPS** / `cd-evonexus-lab`, não do Windows.
-- **(D4) Fork A vs B em `agents` = B ✅ DECIDIDO em 2026-06-06:** catálogo global + habilitação por tenant via `tenant_agents`/`tenant_agent_config`. Evidência dos dois lados em `docs/evonexus-replica/FASE-1-mapeamento-multitenant.md` §3.1.
-- **Reusar, não recriar:** `agents` já tem `tenant_id` + RLS (`agents_tenant_isolation`); `agent_runs`, `agent_memories`, `tenant_agent_config`, `roles`/`role_permissions`, `audit_log` já existem → estender via `ALTER ADD COLUMN IF NOT EXISTS`.
-- **Build é gated:** parar em cada 🛑 CHECKPOINT (Wandson aprova). Plano persistido em 2026-06-02. **Status 2026-06-06:** FASE 0 ✅ rodada na VPS (`docs/evonexus-replica/FASE-0-inventario-evonexus.md`, PR #156) · FASE 1 ✅ completa e reconciliada (PR #152) · CHECKPOINT 1 ✅ go dado → FASE 2 onda 1 em redação (migrations: 3 RLS permissivas + cabear `tenant_agents`).
+- **(D4) Fork A vs B em `agents` = B ✅ DECIDIDO e CABEADO (onda 1):** catálogo global + habilitação por tenant via `tenant_agents` (15 linhas em produção). Evidência em `docs/evonexus-replica/FASE-1-mapeamento-multitenant.md` §3.1.
+- **Reusar, não recriar:** `agents`, `agent_runs`, `agent_memories`, `tenant_agents`, `tenant_agent_config`, `roles`/`role_permissions`, `audit_log` já existem → estender via `ALTER ADD COLUMN IF NOT EXISTS`.
+- **Build é gated:** parar em cada 🛑 CHECKPOINT (Wandson aprova). **Status 2026-06-06:** FASE 0 ✅ (#156) · FASE 1 ✅ (#152) · **FASE 2 onda 1 ✅ APLICADA** (4 brechas RLS corrigidas + B cabeado; `docs/evonexus-replica/FASE-2-onda1-plano.md`) · próximo: onda 2 (contract/cutover).
 
 ---
 
@@ -113,7 +113,8 @@ Emails: @consultdelivery.com.br | Bot Telegram: @DeliConsultBot (analista-ifood)
 | MAX    | consultor técnico             | futuro              |
 
 **DELI:** COO (título travado ✅ 2026-06-06), não chatbot. Monitora tudo, aciona especialistas, semáforo Verde/Amarelo/Vermelho. NUNCA responde clientes.  
-**Todo agente novo → `trigger/` (Trigger.dev).** Nunca OpenClaw/n8n/EvoNexus.
+**Todo agente novo → `trigger/` (Trigger.dev).** Nunca OpenClaw/n8n/EvoNexus.  
+**Habilitação por tenant:** `tenant_agents` (cabeada na onda 1) — agente só visível ao tenant se habilitado.
 
 LARA refs: `docs/fluxos/lara-regua.md` | `bridge-server/docs/lara-endpoints.md` | `supabase/migrations/20260506_001_lara_regua.sql`
 
@@ -156,7 +157,7 @@ Arquivo: supabase/migrations/YYYYMMDD_NNN_descricao.sql
 ```
 
 - Toda tabela nova: `tenant_id uuid NOT NULL REFERENCES tenants(id)` + RLS policy.
-- **Nunca rodar sem mostrar SQL e ter aprovação.** Migration é irreversível em produção.
+- **SQL versionado e aprovado pelo Wandson ANTES de aplicar.** Aplicação pelo Cowork é permitida (D5 v2): 1 arquivo por vez · validação com output bruto · parar no 1º erro · teste de isolamento quando tocar RLS.
 - Padrão P1: não usar `.select('coluna_que_nao_existe')` — erro silenciado, data = null.
 
 ---
@@ -207,7 +208,7 @@ gh pr create --base main
 gh pr merge --squash --delete-branch
 ```
 
-Se estiver em `main`: PARAR e pedir branch ao usuário.  
+Se estiver em `main`: PARAR e pedir branch ao usuário. **Nunca reusar branch já squash-merged** (conflito fantasma — caso #155).  
 → fluxo completo da equipe: `docs/deli-memory/principles/git-workflow.md`
 
 ---
@@ -238,7 +239,7 @@ Padrões conhecidos: P1 colunas inexistentes `.select()` | P2 build local ≠ pr
 6. Pular validação entre fases → cada fase tem critério, não há pulo
 7. Agente novo fora de `trigger/` → proibido (OpenClaw/n8n/EvoNexus fora da stack)
 8. Commit direto em main → sempre branch + PR
-9. Migration sem aprovação do SQL → mostrar SQL, aguardar ok
+9. Migration sem aprovação do SQL pelo Wandson → mostrar SQL, aguardar ok (aplicação: D5 v2)
 10. Confiar no resultado do Claude sem teste manual → 1 teste + log/output real
 
 ---
