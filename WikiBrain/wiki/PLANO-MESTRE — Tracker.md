@@ -14,24 +14,31 @@
 
 ---
 
+## 🔒 D6 — Direcionamento SaaS (APROVADA pelo Wandson em 2026-06-07)
+
+**F1 = "Defesa Comercial iFood — modo copiloto" a R$147/loja/mês.** Carteira de consultoria INTOCADA (beta não-pagante; venda só a lojas novas). ROI em cesta "R$ defendido". **Gate D+90** (metas em `docs/estrategia/DIRECIONAMENTO-SAAS-2026-06.md` §5) antes de qualquer F2 (Análise/Cardápio/Keeta/99Food/white-label). **Regra anti-dispersão aprovada.** Kill-switch da Cris pré-escrito (§6). Início do build: **imediato** (2026-06-07), usando o design do Claude Design Web como referência. Plano de PRs: `docs/estrategia/F1-BUILD-PLAN.md`.
+*Pendência de registro: gravar D6 também na seção de decisões do `PLANO-MESTRE.md` (raiz) na próxima sessão.*
+
+---
+
 ## 🔴 Onde parou
 
-_Última sessão: 2026-06-06 (Cowork — sessão 5: T3 revisão + protótipo)_
+_Última sessão: 2026-06-07 (Cowork — sessões 6-8: benchmark + direcionamento adversarial + D6 + PR1 do build F1)_
 
-- **T3(a) mapa v1 ✅ (#163):** revisão contra o código real (`src/screens/` = 40+ telas) + screenshot do DELI Hub — ~70% do mapa v0 JÁ EXISTE; 8 gaps reais identificados (GAP-1..8 no doc).
-- **Decisão do Wandson (escopo T3b):** protótipo COMPLETO com as ~32 telas estilo EvoNexus + redesign moderno do console inteiro — ele quer reconstruir a UI da plataforma nesse padrão (multi-tenant). Substitui o recorte de 4 gaps.
-- **T3(b) protótipo ✅ ENTREGUE (#164, `6092e98`):** `docs/prototipo/console-v2.html` — arquivo único, abre com duplo clique. 32+ telas em 6 grupos, login c/ seleção de tenant, **tenant switcher funcional** (A não vê B), toggles `tenant_agents`, fila única de aprovações interativa, custos c/ gráfico, config de agente (modo/provider/RBAC). Visual dark EvoNexus (#0b0f1a + verde #00ffa7) + marca CD.
-- Sessão anterior (4): FASE 2 onda 1 APLICADA com isolamento provado; D5 v2; fatos equipe/COO.
-- **⚠️ Pendentes antigos:** `.obsidian/*` e `log.md` trackeados · grants órfãos P-5 · rotação credenciais.
+- **Benchmark de mercado ✅ (#167):** `docs/benchmark/benchmark-mercado-2026-06.md` — 19 buscas; quadrante "executa por você" vazio confirmado; + relatório complementar do Gemini Deep Research.
+- **Direcionamento adversarial ✅ (#168):** estrategista vs advogado do diabo (agentes Opus) → `docs/estrategia/DIRECIONAMENTO-SAAS-2026-06.md` (proposta D6). 3 golpes absorvidos: ROI em cesta (não por contestação) · modo copiloto assumido · carteira intocada.
+- **D6 APROVADA pelo Wandson** (direção + anti-dispersão + início imediato).
+- **PR1 do build F1 ✅ EM PRODUÇÃO (#169, `cdb271c`):** rota isolada `console-v2` (admin) — shell com design system oficial + 3 telas (Visão Geral, Defesa copiloto com fila Aprovar/Editar/Descartar, Radar). Dados de exemplo rotulados. **QA com output bruto:** bundle publicado `index-tsB3h_qx.js` contém `console-v2` e `Defesa Comercial` → build verde, deploy live, zero impacto nas rotas atuais.
+- **⚠️ Pendentes antigos:** `.obsidian/*` e `log.md` trackeados · grants órfãos P-5 · rotação credenciais · 2 ajustes do protótipo no Claude Design (preview antes de enviar + eventos finalizada/reaberta).
 
 ---
 
 ## 👉 Próxima ação
 
-1. **Wandson:** `git pull` na pasta → abrir `docs/prototipo/console-v2.html` (duplo clique) → clicar à vontade (trocar tenant no topo, ligar/desligar agentes, aprovar/rejeitar na fila) → anotar o que mudar (cores, nomes, telas a cortar/juntar).
-2. **Com o feedback:** Cowork itera o protótipo → travado o visual, começa a construção real tela a tela (1 PR por tela, CORE primeiro), reusando o que já existe (Chat preservado).
-3. **FASE 2 onda 2** (paralelo): P-2 cutover logAgentRun · P-3 contract user_agent_access · P-5 grants órfãos · tenants seed.
-4. **5.5** consolidar docs de plano.
+1. **Wandson:** `git pull` → abrir app.consultdelivery.com.br → menu Início → **Console v2 · F1** → validar visual e fluxo da fila de Defesa (é com dados de exemplo).
+2. **PR2 (próxima sessão de build):** ligar Visão Geral aos dados reais de `agent_runs` (critério: números batem com SQL direto). Plano completo: `docs/estrategia/F1-BUILD-PLAN.md` (PR2→PR7).
+3. **PR3:** redigir migrations `defesa_casos`/`defesa_metricas` → SQL ao Wandson p/ aprovação → aplicar (D5 v2).
+4. Paralelo: FASE 2 onda 2 (P-2/P-3/P-5) · 5.5 consolidar docs · registrar D6 no PLANO-MESTRE.md.
 
 ---
 
@@ -39,19 +46,25 @@ _Última sessão: 2026-06-06 (Cowork — sessão 5: T3 revisão + protótipo)_
 
 | Track | Nome | Status | Última ação |
 |-------|------|--------|-------------|
-| T1 | Plataforma CD (V1→V3) | 🔄 ~95% | console v2 (T3) vai absorver o redesign da UI |
-| T2 | EvoNexus-replica | ✅ onda 1 aplicada | onda 2 a redigir; framework de telas validado no protótipo |
-| T3 | Visual-First / telas | ✅ mapa v1 + **protótipo 32 telas entregue** | 👉 Wandson clica e dá feedback → iteração → build real |
+| T1 | Plataforma CD (V1→V3) | 🔄 | Console v2 F1 nasceu como rota isolada (#169) |
+| T2 | EvoNexus-replica | ✅ onda 1 aplicada | onda 2 a redigir |
+| T3 | Visual-First / telas | ✅ design definitivo (Claude Design Web) | build real começou pela F1 (D6) |
 | T4 | Hermes | 🔄 3A ✅ / 3B bloqueado | aguarda GATE 0 |
 | T5 | Segurança | ✅ 4 brechas RLS corrigidas | rotação adiada |
-| T6 | Agentes IA | 🔄 | DELI em andamento |
+| T6 | Agentes IA | 🔄 | próximo agente novo = Defesa (PR4) |
 | T7 | PILOTO | 🔄 | Onda 03 não aplicada |
 | T8 | Infra/CI | ⚠️ 2 riscos | — |
-| T9 | Negócio | contexto | 1º cliente real = prioridade |
+| T9 | Negócio | **🔒 D6 travada** | F1 Defesa R$147 · gate D+90 · benchmark #167 + direcionamento #168 |
 
 ---
 
 ## 📋 Log de sessões
+
+### 2026-06-07 (sessões 6-8 — Cowork: benchmark → D6 → build F1 PR1)
+- Benchmark BR+exterior (#167) + Gemini Deep Research; tese do quadrante vazio confirmada
+- Método adversarial (estrategista × advogado do diabo × síntese) → DIRECIONAMENTO-SAAS (#168)
+- **D6 aprovada pelo Wandson:** F1 Defesa copiloto R$147 · carteira intocada · gate D+90 · anti-dispersão · início imediato
+- **PR1 #169 merged e EM PRODUÇÃO:** Console v2 (rota isolada) + 3 telas F1 + F1-BUILD-PLAN.md; QA: bundle live contém o código novo
 
 ### 2026-06-06 (sessão 5 — Cowork: T3 revisão + protótipo console v2)
 - Mapa v1 (#163): app real já cobre ~70% do v0; gaps reais = GAP-1..8; divergência NOVA/MAX registrada
