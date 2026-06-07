@@ -13,21 +13,23 @@ import { notifyDeli } from "../_shared/notify-deli";
 // escreve a contestação/resposta e grava em defesa_casos
 // com status 'aguardando_ok'. NUNCA envia nada — copiloto.
 // PR5: draft oficial (agent_drafts) + sino + feed DELI.
-// PR5c: origem_message_id (dedupe do vigia automático).
+// PR5b: origem_message_id (dedupe) + origem_conversation_id
+// (vínculo para aprovação por "@defesa ok" na mesma conversa).
 // =====================================================
 
 const DefesaAnalisarInput = z.object({
-  tenant_id:         z.string().uuid(),
-  loja_id:           z.string().uuid().optional(),
-  canal:             z.string().default("ifood"),
-  tipo:              z.enum(["cancelamento", "avaliacao"]),
-  pedido_ref:        z.string().optional(),
-  valor_centavos:    z.number().int().min(0).default(0),
-  motivo:            z.string().min(5),          // o que aconteceu, na visão do lojista/plataforma
-  contexto:          z.string().optional(),      // evidências, histórico, prints transcritos etc.
-  loja_nome:         z.string().optional(),
-  origem_message_id: z.string().optional(),      // mensagem WhatsApp que originou (vigia — dedupe)
-  triggered_by:      z.string().uuid().optional(),
+  tenant_id:              z.string().uuid(),
+  loja_id:                z.string().uuid().optional(),
+  canal:                  z.string().default("ifood"),
+  tipo:                   z.enum(["cancelamento", "avaliacao"]),
+  pedido_ref:             z.string().optional(),
+  valor_centavos:         z.number().int().min(0).default(0),
+  motivo:                 z.string().min(5),
+  contexto:               z.string().optional(),
+  loja_nome:              z.string().optional(),
+  origem_message_id:      z.string().optional(),
+  origem_conversation_id: z.string().optional(),
+  triggered_by:           z.string().uuid().optional(),
 });
 
 const AnaliseClaudeSchema = z.object({
@@ -134,6 +136,7 @@ export const defesaAnalisarCaso = task({
           recomendacao: analise.recomendacao,
           loja_nome: input.loja_nome ?? null,
           origem_message_id: input.origem_message_id ?? null,
+          origem_conversation_id: input.origem_conversation_id ?? null,
         },
         draft_resposta: analise.draft_resposta,
         status: "aguardando_ok",
@@ -174,7 +177,7 @@ export const defesaAnalisarCaso = task({
       kind: "draft_pending",
       agent: "defesa",
       title: `${tituloCurto} — aguardando seu OK`,
-      body: `Chance de vitória: ${analise.chance_vitoria}. Recomendação: ${analise.recomendacao}. Revise no Console v2 › Defesa Comercial.`,
+      body: `Chance de vitória: ${analise.chance_vitoria}. Recomendação: ${analise.recomendacao}. Aprove no Console v2 › Defesa Comercial ou responda "@defesa ok" na conversa do caso.`,
       metadata: { caso_id: caso.id },
     });
     await notifyDeli({
