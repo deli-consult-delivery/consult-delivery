@@ -6,6 +6,7 @@
 -- Estratégia expand→cutover→contract: esta migration só EXPANDE
 -- (colunas novas + backfill). PK antiga (user_id, agent_name) fica
 -- intacta; contract na onda 2 após cutover do app.
+-- P-1 ✅ DECIDIDO (Wandson, 2026-06-06): 'main' → 'deli'.
 -- ============================================================
 
 ALTER TABLE public.user_agent_access
@@ -23,16 +24,12 @@ SET agent_id = CASE agent_name
   WHEN 'analista-ifood' THEN 'analise-ifood'  -- slug antigo → slug do catálogo
   WHEN 'deli'           THEN 'deli'
   WHEN 'lara'           THEN 'lara'
+  WHEN 'main'           THEN 'deli'           -- P-1: decidido por Wandson 2026-06-06
   ELSE NULL
 END
 WHERE agent_id IS NULL;
 
--- ⚠️ PENDÊNCIA P-1 (decisão Wandson): 1 linha com agent_name='main'
--- (user 718e256d…) fica com agent_id NULL — não existe agente 'main'.
--- Opções: (a) mapear para 'deli', (b) aposentar a linha na onda 2.
--- Nada é deletado nesta migration.
-
--- Validação pós-aplicação (esperado: 7 / 6 / 1):
+-- Validação pós-aplicação (esperado: 7 / 7 / 0):
 -- SELECT count(*) total,
 --        count(agent_id) mapeados,
 --        count(*) FILTER (WHERE agent_id IS NULL) pendentes
