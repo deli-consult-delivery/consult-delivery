@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
+import AtivarLoja from './AtivarLoja.jsx';
 import './console.css';
 
 // ============================================================
 // Console v2 · F1 — Defesa Comercial (copiloto)  [D6 aprovada 2026-06-07]
 // PR6: ciclo completo do caso — aguardando_ok → aprovado → enviado →
 // ganho (com valor recuperado) | perdido. "R$ defendido" acumula via view.
+// PR7: onboarding self-service (Ativar loja).
 // Radar segue com DADOS DE EXEMPLO (sem fonte de dados ainda).
 // ============================================================
 
@@ -14,6 +16,7 @@ const GRUPOS = [
   { label: 'Operação', items: [
     { id: 'defesa', label: 'Defesa Comercial' },
     { id: 'radar', label: 'Radar (grátis)' },
+    { id: 'ativar', label: 'Ativar loja' },
   ]},
   { label: 'Agentes IA', locked: true, items: [
     { id: 'x1', label: 'Análise de Loja' }, { id: 'x2', label: 'Cardápio' }, { id: 'x3', label: 'Multicanal' },
@@ -21,6 +24,8 @@ const GRUPOS = [
   { label: 'Dados', locked: true, items: [{ id: 'x4', label: 'Custos de IA' }] },
   { label: 'Admin', locked: true, items: [{ id: 'x5', label: 'White-label' }] },
 ];
+
+const TITULOS = { visao: 'Visão Geral', defesa: 'Defesa Comercial', radar: 'Radar', ativar: 'Ativar loja' };
 
 const OK_STATUSES = ['ok', 'completed', 'success'];
 const fmtBRL = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -132,12 +137,12 @@ function CasoCard({ c, children }) {
 }
 
 function Defesa({ tenantDbId, userId }) {
-  const [fila, setFila] = useState(null);          // aguardando_ok
-  const [andamento, setAndamento] = useState(null); // aprovado | enviado
+  const [fila, setFila] = useState(null);
+  const [andamento, setAndamento] = useState(null);
   const [erro, setErro] = useState(null);
   const [editando, setEditando] = useState(null);
   const [textoEdit, setTextoEdit] = useState('');
-  const [ganhoDe, setGanhoDe] = useState(null);     // id do caso com input de valor aberto
+  const [ganhoDe, setGanhoDe] = useState(null);
   const [valorGanho, setValorGanho] = useState('');
   const [agindo, setAgindo] = useState(null);
 
@@ -186,7 +191,7 @@ function Defesa({ tenantDbId, userId }) {
     <div>
       <h1>Defesa Comercial <span className="cv2-mock" style={{ background: 'var(--green-soft)', color: 'var(--green)' }}>FILA REAL</span></h1>
       <div className="cv2-rule" />
-      <div className="cv2-sub">Casos preparados pelo agente — revise e dê o OK. Nada é enviado sem a sua aprovação.{erro ? ` · erro: ${erro}` : ''}</div>
+      <div className="cv2-sub">Casos preparados pelo agente — revise e dê o OK (aqui ou respondendo “@defesa ok” na conversa do caso).{erro ? ` · erro: ${erro}` : ''}</div>
       <div className="cv2-kpis">
         <Kpi l="Aguardando seu OK" v={fila ? fila.length : '…'} d="revisar agora" neg={fila ? fila.length > 0 : false} />
         <Kpi l="Em andamento" v={andamento ? andamento.length : '…'} d="aprovados/enviados — registre o resultado" mut />
@@ -309,7 +314,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
       </aside>
       <div className="cv2-main">
         <div className="cv2-tb">
-          <span className="crumb">Console › <b>{tela === 'visao' ? 'Visão Geral' : tela === 'defesa' ? 'Defesa Comercial' : 'Radar'}</b></span>
+          <span className="crumb">Console › <b>{TITULOS[tela] || tela}</b></span>
           <span style={{ flex: 1 }} />
           <span className="cv2-pill">Cliente <b>{tenantNome}</b></span>
           <span className="cv2-pill"><b>BETA F1</b></span>
@@ -318,6 +323,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
           {tela === 'visao' && <VisaoGeral tenantNome={tenantNome} tenantDbId={tenantDbId} onIrDefesa={() => setTela('defesa')} />}
           {tela === 'defesa' && <Defesa tenantDbId={tenantDbId} userId={userId} />}
           {tela === 'radar' && <Radar tenantNome={tenantNome} />}
+          {tela === 'ativar' && <AtivarLoja tenantDbId={tenantDbId} />}
         </div>
       </div>
     </div>
