@@ -39,6 +39,7 @@ import InadimplentesScreen from './screens/InadimplentesScreen.jsx';
 import NotificacoesScreen from './screens/NotificacoesScreen.jsx';
 import WhatsappVinculosScreen from './screens/WhatsappVinculosScreen.jsx';
 import MiaAuditScreen from './screens/MiaAuditScreen.jsx';
+import ConsoleV2 from './console/ConsoleV2.jsx';
 import { CONVERSATIONS, INADIMPLENTES, TENANTS } from './data.js';
 import { supabase } from './lib/supabase.js';
 import { listTenants, countUnreadNotifications, subscribeToNotifications } from './lib/api.js';
@@ -192,7 +193,7 @@ export default function App() {
     return () => { alive = false; supabase.removeChannel(channel); };
   }, [tenantDbId, session?.user?.id]);
 
-  // ── Notificações globais de chat ─────────────────────────────────────────────
+  // ── Notificações globais de chat ─────────────────────────────────────────
   const routeRef    = useRef(route);
   const lastSoundRef = useRef(0);
   useEffect(() => { routeRef.current = route; }, [route]);
@@ -325,6 +326,18 @@ export default function App() {
           Sair
         </button>
       </div>
+    );
+  }
+
+  // Console v2 (F1 · D6) — shell próprio em tela cheia, rota isolada
+  if (route === 'console-v2') {
+    return (
+      <ConsoleV2
+        tenantInfo={tenants.find(t => t.id === tenant)}
+        tenantDbId={tenantDbId}
+        userId={session?.user?.id}
+        onExit={() => setRoute('dashboard')}
+      />
     );
   }
 

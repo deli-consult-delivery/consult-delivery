@@ -9,6 +9,7 @@ const NAV_GROUPS = [
     items: [
       { id: 'dashboard', icon: 'home',    label: 'Dashboard' },
       { id: 'deli',      icon: 'bot',     label: 'DELI', pulse: true, roles: ['admin', 'deli_owner'] },
+      { id: 'console-v2', icon: 'bot',    label: 'Console v2 · F1', roles: ['admin'] },
     ],
   },
   {
