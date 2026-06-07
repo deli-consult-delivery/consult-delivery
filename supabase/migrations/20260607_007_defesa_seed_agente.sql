@@ -1,7 +1,9 @@
 -- =============================================================
 -- F1 Defesa — PR4: seed do agente 'defesa' no catálogo global
 -- + habilitação para o tenant consult (fork B / D4).
--- NÃO APLICAR sem aprovação do Wandson (D5 v2). Idempotente.
+-- APROVADA pelo Wandson e APLICADA em 2026-06-07. Idempotente.
+-- Nota: category corrigida para 'specialist' na aplicação
+-- (agents_category_check permite apenas orchestrator|specialist).
 -- =============================================================
 
 insert into public.agents (id, name, role, letter, color, description, is_active, category, is_custom)
@@ -13,7 +15,7 @@ values (
   '#B70C00',
   'Vigia cancelamentos e avaliações, prepara contestações e respostas com a melhor chance de vitória e aguarda aprovação humana. Nunca envia nada sozinho.',
   true,
-  'operacao',
+  'specialist',
   false
 )
 on conflict (id) do nothing;
