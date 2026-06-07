@@ -1,17 +1,23 @@
 import { schedules, logger } from "@trigger.dev/sdk/v3";
 import { getSupabase } from "../_shared/supabase";
+import { notify } from "../_shared/notify";
 import { defesaAnalisarCaso } from "./analisar-caso";
 
 // =====================================================
-// DEFESA — VIGIA (entrada automática de casos)
+// DEFESA — VIGIA (entrada automática + OK pelo WhatsApp)
 // Cron 5 min: varre mensagens inbound do WhatsApp (Supabase é a
-// fonte primária — padrão P3) e dispara defesa-analisar-caso quando
-// detecta cancelamento ou menção explícita @defesa.
-// Respeita o modelo WhatsApp: NUNCA responde na conversa — apenas
-// cria caso interno que aguarda OK humano.
-// Dedupe: origem_message_id gravado em defesa_casos.analise.
+// fonte primária — padrão P3).
+//  · Detecta cancelamento ou menção @defesa → cria caso (analisar-caso)
+//  · PR5b: comandos de aprovação na MESMA conversa do caso:
+//      "@defesa ok|aprovo|aprovar"      → aprova o caso pendente
+//      "@defesa descartar|rejeitar"     → descarta
+// NUNCA envia mensagem — apenas leitura (modelo WhatsApp preservado).
+// Dedupe de criação: origem_message_id. Aprovação é idempotente
+// (update com guarda status='aguardando_ok').
 // =====================================================
 
+const RE_CMD_APROVAR = /@defesa\s+(ok|aprovo|aprovar|pode\s+enviar)\b/i;
+const RE_CMD_DESCARTAR = /@defesa\s+(descartar|descarta|rejeitar|rejeito|nao|não)\b/i;
 const RE_MENCAO = /@defesa\b/i;
 const RE_CANCEL = /(pedido\s+(foi\s+)?cancelad|cancelaram\s+o\s+pedido|cancelamento\s+(de\s+|do\s+)?pedido|golpe\s+do\s+estorno|estorno\s+indevido)/i;
 const RE_AVALIACAO = /(avaliação|avaliacao|estrela|nota\s*(1|um|baixa))/i;
@@ -45,10 +51,59 @@ export const defesaVigia = schedules.task({
     let detectados = 0;
     let disparados = 0;
     let duplicados = 0;
+    let aprovacoes = 0;
+    let descartes = 0;
 
     for (const msg of msgs ?? []) {
       const texto = (msg.content || msg.body || "").toString();
-      if (!texto || texto.length < 8) continue;
+      if (!texto || texto.length < 3) continue;
+
+      // ---------- PR5b: comandos de aprovação/descarte ----------
+      const cmdAprovar = RE_CMD_APROVAR.test(texto);
+      const cmdDescartar = !cmdAprovar && RE_CMD_DESCARTAR.test(texto);
+      if (cmdAprovar || cmdDescartar) {
+        // caso pendente mais recente ORIGINADO nesta conversa
+        const { data: caso } = await sb
+          .from("defesa_casos")
+          .select("id, analise, valor_centavos, tipo")
+          .eq("tenant_id", msg.tenant_id)
+          .eq("status", "aguardando_ok")
+          .filter("analise->>origem_conversation_id", "eq", String(msg.conversation_id))
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!caso) continue;
+        const novaAnalise = {
+          ...(caso.analise ?? {}),
+          aprovado_via: "whatsapp",
+          comando_de: msg.sender_name ?? null,
+          comando_message_id: String(msg.id),
+        };
+        const { data: upd } = await sb
+          .from("defesa_casos")
+          .update(cmdAprovar
+            ? { status: "aprovado", aprovado_em: new Date().toISOString(), analise: novaAnalise, updated_at: new Date().toISOString() }
+            : { status: "descartado", analise: novaAnalise, updated_at: new Date().toISOString() })
+          .eq("id", caso.id)
+          .eq("status", "aguardando_ok") // guarda: idempotente entre varreduras
+          .select("id");
+        if (upd && upd.length > 0) {
+          if (cmdAprovar) aprovacoes++; else descartes++;
+          await notify({
+            tenantId: msg.tenant_id,
+            kind: cmdAprovar ? "draft_approved" : "draft_rejected",
+            agent: "defesa",
+            title: `Caso ${cmdAprovar ? "APROVADO" : "descartado"} pelo WhatsApp (${msg.sender_name || "sem nome"})`,
+            body: `${caso.tipo} · R$ ${(caso.valor_centavos / 100).toFixed(2)} — comando "@defesa ${cmdAprovar ? "ok" : "descartar"}" na conversa do caso.`,
+            metadata: { caso_id: caso.id },
+          });
+          logger.info("VIGIA — comando processado", { caso_id: caso.id, comando: cmdAprovar ? "aprovar" : "descartar", de: msg.sender_name ?? null });
+        }
+        continue; // comando não vira caso novo
+      }
+
+      // ---------- entrada automática de casos ----------
+      if (texto.length < 8) continue;
       const mencionado = RE_MENCAO.test(texto);
       const ehCancel = RE_CANCEL.test(texto);
       if (!mencionado && !ehCancel) continue;
@@ -105,12 +160,13 @@ export const defesaVigia = schedules.task({
         contexto: `Detectado automaticamente pelo vigia (mensagem de ${msg.sender_name || "desconhecido"} no WhatsApp).\nConversa recente:\n${contexto}`.slice(0, 3000),
         loja_nome: lojaNome,
         origem_message_id: String(msg.id),
+        origem_conversation_id: String(msg.conversation_id),
       });
       disparados++;
       logger.info("VIGIA — caso disparado", { message_id: msg.id, tipo, mencionado, loja: lojaNome ?? null });
     }
 
-    logger.info("VIGIA — varredura concluída", { janela_msgs: (msgs ?? []).length, detectados, disparados, duplicados });
-    return { ok: true, mensagens_na_janela: (msgs ?? []).length, detectados, disparados, duplicados };
+    logger.info("VIGIA — varredura concluída", { janela_msgs: (msgs ?? []).length, detectados, disparados, duplicados, aprovacoes, descartes });
+    return { ok: true, mensagens_na_janela: (msgs ?? []).length, detectados, disparados, duplicados, aprovacoes, descartes };
   },
 });
