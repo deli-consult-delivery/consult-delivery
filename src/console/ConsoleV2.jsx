@@ -4,7 +4,8 @@ import './console.css';
 
 // ============================================================
 // Console v2 · F1 — Defesa Comercial (copiloto)  [D6 aprovada 2026-06-07]
-// PR2: Visão Geral ligada a dados reais (agent_runs / tenant_agents).
+// PR2b: KPIs por COUNT exato (PostgREST corta selects em 1000 linhas —
+// padrão P5 no qa-knowledge). Custo busca só linhas com cost_usd > 0.
 // Defesa e Radar seguem com DADOS DE EXEMPLO até PR4/PR6.
 // ============================================================
 
@@ -41,15 +42,23 @@ function useKpisReais(tenantDbId) {
     (async () => {
       try {
         const desde = new Date(Date.now() - 30 * 86400000).toISOString();
-        const [{ data: runs, error: e1 }, { count: agentes, error: e2 }] = await Promise.all([
-          supabase.from('agent_runs').select('status, cost_usd').eq('tenant_id', tenantDbId).gte('created_at', desde),
+        const base = () => supabase.from('agent_runs').select('*', { count: 'exact', head: true })\n          .eq('tenant_id', tenantDbId).gte('created_at', desde);
+        const [
+          { count: total, error: e1 },
+          { count: ok, error: e2 },
+          { data: comCusto, error: e3 },
+          { count: agentes, error: e4 },
+        ] = await Promise.all([
+          base(),
+          base().in('status', OK_STATUSES),
+          supabase.from('agent_runs').select('cost_usd').eq('tenant_id', tenantDbId).gte('created_at', desde).gt('cost_usd', 0),
           supabase.from('tenant_agents').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantDbId),
         ]);
-        if (e1 || e2) throw (e1 || e2);
-        const total = runs?.length ?? 0;
-        const ok = (runs ?? []).filter(r => OK_STATUSES.includes(r.status)).length;
-        const custo = (runs ?? []).reduce((s, r) => s + (Number(r.cost_usd) || 0), 0);
-        if (alive) setKpis({ total, ok, falhas: total - ok, taxa: total ? Math.round((ok / total) * 100) : null, custo, agentes: agentes ?? 0 });
+        if (e1 || e2 || e3 || e4) throw (e1 || e2 || e3 || e4);
+        const t = total ?? 0;
+        const o = ok ?? 0;
+        const custo = (comCusto ?? []).reduce((s, r) => s + (Number(r.cost_usd) || 0), 0);
+        if (alive) setKpis({ total: t, ok: o, falhas: t - o, taxa: t ? Math.round((o / t) * 100) : null, custo, agentes: agentes ?? 0 });
       } catch (err) {
         if (alive) setErro(err?.message || 'erro ao carregar');
       }
