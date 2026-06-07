@@ -12,21 +12,22 @@ import { notifyDeli } from "../_shared/notify-deli";
 // Recebe um caso (cancelamento ou avaliação), analisa,
 // escreve a contestação/resposta e grava em defesa_casos
 // com status 'aguardando_ok'. NUNCA envia nada — copiloto.
-// PR5: também cria draft no fluxo oficial (agent_drafts),
-// notifica no sino e no feed da DELI.
+// PR5: draft oficial (agent_drafts) + sino + feed DELI.
+// PR5c: origem_message_id (dedupe do vigia automático).
 // =====================================================
 
 const DefesaAnalisarInput = z.object({
-  tenant_id:      z.string().uuid(),
-  loja_id:        z.string().uuid().optional(),
-  canal:          z.string().default("ifood"),
-  tipo:           z.enum(["cancelamento", "avaliacao"]),
-  pedido_ref:     z.string().optional(),
-  valor_centavos: z.number().int().min(0).default(0),
-  motivo:         z.string().min(5),          // o que aconteceu, na visão do lojista/plataforma
-  contexto:       z.string().optional(),      // evidências, histórico, prints transcritos etc.
-  loja_nome:      z.string().optional(),
-  triggered_by:   z.string().uuid().optional(),
+  tenant_id:         z.string().uuid(),
+  loja_id:           z.string().uuid().optional(),
+  canal:             z.string().default("ifood"),
+  tipo:              z.enum(["cancelamento", "avaliacao"]),
+  pedido_ref:        z.string().optional(),
+  valor_centavos:    z.number().int().min(0).default(0),
+  motivo:            z.string().min(5),          // o que aconteceu, na visão do lojista/plataforma
+  contexto:          z.string().optional(),      // evidências, histórico, prints transcritos etc.
+  loja_nome:         z.string().optional(),
+  origem_message_id: z.string().optional(),      // mensagem WhatsApp que originou (vigia — dedupe)
+  triggered_by:      z.string().uuid().optional(),
 });
 
 const AnaliseClaudeSchema = z.object({
@@ -63,6 +64,7 @@ Regras de linguagem (Brand Guard):
 - Português brasileiro, profissional e direto. Zero emoji.
 - Use "oferta", nunca "promoção".
 - Nunca prometa o que a loja não confirmou (cortesias só se mencionadas no contexto).
+- Se as informações do caso forem insuficientes, diga isso nos pontos_fracos e recomende com cautela.
 
 Responda APENAS com JSON válido neste formato:
 {
@@ -80,7 +82,7 @@ export const defesaAnalisarCaso = task({
     const t0 = Date.now();
     const input: Input = DefesaAnalisarInput.parse(payload);
 
-    logger.info("DEFESA — caso recebido", { tipo: input.tipo, tenant: input.tenant_id });
+    logger.info("DEFESA — caso recebido", { tipo: input.tipo, tenant: input.tenant_id, origem: input.origem_message_id ?? "manual" });
 
     const valorReais = (input.valor_centavos / 100).toFixed(2);
     const userPrompt = [
@@ -131,6 +133,7 @@ export const defesaAnalisarCaso = task({
           pontos_fracos: analise.pontos_fracos,
           recomendacao: analise.recomendacao,
           loja_nome: input.loja_nome ?? null,
+          origem_message_id: input.origem_message_id ?? null,
         },
         draft_resposta: analise.draft_resposta,
         status: "aguardando_ok",
@@ -186,7 +189,7 @@ export const defesaAnalisarCaso = task({
     await logAgentRun({
       runId: ctx.run.id,
       agentSlug: "defesa",
-      input: { tipo: input.tipo, canal: input.canal, pedido_ref: input.pedido_ref ?? null, valor_centavos: input.valor_centavos },
+      input: { tipo: input.tipo, canal: input.canal, pedido_ref: input.pedido_ref ?? null, valor_centavos: input.valor_centavos, origem_message_id: input.origem_message_id ?? null },
       output: { caso_id: caso.id, chance_vitoria: analise.chance_vitoria, recomendacao: analise.recomendacao },
       tenantId: input.tenant_id,
       triggeredBy: input.triggered_by,
