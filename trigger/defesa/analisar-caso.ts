@@ -4,12 +4,16 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getAnthropic } from "../_shared/claude";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
+import { notify } from "../_shared/notify";
+import { notifyDeli } from "../_shared/notify-deli";
 
 // =====================================================
 // AGENTE DEFESA — F1 (D6 aprovada 2026-06-07)
 // Recebe um caso (cancelamento ou avaliação), analisa,
 // escreve a contestação/resposta e grava em defesa_casos
 // com status 'aguardando_ok'. NUNCA envia nada — copiloto.
+// PR5: também cria draft no fluxo oficial (agent_drafts),
+// notifica no sino e no feed da DELI.
 // =====================================================
 
 const DefesaAnalisarInput = z.object({
@@ -135,6 +139,48 @@ export const defesaAnalisarCaso = task({
       .select("id, status")
       .single();
     if (error) throw new Error(`defesa_casos insert falhou: ${error.message}`);
+
+    // PR5 — fluxo oficial de aprovação: draft no painel (Disparos) + sino + feed DELI.
+    // Soft-fail: o caso em defesa_casos é a fonte de verdade.
+    const tituloCurto = `Defesa — ${input.tipo}${input.pedido_ref ? ` ${input.pedido_ref}` : ""}${input.valor_centavos > 0 ? ` (R$ ${valorReais})` : ""}`;
+    try {
+      await getSupabase().from("agent_drafts").insert({
+        tenant_id: input.tenant_id,
+        agent_name: "defesa",
+        channel: "painel",
+        loja_id: input.loja_id ?? null,
+        subject: tituloCurto,
+        content: analise.draft_resposta,
+        status: "pending",
+        autonomy_level: "amarelo",
+        reasoning: analise.fundamentos.join(" · "),
+        metadata: {
+          caso_id: caso.id,
+          tipo: input.tipo,
+          canal: input.canal,
+          valor_centavos: input.valor_centavos,
+          chance_vitoria: analise.chance_vitoria,
+          recomendacao: analise.recomendacao,
+        },
+      });
+    } catch (err) {
+      logger.warn("DEFESA — agent_drafts falhou (caso segue em defesa_casos)", { erro: (err as Error).message });
+    }
+    await notify({
+      tenantId: input.tenant_id,
+      kind: "draft_pending",
+      agent: "defesa",
+      title: `${tituloCurto} — aguardando seu OK`,
+      body: `Chance de vitória: ${analise.chance_vitoria}. Recomendação: ${analise.recomendacao}. Revise no Console v2 › Defesa Comercial.`,
+      metadata: { caso_id: caso.id },
+    });
+    await notifyDeli({
+      tenantId: input.tenant_id,
+      content: `DEFESA preparou um caso (${input.tipo}${input.pedido_ref ? ` ${input.pedido_ref}` : ""}): chance de vitória ${analise.chance_vitoria}, recomendação ${analise.recomendacao}. Aguardando OK humano na fila da Defesa.`,
+      sourceAgent: "defesa",
+      sourceTask: "defesa-analisar-caso",
+      runId: ctx.run.id,
+    });
 
     const durationMs = Date.now() - t0;
     await logAgentRun({
