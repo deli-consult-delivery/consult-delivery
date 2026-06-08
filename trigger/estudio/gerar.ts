@@ -15,6 +15,8 @@ import { notify } from "../_shared/notify";
 //   3. logAgentRun com custo real (texto + imagem)
 // NUNCA publica nada — resultado vira 'pronto' e aguarda humano.
 // Idempotente: claim otimista fila→gerando com guarda de status.
+// E2b: imagem via chat/completions + modalities (404 no endpoint
+// de images — provado em produção 2026-06-08).
 // =====================================================
 
 const TIPO_LABEL: Record<string, string> = {
@@ -24,12 +26,6 @@ const TIPO_LABEL: Record<string, string> = {
   oferta_whatsapp: "Mensagem de oferta para WhatsApp",
   cardapio_copy: "Copy de cardápio (descrições que vendem)",
   calendario_mes: "Calendário editorial do mês",
-};
-
-const FORMATO_SIZE: Record<string, string> = {
-  "1:1": "1024x1024",
-  "9:16": "1024x1792",
-  "16:9": "1792x1024",
 };
 
 const SYSTEM_PROMPT = `Você é o agente ESTÚDIO da Consult Delivery — criação de conteúdo para restaurantes no delivery.
@@ -59,29 +55,34 @@ async function gerarImagemOpenRouter(prompt: string, formato: string): Promise<{
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY ausente no ambiente do Trigger.dev");
   const modelo = process.env.ESTUDIO_IMAGE_MODEL || "openai/gpt-image-2";
-  const size = FORMATO_SIZE[formato] || "1024x1024";
+  const aspect = formato === "9:16" ? "9:16 (vertical story)" : formato === "16:9" ? "16:9 (widescreen)" : "1:1 (square)";
 
-  const resp = await fetch("https://openrouter.ai/api/v1/images/generations", {
+  // OpenRouter gera imagem via chat/completions com modalities image+text
+  // (nao existe /v1/images/generations — confirmado em producao, 404).
+  const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ model: modelo, prompt, size, n: 1, response_format: "b64_json" }),
+    body: JSON.stringify({
+      model: modelo,
+      messages: [{ role: "user", content: `${prompt}\n\nAspect ratio: ${aspect}. Output a single image.` }],
+      modalities: ["image", "text"],
+      usage: { include: true },
+    }),
   });
   if (!resp.ok) {
     const corpo = await resp.text();
     throw new Error(`OpenRouter ${resp.status}: ${corpo.slice(0, 300)}`);
   }
   const json = await resp.json();
-  const b64 = json?.data?.[0]?.b64_json;
-  if (!b64) {
-    // alguns modelos retornam URL — buscar o binário
-    const url = json?.data?.[0]?.url;
-    if (!url) throw new Error("OpenRouter sem imagem na resposta");
-    const bin = await fetch(url);
-    if (!bin.ok) throw new Error(`download da imagem falhou: ${bin.status}`);
-    const buf = Buffer.from(await bin.arrayBuffer());
-    return { png: buf, custoUsd: Number(json?.usage?.cost ?? 0), modelo };
+  const img = json?.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+  if (!img) throw new Error(`OpenRouter sem imagem na resposta (modelo ${modelo}): ${JSON.stringify(json?.choices?.[0]?.message ?? json?.error ?? {}).slice(0, 200)}`);
+  const custoUsd = Number(json?.usage?.cost ?? 0);
+  if (img.startsWith("data:")) {
+    return { png: Buffer.from(img.split(",")[1], "base64"), custoUsd, modelo };
   }
-  return { png: Buffer.from(b64, "base64"), custoUsd: Number(json?.usage?.cost ?? 0), modelo };
+  const bin = await fetch(img);
+  if (!bin.ok) throw new Error(`download da imagem falhou: ${bin.status}`);
+  return { png: Buffer.from(await bin.arrayBuffer()), custoUsd, modelo };
 }
 
 export const estudioGerar = schedules.task({
