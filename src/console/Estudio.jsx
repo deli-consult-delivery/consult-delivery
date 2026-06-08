@@ -7,6 +7,8 @@ import { supabase } from '../lib/supabase.js';
 // estados vazio/gerando/resultado/erro, Brand Guard, zero emoji).
 // Fluxo: GERAR grava status='fila' → task cron estudio-gerar (E2)
 // processa → tela faz poll e mostra 'pronto'. Nada é publicado.
+// E4: Enviar como rascunho de campanha → agent_drafts (canal
+// painel, fila oficial de aprovações — schema real usa agent_name).
 // ============================================================
 
 const TIPOS = [
@@ -45,17 +47,23 @@ export default function Estudio({ tenantDbId, userId }) {
   const [busca, setBusca] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState(null);
+  const [enviados, setEnviados] = useState({}); // criacao_id -> true (rascunho de campanha já criado)
+  const [enviando, setEnviando] = useState(null);
   const pollRef = useRef(null);
 
   const carregar = useCallback(async () => {
     if (!tenantDbId) return;
-    const [{ data: ls, error: e1 }, { data: cs, error: e2 }] = await Promise.all([
+    const [{ data: ls, error: e1 }, { data: cs, error: e2 }, { data: ds }] = await Promise.all([
       supabase.from('lojas').select('id, nome').eq('tenant_id', tenantDbId).eq('is_active', true).order('nome').limit(50),
       supabase.from('estudio_criacoes').select('id, loja_id, tipo, formato, brief, tom, status, texto_gerado, imagem_url, custo_usd, erro_msg, created_at').eq('tenant_id', tenantDbId).order('created_at', { ascending: false }).limit(24),
+      supabase.from('agent_drafts').select('metadata').eq('tenant_id', tenantDbId).eq('agent_name', 'estudio').limit(100),
     ]);
     if (e1 || e2) { setErro((e1 || e2).message); return; }
     setLojas(ls ?? []);
     setCriacoes(cs ?? []);
+    const env = {};
+    (ds ?? []).forEach(d => { if (d.metadata?.criacao_id) env[d.metadata.criacao_id] = true; });
+    setEnviados(env);
   }, [tenantDbId]);
 
   useEffect(() => { carregar(); }, [carregar]);
@@ -103,6 +111,30 @@ export default function Estudio({ tenantDbId, userId }) {
   async function aprovar(c) {
     const { error } = await supabase.from('estudio_criacoes').update({ status: 'aprovado' }).eq('id', c.id).eq('status', 'pronto');
     if (error) setErro(error.message); else await carregar();
+  }
+
+  // E4 — vira rascunho de campanha no fluxo oficial de aprovação (agent_drafts,
+  // canal painel — mesma fila da Defesa; nada é publicado direto).
+  async function enviarRascunho(c) {
+    setErro(null); setEnviando(c.id);
+    try {
+      const { error } = await supabase.from('agent_drafts').insert({
+        tenant_id: tenantDbId,
+        agent_name: 'estudio',
+        channel: 'painel',
+        loja_id: c.loja_id || null,
+        subject: `Estúdio — ${TIPO_LABEL[c.tipo] || c.tipo}: ${(c.brief || '').slice(0, 60)}`,
+        content: `${c.texto_gerado || ''}${c.imagem_url ? `\n\nArte: ${c.imagem_url}` : ''}`,
+        status: 'pending',
+        autonomy_level: 'amarelo',
+        reasoning: 'Criação do Estúdio enviada pelo usuário como rascunho de campanha — aguardando aprovação no painel.',
+        metadata: { criacao_id: c.id, tipo: c.tipo, formato: c.formato, imagem_url: c.imagem_url, brief: c.brief },
+      });
+      if (error) throw error;
+      if (c.status === 'pronto') await supabase.from('estudio_criacoes').update({ status: 'aprovado' }).eq('id', c.id).eq('status', 'pronto');
+      await carregar();
+    } catch (err) { setErro(err?.message || 'falha ao enviar rascunho'); }
+    finally { setEnviando(null); }
   }
 
   const biblio = (criacoes ?? []).filter(c => !busca || (c.brief || '').toLowerCase().includes(busca.toLowerCase()) || (TIPO_LABEL[c.tipo] || '').toLowerCase().includes(busca.toLowerCase()));
@@ -216,7 +248,9 @@ export default function Estudio({ tenantDbId, userId }) {
                   {sel.status === 'pronto' && <button className="cv2-btn" onClick={() => aprovar(sel)}>Aprovar</button>}
                   <button className="cv2-btn sec" onClick={() => gerar(sel.tipo, sel.brief)}>Gerar variação</button>
                   {sel.imagem_url && <a className="cv2-btn sec" style={{ textDecoration: 'none' }} href={sel.imagem_url} target="_blank" rel="noreferrer" download>Baixar PNG</a>}
-                  <button className="cv2-btn sec" disabled title="Entra na próxima entrega (E4): vira rascunho de campanha para aprovação">Enviar como rascunho de campanha</button>
+                  {enviados[sel.id]
+                    ? <span className="cv2-bdg ok" style={{ alignSelf: 'center' }}>NA FILA DE APROVAÇÕES</span>
+                    : <button className="cv2-btn sec" disabled={enviando === sel.id} title="Vira rascunho de campanha na fila de aprovações — nada é publicado direto" onClick={() => enviarRascunho(sel)}>{enviando === sel.id ? 'Enviando…' : 'Enviar como rascunho de campanha'}</button>}
                 </div>
               </div>
             </div>
