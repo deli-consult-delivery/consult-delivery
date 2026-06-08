@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase.js';
 // processa → tela faz poll e mostra 'pronto'. Nada é publicado.
 // E4: Enviar como rascunho de campanha → agent_drafts (canal
 // painel, fila oficial de aprovações — schema real usa agent_name).
+// fix: custo médio fallback 0,04 → 0,24 (custo real medido no e2e).
 // ============================================================
 
 const TIPOS = [
@@ -149,7 +150,7 @@ export default function Estudio({ tenantDbId, userId }) {
           <div className="cv2-sub">Gera artes e copy na identidade visual da loja. Nada é publicado — você revisa e aprova.</div>
         </div>
         <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-          <span className="cv2-pill">custo médio <b>{custoMedioImg ? `US$ ${custoMedioImg.toFixed(2)}` : 'US$ 0,04'}</b> / imagem</span>
+          <span className="cv2-pill">custo médio <b>{custoMedioImg ? `US$ ${custoMedioImg.toFixed(2)}` : 'US$ 0,24'}</b> / imagem</span>
           <span className="cv2-pill" title="Modelo travado — definido pela plataforma">modelo <b>GPT Image 2</b> via OpenRouter</span>
         </div>
       </div>
