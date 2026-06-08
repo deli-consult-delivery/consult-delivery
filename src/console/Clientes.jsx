@@ -2,12 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
 
 // ============================================================
-// Console v2 — PR9/C1: Clientes da plataforma (admin)
-// Cria tenant novo (workspace do lojista beta), insere você como
-// owner, convida o dono por email (bridge /users/invite) e controla
-// a habilitação da Defesa (D7: Radar grátis até pagar — tenant novo
-// nasce SEM defesa; habilitação manual aqui até o PR10 automatizar
-// via assinatura Asaas).
+// Console v2 — PR9/C1 + PR10: Clientes da plataforma (admin)
+// Cria tenant, convida o dono, controla a Defesa (D7) e gera a
+// ASSINATURA R$147/mês (fila → task defesa-criar-assinatura →
+// Asaas → link de pagamento → sync ativa/desativa sozinho).
 // ============================================================
 
 const BRIDGE_URL = import.meta.env.VITE_BRIDGE_URL || 'http://187.127.25.24:3001';
@@ -22,9 +20,12 @@ function slugify(s) {
 export default function Clientes({ userId }) {
   const [tenants, setTenants] = useState(null);
   const [defesaMap, setDefesaMap] = useState({});
+  const [assinaturaMap, setAssinaturaMap] = useState({});
   const [nome, setNome] = useState('');
   const [slug, setSlug] = useState('');
   const [email, setEmail] = useState('');
+  const [assinandoDe, setAssinandoDe] = useState(null); // tenant_id com form de pagador aberto
+  const [payer, setPayer] = useState({ nome: '', email: '', doc: '' });
   const [salvando, setSalvando] = useState(false);
   const [agindo, setAgindo] = useState(null);
   const [msg, setMsg] = useState(null);
@@ -35,10 +36,17 @@ export default function Clientes({ userId }) {
     if (e1) { setErro(e1.message); return; }
     setTenants(ts ?? []);
     if (ts?.length) {
-      const { data: tas } = await supabase.from('tenant_agents').select('tenant_id').eq('agent_id', 'defesa').in('tenant_id', ts.map(t => t.id));
-      const map = {};
-      (tas ?? []).forEach(r => { map[r.tenant_id] = true; });
-      setDefesaMap(map);
+      const ids = ts.map(t => t.id);
+      const [{ data: tas }, { data: asn }] = await Promise.all([
+        supabase.from('tenant_agents').select('tenant_id').eq('agent_id', 'defesa').in('tenant_id', ids),
+        supabase.from('defesa_assinaturas').select('tenant_id, status, link_pagamento, valor_centavos, ultima_cobranca_status').in('tenant_id', ids).order('created_at', { ascending: false }),
+      ]);
+      const dm = {};
+      (tas ?? []).forEach(r => { dm[r.tenant_id] = true; });
+      setDefesaMap(dm);
+      const am = {};
+      (asn ?? []).forEach(r => { if (!am[r.tenant_id]) am[r.tenant_id] = r; });
+      setAssinaturaMap(am);
     }
   }, []);
 
@@ -51,16 +59,13 @@ export default function Clientes({ userId }) {
     if (!slugFinal) { setErro('Slug inválido.'); return; }
     setSalvando(true);
     try {
-      // 1. Cria o tenant
       const { data: t, error: e1 } = await supabase.from('tenants')
         .insert({ name: nome.trim(), slug: slugFinal, color: '#B70C00' })
         .select('id, name, slug')
         .single();
       if (e1) throw e1;
-      // 2. Você vira owner (necessário p/ administrar e convidar)
       const { error: e2 } = await supabase.from('tenant_members').insert({ tenant_id: t.id, user_id: userId, role: 'owner' });
       if (e2) throw e2;
-      // 3. Convite do dono por email (fluxo oficial do bridge) — opcional
       let convite = 'sem convite (adicione depois)';
       if (email.trim()) {
         const { data: { session } } = await supabase.auth.getSession();
@@ -72,8 +77,7 @@ export default function Clientes({ userId }) {
         const json = await res.json().catch(() => ({}));
         convite = res.ok ? `convite enviado para ${email.trim()}` : `falha no convite: ${json.error || res.status} (reenvie depois)`;
       }
-      // 4. D7: defesa NÃO é habilitada — nasce no Radar grátis
-      setMsg(`Workspace "${t.name}" criado no plano Radar grátis — ${convite}. Habilite a Defesa quando a assinatura estiver ativa.`);
+      setMsg(`Workspace "${t.name}" criado no plano Radar grátis — ${convite}.`);
       setNome(''); setSlug(''); setEmail('');
       await carregar();
     } catch (err) {
@@ -101,11 +105,48 @@ export default function Clientes({ userId }) {
     }
   }
 
+  async function gerarAssinatura(t) {
+    setErro(null);
+    if (payer.nome.trim().length < 2 || String(payer.doc).replace(/\D/g, '').length < 11) {
+      setErro('Informe nome e CPF/CNPJ do pagador.');
+      return;
+    }
+    setAgindo(t.id);
+    try {
+      const { error } = await supabase.from('defesa_assinaturas').insert({
+        tenant_id: t.id,
+        status: 'pendente',
+        payer_nome: payer.nome.trim(),
+        payer_email: payer.email.trim() || null,
+        payer_cpf_cnpj: String(payer.doc).replace(/\D/g, ''),
+      });
+      if (error) throw error;
+      setMsg(`Assinatura de "${t.name}" entrou na fila — em até 5 minutos o link de pagamento aparece aqui.`);
+      setAssinandoDe(null);
+      setPayer({ nome: '', email: '', doc: '' });
+      await carregar();
+    } catch (err) {
+      setErro(err?.message || 'falha ao gerar assinatura');
+    } finally {
+      setAgindo(null);
+    }
+  }
+
+  function badgeAssinatura(a) {
+    if (!a) return null;
+    if (a.status === 'ativa') return <span className="cv2-bdg ok">assinatura ativa</span>;
+    if (a.status === 'atrasada') return <span className="cv2-bdg err">assinatura atrasada</span>;
+    if (a.status === 'cancelada') return <span className="cv2-bdg mut">assinatura cancelada</span>;
+    return a.link_pagamento
+      ? <a className="cv2-bdg warn" href={a.link_pagamento} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>link de pagamento</a>
+      : <span className="cv2-bdg warn">criando no Asaas…</span>;
+  }
+
   return (
     <div>
       <h1>Clientes da plataforma <span className="cv2-mock" style={{ background: 'var(--green-soft)', color: 'var(--green)' }}>ADMIN</span></h1>
       <div className="cv2-rule" />
-      <div className="cv2-sub">Cada cliente é um workspace isolado (loja A nunca vê loja B). Plano inicial: Radar grátis — a Defesa é habilitada com a assinatura de R$ 147/loja/mês (D7).{erro ? ` · erro: ${erro}` : ''}</div>
+      <div className="cv2-sub">Cada cliente é um workspace isolado. Plano inicial: Radar grátis — a Defesa liga sozinha quando o pagamento da assinatura (R$ 147/loja/mês) confirma.{erro ? ` · erro: ${erro}` : ''}</div>
 
       {msg && <div className="cv2-card" style={{ borderLeft: '3px solid var(--green)', color: 'var(--green)', fontWeight: 600 }}>{msg}</div>}
 
@@ -127,23 +168,45 @@ export default function Clientes({ userId }) {
       {tenants && (
         <div className="cv2-card">
           <table>
-            <thead><tr><th>Cliente</th><th>Slug</th><th>Plano</th><th>Ação</th></tr></thead>
+            <thead><tr><th>Cliente</th><th>Plano</th><th>Assinatura</th><th>Ações</th></tr></thead>
             <tbody>
-              {tenants.map(t => (
-                <tr key={t.id}>
-                  <td><b>{t.name}</b></td>
-                  <td style={{ color: 'var(--tx2)' }}>{t.slug}</td>
-                  <td>{defesaMap[t.id] ? <span className="cv2-bdg ok">Defesa ativa · R$ 147/mês</span> : <span className="cv2-bdg mut">Radar grátis</span>}</td>
-                  <td>
-                    <button className={defesaMap[t.id] ? 'cv2-btn danger' : 'cv2-btn'} disabled={agindo === t.id} onClick={() => toggleDefesa(t)}>
-                      {defesaMap[t.id] ? 'Desabilitar Defesa' : 'Habilitar Defesa'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {tenants.map(t => {
+                const a = assinaturaMap[t.id];
+                const aberto = assinandoDe === t.id;
+                return (
+                  <tr key={t.id}>
+                    <td><b>{t.name}</b><div style={{ color: 'var(--tx2)', fontSize: 11 }}>{t.slug}</div></td>
+                    <td>{defesaMap[t.id] ? <span className="cv2-bdg ok">Defesa ativa</span> : <span className="cv2-bdg mut">Radar grátis</span>}</td>
+                    <td>
+                      {badgeAssinatura(a) || <span style={{ color: 'var(--tx2)', fontSize: 12 }}>sem assinatura</span>}
+                      {aberto && (
+                        <div style={{ marginTop: 8, display: 'grid', gap: 6, maxWidth: 260 }}>
+                          <input style={inputStyle} placeholder="Nome do pagador" value={payer.nome} onChange={e => setPayer(p => ({ ...p, nome: e.target.value }))} />
+                          <input style={inputStyle} placeholder="CPF ou CNPJ" value={payer.doc} onChange={e => setPayer(p => ({ ...p, doc: e.target.value }))} />
+                          <input style={inputStyle} placeholder="Email do pagador (opcional)" value={payer.email} onChange={e => setPayer(p => ({ ...p, email: e.target.value }))} />
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button className="cv2-btn" disabled={agindo === t.id} onClick={() => gerarAssinatura(t)}>Confirmar</button>
+                            <button className="cv2-btn sec" onClick={() => setAssinandoDe(null)}>Cancelar</button>
+                          </div>
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {!a && !aberto && (
+                          <button className="cv2-btn" disabled={agindo === t.id} onClick={() => { setAssinandoDe(t.id); setPayer({ nome: t.name, email: '', doc: '' }); }}>Gerar assinatura R$ 147</button>
+                        )}
+                        <button className={defesaMap[t.id] ? 'cv2-btn danger' : 'cv2-btn sec'} disabled={agindo === t.id} onClick={() => toggleDefesa(t)}>
+                          {defesaMap[t.id] ? 'Desabilitar Defesa' : 'Habilitar (override)'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
-          <div style={{ fontSize: 11.5, color: 'var(--tx2)', marginTop: 10 }}>No PR10 a habilitação passa a seguir a assinatura Asaas automaticamente; este toggle vira o override manual.</div>
+          <div style={{ fontSize: 11.5, color: 'var(--tx2)', marginTop: 10 }}>Fluxo automático: pagamento confirmado liga a Defesa · 2 cobranças vencidas desligam (volta ao Radar). O toggle manual é o override.</div>
         </div>
       )}
       {tenants && !tenants.length && <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>Nenhum workspace visível.</div>}
