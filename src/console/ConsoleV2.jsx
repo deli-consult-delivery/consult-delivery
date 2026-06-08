@@ -22,7 +22,33 @@ import './console.css';
 // T4: Aprovacoes Unificadas (grupo Operacao — GAP-3).
 // PR12a: Importar relatórios iFood (grupo Dados — fonte do Radar).
 // PR12b: Radar real (RadarReal.jsx — métricas importadas + casos Defesa).
+// fix: ícones SVG no sidebar (paridade com o MVP, Brand Guard zero emoji).
 // ============================================================
+
+// Ícones SVG (estilo lucide, stroke) — paridade visual com o MVP sem usar emoji (Brand Guard).
+const ICONS = {
+  visao:      ['M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', 'M9 22V12h6v10'],
+  defesa:     ['M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'],
+  radar:      ['M22 12h-4l-3 9L9 3l-3 9H2'],
+  ativar:     ['M3 21h18', 'M5 21V7l8-4v18', 'M19 21V11l-6-4'],
+  execucoes:  ['M8 6h13', 'M8 12h13', 'M8 18h13', 'M3 6h.01', 'M3 12h.01', 'M3 18h.01'],
+  aprovacoes: ['M22 11.08V12a10 10 0 1 1-5.93-9.14', 'M22 4 12 14.01l-3-3'],
+  agentes:    ['M12 2v2', 'M5 8h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z', 'M9 13h.01', 'M15 13h.01'],
+  estudio:    ['M3 3h18v18H3z', 'M3 15l5-5 4 4 3-3 6 6'],
+  custos:     ['M12 1v22', 'M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'],
+  importar:   ['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', 'M7 10l5-5 5 5', 'M12 5v12'],
+  clientes:   ['M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M23 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'],
+  lock:       ['M5 11h14v10H5z', 'M8 11V7a4 4 0 0 1 8 0v4'],
+};
+
+function Ico({ name }) {
+  const paths = ICONS[name] || ICONS.lock;
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {paths.map((d, i) => <path key={i} d={d} />)}
+    </svg>
+  );
+}
 
 const GRUPOS = [
   { label: 'Início', items: [{ id: 'visao', label: 'Visão Geral' }] },
@@ -30,8 +56,8 @@ const GRUPOS = [
     { id: 'defesa', label: 'Defesa Comercial' },
     { id: 'radar', label: 'Radar (grátis)' },
     { id: 'ativar', label: 'Ativar loja' },
-    { id: 'execucoes', label: 'Execucoes' },
-    { id: 'aprovacoes', label: 'Aprovacoes' },
+    { id: 'execucoes', label: 'Execuções' },
+    { id: 'aprovacoes', label: 'Aprovações' },
   ]},
   { label: 'Agentes IA', items: [
     { id: 'agentes', label: 'Painel de Agentes' },
@@ -45,7 +71,7 @@ const GRUPOS = [
   { label: 'Admin', items: [{ id: 'clientes', label: 'Clientes (plataforma)' }] },
 ];
 
-const TITULOS = { visao: 'Visão Geral', defesa: 'Defesa Comercial', radar: 'Radar', ativar: 'Ativar loja', clientes: 'Clientes', estudio: 'Estúdio de Conteúdo', custos: 'Custos de IA', agentes: 'Painel de Agentes', execucoes: 'Execucoes', aprovacoes: 'Aprovacoes', importar: 'Importar relatórios' };
+const TITULOS = { visao: 'Visão Geral', defesa: 'Defesa Comercial', radar: 'Radar', ativar: 'Ativar loja', clientes: 'Clientes', estudio: 'Estúdio de Conteúdo', custos: 'Custos de IA', agentes: 'Painel de Agentes', execucoes: 'Execuções', aprovacoes: 'Aprovações', importar: 'Importar relatórios' };
 
 const OK_STATUSES = ['ok', 'completed', 'success'];
 const fmtBRL = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -324,10 +350,12 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
             <div className="cv2-grp">{g.label}</div>
             {g.items.map(it => (g.locked || it.locked) ? (
               <div key={it.id} className="cv2-item lock" title="Em construção — próximas fases do roadmap">
-                {it.label}<span className="f2">EM BREVE</span>
+                <Ico name="lock" />{it.label}<span className="f2">EM BREVE</span>
               </div>
             ) : (
-              <div key={it.id} className={`cv2-item${tela === it.id ? ' on' : ''}`} onClick={() => setTela(it.id)}>{it.label}</div>
+              <div key={it.id} className={`cv2-item${tela === it.id ? ' on' : ''}`} onClick={() => setTela(it.id)}>
+                <Ico name={it.id} />{it.label}
+              </div>
             ))}
           </div>
         ))}
