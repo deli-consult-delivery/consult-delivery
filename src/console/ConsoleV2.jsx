@@ -83,7 +83,7 @@ function Kpi({ l, v, d, neg, mut }) {
     <div className="cv2-kpi">
       <div className="l">{l}</div>
       <div className="v">{v}</div>
-      <div className={`d${neg ? ' neg' : ''}${mut ? ' mut' : ''}`}>{d || ' '}</div>
+      <div className={`d${neg ? ' neg' : ''}${mut ? ' mut' : ''}`}>{d || ' '}</div>
     </div>
   );
 }
