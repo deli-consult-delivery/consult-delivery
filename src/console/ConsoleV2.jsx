@@ -2,12 +2,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
 import AtivarLoja from './AtivarLoja.jsx';
 import Clientes from './Clientes.jsx';
+import Estudio from './Estudio.jsx';
 import './console.css';
 
 // ============================================================
 // Console v2 · F1+ — [D6 aprovada e REABERTA pelo fundador em 2026-06-07]
 // PR6: ciclo do caso · PR7: Ativar loja · PR9: Clientes (multi-tenant)
 // + gating D7: Defesa só com assinatura (tenant_agents); Radar grátis.
+// E3: Estúdio de Conteúdo (grupo Agentes IA — lock por item).
 // ============================================================
 
 const GRUPOS = [
@@ -17,14 +19,15 @@ const GRUPOS = [
     { id: 'radar', label: 'Radar (grátis)' },
     { id: 'ativar', label: 'Ativar loja' },
   ]},
-  { label: 'Agentes IA', locked: true, items: [
-    { id: 'x1', label: 'Análise de Loja' }, { id: 'x2', label: 'Cardápio' }, { id: 'x3', label: 'Multicanal' },
+  { label: 'Agentes IA', items: [
+    { id: 'estudio', label: 'Estúdio de Conteúdo' },
+    { id: 'x1', label: 'Análise de Loja', locked: true }, { id: 'x2', label: 'Cardápio', locked: true }, { id: 'x3', label: 'Multicanal', locked: true },
   ]},
   { label: 'Dados', locked: true, items: [{ id: 'x4', label: 'Custos de IA' }] },
   { label: 'Admin', items: [{ id: 'clientes', label: 'Clientes (plataforma)' }] },
 ];
 
-const TITULOS = { visao: 'Visão Geral', defesa: 'Defesa Comercial', radar: 'Radar', ativar: 'Ativar loja', clientes: 'Clientes' };
+const TITULOS = { visao: 'Visão Geral', defesa: 'Defesa Comercial', radar: 'Radar', ativar: 'Ativar loja', clientes: 'Clientes', estudio: 'Estúdio de Conteúdo' };
 
 const OK_STATUSES = ['ok', 'completed', 'success'];
 const fmtBRL = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -80,7 +83,7 @@ function Kpi({ l, v, d, neg, mut }) {
     <div className="cv2-kpi">
       <div className="l">{l}</div>
       <div className="v">{v}</div>
-      <div className={`d${neg ? ' neg' : ''}${mut ? ' mut' : ''}`}>{d || ' '}</div>
+      <div className={`d${neg ? ' neg' : ''}${mut ? ' mut' : ''}`}>{d || ' '}</div>
     </div>
   );
 }
@@ -328,7 +331,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
         {GRUPOS.map((g, i) => (
           <div key={i}>
             <div className="cv2-grp">{g.label}</div>
-            {g.items.map(it => g.locked ? (
+            {g.items.map(it => (g.locked || it.locked) ? (
               <div key={it.id} className="cv2-item lock" title="Em construção — próximas fases do roadmap">
                 {it.label}<span className="f2">EM BREVE</span>
               </div>
@@ -354,6 +357,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
           {tela === 'radar' && <Radar tenantNome={tenantNome} />}
           {tela === 'ativar' && <AtivarLoja tenantDbId={tenantDbId} />}
           {tela === 'clientes' && <Clientes userId={userId} />}
+          {tela === 'estudio' && <Estudio tenantDbId={tenantDbId} userId={userId} />}
         </div>
       </div>
     </div>
