@@ -9,23 +9,23 @@ import Execucoes from './Execucoes.jsx';
 import AprovacoesUnificadas from './AprovacoesUnificadas.jsx';
 import ImportarRelatorios from './ImportarRelatorios.jsx';
 import RadarReal from './RadarReal.jsx';
+import AnaliseLoja from './AnaliseLoja.jsx';
+import AgenteConfig from './AgenteConfig.jsx';
+import AuditLog from './AuditLog.jsx';
+import AcessoUsuarios from './AcessoUsuarios.jsx';
+import Habilidades from './Habilidades.jsx';
+import Templates from './Templates.jsx';
 import './console.css';
 
 // ============================================================
-// Console v2 · F1+ — [D6 aprovada e REABERTA pelo fundador em 2026-06-07]
-// PR6: ciclo do caso · PR7: Ativar loja · PR9: Clientes (multi-tenant)
-// + gating D7: Defesa só com assinatura (tenant_agents); Radar grátis.
-// E3: Estúdio de Conteúdo (grupo Agentes IA — lock por item).
-// T1: Custos de IA (grupo Dados — GAP-4).
-// T2: Painel de Agentes v2 (grupo Agentes IA — GAP-1+2).
-// T3: Execucoes (grupo Operacao — log de agent_runs).
-// T4: Aprovacoes Unificadas (grupo Operacao — GAP-3).
-// PR12a: Importar relatórios iFood (grupo Dados — fonte do Radar).
-// PR12b: Radar real (RadarReal.jsx — métricas importadas + casos Defesa).
-// fix: ícones SVG no sidebar (paridade com o MVP, Brand Guard zero emoji).
+// Console v2 · plataforma completa (madrugada 2026-06-08, sessão autônoma)
+// Operação: Defesa · Radar · Ativar loja · Execuções · Aprovações
+// Agentes IA: Painel · Análise de Loja · Estúdio · Config de Agentes · Habilidades
+// Dados: Custos de IA · Importar relatórios
+// Admin: Clientes · Acesso por usuário · Auditoria · Templates
+// Locked (futuro): Cardápio · Multicanal (agentes sem tela ainda)
 // ============================================================
 
-// Ícones SVG (estilo lucide, stroke) — paridade visual com o MVP sem usar emoji (Brand Guard).
 const ICONS = {
   visao:      ['M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', 'M9 22V12h6v10'],
   defesa:     ['M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'],
@@ -34,10 +34,16 @@ const ICONS = {
   execucoes:  ['M8 6h13', 'M8 12h13', 'M8 18h13', 'M3 6h.01', 'M3 12h.01', 'M3 18h.01'],
   aprovacoes: ['M22 11.08V12a10 10 0 1 1-5.93-9.14', 'M22 4 12 14.01l-3-3'],
   agentes:    ['M12 2v2', 'M5 8h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z', 'M9 13h.01', 'M15 13h.01'],
+  analise:    ['M3 3v18h18', 'M7 14l3-3 3 3 4-5'],
   estudio:    ['M3 3h18v18H3z', 'M3 15l5-5 4 4 3-3 6 6'],
+  config:     ['M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'],
+  habilidades:['M13 2L3 14h9l-1 8 10-12h-9l1-8z'],
   custos:     ['M12 1v22', 'M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'],
   importar:   ['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', 'M7 10l5-5 5 5', 'M12 5v12'],
   clientes:   ['M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M23 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'],
+  acesso:     ['M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z', 'M9 12l2 2 4-4'],
+  auditoria:  ['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', 'M14 2v6h6', 'M16 13H8', 'M16 17H8'],
+  templates:  ['M3 3h18v18H3z', 'M3 9h18', 'M9 21V9'],
   lock:       ['M5 11h14v10H5z', 'M8 11V7a4 4 0 0 1 8 0v4'],
 };
 
@@ -61,17 +67,25 @@ const GRUPOS = [
   ]},
   { label: 'Agentes IA', items: [
     { id: 'agentes', label: 'Painel de Agentes' },
+    { id: 'analise', label: 'Análise de Loja' },
     { id: 'estudio', label: 'Estúdio de Conteúdo' },
-    { id: 'x1', label: 'Análise de Loja', locked: true }, { id: 'x2', label: 'Cardápio', locked: true }, { id: 'x3', label: 'Multicanal', locked: true },
+    { id: 'config', label: 'Config de Agentes' },
+    { id: 'habilidades', label: 'Habilidades' },
+    { id: 'x2', label: 'Cardápio', locked: true }, { id: 'x3', label: 'Multicanal', locked: true },
   ]},
   { label: 'Dados', items: [
     { id: 'custos', label: 'Custos de IA' },
     { id: 'importar', label: 'Importar relatórios' },
   ]},
-  { label: 'Admin', items: [{ id: 'clientes', label: 'Clientes (plataforma)' }] },
+  { label: 'Admin', items: [
+    { id: 'clientes', label: 'Clientes (plataforma)' },
+    { id: 'acesso', label: 'Acesso por usuário' },
+    { id: 'auditoria', label: 'Auditoria' },
+    { id: 'templates', label: 'Templates' },
+  ]},
 ];
 
-const TITULOS = { visao: 'Visão Geral', defesa: 'Defesa Comercial', radar: 'Radar', ativar: 'Ativar loja', clientes: 'Clientes', estudio: 'Estúdio de Conteúdo', custos: 'Custos de IA', agentes: 'Painel de Agentes', execucoes: 'Execuções', aprovacoes: 'Aprovações', importar: 'Importar relatórios' };
+const TITULOS = { visao: 'Visão Geral', defesa: 'Defesa Comercial', radar: 'Radar', ativar: 'Ativar loja', clientes: 'Clientes', estudio: 'Estúdio de Conteúdo', custos: 'Custos de IA', agentes: 'Painel de Agentes', execucoes: 'Execuções', aprovacoes: 'Aprovações', importar: 'Importar relatórios', analise: 'Análise de Loja', config: 'Config de Agentes', habilidades: 'Habilidades', acesso: 'Acesso por usuário', auditoria: 'Auditoria', templates: 'Templates' };
 
 const OK_STATUSES = ['ok', 'completed', 'success'];
 const fmtBRL = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -382,6 +396,12 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
           {tela === 'execucoes' && <Execucoes tenantDbId={tenantDbId} />}
           {tela === 'aprovacoes' && <AprovacoesUnificadas tenantDbId={tenantDbId} userId={userId} />}
           {tela === 'importar' && <ImportarRelatorios tenantDbId={tenantDbId} userId={userId} />}
+          {tela === 'analise' && <AnaliseLoja tenantDbId={tenantDbId} userId={userId} />}
+          {tela === 'config' && <AgenteConfig tenantDbId={tenantDbId} />}
+          {tela === 'habilidades' && <Habilidades tenantDbId={tenantDbId} userId={userId} />}
+          {tela === 'acesso' && <AcessoUsuarios tenantDbId={tenantDbId} />}
+          {tela === 'auditoria' && <AuditLog tenantDbId={tenantDbId} />}
+          {tela === 'templates' && <Templates tenantDbId={tenantDbId} userId={userId} />}
         </div>
       </div>
     </div>
