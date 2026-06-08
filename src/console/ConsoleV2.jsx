@@ -8,6 +8,7 @@ import PainelAgentes from './PainelAgentes.jsx';
 import Execucoes from './Execucoes.jsx';
 import AprovacoesUnificadas from './AprovacoesUnificadas.jsx';
 import ImportarRelatorios from './ImportarRelatorios.jsx';
+import RadarReal from './RadarReal.jsx';
 import './console.css';
 
 // ============================================================
@@ -20,6 +21,7 @@ import './console.css';
 // T3: Execucoes (grupo Operacao — log de agent_runs).
 // T4: Aprovacoes Unificadas (grupo Operacao — GAP-3).
 // PR12a: Importar relatórios iFood (grupo Dados — fonte do Radar).
+// PR12b: Radar real (RadarReal.jsx — métricas importadas + casos Defesa).
 // ============================================================
 
 const GRUPOS = [
@@ -99,7 +101,7 @@ function Kpi({ l, v, d, neg, mut }) {
     <div className="cv2-kpi">
       <div className="l">{l}</div>
       <div className="v">{v}</div>
-      <div className={`d${neg ? ' neg' : ''}${mut ? ' mut' : ''}`}>{d || ' '}</div>
+      <div className={`d${neg ? ' neg' : ''}${mut ? ' mut' : ''}`}>{d || ' '}</div>
     </div>
   );
 }
@@ -292,33 +294,6 @@ function Defesa({ tenantDbId, userId }) {
   );
 }
 
-function Radar({ tenantNome }) {
-  return (
-    <div>
-      <h1>Radar <span className="cv2-mock">DADOS DE EXEMPLO · rotina semanal futura</span></h1>
-      <div className="cv2-rule" />
-      <div className="cv2-sub">Diagnóstico semanal gratuito — mostra quanto dinheiro está vazando antes de você contratar a Defesa.</div>
-      <div className="cv2-kpis">
-        <Kpi l="Nota média (semana)" v="4,3" d="caiu 0,2" neg />
-        <Kpi l="Cancelamentos" v="7" d="R$ 312 perdidos" neg />
-        <Kpi l="Avaliações sem resposta" v="12" d="ranking em risco" neg />
-        <Kpi l="Perda estimada do mês" v="R$ 1.180" d="a Defesa custa R$ 147" mut />
-      </div>
-      <div className="cv2-card">
-        <h3>{tenantNome}: o que o Radar viu esta semana</h3>
-        <table>
-          <thead><tr><th>Sinal</th><th>Impacto</th><th>Ação sugerida</th></tr></thead>
-          <tbody>
-            <tr><td>3 cancelamentos com perfil de “golpe do estorno”</td><td><span className="cv2-bdg err">R$ 198</span></td><td>contestáveis — a Defesa prepara em minutos</td></tr>
-            <tr><td>Avaliação 1★ sem resposta há 3 dias</td><td><span className="cv2-bdg warn">ranking</span></td><td>resposta pronta aguardando OK</td></tr>
-            <tr><td>Tempo médio de resposta a avaliações: 2,4 dias</td><td><span className="cv2-bdg warn">conversão</span></td><td>meta com Defesa: minutos</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
 export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
   const [tela, setTela] = useState('visao');
   const [defesaOn, setDefesaOn] = useState(null); // null = carregando
@@ -370,7 +345,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
         <div className="cv2-ct">
           {tela === 'visao' && <VisaoGeral tenantNome={tenantNome} tenantDbId={tenantDbId} onIrDefesa={() => setTela('defesa')} />}
           {tela === 'defesa' && (defesaOn === false ? <PaywallDefesa /> : <Defesa tenantDbId={tenantDbId} userId={userId} />)}
-          {tela === 'radar' && <Radar tenantNome={tenantNome} />}
+          {tela === 'radar' && <RadarReal tenantNome={tenantNome} tenantDbId={tenantDbId} />}
           {tela === 'ativar' && <AtivarLoja tenantDbId={tenantDbId} />}
           {tela === 'clientes' && <Clientes userId={userId} />}
           {tela === 'estudio' && <Estudio tenantDbId={tenantDbId} userId={userId} />}
