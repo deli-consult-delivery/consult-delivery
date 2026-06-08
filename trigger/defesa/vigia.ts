@@ -11,6 +11,10 @@ import { defesaAnalisarCaso } from "./analisar-caso";
 //  · PR5b: comandos de aprovação na MESMA conversa do caso:
 //      "@defesa ok|aprovo|aprovar"      → aprova o caso pendente
 //      "@defesa descartar|rejeitar"     → descarta
+//  · PR8 (C4): allowlist de aprovadores (defesa_aprovadores)
+//  · PR9 (D7): só processa tenants com 'defesa' habilitada em
+//    tenant_agents — Radar grátis até pagar; habilitação via
+//    tela Clientes (PR10 automatiza pela assinatura Asaas).
 // NUNCA envia mensagem — apenas leitura (modelo WhatsApp preservado).
 // Dedupe de criação: origem_message_id. Aprovação é idempotente
 // (update com guarda status='aguardando_ok').
@@ -38,6 +42,20 @@ export const defesaVigia = schedules.task({
     const sb = getSupabase();
     const desde = new Date(Date.now() - 15 * 60000).toISOString(); // janela 15min (overlap; dedupe garante idempotência)
 
+    // PR9 (D7): cache por varredura de quais tenants têm Defesa habilitada
+    const habilitadoCache = new Map<string, boolean>();
+    async function defesaHabilitada(tenantId: string): Promise<boolean> {
+      if (habilitadoCache.has(tenantId)) return habilitadoCache.get(tenantId)!;
+      const { count } = await sb
+        .from("tenant_agents")
+        .select("*", { count: "exact", head: true })
+        .eq("tenant_id", tenantId)
+        .eq("agent_id", "defesa");
+      const ok = (count ?? 0) > 0;
+      habilitadoCache.set(tenantId, ok);
+      return ok;
+    }
+
     const { data: msgs, error } = await sb
       .from("messages")
       .select("id, tenant_id, conversation_id, content, body, sender_name, whatsapp_msg_id, created_at")
@@ -54,10 +72,14 @@ export const defesaVigia = schedules.task({
     let aprovacoes = 0;
     let descartes = 0;
     let naoAutorizados = 0;
+    let tenantsSemDefesa = 0;
 
     for (const msg of msgs ?? []) {
       const texto = (msg.content || msg.body || "").toString();
       if (!texto || texto.length < 3) continue;
+
+      // PR9 (D7): tenant sem Defesa habilitada = vigia não atua (Radar grátis)
+      if (!(await defesaHabilitada(msg.tenant_id))) { tenantsSemDefesa++; continue; }
 
       // ---------- PR5b: comandos de aprovação/descarte ----------
       const cmdAprovar = RE_CMD_APROVAR.test(texto);
@@ -208,7 +230,7 @@ export const defesaVigia = schedules.task({
       logger.info("VIGIA — caso disparado", { message_id: msg.id, tipo, mencionado, loja: lojaNome ?? null });
     }
 
-    logger.info("VIGIA — varredura concluída", { janela_msgs: (msgs ?? []).length, detectados, disparados, duplicados, aprovacoes, descartes, naoAutorizados });
-    return { ok: true, mensagens_na_janela: (msgs ?? []).length, detectados, disparados, duplicados, aprovacoes, descartes, naoAutorizados };
+    logger.info("VIGIA — varredura concluída", { janela_msgs: (msgs ?? []).length, detectados, disparados, duplicados, aprovacoes, descartes, naoAutorizados, tenantsSemDefesa });
+    return { ok: true, mensagens_na_janela: (msgs ?? []).length, detectados, disparados, duplicados, aprovacoes, descartes, naoAutorizados, tenantsSemDefesa };
   },
 });
