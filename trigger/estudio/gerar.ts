@@ -10,13 +10,14 @@ import { notify } from "../_shared/notify";
 // status='fila' — padrão PR10). Para cada pedido:
 //   1. texto/copy com claude-sonnet-4-6 (Brand Guard)
 //   2. se formato visual: imagem via OpenRouter
-//      (modelo em ESTUDIO_IMAGE_MODEL, default openai/gpt-image-2)
+//      (modelo em ESTUDIO_IMAGE_MODEL, default openai/gpt-5.4-image-2)
 //      → PNG salvo no bucket 'estudio' (público)
 //   3. logAgentRun com custo real (texto + imagem)
 // NUNCA publica nada — resultado vira 'pronto' e aguarda humano.
 // Idempotente: claim otimista fila→gerando com guarda de status.
 // E2b: imagem via chat/completions + modalities (404 no endpoint
 // de images — provado em produção 2026-06-08).
+// E2c: slug válido confirmado na API de modelos (gpt-image-2 não existe).
 // =====================================================
 
 const TIPO_LABEL: Record<string, string> = {
@@ -54,7 +55,7 @@ function extrairJson(texto: string): { texto: string; prompt_imagem: string | nu
 async function gerarImagemOpenRouter(prompt: string, formato: string): Promise<{ png: Buffer; custoUsd: number; modelo: string }> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY ausente no ambiente do Trigger.dev");
-  const modelo = process.env.ESTUDIO_IMAGE_MODEL || "openai/gpt-image-2";
+  const modelo = process.env.ESTUDIO_IMAGE_MODEL || "openai/gpt-5.4-image-2";
   const aspect = formato === "9:16" ? "9:16 (vertical story)" : formato === "16:9" ? "16:9 (widescreen)" : "1:1 (square)";
 
   // OpenRouter gera imagem via chat/completions com modalities image+text
