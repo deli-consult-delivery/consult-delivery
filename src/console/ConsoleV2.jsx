@@ -15,15 +15,12 @@ import AuditLog from './AuditLog.jsx';
 import AcessoUsuarios from './AcessoUsuarios.jsx';
 import Habilidades from './Habilidades.jsx';
 import Templates from './Templates.jsx';
+import AgenteAnalise from './AgenteAnalise.jsx';
 import './console.css';
 
 // ============================================================
-// Console v2 · plataforma completa (madrugada 2026-06-08, sessão autônoma)
-// Operação: Defesa · Radar · Ativar loja · Execuções · Aprovações
-// Agentes IA: Painel · Análise de Loja · Estúdio · Config de Agentes · Habilidades
-// Dados: Custos de IA · Importar relatórios
-// Admin: Clientes · Acesso por usuário · Auditoria · Templates
-// Locked (futuro): Cardápio · Multicanal (agentes sem tela ainda)
+// Console v2 · plataforma completa (noite autônoma 2026-06-08)
+// Operação · Agentes IA (Painel/Análise/Estúdio/Cardápio/Multicanal/Config/Habilidades) · Dados · Admin
 // ============================================================
 
 const ICONS = {
@@ -36,6 +33,8 @@ const ICONS = {
   agentes:    ['M12 2v2', 'M5 8h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z', 'M9 13h.01', 'M15 13h.01'],
   analise:    ['M3 3v18h18', 'M7 14l3-3 3 3 4-5'],
   estudio:    ['M3 3h18v18H3z', 'M3 15l5-5 4 4 3-3 6 6'],
+  cardapio:   ['M4 19.5A2.5 2.5 0 0 1 6.5 17H20', 'M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'],
+  multicanal: ['M12 2 2 7l10 5 10-5-10-5z', 'M2 17l10 5 10-5', 'M2 12l10 5 10-5'],
   config:     ['M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'],
   habilidades:['M13 2L3 14h9l-1 8 10-12h-9l1-8z'],
   custos:     ['M12 1v22', 'M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'],
@@ -68,10 +67,11 @@ const GRUPOS = [
   { label: 'Agentes IA', items: [
     { id: 'agentes', label: 'Painel de Agentes' },
     { id: 'analise', label: 'Análise de Loja' },
+    { id: 'cardapio', label: 'Cardápio' },
+    { id: 'multicanal', label: 'Multicanal' },
     { id: 'estudio', label: 'Estúdio de Conteúdo' },
     { id: 'config', label: 'Config de Agentes' },
     { id: 'habilidades', label: 'Habilidades' },
-    { id: 'x2', label: 'Cardápio', locked: true }, { id: 'x3', label: 'Multicanal', locked: true },
   ]},
   { label: 'Dados', items: [
     { id: 'custos', label: 'Custos de IA' },
@@ -85,7 +85,7 @@ const GRUPOS = [
   ]},
 ];
 
-const TITULOS = { visao: 'Visão Geral', defesa: 'Defesa Comercial', radar: 'Radar', ativar: 'Ativar loja', clientes: 'Clientes', estudio: 'Estúdio de Conteúdo', custos: 'Custos de IA', agentes: 'Painel de Agentes', execucoes: 'Execuções', aprovacoes: 'Aprovações', importar: 'Importar relatórios', analise: 'Análise de Loja', config: 'Config de Agentes', habilidades: 'Habilidades', acesso: 'Acesso por usuário', auditoria: 'Auditoria', templates: 'Templates' };
+const TITULOS = { visao: 'Visão Geral', defesa: 'Defesa Comercial', radar: 'Radar', ativar: 'Ativar loja', clientes: 'Clientes', estudio: 'Estúdio de Conteúdo', custos: 'Custos de IA', agentes: 'Painel de Agentes', execucoes: 'Execuções', aprovacoes: 'Aprovações', importar: 'Importar relatórios', analise: 'Análise de Loja', config: 'Config de Agentes', habilidades: 'Habilidades', acesso: 'Acesso por usuário', auditoria: 'Auditoria', templates: 'Templates', cardapio: 'Cardápio', multicanal: 'Multicanal' };
 
 const OK_STATUSES = ['ok', 'completed', 'success'];
 const fmtBRL = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -136,6 +136,30 @@ function useKpisReais(tenantDbId) {
   return { kpis, erro };
 }
 
+// Alertas acionáveis: casos aguardando OK, assinaturas atrasadas, fontes/análises prontas
+function useAlertas(tenantDbId) {
+  const [al, setAl] = useState([]);
+  useEffect(() => {
+    if (!tenantDbId) return;
+    let alive = true;
+    (async () => {
+      const [{ count: casos }, { count: atrasadas }, { count: fontesPend }] = await Promise.all([
+        supabase.from('defesa_casos').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantDbId).eq('status', 'aguardando_ok'),
+        supabase.from('defesa_assinaturas').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantDbId).eq('status', 'atrasada'),
+        supabase.from('radar_fontes').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantDbId).eq('status', 'pendente'),
+      ]);
+      if (!alive) return;
+      const lista = [];
+      if ((casos ?? 0) > 0) lista.push({ cls: 'err', txt: `${casos} caso(s) de Defesa aguardando seu OK`, ir: 'defesa' });
+      if ((atrasadas ?? 0) > 0) lista.push({ cls: 'err', txt: `${atrasadas} assinatura(s) atrasada(s)`, ir: 'clientes' });
+      if ((fontesPend ?? 0) > 0) lista.push({ cls: 'warn', txt: `${fontesPend} relatório(s) em processamento`, ir: 'importar' });
+      setAl(lista);
+    })();
+    return () => { alive = false; };
+  }, [tenantDbId]);
+  return al;
+}
+
 function Kpi({ l, v, d, neg, mut }) {
   return (
     <div className="cv2-kpi">
@@ -146,14 +170,30 @@ function Kpi({ l, v, d, neg, mut }) {
   );
 }
 
-function VisaoGeral({ tenantNome, tenantDbId, onIrDefesa }) {
+function VisaoGeral({ tenantNome, tenantDbId, onNav }) {
   const { kpis, erro } = useKpisReais(tenantDbId);
+  const alertas = useAlertas(tenantDbId);
   const fmt = n => (n ?? 0).toLocaleString('pt-BR');
   return (
     <div>
       <h1>Visão Geral <span className="cv2-mock" style={{ background: 'var(--green-soft)', color: 'var(--green)' }}>DADOS REAIS · ÚLTIMOS 30 DIAS</span></h1>
       <div className="cv2-rule" />
       <div className="cv2-sub">{tenantNome}{erro ? ` · erro ao carregar: ${erro}` : ''}</div>
+
+      {alertas.length > 0 && (
+        <div className="cv2-card" style={{ borderLeft: '3px solid var(--red)' }}>
+          <h3>Atenção — precisa de você</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+            {alertas.map((a, i) => (
+              <div key={i} className="cv2-spread">
+                <span><span className={`cv2-bdg ${a.cls}`} style={{ marginRight: 8 }}>!</span>{a.txt}</span>
+                <button className="cv2-btn sec" onClick={() => onNav(a.ir)}>Abrir</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="cv2-kpis">
         <Kpi l="Execuções de agentes" v={kpis ? fmt(kpis.total) : '…'} d={kpis ? `${fmt(kpis.ok)} ok · ${fmt(kpis.falhas)} falhas` : 'carregando'} neg={kpis ? kpis.falhas > 0 : false} />
         <Kpi l="Taxa de sucesso" v={kpis ? (kpis.taxa != null ? `${kpis.taxa}%` : '—') : '…'} d={kpis && kpis.taxa != null ? (kpis.taxa >= 95 ? 'saudável' : 'investigar falhas') : ''} mut />
@@ -168,7 +208,7 @@ function VisaoGeral({ tenantNome, tenantDbId, onIrDefesa }) {
           1. Os agentes vigiam cancelamentos e avaliações das suas lojas · 2. Preparam a contestação ou a resposta com a melhor chance de vitória · 3. <b style={{ color: 'var(--ink)' }}>Você só dá o OK</b> · 4. O painel mostra o dinheiro defendido, mês a mês.
         </div>
         <div style={{ marginTop: 12 }}>
-          <button className="cv2-btn" onClick={onIrDefesa}>Abrir fila de Defesa</button>
+          <button className="cv2-btn" onClick={() => onNav('defesa')}>Abrir fila de Defesa</button>
         </div>
       </div>
     </div>
@@ -385,7 +425,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
           <span className="cv2-pill"><b>{defesaOn === false ? 'RADAR GRÁTIS' : 'BETA'}</b></span>
         </div>
         <div className="cv2-ct">
-          {tela === 'visao' && <VisaoGeral tenantNome={tenantNome} tenantDbId={tenantDbId} onIrDefesa={() => setTela('defesa')} />}
+          {tela === 'visao' && <VisaoGeral tenantNome={tenantNome} tenantDbId={tenantDbId} onNav={setTela} />}
           {tela === 'defesa' && (defesaOn === false ? <PaywallDefesa /> : <Defesa tenantDbId={tenantDbId} userId={userId} />)}
           {tela === 'radar' && <RadarReal tenantNome={tenantNome} tenantDbId={tenantDbId} />}
           {tela === 'ativar' && <AtivarLoja tenantDbId={tenantDbId} />}
@@ -397,6 +437,8 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
           {tela === 'aprovacoes' && <AprovacoesUnificadas tenantDbId={tenantDbId} userId={userId} />}
           {tela === 'importar' && <ImportarRelatorios tenantDbId={tenantDbId} userId={userId} />}
           {tela === 'analise' && <AnaliseLoja tenantDbId={tenantDbId} userId={userId} />}
+          {tela === 'cardapio' && <AgenteAnalise tenantDbId={tenantDbId} userId={userId} agente="cardapio" titulo="Cardápio" descricao="O agente analisa o funil e os itens do cardápio e sugere otimizações de nomes, descrições e preços." />}
+          {tela === 'multicanal' && <AgenteAnalise tenantDbId={tenantDbId} userId={userId} agente="multicanal" titulo="Multicanal" descricao="O agente consolida as métricas dos seus canais de delivery num panorama único e aponta onde focar." />}
           {tela === 'config' && <AgenteConfig tenantDbId={tenantDbId} />}
           {tela === 'habilidades' && <Habilidades tenantDbId={tenantDbId} userId={userId} />}
           {tela === 'acesso' && <AcessoUsuarios tenantDbId={tenantDbId} />}
