@@ -19,7 +19,9 @@ export function usePermissions(userId) {
           .select('role_id, roles(name)')
           .eq('user_id', userId),
         supabase.from('user_agent_access')
-          .select('agent_name, can_invoke, can_view_history, can_approve_drafts')
+          // P-3 (onda 2): inclui agent_id para indexação canônica por slug do catálogo.
+          // agent_name mantido para backward compat enquanto callers não migram.
+          .select('agent_name, agent_id, can_invoke, can_view_history, can_approve_drafts')
           .eq('user_id', userId),
         supabase.from('user_screen_permissions')
           .select('screen_id, allowed')
@@ -39,8 +41,14 @@ export function usePermissions(userId) {
         permSet = new Set((perms ?? []).map(p => `${p.resource}:${p.action}`));
       }
 
+      // P-3: indexa por agent_id (slug canônico) E por agent_name (legado).
+      // Callers existentes usando agent_name continuam funcionando.
+      // Novos callers devem usar agent_id (ex: 'analise-ifood' em vez de 'analista-ifood').
       const agentMap = {};
-      (agents ?? []).forEach(a => { agentMap[a.agent_name] = a; });
+      (agents ?? []).forEach(a => {
+        if (a.agent_id)   agentMap[a.agent_id]   = a;
+        if (a.agent_name) agentMap[a.agent_name] = a;
+      });
 
       const screenMap = new Map();
       (screens ?? []).forEach(s => screenMap.set(s.screen_id, s.allowed));
