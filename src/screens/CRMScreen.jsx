@@ -15,13 +15,13 @@ const CrmScreen = ({ tenant, tenantDbId, onNavigate }) => {
   return (
     <div className="route-enter" style={{ padding: '28px 32px 56px', maxWidth: 1480, margin: '0 auto' }}>
       {/* Mode toggle */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 24, background: '#1A1A1A', borderRadius: 10, padding: 4, width: 'fit-content' }}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 24, background: 'var(--g-100)', borderRadius: 10, padding: 4, width: 'fit-content' }}>
         <button
           onClick={() => setMode('clientes')}
           style={{
             padding: '7px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
-            background: mode === 'clientes' ? '#2A2A2A' : 'transparent',
-            color: mode === 'clientes' ? 'white' : 'rgba(255,255,255,0.45)',
+            background: mode === 'clientes' ? 'var(--white)' : 'transparent',
+            color: mode === 'clientes' ? 'var(--g-900)' : 'var(--g-500)',
             transition: 'all .15s',
           }}
         >Clientes</button>
@@ -29,8 +29,8 @@ const CrmScreen = ({ tenant, tenantDbId, onNavigate }) => {
           onClick={() => setMode('leads')}
           style={{
             padding: '7px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
-            background: mode === 'leads' ? '#2A2A2A' : 'transparent',
-            color: mode === 'leads' ? 'white' : 'rgba(255,255,255,0.45)',
+            background: mode === 'leads' ? 'var(--white)' : 'transparent',
+            color: mode === 'leads' ? 'var(--g-900)' : 'var(--g-500)',
             transition: 'all .15s',
           }}
         >Leads</button>
@@ -343,7 +343,7 @@ const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0, onNavigate }) =>
           { label: 'Fechados', value: stats.fechados, color: '#10B981' },
           { label: 'Score Médio', value: stats.avgScore || '—', color: '#F59E0B' },
         ].map(s => (
-          <div key={s.label} style={{ background:'#161616', border:'1px solid #222', borderRadius: 10, padding:'12px 20px', display:'flex', flexDirection:'column', gap: 4, minWidth: 130 }}>
+          <div key={s.label} style={{ background:'var(--white)', border:'1px solid var(--g-200)', borderRadius: 10, padding:'12px 20px', display:'flex', flexDirection:'column', gap: 4, minWidth: 130 }}>
             <div style={{ fontSize: 18, fontWeight: 800, color: s.color }}>{s.value}</div>
             <div style={{ fontSize: 10, fontWeight: 600, color:'var(--g-500)', textTransform:'uppercase', letterSpacing: 0.5 }}>{s.label}</div>
           </div>
@@ -354,12 +354,12 @@ const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0, onNavigate }) =>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 16 }}>
         <div style={{ display:'flex', gap: 8, alignItems:'center' }}>
           {/* View toggle */}
-          <div style={{ display:'flex', background:'#1A1A1A', border:'1px solid #2A2A2A', borderRadius: 8, padding: 2 }}>
+          <div style={{ display:'flex', background:'var(--g-100)', border:'1px solid var(--g-200)', borderRadius: 8, padding: 2 }}>
             {[{ id:'kanban', label:'Kanban' }, { id:'lista', label:'Lista' }].map(v => (
               <button key={v.id} onClick={() => setView(v.id)} style={{
                 padding:'5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 6, border:'none', cursor:'pointer',
-                background: view === v.id ? '#2A2A2A' : 'none',
-                color: view === v.id ? 'white' : 'var(--g-500)',
+                background: view === v.id ? 'var(--white)' : 'none',
+                color: view === v.id ? 'var(--g-900)' : 'var(--g-500)',
               }}>{v.label}</button>
             ))}
           </div>
@@ -394,8 +394,8 @@ const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0, onNavigate }) =>
                 onDrop={e => handleDrop(e, stage.id)}
                 onDragLeave={() => setDragOver(null)}
                 style={{
-                  minWidth: 220, flex: '0 0 220px', background: isOver ? '#1A2A1A' : '#161616',
-                  border: isOver ? '1.5px dashed #10B981' : '1px solid #222',
+                  minWidth: 220, flex: '0 0 220px', background: isOver ? 'rgba(16,185,129,0.08)' : 'var(--g-50)',
+                  border: isOver ? '1.5px dashed #10B981' : '1px solid var(--g-200)',
                   borderRadius: 12, padding: 10, transition: 'background .15s, border .15s',
                 }}
               >
@@ -404,7 +404,7 @@ const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0, onNavigate }) =>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: stage.color }}/>
                     <span style={{ fontSize: 11, fontWeight: 700, color:'var(--g-700)', textTransform:'uppercase', letterSpacing: 0.5 }}>{stage.label}</span>
                   </div>
-                  <span style={{ fontSize: 11, fontWeight: 700, color:'var(--g-500)', background:'#222', borderRadius: 10, padding:'1px 7px' }}>{columnLeads.length}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color:'var(--g-500)', background:'var(--g-200)', borderRadius: 10, padding:'1px 7px' }}>{columnLeads.length}</span>
                 </div>
                 <div style={{ display:'flex', flexDirection:'column', gap: 8 }}>
                   {columnLeads.map(lead => (
@@ -414,13 +414,13 @@ const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0, onNavigate }) =>
                       onDragStart={e => handleDragStart(e, lead.id)}
                       onDragEnd={handleDragEnd}
                       style={{
-                        background: draggingId === lead.id ? 'rgba(183,12,0,0.08)' : '#1E1E1E',
-                        border: draggingId === lead.id ? '1px solid rgba(183,12,0,0.4)' : '1px solid #2A2A2A',
+                        background: draggingId === lead.id ? 'rgba(183,12,0,0.08)' : 'var(--white)',
+                        border: draggingId === lead.id ? '1px solid rgba(183,12,0,0.4)' : '1px solid var(--g-200)',
                         borderRadius: 10, padding: '10px 12px', cursor:'grab',
                         opacity: draggingId === lead.id ? 0.6 : 1, transition: 'opacity .1s',
                       }}
                     >
-                      <div style={{ fontSize: 13, fontWeight: 600, color:'white', marginBottom: 6, lineHeight: 1.3 }}>{lead.nome}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color:'var(--g-900)', marginBottom: 6, lineHeight: 1.3 }}>{lead.nome}</div>
                       <div style={{ display:'flex', flexWrap:'wrap', gap: 6 }}>
                         {lead.valor_estimado != null && (
                           <span style={{ fontSize: 11, color:'#10B981', fontWeight: 600 }}>{formatValor(lead.valor_estimado)}</span>
@@ -434,7 +434,7 @@ const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0, onNavigate }) =>
                       </div>
                       <div style={{ display:'flex', gap: 4, marginTop: 8, justifyContent:'flex-end' }}>
                         <button onClick={() => setEditLead(lead)} style={{ background:'none', border:'none', color:'var(--g-400)', cursor:'pointer', fontSize: 11, padding:'2px 6px', borderRadius: 4 }}
-                          onMouseEnter={e => e.currentTarget.style.color = 'white'}
+                          onMouseEnter={e => e.currentTarget.style.color = 'var(--g-900)'}
                           onMouseLeave={e => e.currentTarget.style.color = 'var(--g-400)'}
                         >✏️</button>
                         <button onClick={() => setDeleteConfirm(lead)} style={{ background:'none', border:'none', color:'var(--g-400)', cursor:'pointer', fontSize: 11, padding:'2px 6px', borderRadius: 4 }}
@@ -458,7 +458,7 @@ const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0, onNavigate }) =>
         <div className="card" style={{ padding: 0, overflow:'hidden' }}>
           <table style={{ width:'100%', borderCollapse:'collapse' }}>
             <thead>
-              <tr style={{ borderBottom:'1px solid #222' }}>
+              <tr style={{ borderBottom:'1px solid var(--g-200)' }}>
                 <th style={thStyle}>Nome</th>
                 <th style={thStyle}>Contato</th>
                 <th style={thStyle}>Stage</th>
@@ -472,11 +472,11 @@ const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0, onNavigate }) =>
               {filtered.map(lead => {
                 const stg = STAGES.find(s => s.id === lead.stage) || STAGES[0];
                 return (
-                  <tr key={lead.id} style={{ borderBottom:'1px solid #1A1A1A' }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#161616'}
+                  <tr key={lead.id} style={{ borderBottom:'1px solid var(--g-200)' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--g-50)'}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                   >
-                    <td style={{ padding:'11px 16px', fontSize: 13, fontWeight: 600, color:'white' }}>{lead.nome}</td>
+                    <td style={{ padding:'11px 16px', fontSize: 13, fontWeight: 600, color:'var(--g-900)' }}>{lead.nome}</td>
                     <td style={{ padding:'11px 16px', fontSize: 12, color:'var(--g-500)' }}>
                       {lead.whatsapp && <div>{lead.whatsapp}</div>}
                       {lead.email && <div style={{ fontSize: 11 }}>{lead.email}</div>}
@@ -496,7 +496,7 @@ const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0, onNavigate }) =>
                     <td style={{ padding:'11px 8px' }}>
                       <div style={{ display:'flex', gap: 4, justifyContent:'center' }}>
                         <button onClick={() => setEditLead(lead)} style={{ background:'none', border:'none', color:'var(--g-400)', cursor:'pointer', padding: 4, borderRadius: 4 }}
-                          onMouseEnter={e => e.currentTarget.style.color = 'white'}
+                          onMouseEnter={e => e.currentTarget.style.color = 'var(--g-900)'}
                           onMouseLeave={e => e.currentTarget.style.color = 'var(--g-400)'}
                         >✏️</button>
                         <button onClick={() => setDeleteConfirm(lead)} style={{ background:'none', border:'none', color:'var(--g-400)', cursor:'pointer', padding: 4, borderRadius: 4 }}
@@ -540,11 +540,11 @@ const LeadsView = ({ tenantDbId, onImportClick, refreshKey = 0, onNavigate }) =>
       {deleteConfirm && createPortal(
         <div style={{ position:'fixed', inset: 0, background:'rgba(0,0,0,0.6)', zIndex: 1000, display:'flex', alignItems:'center', justifyContent:'center' }}
           onClick={e => e.target === e.currentTarget && setDeleteConfirm(null)}>
-          <div style={{ background:'#1A1A1A', border:'1px solid #2A2A2A', borderRadius: 14, padding: 28, width: 380, boxShadow:'0 24px 48px rgba(0,0,0,.6)' }}>
+          <div style={{ background:'var(--white)', border:'1px solid var(--g-200)', borderRadius: 14, padding: 28, width: 380, boxShadow:'0 24px 48px rgba(0,0,0,.6)' }}>
             <div style={{ fontSize: 32, textAlign:'center', marginBottom: 14 }}>🗑️</div>
-            <h3 style={{ margin:'0 0 8px', fontSize: 16, fontWeight: 700, color:'white', textAlign:'center' }}>Excluir lead</h3>
+            <h3 style={{ margin:'0 0 8px', fontSize: 16, fontWeight: 700, color:'var(--g-900)', textAlign:'center' }}>Excluir lead</h3>
             <p style={{ margin:'0 0 24px', fontSize: 13, color:'var(--g-500)', textAlign:'center', lineHeight: 1.5 }}>
-              Tem certeza que deseja excluir <strong style={{ color:'white' }}>{deleteConfirm.nome}</strong>?<br/>Esta ação não pode ser desfeita.
+              Tem certeza que deseja excluir <strong style={{ color:'var(--g-900)' }}>{deleteConfirm.nome}</strong>?<br/>Esta ação não pode ser desfeita.
             </p>
             <div style={{ display:'flex', gap: 8 }}>
               <button className="btn-secondary" style={{ flex: 1, justifyContent:'center' }} onClick={() => setDeleteConfirm(null)}>Cancelar</button>
@@ -597,9 +597,9 @@ const LeadFormModal = ({ title, initial, leadId, tenantDbId, onClose, onSave }) 
   return (
     <div style={{ position:'fixed', inset: 0, background:'rgba(0,0,0,0.6)', zIndex: 1000, display:'flex', alignItems:'center', justifyContent:'center' }}
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background:'#1A1A1A', border:'1px solid #2A2A2A', borderRadius: 14, padding: 28, width: 480, boxShadow:'0 24px 48px rgba(0,0,0,.6)', maxHeight:'90vh', overflowY:'auto' }}>
+      <div style={{ background:'var(--white)', border:'1px solid var(--g-200)', borderRadius: 14, padding: 28, width: 480, boxShadow:'0 24px 48px rgba(0,0,0,.6)', maxHeight:'90vh', overflowY:'auto' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 20 }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color:'white' }}>{title}</h3>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color:'var(--g-900)' }}>{title}</h3>
           <button onClick={onClose} style={{ background:'none', border:'none', color:'var(--g-500)', cursor:'pointer', fontSize: 20, lineHeight: 1 }}>×</button>
         </div>
         <form onSubmit={submit} style={{ display:'flex', flexDirection:'column', gap: 14 }}>
@@ -746,12 +746,12 @@ const Customer360 = ({ customer, onNavigate }) => {
 
 const OverviewTab = ({ customer }) => (
   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: 16 }}>
-    <div className="crm-card-mini" style={{ background:'#0D0D0D', color:'white', borderColor:'transparent' }}>
+    <div className="crm-card-mini" style={{ background:'var(--g-50)', color:'var(--g-900)', borderColor:'var(--g-200)' }}>
       <div style={{ display:'flex', alignItems:'center', gap: 8, marginBottom: 12 }}>
         <AgentAvatar id="deli" size={24}/>
         <span style={{ fontSize: 11, fontWeight: 800, color:'var(--red-light)', letterSpacing: 1, textTransform:'uppercase' }}>DELI · Insights</span>
       </div>
-      <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.7, color:'rgba(255,255,255,0.85)' }}>
+      <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.7, color:'var(--g-700)' }}>
         <li>Cliente {customer.segment.toLowerCase()} desde 2024 — ticket médio R$ {(parseFloat(customer.lifetime.replace(/[^\d]/g,''))/Math.max(customer.orders,1)).toFixed(0)}</li>
         <li>{customer.nps >= 8 ? 'NPS excelente — bom candidato para programa de indicação' : 'NPS abaixo do ideal — atenção nos próximos contatos'}</li>
         <li>{customer.risk === 'high' ? 'Risco alto: 0 pedidos nos últimos 30 dias' : 'Engajamento saudável nos últimos 30 dias'}</li>
@@ -1020,11 +1020,11 @@ const ImportCSVModal = ({ tenantDbId, onClose, onImported }) => {
       style={{ position:'fixed', inset: 0, background:'rgba(0,0,0,0.7)', zIndex: 1000, display:'flex', alignItems:'center', justifyContent:'center', padding: 20 }}
       onClick={e => e.target === e.currentTarget && onClose()}
     >
-      <div style={{ background:'#1A1A1A', border:'1px solid #2A2A2A', borderRadius: 16, width: '100%', maxWidth: 640, maxHeight: '85vh', display:'flex', flexDirection:'column', boxShadow:'0 32px 64px rgba(0,0,0,.7)' }}>
+      <div style={{ background:'var(--white)', border:'1px solid var(--g-200)', borderRadius: 16, width: '100%', maxWidth: 640, maxHeight: '85vh', display:'flex', flexDirection:'column', boxShadow:'0 32px 64px rgba(0,0,0,.7)' }}>
         {/* Header */}
-        <div style={{ padding:'20px 24px 16px', borderBottom:'1px solid #222', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink: 0 }}>
+        <div style={{ padding:'20px 24px 16px', borderBottom:'1px solid var(--g-200)', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink: 0 }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color:'white' }}>Importar Leads via CSV</h3>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color:'var(--g-900)' }}>Importar Leads via CSV</h3>
             <p style={{ margin:'4px 0 0', fontSize: 12, color:'var(--g-500)' }}>Formato: id;nome;telefone;email;empresa;tags;atendente</p>
           </div>
           <button onClick={onClose} style={{ background:'none', border:'none', color:'var(--g-500)', cursor:'pointer', fontSize: 22, lineHeight: 1, padding: 4 }}>×</button>
@@ -1038,7 +1038,7 @@ const ImportCSVModal = ({ tenantDbId, onClose, onImported }) => {
               onDragLeave={() => setDragging(false)}
               onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files?.[0]; if (f) loadFile(f); }}
               style={{
-                border: `2px dashed ${dragging ? '#B70C00' : 'rgba(255,255,255,0.15)'}`,
+                border: `2px dashed ${dragging ? '#B70C00' : 'var(--g-200)'}`,
                 borderRadius: 12, padding: 40, textAlign:'center',
                 transition: 'border-color .15s', cursor:'pointer',
                 background: dragging ? 'rgba(183,12,0,0.05)' : 'transparent',
@@ -1046,7 +1046,7 @@ const ImportCSVModal = ({ tenantDbId, onClose, onImported }) => {
               onClick={() => document.getElementById('crm-csv-input').click()}
             >
               <div style={{ fontSize: 32, marginBottom: 12 }}>📄</div>
-              <div style={{ fontSize: 14, fontWeight: 600, color:'rgba(255,255,255,0.7)', marginBottom: 6 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color:'var(--g-700)', marginBottom: 6 }}>
                 Arraste o CSV aqui ou clique para selecionar
               </div>
               <div style={{ fontSize: 12, color:'var(--g-500)' }}>Suporta separadores ; e ,  ·  UTF-8</div>
@@ -1057,8 +1057,8 @@ const ImportCSVModal = ({ tenantDbId, onClose, onImported }) => {
           {rows.length > 0 && !result && (
             <div style={{ display:'flex', flexDirection:'column', gap: 16 }}>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                <div style={{ fontSize: 13, color:'rgba(255,255,255,0.7)' }}>
-                  <strong style={{ color:'white' }}>{rows.length}</strong> linhas ·{' '}
+                <div style={{ fontSize: 13, color:'var(--g-700)' }}>
+                  <strong style={{ color:'var(--g-900)' }}>{rows.length}</strong> linhas ·{' '}
                   <strong style={{ color:'#10B981' }}>{validCount} válidas</strong>
                   {skipCount > 0 && <span style={{ color:'#F59E0B' }}> · {skipCount} serão ignoradas</span>}
                 </div>
@@ -1070,20 +1070,20 @@ const ImportCSVModal = ({ tenantDbId, onClose, onImported }) => {
                 </button>
               </div>
 
-              <div style={{ overflowX:'auto', borderRadius: 8, border:'1px solid #222' }}>
+              <div style={{ overflowX:'auto', borderRadius: 8, border:'1px solid var(--g-200)' }}>
                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize: 12 }}>
                   <thead>
                     <tr>
                       {headers.map(h => (
-                        <th key={h} style={{ padding:'8px 12px', background:'#111', borderBottom:'1px solid #222', textAlign:'left', color:'var(--g-500)', fontWeight: 700, textTransform:'uppercase', letterSpacing: 0.4, whiteSpace:'nowrap' }}>{h}</th>
+                        <th key={h} style={{ padding:'8px 12px', background:'var(--g-50)', borderBottom:'1px solid var(--g-200)', textAlign:'left', color:'var(--g-500)', fontWeight: 700, textTransform:'uppercase', letterSpacing: 0.4, whiteSpace:'nowrap' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {rows.slice(0, 5).map((row, ri) => (
-                      <tr key={ri} style={{ borderBottom:'1px solid #1A1A1A' }}>
+                      <tr key={ri} style={{ borderBottom:'1px solid var(--g-200)' }}>
                         {row.map((cell, ci) => (
-                          <td key={ci} style={{ padding:'7px 12px', color:'rgba(255,255,255,0.7)', maxWidth: 160, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                          <td key={ci} style={{ padding:'7px 12px', color:'var(--g-700)', maxWidth: 160, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                             {cell || <span style={{ color:'var(--g-600)' }}>—</span>}
                           </td>
                         ))}
@@ -1091,10 +1091,10 @@ const ImportCSVModal = ({ tenantDbId, onClose, onImported }) => {
                     ))}
                   </tbody>
                 </table>
-                {rows.length > 5 && <div style={{ padding:'8px 12px', fontSize: 11, color:'var(--g-600)', borderTop:'1px solid #1A1A1A' }}>…e mais {rows.length - 5} linhas</div>}
+                {rows.length > 5 && <div style={{ padding:'8px 12px', fontSize: 11, color:'var(--g-600)', borderTop:'1px solid var(--g-200)' }}>…e mais {rows.length - 5} linhas</div>}
               </div>
 
-              <div style={{ padding:'10px 14px', background:'rgba(255,255,255,0.04)', borderRadius: 8, fontSize: 12, color:'var(--g-500)', lineHeight: 1.6 }}>
+              <div style={{ padding:'10px 14px', background:'var(--g-50)', borderRadius: 8, fontSize: 12, color:'var(--g-500)', lineHeight: 1.6 }}>
                 Regras de limpeza: nomes vazios, apenas emojis, ou que são números de telefone serão ignorados. Registros já importados (via original_id) serão pulados automaticamente.
               </div>
             </div>
@@ -1104,16 +1104,16 @@ const ImportCSVModal = ({ tenantDbId, onClose, onImported }) => {
             <div style={{ display:'flex', flexDirection:'column', gap: 16 }}>
               <div style={{ textAlign:'center', padding: '12px 0' }}>
                 <div style={{ fontSize: 40, marginBottom: 8 }}>{result.ok > 0 ? '✅' : '⚠️'}</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color:'white' }}>Importação concluída</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color:'var(--g-900)' }}>Importação concluída</div>
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: 10 }}>
                 <div style={{ padding:'14px 16px', background:'rgba(16,185,129,0.1)', border:'1px solid rgba(16,185,129,0.2)', borderRadius: 10, textAlign:'center' }}>
                   <div style={{ fontSize: 28, fontWeight: 800, color:'#10B981' }}>{result.ok}</div>
-                  <div style={{ fontSize: 11, color:'rgba(255,255,255,0.6)', marginTop: 4 }}>Importados</div>
+                  <div style={{ fontSize: 11, color:'var(--g-700)', marginTop: 4 }}>Importados</div>
                 </div>
                 <div style={{ padding:'14px 16px', background:'rgba(245,158,11,0.08)', border:'1px solid rgba(245,158,11,0.2)', borderRadius: 10, textAlign:'center' }}>
                   <div style={{ fontSize: 28, fontWeight: 800, color:'#F59E0B' }}>{result.skipped + result.duped}</div>
-                  <div style={{ fontSize: 11, color:'rgba(255,255,255,0.6)', marginTop: 4 }}>Pulados ({result.duped} já existiam)</div>
+                  <div style={{ fontSize: 11, color:'var(--g-700)', marginTop: 4 }}>Pulados ({result.duped} já existiam)</div>
                 </div>
                 {result.err > 0 && (
                   <div style={{ padding:'14px 16px', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.2)', borderRadius: 10, textAlign:'center', gridColumn:'1/-1' }}>
@@ -1126,7 +1126,7 @@ const ImportCSVModal = ({ tenantDbId, onClose, onImported }) => {
         </div>
 
         {/* Footer */}
-        <div style={{ padding:'16px 24px', borderTop:'1px solid #222', display:'flex', justifyContent:'flex-end', gap: 8, flexShrink: 0 }}>
+        <div style={{ padding:'16px 24px', borderTop:'1px solid var(--g-200)', display:'flex', justifyContent:'flex-end', gap: 8, flexShrink: 0 }}>
           {!result ? (
             <>
               <button className="btn-secondary" onClick={onClose}>Cancelar</button>
