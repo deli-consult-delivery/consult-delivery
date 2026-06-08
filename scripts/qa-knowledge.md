@@ -57,9 +57,84 @@ Regra: NUNCA contar/somar buscando linhas no cliente.
 Verificação: comparar com SQL direto (count(*)/sum) no mesmo filtro.
 ```
 
+### P7 — Grants órfãos (ex-membros com user_agent_access sem tenant_members)
+```sql
+-- Detectar usuários com acesso a agentes mas sem membership ativo:
+SELECT au.email, uaa.agent_name, uaa.agent_id, uaa.can_invoke, uaa.can_approve_drafts
+FROM auth.users au
+INNER JOIN user_agent_access uaa ON uaa.user_id = au.id
+WHERE NOT EXISTS (
+  SELECT 1 FROM tenant_members tm WHERE tm.user_id = au.id
+)
+ORDER BY au.email, uaa.agent_name;
+-- Esperado: 0 linhas após migration 20260608_007 aplicada
+```
+
+### P8 — Impersonation RLS correta (padrão validado 2026-06-07)
+```sql
+-- CORRETO: usar SET LOCAL dentro de transação
+BEGIN;
+  SET LOCAL role authenticated;
+  SET LOCAL "request.jwt.claims" TO '{"sub": "<user_uuid>", "role": "authenticated"}';
+  -- query aqui — retorna apenas registros do usuário via RLS
+  SELECT * FROM agent_runs;
+ROLLBACK;
+
+-- ERRADO: set_config dentro de CTE não aplica o papel — gera falso positivo de
+-- "vazamento" (o SELECT roda como service_role, não como authenticated)
+WITH rls_setup AS (
+  SELECT set_config('role', 'authenticated', true)
+)
+SELECT * FROM agent_runs; -- ERRADO
+```
+
 ---
 
 ## Casos Resolvidos
+
+### [2026-06-08] FASE 2 onda 2 — Runs de sistema gravavam tenant_id = NULL
+**Arquivo:** `trigger/_shared/audit.ts`  
+**Sintoma:** Tasks de cron (backup, bom-dia global) logeavam `tenant_id = NULL` em `agent_runs`  
+**Causa raiz:** Interface `AgentRunLog` tem `tenantId?: string` (opcional). Tasks de sistema sem contexto de tenant simplesmente não passavam o campo → `tenantId ?? null`.  
+**Fix (P-2, feat/seguranca-s1):** Adicionar `CONSULT_TENANT_ID = '9079...'` como constante; trocar `?? null` por `?? CONSULT_TENANT_ID`. Nenhuma task individual precisou ser alterada — o default centralizado cobre tudo.  
+**Migration:** `20260608_005_p2_agent_runs_not_null.sql` — backfill final + SET NOT NULL + DROP POLICY `authenticated_view_global_runs`.  
+**Teste de regressão:**
+```sql
+-- Após migration: esperado 0
+SELECT count(*) FROM public.agent_runs WHERE tenant_id IS NULL;
+-- Policy já não deve existir: esperado 0
+SELECT count(*) FROM pg_policies
+ WHERE tablename = 'agent_runs' AND policyname = 'authenticated_view_global_runs';
+```
+**Lição:** Toda função de audit que grava em tabela multi-tenant DEVE ter um fallback explícito para o tenant padrão — nunca `?? null`. Sistemas de sistema (cron, backup) sempre caem sob o tenant consult.
+
+---
+
+### [2026-06-08] FASE 2 onda 2 — usePermissions indexava por agent_name legado
+**Arquivo:** `src/hooks/usePermissions.js`  
+**Sintoma:** Callers usando agent_id canônico (ex: `canInvokeAgent('analise-ifood')`) recebiam `false` mesmo com grant ativo, porque o mapa era construído apenas por `agent_name` (ex: `'analista-ifood'`).  
+**Causa raiz:** Onda 1 adicionou `agent_id` na tabela mas o hook só selecionava `agent_name` e indexava por ele.  
+**Fix (P-3, feat/seguranca-s2):** Adicionar `agent_id` ao `.select()`; construir `agentMap` indexado por AMBOS `agent_id` e `agent_name`. Backward compat garantido.  
+**Migration:** `20260608_006_p3_user_agent_access_contract.sql` — NOT NULL em `tenant_id`/`agent_id` + UNIQUE `(tenant_id, user_id, agent_id)`.  
+**Teste de regressão:**
+```sql
+-- Verificar que todas as linhas têm agent_id preenchido: esperado 0
+SELECT count(*) FROM public.user_agent_access WHERE agent_id IS NULL;
+-- Unique constraint deve existir:
+SELECT conname FROM pg_constraint
+ WHERE conrelid = 'public.user_agent_access'::regclass AND contype = 'u';
+```
+
+---
+
+### [2026-06-08] FASE 2 onda 2 — Grants órfãos de ex-membros (Eduardo + Wellida)
+**Tabela:** `public.user_agent_access`  
+**Sintoma:** Eduardo e Wellida (removidos de `tenant_members` em jun/2026) ainda tinham grants ativos: Eduardo em `analise-ifood`; Wellida em `analise-ifood` e `lara` (com `can_approve_drafts=true`).  
+**Fix (P-5, feat/seguranca-s3):** Migration `20260608_007_p5_revoke_orphan_grants.sql` — DELETE por user_id.  
+**Teste de regressão:** usar P7 (query de grants órfãos acima). Esperado: 0 linhas.  
+**Lição:** Remoção de membro do `tenant_members` NÃO cascateia em `user_agent_access`. Adicionar ON DELETE CASCADE ou trigger em futura onda.
+
+---
 
 ### [2026-06-07] Console v2 — KPIs da Visão Geral não batiam com o banco
 **Arquivo:** `src/console/ConsoleV2.jsx` (hook `useKpisReais`)  
@@ -106,6 +181,18 @@ LIMIT 3;
 
 ---
 
+## Advisors Abertos (não cobertas por esta frente)
+
+| Tabela | Advisor | Observação |
+|---|---|---|
+| `customer_group_members` | rls_enabled_no_policy | RLS ativo sem policies — acesso bloqueado para authenticated |
+| `customer_groups` | rls_enabled_no_policy | Idem |
+| `tarefas_analise` | rls_enabled_no_policy | Idem |
+
+Ação: criar policies ou desabilitar RLS se a tabela não é acessada por usuários authenticated. Incluir em frente separada.
+
+---
+
 ## Schema Reference (tabelas críticas)
 
 ### whatsapp_groups
@@ -115,15 +202,37 @@ LIMIT 3;
 ### whatsapp_messages  
 `id, tenant_id, conversation_id, content, sender_jid, created_at, status`
 
-### agent_runs
-`id, tenant_id, agent_id, status, output, created_at, trigger_dev_run_id`
+### agent_runs (após P-2)
+`id, tenant_id NOT NULL, agent_id, status, output, created_at, trigger_dev_run_id`  
+Policies: `service_role_manage_runs`, `tenant_members_view_own_runs`  
+(authenticated_view_global_runs removida em 20260608_005)
 
 ### tenant_members
 `id, tenant_id, user_id, role, created_at`
 
-### defesa_casos (F1 — criada 2026-06-07, migration 20260607_006)
+### user_agent_access (após P-3)
+`user_id, agent_name, can_invoke, can_view_history, can_approve_drafts, tenant_id NOT NULL, agent_id NOT NULL`  
+UNIQUE: `(tenant_id, user_id, agent_id)` | PK legada: `(user_id, agent_name)`
+
+### tenant_agent_config (criada 20260512_004)
+`tenant_id, agent_id, modo_override, enabled, config jsonb`  
+PK: `(tenant_id, agent_id)` | Leitura via helper `getTenantAgentConfig(tenantId, agentId)`
+
+### defesa_casos (criada 2026-06-07, migration 20260607_006)
 `id, tenant_id, loja_id, canal, tipo, pedido_ref, valor_centavos, motivo, analise, draft_resposta, status, resultado_valor_centavos, criado_por_agente, aprovado_por, aprovado_em, enviado_em, created_at, updated_at`  
-Estados: `rascunho → aguardando_ok → aprovado → enviado → ganho|perdido` (ou `descartado`). Sem DELETE por RLS. View: `defesa_metricas_mensal`.
+Estados: `rascunho → aguardando_ok → aprovado → enviado → ganho|perdido` (ou `descartado`). Sem DELETE por RLS.
+
+### defesa_aprovadores (criada 2026-06-07)
+`id, tenant_id, user_id, ativo, criado_em`  
+Policies: select, insert, update, delete (4 completas) ✓
+
+### defesa_assinaturas (criada 2026-06-07)
+`id, tenant_id, caso_id, aprovador_id, assinado_em, ...`  
+Policies: select, insert_admin (2) — UPDATE/DELETE intencionalmente ausentes (assinaturas são imutáveis).
+
+### estudio_criacoes (criada 2026-06-08)
+`id, tenant_id, ...`  
+Policies: select, insert, update (3) ✓
 
 ---
 
