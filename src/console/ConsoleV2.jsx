@@ -37,7 +37,7 @@ import './console.css';
 
 // ============================================================
 // Console v2 — estrutura IDÊNTICA ao protótipo (docs/prototipo/console-v2.html)
-// 5 grupos · ícones do protótipo · + abas novas mescladas. Onda 1.
+// 5 grupos · ícones do protótipo · topbar fiel (créditos/tenant/sino/avatar).
 // ============================================================
 
 const GRUPOS = [
@@ -100,7 +100,65 @@ GRUPOS.forEach(g => g.items.forEach(it => { LABELS[it.id] = it.label; }));
 const LEGADO = new Set(['deli', 'crm', 'lojas', 'mia', 'cobranca', 'rotinas', 'heartbeats', 'metas', 'memoria', 'conhecimento', 'configsys']);
 
 const OK_STATUSES = ['ok', 'completed', 'success'];
+const CREDITOS_MES = 10000; // freemium: 10k créditos/mês, 1 por execução de IA
 const fmtBRL = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const fmtK = n => (n >= 1000 ? (n / 1000).toFixed(1).replace('.', ',') + 'k' : String(n));
+
+// lista de tenants do usuário + seleção (seletor de tenant da topbar)
+function useTenants(userId, fallback) {
+  const [list, setList] = useState(fallback?.dbId ? [fallback] : []);
+  const [sel, setSel] = useState(fallback?.dbId ? fallback : null);
+  useEffect(() => {
+    if (!userId) return;
+    let alive = true;
+    (async () => {
+      const { data } = await supabase.from('tenant_members').select('tenants(id, name, slug)').eq('user_id', userId);
+      if (!alive || !Array.isArray(data)) return;
+      const mapped = data.filter(d => d.tenants).map(d => ({ dbId: d.tenants.id, slug: d.tenants.slug, nome: d.tenants.name }));
+      const uniq = [...new Map(mapped.map(m => [m.dbId, m])).values()];
+      if (uniq.length) {
+        setList(uniq);
+        setSel(prev => (prev && uniq.find(u => u.dbId === prev.dbId)) || uniq[0]);
+      }
+    })();
+    return () => { alive = false; };
+  }, [userId]);
+  return [list, sel, setSel];
+}
+
+// créditos (execuções do mês) + notificações não-lidas
+function useTopbar(tenantDbId, userId) {
+  const [s, setS] = useState({ runs: null, notif: 0 });
+  useEffect(() => {
+    if (!tenantDbId) return;
+    let alive = true;
+    (async () => {
+      try {
+        const ini = new Date(); ini.setUTCDate(1); ini.setUTCHours(0, 0, 0, 0);
+        const [{ count: runs }, notifRes] = await Promise.all([
+          supabase.from('agent_runs').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantDbId).gte('created_at', ini.toISOString()),
+          userId
+            ? supabase.from('internal_notifications').select('*', { count: 'exact', head: true }).eq('recipient_user_id', userId).is('read_at', null)
+            : Promise.resolve({ count: 0 }),
+        ]);
+        if (alive) setS({ runs: runs ?? 0, notif: notifRes?.count ?? 0 });
+      } catch { if (alive) setS({ runs: 0, notif: 0 }); }
+    })();
+    return () => { alive = false; };
+  }, [tenantDbId, userId]);
+  return s;
+}
+
+function useBranding(tenantDbId) {
+  const [b, setB] = useState(null);
+  const load = useCallback(async () => {
+    if (!tenantDbId) return;
+    const { data } = await supabase.from('tenants').select('name, theme_color, color, logo_url').eq('id', tenantDbId).maybeSingle();
+    if (data) setB({ nome: data.name, cor: data.theme_color || data.color || null, logo: data.logo_url || null });
+  }, [tenantDbId]);
+  useEffect(() => { load(); }, [load]);
+  return [b, load];
+}
 
 function useKpisReais(tenantDbId) {
   const [kpis, setKpis] = useState(null);
@@ -169,17 +227,6 @@ function useAlertas(tenantDbId) {
     return () => { alive = false; };
   }, [tenantDbId]);
   return al;
-}
-
-function useBranding(tenantDbId) {
-  const [b, setB] = useState(null);
-  const load = useCallback(async () => {
-    if (!tenantDbId) return;
-    const { data } = await supabase.from('tenants').select('name, theme_color, color, logo_url').eq('id', tenantDbId).maybeSingle();
-    if (data) setB({ nome: data.name, cor: data.theme_color || data.color || null, logo: data.logo_url || null });
-  }, [tenantDbId]);
-  useEffect(() => { load(); }, [load]);
-  return [b, load];
 }
 
 function Kpi({ l, v, d, neg, mut }) {
@@ -396,12 +443,18 @@ function Defesa({ tenantDbId, userId }) {
   );
 }
 
-export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
+export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, onExit }) {
   const [tela, setTela] = useState('visao');
   const [defesaOn, setDefesaOn] = useState(null);
+  const [tenantsList, sel, setSel] = useTenants(userId, { dbId: propDbId, slug: tenantInfo?.id, nome: tenantInfo?.name });
+
+  // tenant ativo = selecionado no topo (todas as telas seguem isto)
+  const tenantDbId = sel?.dbId || propDbId;
+  const tenantSlug = sel?.slug || tenantInfo?.id;
   const [brand, recarregarBrand] = useBranding(tenantDbId);
-  const tenantNome = brand?.nome || tenantInfo?.name || 'Workspace';
-  const tenantSlug = tenantInfo?.id;
+  const tenantNome = brand?.nome || sel?.nome || tenantInfo?.name || 'Workspace';
+  const { runs, notif } = useTopbar(tenantDbId, userId);
+  const creditosTxt = runs == null ? '…' : fmtK(Math.max(0, CREDITOS_MES - runs));
 
   useEffect(() => {
     if (!tenantDbId) return;
@@ -415,15 +468,12 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
   const temaStyle = brand?.cor ? { '--red': brand.cor, '--red-dark': brand.cor, '--red-soft': brand.cor + '1a' } : undefined;
   const ehChat = tela === 'chat';
   const ehLegado = LEGADO.has(tela);
-
-  const nav = setTela; // navegação interna do cv2
+  const nav = setTela;
 
   function render() {
     switch (tela) {
-      // INÍCIO
       case 'visao': return <VisaoGeral tenantNome={tenantNome} tenantDbId={tenantDbId} onNav={nav} />;
       case 'deli': return <DeliScreen tenantDbId={tenantDbId} userId={userId} />;
-      // OPERAÇÃO
       case 'crm': return <CrmScreen tenant={tenantSlug} tenantDbId={tenantDbId} onNavigate={nav} />;
       case 'lojas': return <LojasScreen tenantDbId={tenantDbId} userId={userId} />;
       case 'mia': return <MiaAuditScreen tenantDbId={tenantDbId} />;
@@ -432,7 +482,6 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
       case 'defesa': return defesaOn === false ? <PaywallDefesa /> : <Defesa tenantDbId={tenantDbId} userId={userId} />;
       case 'radar': return <RadarReal tenantNome={tenantNome} tenantDbId={tenantDbId} />;
       case 'ativar': return <AtivarLoja tenantDbId={tenantDbId} />;
-      // AGENTES IA
       case 'catalogo': return <PainelAgentes tenantDbId={tenantDbId} />;
       case 'estudio': return <Estudio tenantDbId={tenantDbId} userId={userId} />;
       case 'habilidades': return <Habilidades tenantDbId={tenantDbId} userId={userId} />;
@@ -448,14 +497,12 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
       case 'topicos': return <Topicos />;
       case 'modelos': return <Templates tenantDbId={tenantDbId} userId={userId} />;
       case 'config': return <AgenteConfig tenantDbId={tenantDbId} />;
-      // DADOS
       case 'arquivos': return <Arquivos tenantDbId={tenantDbId} />;
       case 'links': return <Links />;
       case 'memoria': return <MemoriesScreen tenantDbId={tenantDbId} />;
       case 'conhecimento': return <KnowledgeBaseScreen tenantDbId={tenantDbId} />;
       case 'custos': return <CustosIA tenantDbId={tenantDbId} />;
       case 'importar': return <ImportarRelatorios tenantDbId={tenantDbId} userId={userId} />;
-      // SISTEMA
       case 'configsys': return <SettingsScreen tenant={tenantSlug} tenantDbId={tenantDbId} userId={userId} onTenantChange={() => {}} />;
       case 'clientesplat': return <Clientes userId={userId} />;
       case 'marca': return <Marca tenantDbId={tenantDbId} onChanged={recarregarBrand} />;
@@ -467,6 +514,8 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
       default: return <div className="cv2-card">Tela não encontrada.</div>;
     }
   }
+
+  const inicial = (tenantNome || 'CD').replace(/[^A-Za-zÀ-ú]/g, '').slice(0, 2).toUpperCase() || 'CD';
 
   return (
     <div className="cv2" style={temaStyle}>
@@ -502,10 +551,22 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
           <>
             <div className="cv2-tb">
               <span className="crumb">Console › <b>{LABELS[tela] || tela}</b></span>
-              <input className="search" placeholder="Buscar clientes, lojas, conversas, agentes…" />
-              <span className="cv2-pill">Cliente <b>{tenantNome}</b></span>
-              <span className="cv2-pill"><b>{defesaOn === false ? 'RADAR GRÁTIS' : 'BETA'}</b></span>
-              <span className="cv2-avatar">{(tenantNome || 'CD').slice(0, 2).toUpperCase()}</span>
+              <input className="search" placeholder="Buscar clientes, lojas, agentes, pedidos…" />
+              <span className="cv2-pill" title={`Plano freemium · ${CREDITOS_MES.toLocaleString('pt-BR')} créditos/mês · 1 por execução de IA · ${runs ?? 0} usados`}>
+                <Ico name="i-zap" size={13} /> Créditos IA <b>{creditosTxt}</b>
+              </span>
+              {tenantsList.length > 1 ? (
+                <select value={tenantDbId || ''} onChange={e => { const t = tenantsList.find(x => x.dbId === e.target.value); if (t) setSel(t); }}
+                  style={{ background: '#fff', color: 'var(--tx)', border: '1px solid var(--line)', borderRadius: 4, padding: '7px 9px', fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit', maxWidth: 180 }}>
+                  {tenantsList.map(t => <option key={t.dbId} value={t.dbId}>{t.nome}</option>)}
+                </select>
+              ) : (
+                <span className="cv2-pill">Cliente <b>{tenantNome}</b></span>
+              )}
+              <span className="cv2-pill" title="Notificações não lidas">
+                <Ico name="i-bell" size={13} /><b style={notif > 0 ? { color: 'var(--red)' } : { color: 'var(--tx2)' }}>{notif}</b>
+              </span>
+              <span className="cv2-avatar">{inicial}</span>
             </div>
             {ehLegado ? (
               <div className="cv2-legado">{render()}</div>
