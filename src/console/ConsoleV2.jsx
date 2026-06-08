@@ -17,15 +17,19 @@ import Habilidades from './Habilidades.jsx';
 import Templates from './Templates.jsx';
 import AgenteAnalise from './AgenteAnalise.jsx';
 import Marca from './Marca.jsx';
+import ChatScreen from '../screens/ChatScreen.jsx';
 import './console.css';
 
 // ============================================================
 // Console v2 · plataforma completa (noite autônoma 2026-06-08)
-// Operação · Agentes IA · Dados · Admin (+ Marca white-label)
+// Operação (+ Chat ao Vivo) · Agentes IA · Dados · Admin
+// Chat ao Vivo = componente de produção ChatScreen reusado em área
+// cheia (100% paridade: realtime, mídia, lead, departamentos, tarefas).
 // ============================================================
 
 const ICONS = {
   visao:      ['M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', 'M9 22V12h6v10'],
+  chat:       ['M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'],
   defesa:     ['M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'],
   radar:      ['M22 12h-4l-3 9L9 3l-3 9H2'],
   ativar:     ['M3 21h18', 'M5 21V7l8-4v18', 'M19 21V11l-6-4'],
@@ -60,6 +64,7 @@ function Ico({ name }) {
 const GRUPOS = [
   { label: 'Início', items: [{ id: 'visao', label: 'Visão Geral' }] },
   { label: 'Operação', items: [
+    { id: 'chat', label: 'Chat ao Vivo' },
     { id: 'defesa', label: 'Defesa Comercial' },
     { id: 'radar', label: 'Radar (grátis)' },
     { id: 'ativar', label: 'Ativar loja' },
@@ -88,7 +93,7 @@ const GRUPOS = [
   ]},
 ];
 
-const TITULOS = { visao: 'Visão Geral', defesa: 'Defesa Comercial', radar: 'Radar', ativar: 'Ativar loja', clientes: 'Clientes', estudio: 'Estúdio de Conteúdo', custos: 'Custos de IA', agentes: 'Painel de Agentes', execucoes: 'Execuções', aprovacoes: 'Aprovações', importar: 'Importar relatórios', analise: 'Análise de Loja', config: 'Config de Agentes', habilidades: 'Habilidades', acesso: 'Acesso por usuário', auditoria: 'Auditoria', templates: 'Templates', cardapio: 'Cardápio', multicanal: 'Multicanal', marca: 'Marca' };
+const TITULOS = { visao: 'Visão Geral', chat: 'Chat ao Vivo', defesa: 'Defesa Comercial', radar: 'Radar', ativar: 'Ativar loja', clientes: 'Clientes', estudio: 'Estúdio de Conteúdo', custos: 'Custos de IA', agentes: 'Painel de Agentes', execucoes: 'Execuções', aprovacoes: 'Aprovações', importar: 'Importar relatórios', analise: 'Análise de Loja', config: 'Config de Agentes', habilidades: 'Habilidades', acesso: 'Acesso por usuário', auditoria: 'Auditoria', templates: 'Templates', cardapio: 'Cardápio', multicanal: 'Multicanal', marca: 'Marca' };
 
 const OK_STATUSES = ['ok', 'completed', 'success'];
 const fmtBRL = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -162,7 +167,6 @@ function useAlertas(tenantDbId) {
   return al;
 }
 
-// White-label: lê cor/logo do tenant
 function useBranding(tenantDbId) {
   const [b, setB] = useState(null);
   const load = useCallback(async () => {
@@ -393,6 +397,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
   const [defesaOn, setDefesaOn] = useState(null); // null = carregando
   const [brand, recarregarBrand] = useBranding(tenantDbId);
   const tenantNome = brand?.nome || tenantInfo?.name || 'Workspace';
+  const tenantSlug = tenantInfo?.id;
 
   useEffect(() => {
     if (!tenantDbId) return;
@@ -403,8 +408,8 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
     return () => { alive = false; };
   }, [tenantDbId]);
 
-  // White-label: aplica a cor da marca do tenant ao tema do console
   const temaStyle = brand?.cor ? { '--red': brand.cor, '--red-dark': brand.cor, '--red-soft': brand.cor + '1a' } : undefined;
+  const ehChat = tela === 'chat';
 
   return (
     <div className="cv2" style={temaStyle}>
@@ -435,34 +440,43 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
         </div>
       </aside>
       <div className="cv2-main">
-        <div className="cv2-tb">
-          <span className="crumb">Console › <b>{TITULOS[tela] || tela}</b></span>
-          <span style={{ flex: 1 }} />
-          <span className="cv2-pill">Cliente <b>{tenantNome}</b></span>
-          <span className="cv2-pill"><b>{defesaOn === false ? 'RADAR GRÁTIS' : 'BETA'}</b></span>
-        </div>
-        <div className="cv2-ct">
-          {tela === 'visao' && <VisaoGeral tenantNome={tenantNome} tenantDbId={tenantDbId} onNav={setTela} />}
-          {tela === 'defesa' && (defesaOn === false ? <PaywallDefesa /> : <Defesa tenantDbId={tenantDbId} userId={userId} />)}
-          {tela === 'radar' && <RadarReal tenantNome={tenantNome} tenantDbId={tenantDbId} />}
-          {tela === 'ativar' && <AtivarLoja tenantDbId={tenantDbId} />}
-          {tela === 'clientes' && <Clientes userId={userId} />}
-          {tela === 'estudio' && <Estudio tenantDbId={tenantDbId} userId={userId} />}
-          {tela === 'custos' && <CustosIA tenantDbId={tenantDbId} />}
-          {tela === 'agentes' && <PainelAgentes tenantDbId={tenantDbId} />}
-          {tela === 'execucoes' && <Execucoes tenantDbId={tenantDbId} />}
-          {tela === 'aprovacoes' && <AprovacoesUnificadas tenantDbId={tenantDbId} userId={userId} />}
-          {tela === 'importar' && <ImportarRelatorios tenantDbId={tenantDbId} userId={userId} />}
-          {tela === 'analise' && <AnaliseLoja tenantDbId={tenantDbId} userId={userId} />}
-          {tela === 'cardapio' && <AgenteAnalise tenantDbId={tenantDbId} userId={userId} agente="cardapio" titulo="Cardápio" descricao="O agente analisa o funil e os itens do cardápio e sugere otimizações de nomes, descrições e preços." />}
-          {tela === 'multicanal' && <AgenteAnalise tenantDbId={tenantDbId} userId={userId} agente="multicanal" titulo="Multicanal" descricao="O agente consolida as métricas dos seus canais de delivery num panorama único e aponta onde focar." />}
-          {tela === 'config' && <AgenteConfig tenantDbId={tenantDbId} />}
-          {tela === 'habilidades' && <Habilidades tenantDbId={tenantDbId} userId={userId} />}
-          {tela === 'acesso' && <AcessoUsuarios tenantDbId={tenantDbId} />}
-          {tela === 'auditoria' && <AuditLog tenantDbId={tenantDbId} />}
-          {tela === 'templates' && <Templates tenantDbId={tenantDbId} userId={userId} />}
-          {tela === 'marca' && <Marca tenantDbId={tenantDbId} onChanged={recarregarBrand} />}
-        </div>
+        {ehChat ? (
+          // Chat ao Vivo em área cheia: o ChatScreen traz seu próprio layout 100vh.
+          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            <ChatScreen tenant={tenantSlug} tenantDbId={tenantDbId} onNavigate={setTela} deepLinkConvId={null} />
+          </div>
+        ) : (
+          <>
+            <div className="cv2-tb">
+              <span className="crumb">Console › <b>{TITULOS[tela] || tela}</b></span>
+              <span style={{ flex: 1 }} />
+              <span className="cv2-pill">Cliente <b>{tenantNome}</b></span>
+              <span className="cv2-pill"><b>{defesaOn === false ? 'RADAR GRÁTIS' : 'BETA'}</b></span>
+            </div>
+            <div className="cv2-ct">
+              {tela === 'visao' && <VisaoGeral tenantNome={tenantNome} tenantDbId={tenantDbId} onNav={setTela} />}
+              {tela === 'defesa' && (defesaOn === false ? <PaywallDefesa /> : <Defesa tenantDbId={tenantDbId} userId={userId} />)}
+              {tela === 'radar' && <RadarReal tenantNome={tenantNome} tenantDbId={tenantDbId} />}
+              {tela === 'ativar' && <AtivarLoja tenantDbId={tenantDbId} />}
+              {tela === 'clientes' && <Clientes userId={userId} />}
+              {tela === 'estudio' && <Estudio tenantDbId={tenantDbId} userId={userId} />}
+              {tela === 'custos' && <CustosIA tenantDbId={tenantDbId} />}
+              {tela === 'agentes' && <PainelAgentes tenantDbId={tenantDbId} />}
+              {tela === 'execucoes' && <Execucoes tenantDbId={tenantDbId} />}
+              {tela === 'aprovacoes' && <AprovacoesUnificadas tenantDbId={tenantDbId} userId={userId} />}
+              {tela === 'importar' && <ImportarRelatorios tenantDbId={tenantDbId} userId={userId} />}
+              {tela === 'analise' && <AnaliseLoja tenantDbId={tenantDbId} userId={userId} />}
+              {tela === 'cardapio' && <AgenteAnalise tenantDbId={tenantDbId} userId={userId} agente="cardapio" titulo="Cardápio" descricao="O agente analisa o funil e os itens do cardápio e sugere otimizações de nomes, descrições e preços." />}
+              {tela === 'multicanal' && <AgenteAnalise tenantDbId={tenantDbId} userId={userId} agente="multicanal" titulo="Multicanal" descricao="O agente consolida as métricas dos seus canais de delivery num panorama único e aponta onde focar." />}
+              {tela === 'config' && <AgenteConfig tenantDbId={tenantDbId} />}
+              {tela === 'habilidades' && <Habilidades tenantDbId={tenantDbId} userId={userId} />}
+              {tela === 'acesso' && <AcessoUsuarios tenantDbId={tenantDbId} />}
+              {tela === 'auditoria' && <AuditLog tenantDbId={tenantDbId} />}
+              {tela === 'templates' && <Templates tenantDbId={tenantDbId} userId={userId} />}
+              {tela === 'marca' && <Marca tenantDbId={tenantDbId} onChanged={recarregarBrand} />}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
