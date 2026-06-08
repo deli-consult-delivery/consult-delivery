@@ -16,11 +16,12 @@ import AcessoUsuarios from './AcessoUsuarios.jsx';
 import Habilidades from './Habilidades.jsx';
 import Templates from './Templates.jsx';
 import AgenteAnalise from './AgenteAnalise.jsx';
+import Marca from './Marca.jsx';
 import './console.css';
 
 // ============================================================
 // Console v2 · plataforma completa (noite autônoma 2026-06-08)
-// Operação · Agentes IA (Painel/Análise/Estúdio/Cardápio/Multicanal/Config/Habilidades) · Dados · Admin
+// Operação · Agentes IA · Dados · Admin (+ Marca white-label)
 // ============================================================
 
 const ICONS = {
@@ -43,6 +44,7 @@ const ICONS = {
   acesso:     ['M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z', 'M9 12l2 2 4-4'],
   auditoria:  ['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', 'M14 2v6h6', 'M16 13H8', 'M16 17H8'],
   templates:  ['M3 3h18v18H3z', 'M3 9h18', 'M9 21V9'],
+  marca:      ['M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z'],
   lock:       ['M5 11h14v10H5z', 'M8 11V7a4 4 0 0 1 8 0v4'],
 };
 
@@ -79,13 +81,14 @@ const GRUPOS = [
   ]},
   { label: 'Admin', items: [
     { id: 'clientes', label: 'Clientes (plataforma)' },
+    { id: 'marca', label: 'Marca' },
     { id: 'acesso', label: 'Acesso por usuário' },
     { id: 'auditoria', label: 'Auditoria' },
     { id: 'templates', label: 'Templates' },
   ]},
 ];
 
-const TITULOS = { visao: 'Visão Geral', defesa: 'Defesa Comercial', radar: 'Radar', ativar: 'Ativar loja', clientes: 'Clientes', estudio: 'Estúdio de Conteúdo', custos: 'Custos de IA', agentes: 'Painel de Agentes', execucoes: 'Execuções', aprovacoes: 'Aprovações', importar: 'Importar relatórios', analise: 'Análise de Loja', config: 'Config de Agentes', habilidades: 'Habilidades', acesso: 'Acesso por usuário', auditoria: 'Auditoria', templates: 'Templates', cardapio: 'Cardápio', multicanal: 'Multicanal' };
+const TITULOS = { visao: 'Visão Geral', defesa: 'Defesa Comercial', radar: 'Radar', ativar: 'Ativar loja', clientes: 'Clientes', estudio: 'Estúdio de Conteúdo', custos: 'Custos de IA', agentes: 'Painel de Agentes', execucoes: 'Execuções', aprovacoes: 'Aprovações', importar: 'Importar relatórios', analise: 'Análise de Loja', config: 'Config de Agentes', habilidades: 'Habilidades', acesso: 'Acesso por usuário', auditoria: 'Auditoria', templates: 'Templates', cardapio: 'Cardápio', multicanal: 'Multicanal', marca: 'Marca' };
 
 const OK_STATUSES = ['ok', 'completed', 'success'];
 const fmtBRL = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -136,7 +139,6 @@ function useKpisReais(tenantDbId) {
   return { kpis, erro };
 }
 
-// Alertas acionáveis: casos aguardando OK, assinaturas atrasadas, fontes/análises prontas
 function useAlertas(tenantDbId) {
   const [al, setAl] = useState([]);
   useEffect(() => {
@@ -158,6 +160,18 @@ function useAlertas(tenantDbId) {
     return () => { alive = false; };
   }, [tenantDbId]);
   return al;
+}
+
+// White-label: lê cor/logo do tenant
+function useBranding(tenantDbId) {
+  const [b, setB] = useState(null);
+  const load = useCallback(async () => {
+    if (!tenantDbId) return;
+    const { data } = await supabase.from('tenants').select('name, theme_color, color, logo_url').eq('id', tenantDbId).maybeSingle();
+    if (data) setB({ nome: data.name, cor: data.theme_color || data.color || null, logo: data.logo_url || null });
+  }, [tenantDbId]);
+  useEffect(() => { load(); }, [load]);
+  return [b, load];
 }
 
 function Kpi({ l, v, d, neg, mut }) {
@@ -377,7 +391,8 @@ function Defesa({ tenantDbId, userId }) {
 export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
   const [tela, setTela] = useState('visao');
   const [defesaOn, setDefesaOn] = useState(null); // null = carregando
-  const tenantNome = tenantInfo?.name || 'Workspace';
+  const [brand, recarregarBrand] = useBranding(tenantDbId);
+  const tenantNome = brand?.nome || tenantInfo?.name || 'Workspace';
 
   useEffect(() => {
     if (!tenantDbId) return;
@@ -388,14 +403,16 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
     return () => { alive = false; };
   }, [tenantDbId]);
 
+  // White-label: aplica a cor da marca do tenant ao tema do console
+  const temaStyle = brand?.cor ? { '--red': brand.cor, '--red-dark': brand.cor, '--red-soft': brand.cor + '1a' } : undefined;
+
   return (
-    <div className="cv2">
+    <div className="cv2" style={temaStyle}>
       <aside className="cv2-sb">
         <div className="cv2-brand">
-          <img src="/assets/rocket-logo.png" alt="" />
+          <img src={brand?.logo || '/assets/rocket-logo.png'} alt="" style={{ width: 22, height: 22, objectFit: 'contain' }} />
           <div>
-            <span className="anton">Consult</span>
-            <span className="anton">Delivery</span>
+            <span className="anton" style={{ fontSize: 13, lineHeight: 1.05, display: 'block' }}>{tenantNome}</span>
             <small>CONSOLE · BETA</small>
           </div>
         </div>
@@ -444,6 +461,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
           {tela === 'acesso' && <AcessoUsuarios tenantDbId={tenantDbId} />}
           {tela === 'auditoria' && <AuditLog tenantDbId={tenantDbId} />}
           {tela === 'templates' && <Templates tenantDbId={tenantDbId} userId={userId} />}
+          {tela === 'marca' && <Marca tenantDbId={tenantDbId} onChanged={recarregarBrand} />}
         </div>
       </div>
     </div>
