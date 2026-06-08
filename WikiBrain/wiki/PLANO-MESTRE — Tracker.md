@@ -32,28 +32,28 @@ Plano da plataforma completa (Consolidação C1–C8 + telas GAP-1..8 + agentes 
 
 ## 🔴 Onde parou
 
-_Última sessão: 2026-06-08 (Cowork — sessão 13: **PR9 multi-tenant + PR10 assinaturas Asaas — ciclo comercial completo PROVADO em sandbox**)_
+_Última sessão: 2026-06-08 (Cowork — sessão 14: **Frente Segurança FASE 2 onda 2 — PR S1..S4 abertos, aguardando aprovação SQL**)_
 
-- **PR9 ✅ (#187):** tela **Clientes (plataforma)** no Console v2 (Admin) — cria tenant + owner + convite do dono via bridge `/users/invite` + toggle Defesa. **Gating D7 cabeado nas 2 pontas:** vigia pula tenants sem `defesa` em `tenant_agents` (preserva allowlist do PR8); tela Defesa vira **paywall R$147** quando desabilitada (pill "RADAR GRÁTIS"). Sem SQL novo. Bundle verificado `index-U8Exi0qN.js`.
-- **PR10 ✅ (#189) + migrations 008/009 aplicadas:** assinaturas da Defesa via **fila-por-tabela** (`defesa_assinaturas`): tela grava `pendente` (policy INSERT admin, isolamento provado: admin insere/intruso bloqueado) → `defesa-criar-assinatura` (cron 5min) cria customer+subscription R$147 MONTHLY no Asaas → `defesa-sync-assinaturas` (cron 15min) **liga a Defesa quando paga** e desliga com 2+ vencidas. Cliente Asaas próprio (`ASAAS_DEFESA_*` com fallback) — **sandbox da Defesa sem tocar a config da CORA** (Wandson cadastrou as env vars).
-- **PROVA E2E EM SANDBOX (output bruto):** fila 02:53:59 → customer `cus_000008114142` + sub `sub_5oxdzvzhqufpzefz` + link `sandbox.asaas.com/i/w7k5q6...` em **68s** → Wandson confirmou pagamento → sync 03:30:35: status **ativa** · cobrança **RECEIVED** · **`tenant_agents` defesa criada SOZINHA** · notificação "ATIVADA" no sino. **Ciclo comercial autônomo: criar cliente → Radar grátis → assinar → pagou, ligou → atrasou 2, desligou.**
-- **Correção de registro:** a pendência "deploy do worker" da sessão 12 **não existia** — deploy do worker é AUTOMÁTICO via Actions em todo push à main (provado na página Deployments: `20260608.2` do commit do PR8, "Automatically triggered by pushes to main"). Allowlist do PR8 está ATIVA em produção desde 22:33 de 07/06.
-- **🎨 SESSÃO PARALELA DO ESTÚDIO — E1+E2+E3 ENTREGUES E ACEITE E2E PROVADO (2026-06-08):**
-  - **E1 ✅ (#190) + migration `20260608_004` aplicada** (SQL aprovado): `estudio_criacoes` (fila→gerando→pronto→aprovado|erro, padrão PR10) + bucket público `estudio` + seed agente `estudio` (specialist, só consult). RLS provada: membro insere/intruso 0 e bloqueado no INSERT (42501).
-  - **E2 ✅ (#191) + E2b (#194) + E2c (#195):** task `estudio-gerar` (cron 2min) — copy claude-sonnet-4-6 no Brand Guard + imagem OpenRouter + PNG no bucket + `logAgentRun` custo real. 2 correções provadas com output bruto em produção: endpoint é `chat/completions`+`modalities` (404 no `/images/generations`) e slug real do GPT Image 2 é **`openai/gpt-5.4-image-2`** (`gpt-image-2` = 400; lista de modelos conferida na API). `ESTUDIO_IMAGE_MODEL` sobrescreve.
-  - **E3 ✅ (#192):** tela `Estudio.jsx` fiel ao design aprovado (3 colunas BRIEF·RESULTADO·BIBLIOTECA, 4 estados, poll 5s, exemplos clicáveis) + grupo Agentes IA com lock por item (só Estúdio liberado). Desvio registrado: sem chip de saldo OpenRouter (sem endpoint seguro no frontend; entra com GAP-4 Custos).
-  - **ACEITE E2E EM PRODUÇÃO (output bruto):** brief real pela tela ("Combo da semana") → fila → worker → **arte 1:1 no Brand Guard** (SMASH DUPLO · R$ 39,90, zero emoji) + legenda 214 chars ("Oferta válida", nunca "promoção") → PNG público no bucket (`…/estudio/9079bd4d…/b70a072d….png`) → `agent_runs` success **US$ 0,2386 · 234s** → thumbnail na Biblioteca; caminho de erro também provado (2 runs failed auditados + estado de erro na tela). Falta só **E4** (Enviar como rascunho de campanha → `agent_drafts`).
-- Restos de teste no banco (manter p/ inspeção do Wandson; limpar depois): tenant `Cliente Teste Sandbox` (fd7d9eb9) + assinatura ativa de teste + assinatura/customer no sandbox Asaas.
-- **⚠️ Pendentes antigos:** `.obsidian/*`/`log.md` · grants órfãos P-5 · rotação credenciais · 2 ajustes protótipo Claude Design.
+- **PR S1 ✅ aberto (#200) — P-2:** `trigger/_shared/audit.ts` adiciona `CONSULT_TENANT_ID` e troca `?? null` por `?? CONSULT_TENANT_ID`. Zero alterações nas tasks individuais. Migration `20260608_005_p2_agent_runs_not_null.sql` versionada — **aguarda aprovação Wandson para aplicar**.
+- **PR S2 ✅ aberto (#201) — P-3:** `src/hooks/usePermissions.js` passa a indexar `agentMap` por `agent_id` (canonical) + `agent_name` (legado), backward compat. Migration `20260608_006_p3_user_agent_access_contract.sql` versionada — **aguarda aprovação Wandson**.
+- **PR S3 ✅ aberto (#202) — P-4+P-5:** Novo helper `trigger/_shared/tenant-agent-config.ts` (getTenantAgentConfig, soft-fail). Migration P-5 `20260608_007_p5_revoke_orphan_grants.sql` — **aguarda OK explícito do Wandson** (ver grants órfãos abaixo).
+- **PR S4 ✅ aberto (#203) — Varredura final:** `scripts/qa-knowledge.md` atualizado com P7/P8 + 3 casos onda 2 + Schema Reference completo. RLS estudio_*/defesa_* verificada e OK. Advisors abertos mapeados (customer_groups, tarefas_analise — fora do escopo desta frente).
+- **Grants órfãos P-5 identificados (SELECT confirmado em prod):**
+  - `eduardo@consultdelivery.com.br` (`cba66f88-...`): 1 grant — `analise-ifood` (can_invoke=true)
+  - `wellida@consultdelivery.com.br` (`14904752-...`): 2 grants — `analise-ifood` + `lara` (**can_approve_drafts=true** ⚠️)
+  - Yasmin: não está no auth.users, sem grants
 
 ---
 
 ## 👉 Próxima ação
 
-1. **Etapa A — itens restantes:** PR11 (C5-C7: FASE 2 onda 2 — P-2 cutover logAgentRun · P-3 contract user_agent_access · P-4 tenant_agent_config · P-5 grants órfãos) · PR12 (C3: Radar real — decidir fonte de dados com o Wandson).
-2. **Depois da Etapa A:** Etapa B (telas GAP-1..4 no Console v2) → Etapa C (agentes novos / ex-F2) → Etapa D (white-label). **Estúdio: resta E4** (botão "Enviar como rascunho de campanha" → `agent_drafts` canal painel) — sessão paralela.
-3. **Wandson — beta real:** ativar 1 loja real (tela Ativar loja) · vincular grupo · 1 semana de vigia · registrar ganho/perdido. Quando fechar a 1ª loja pagante de fora: trocar `ASAAS_DEFESA_ENVIRONMENT` p/ production (ou remover o override).
-4. Limpeza dos registros de teste (tenant sandbox + assinatura) quando o Wandson autorizar.
+**🛑 CHECKPOINT — Wandson precisa aprovar para avançar:**
+
+1. **Aprovar migration 005** (P-2 — `agent_runs.tenant_id SET NOT NULL`): está em `supabase/migrations/20260608_005_p2_agent_runs_not_null.sql` (PR #200)
+2. **Aprovar migration 006** (P-3 — `user_agent_access` NOT NULL + UNIQUE): está em `supabase/migrations/20260608_006_p3_user_agent_access_contract.sql` (PR #201)
+3. **Confirmar revogação P-5**: Wellida tinha `can_approve_drafts=true` no agente Lara. OK para DELETE? Migration 007 pronta em PR #202.
+4. Depois das aprovações: **merge PR S1→S2→S3→S4** (nessa ordem) + aplicar migrations uma a uma com validação de output bruto.
+5. Após S1..S4: PR12 (C3: Radar real — decidir fonte de dados) · E4 (Estúdio — botão "Enviar como rascunho") · beta real com 1ª loja.
 
 ---
 
@@ -62,10 +62,10 @@ _Última sessão: 2026-06-08 (Cowork — sessão 13: **PR9 multi-tenant + PR10 a
 | Track | Nome | Status | Última ação |
 |-------|------|--------|-------------|
 | T1 | Plataforma CD (V1→V3) | 🔄 | Console v2: 5 telas reais + Clientes/paywall (PR9/PR10) |
-| T2 | EvoNexus-replica | ✅ onda 1 | onda 2 = PR11 (próximo da Etapa A) |
+| T2 | EvoNexus-replica | 🟡 aguard. aprovação | PR S1..S4 abertos — **migrations pendentes de OK Wandson** |
 | T3 | Visual-First / telas | ✅ | F1 + Estúdio entregues no design definitivo |
 | T4 | Hermes | 🔄 | aguarda GATE 0 |
-| T5 | Segurança | ✅ | RLS provada em defesa_casos/aprovadores/assinaturas (008/009) |
+| T5 | Segurança | 🟡 aguard. aprovação | PR S1..S4 abertos — RLS verificada OK, grants mapeados |
 | T6 | Agentes IA | ✅ | DEFESA+VIGIA+allowlist ativos; **ESTÚDIO em produção (e2e provado)** |
 | T7 | PILOTO | 🔄 | Onda 03 não aplicada |
 | T8 | Infra/CI | ✅ | deploy triplo automático (Pages+Trigger+Bridge self-hosted) confirmado |
@@ -74,6 +74,15 @@ _Última sessão: 2026-06-08 (Cowork — sessão 13: **PR9 multi-tenant + PR10 a
 ---
 
 ## 📋 Log de sessões
+
+### 2026-06-08 (sessão 14 — Cowork: Frente Segurança FASE 2 onda 2)
+- Leu handoffs COORDENACAO-MULTI-SESSAO + HANDOFF-FRENTE-SEGURANCA · CLAUDE.md · Tracker · migrations 001-004 · código audit.ts, usePermissions.js, bom-dia/envio-agendado, backup-supabase-diario
+- **P-2 análise:** `tenantId?: string` em AgentRunLog → tasks de sistema (backup, bom-dia global) gravavam NULL. Fix: constante `CONSULT_TENANT_ID` + default centralizado em audit.ts (nenhuma task individual alterada)
+- **P-3 análise:** usePermissions.js indexava agentMap só por agent_name legado → callers com agent_id recebiam false. Fix: dual-key (agent_id + agent_name)
+- **P-5 análise:** SELECT em prod → Eduardo (1 grant) + Wellida (2 grants, incluindo can_approve_drafts=true no lara). Yasmin não em auth.users.
+- **S4 análise:** get_advisors rodado (61KB) · RLS de 7 tabelas verificada em prod → tudo OK exceto advisors em customer_group_members/customer_groups/tarefas_analise (fora do escopo)
+- **4 branches criadas + PRs abertos:** S1=#200, S2=#201, S3=#202, S4=#203
+- **3 migrations versionadas (005-007):** aguardando aprovação Wandson
 
 ### 2026-06-08 (sessão paralela — ESTÚDIO DE CONTEÚDO: E1+E2+E3 + aceite e2e)
 - Handoff #188 assumido · design aprovado conferido ao vivo no Claude Design · E1 #190 (migration 004 aplicada, RLS provada) · E2 #191 + fixes E2b #194 (endpoint chat/completions+modalities) e E2c #195 (slug `openai/gpt-5.4-image-2`) · E3 #192 (tela fiel, lock por item no Agentes IA)
@@ -85,7 +94,7 @@ _Última sessão: 2026-06-08 (Cowork — sessão 13: **PR9 multi-tenant + PR10 a
 - Handoff do Estúdio (#188) p/ sessão paralela · corrigido registro: deploy do worker é automático (Actions)
 
 ### 2026-06-07/08 (sessão 12 — Cowork: D6 REABERTA + Etapa A aprovada + PR8)
-- Wandson reabriu a D6 (decisão consciente, alertado sobre anti-dispersão). Registro feito aqui e no PLANO-MESTRE (Decisões Travadas — fecha pendência antiga).
+- Wandson reabreu a D6 (decisão consciente, alertado sobre anti-dispersão). Registro feito aqui e no PLANO-MESTRE (Decisões Travadas — fecha pendência antiga).
 - Plano apresentado (A Consolidação → B telas GAP-1..4 → C agentes+F2 → GAP-5..8 → D white-label); **Etapa A aprovada**.
 - PR8 #185 merged: allowlist @defesa por JID + UI Aprovadores · migration 20260608_001 aplicada (isolamento intruso 0/membro 1) · seed aprovador Wandson · 3 casos de teste deletados (aprovado).
 
