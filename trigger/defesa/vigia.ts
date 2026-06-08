@@ -40,7 +40,7 @@ export const defesaVigia = schedules.task({
 
     const { data: msgs, error } = await sb
       .from("messages")
-      .select("id, tenant_id, conversation_id, content, body, sender_name, created_at")
+      .select("id, tenant_id, conversation_id, content, body, sender_name, whatsapp_msg_id, created_at")
       .eq("direction", "inbound")
       .is("deleted_at", null)
       .gte("created_at", desde)
@@ -53,6 +53,7 @@ export const defesaVigia = schedules.task({
     let duplicados = 0;
     let aprovacoes = 0;
     let descartes = 0;
+    let naoAutorizados = 0;
 
     for (const msg of msgs ?? []) {
       const texto = (msg.content || msg.body || "").toString();
@@ -62,6 +63,46 @@ export const defesaVigia = schedules.task({
       const cmdAprovar = RE_CMD_APROVAR.test(texto);
       const cmdDescartar = !cmdAprovar && RE_CMD_DESCARTAR.test(texto);
       if (cmdAprovar || cmdDescartar) {
+        // PR8 (C4): allowlist de aprovadores — lista vazia = modo aberto (F1); >=1 ativo = so quem esta nela
+        const { data: aprovadores, error: errApr } = await sb
+          .from("defesa_aprovadores")
+          .select("telefone_jid, nome")
+          .eq("tenant_id", msg.tenant_id)
+          .eq("ativo", true);
+        if (errApr) { logger.error("VIGIA — falha lendo defesa_aprovadores; comando ignorado por seguranca", { error: errApr.message }); continue; }
+        // JID real do remetente: join messages.whatsapp_msg_id -> whatsapp_messages.sender_contact_id -> whatsapp_contacts.evolution_jid
+        let senderJid: string | null = null;
+        if ((msg as any).whatsapp_msg_id) {
+          const { data: wm } = await sb
+            .from("whatsapp_messages")
+            .select("sender_contact_id")
+            .eq("evolution_message_id", (msg as any).whatsapp_msg_id)
+            .maybeSingle();
+          if (wm?.sender_contact_id) {
+            const { data: wc } = await sb
+              .from("whatsapp_contacts")
+              .select("evolution_jid")
+              .eq("id", wm.sender_contact_id)
+              .maybeSingle();
+            senderJid = wc?.evolution_jid ?? null;
+          }
+        }
+        if ((aprovadores?.length ?? 0) > 0) {
+          const autorizado = !!senderJid && aprovadores!.some(a => a.telefone_jid === senderJid);
+          if (!autorizado) {
+            naoAutorizados++;
+            await notify({
+              tenantId: msg.tenant_id,
+              kind: "draft_rejected",
+              agent: "defesa",
+              title: `Comando @defesa IGNORADO — remetente fora da allowlist (${msg.sender_name || "sem nome"})`,
+              body: `Mensagem "${texto.slice(0, 80)}" na conversa ${msg.conversation_id}. Cadastre o numero em Aprovadores (tela Ativar loja) se for legitimo.`,
+              metadata: { conversation_id: msg.conversation_id, sender_jid: senderJid },
+            });
+            logger.warn("VIGIA — comando de remetente nao autorizado", { de: msg.sender_name ?? null, sender_jid: senderJid });
+            continue;
+          }
+        }
         // caso pendente mais recente ORIGINADO nesta conversa
         const { data: caso } = await sb
           .from("defesa_casos")
@@ -77,6 +118,7 @@ export const defesaVigia = schedules.task({
           ...(caso.analise ?? {}),
           aprovado_via: "whatsapp",
           comando_de: msg.sender_name ?? null,
+          comando_jid: senderJid,
           comando_message_id: String(msg.id),
         };
         const { data: upd } = await sb
@@ -166,7 +208,7 @@ export const defesaVigia = schedules.task({
       logger.info("VIGIA — caso disparado", { message_id: msg.id, tipo, mencionado, loja: lojaNome ?? null });
     }
 
-    logger.info("VIGIA — varredura concluída", { janela_msgs: (msgs ?? []).length, detectados, disparados, duplicados, aprovacoes, descartes });
-    return { ok: true, mensagens_na_janela: (msgs ?? []).length, detectados, disparados, duplicados, aprovacoes, descartes };
+    logger.info("VIGIA — varredura concluída", { janela_msgs: (msgs ?? []).length, detectados, disparados, duplicados, aprovacoes, descartes, naoAutorizados });
+    return { ok: true, mensagens_na_janela: (msgs ?? []).length, detectados, disparados, duplicados, aprovacoes, descartes, naoAutorizados };
   },
 });
