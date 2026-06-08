@@ -49,6 +49,7 @@
 - [x] **D2 (Trigger.dev):** v4 (`npx trigger.dev@4.4.6 deploy`), não v3. ✅ 2026-06-03.
 - [x] **D3 (ambiente FASE 0):** FASE 0 roda na **VPS** (`187.127.25.24`) / `cd-evonexus-lab`, não do Windows. ✅ 2026-06-03.
 - [x] **D4 (fork A vs B em `agents`): B** — catálogo global + habilitação por tenant via `tenant_agents`/`tenant_agent_config`. ✅ 2026-06-06 — evidência em `docs/evonexus-replica/FASE-1-mapeamento-multitenant.md` §3.1. **Cabeado em produção na onda 1 (2026-06-06).**
+- [x] **D6 (direcionamento SaaS, aprovada pelo Wandson em 2026-06-07):** F1 = "Defesa Comercial iFood — modo copiloto" a R$147/loja/mês · carteira intocada · gate D+90 · anti-dispersão. Doc: `docs/estrategia/DIRECIONAMENTO-SAAS-2026-06.md` + `F1-BUILD-PLAN.md`. **F1 entregue (PR1–PR7) em 2026-06-07.** ⚠️ **REABERTA pelo Wandson em 2026-06-07** (mesmo dia, pós-entrega da F1): partir para a plataforma completa sem aguardar o gate D+90 — decisão consciente do fundador, alertado sobre a colisão com a regra anti-dispersão. Detalhe no Tracker (`WikiBrain/wiki/PLANO-MESTRE — Tracker.md`).
 - [x] **D5 v2 (mandato Cowork, alterada pelo Wandson em 2026-06-06):** Cowork executa direto tudo que conseguir — incluindo **merge de PRs** e **aplicar migrations cujo SQL foi aprovado pelo Wandson** (sempre: SQL versionado antes · 1 arquivo por vez · validação com output bruto · parar no 1º erro · teste de isolamento quando tocar RLS). **Reservado ao Wandson:** aprovar o SQL antes da aplicação · `DROP`/destrutivo · mensagens a clientes (drafts) · reabrir decisões travadas / 🛑 CHECKPOINTS · credenciais e VPS. (v1 em 2026-06-06: tudo exceto merge/aplicação; v2 no mesmo dia liberou ambos.)
 
 ---
@@ -209,6 +210,7 @@ Resumo de categorias: **CORE** dashboard/agentes/oracle→DELI/skills/atividade/
 
 ### Histórico de atualizações
 
+- 2026-06-08 (v2.6) — **D6 gravada nas Decisões Travadas** (aprovada 2026-06-07 + **reaberta pelo Wandson 2026-06-07** pós-F1; detalhe no Tracker). Fecha pendência da sessão 11.
 - 2026-06-06 (v2.5) — **FASE 2 onda 1 APLICADA** (SQL aprovado #161 → aplicada via D5 v2; validações + teste de isolamento). **D5 v2:** Wandson liberou merge + aplicação de migrations aprovadas pelo Cowork. Checklist mestre detalhado movido para os docs da FASE 0/1 (histórico git ≤ v2.4).
 - 2026-06-06 (v2.4) — equipe = 1 pessoa; DELI = COO travado; CHECKPOINT 1 go.
 - 2026-06-06 (v2.3) — #156 e #152 merged; #155/#157 → #158; regra "branch nova por entrega".
