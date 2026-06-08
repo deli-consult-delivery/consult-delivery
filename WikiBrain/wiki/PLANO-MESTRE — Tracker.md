@@ -32,7 +32,7 @@ Plano da plataforma completa (Consolidação C1–C8 + telas GAP-1..8 + agentes 
 
 ## 🔴 Onde parou
 
-_Última sessão: 2026-06-08 (Cowork — sessão 15 continuação: **Frente Segurança PRs mergeados + migrations aplicadas**)_
+_Última sessão: 2026-06-08 (Cowork — sessão paralela Estúdio: **E4 + E4b — ciclo do Estúdio fechado em produção**)_
 
 ### Frente Telas — Etapa B COMPLETA (sessão 15)
 - **PR #198 ✅ merged** — T1/GAP-4: `CustosIA.jsx` (custo por agente/dia, alerta pico)
@@ -40,6 +40,12 @@ _Última sessão: 2026-06-08 (Cowork — sessão 15 continuação: **Frente Segu
 - **PR #204 ✅ merged** — T3: `Execucoes.jsx` (log agent_runs, filtros, expand JSONB)
 - **PR #205 ✅ merged** — T4/GAP-3: `AprovacoesUnificadas.jsx` (agent_drafts + defesa_casos)
 - Console v2 sidebar: **9 telas reais** (visao, defesa, radar, ativar, execucoes, aprovacoes, agentes, estudio, custos)
+
+### Frente Estúdio — E1..E4 COMPLETO + e2e provado (sessão paralela, handoff #188)
+- E1 #190 (migration `004` aplicada · RLS provada) · E2 #191 + E2b #194 (endpoint `chat/completions`+`modalities`, 404 no `/images/generations`) + E2c #195 (slug **`openai/gpt-5.4-image-2`**, conferido na API) · E3 #192 (tela fiel ao design, lock por item).
+- **E4 #208 ✅** — botão "Enviar como rascunho de campanha" → `agent_drafts` (canal painel, agent_name=estudio). **E4b #213 ✅** — corrigiu bug pré-existente da tela **Aprovações (T4/Frente Telas)**: consultava colunas inexistentes (`agent_id`/`recipient`/`aprovado_*`) e degradava a fila inteira p/ vazia (escondia TODOS os drafts, incl. Defesa). Agora usa schema real (`agent_name`/`target_id`/`reviewer_id`/`reviewed_at`) + filtro por agente (Defesa via defesa_casos, sem duplicar).
+- **ACEITE E2E (output bruto):** brief "Combo da semana" pela tela → arte 1:1 Brand Guard (SMASH DUPLO · R$ 39,90, zero emoji) + legenda → PNG público no bucket → `agent_runs` success **US$ 0,2386 · 234s** → "Enviar rascunho" gravou draft `28f57f4b` → apareceu em Aprovações → **aprovado** (`reviewer_id`+`reviewed_at` gravados). Ciclo do Estúdio fechado.
+- ⚠️ Atenção custo: imagem real ≈ **US$ 0,24** (não US$ 0,04 do design) — recalibrar "uso justo"/créditos quando precificar.
 
 ### Frente Segurança — FASE 2 onda 2 COMPLETA (sessão 14 + aprovação sessão 15)
 - **PR #200 ✅ merged** — S1/P-2: `audit.ts` com `CONSULT_TENANT_ID`. Migration 005 aplicada.
@@ -54,7 +60,7 @@ _Última sessão: 2026-06-08 (Cowork — sessão 15 continuação: **Frente Segu
 ## 👉 Próxima ação
 
 1. **PR12 (C3):** Radar real — decidir fonte de dados com o Wandson.
-2. **E4 (Estúdio):** botão "Enviar como rascunho de campanha" → `agent_drafts`.
+2. **Estúdio — Frente Telas:** revisar o fix E4b (#213) que tocou `AprovacoesUnificadas.jsx` (era da T4); alinhar antes de novas mudanças naquela tela.
 3. **Beta real:** ativar 1 loja real (tela Ativar loja) · vincular grupo · 1 semana de vigia · registrar ganho/perdido. Quando fechar 1ª loja pagante de fora: trocar `ASAAS_DEFESA_ENVIRONMENT` para production.
 4. Limpeza registros de teste (tenant sandbox + assinatura) quando Wandson autorizar.
 5. Advisors abertos: `customer_group_members`, `customer_groups`, `tarefas_analise` — policies ou desabilitar RLS.
@@ -70,7 +76,7 @@ _Última sessão: 2026-06-08 (Cowork — sessão 15 continuação: **Frente Segu
 | T3 | Visual-First / telas | ✅ | F1 + Estúdio entregues no design definitivo |
 | T4 | Hermes | 🔄 | aguarda GATE 0 |
 | T5 | Segurança | ✅ | **onda 2 fechada**: NOT NULL + grants revogados + RLS verificada |
-| T6 | Agentes IA | ✅ | DEFESA+VIGIA+allowlist ativos; ESTÚDIO em produção |
+| T6 | Agentes IA | ✅ | DEFESA+VIGIA+allowlist ativos; **ESTÚDIO completo (E1..E4) em produção** |
 | T7 | PILOTO | 🔄 | Onda 03 não aplicada |
 | T8 | Infra/CI | ✅ | deploy triplo automático confirmado |
 | T9 | Negócio | 🔓 D6 reaberta | PLATAFORMA VENDE E COBRA SOZINHA (sandbox provado) — falta 1º cliente real |
@@ -78,6 +84,10 @@ _Última sessão: 2026-06-08 (Cowork — sessão 15 continuação: **Frente Segu
 ---
 
 ## 📋 Log de sessões
+
+### 2026-06-08 (sessão paralela Estúdio — E4 + E4b)
+- E4 #208: "Enviar como rascunho de campanha" → agent_drafts (canal painel). E4b #213: fix da tela Aprovações (schema real agent_drafts; tocou arquivo da Frente Telas — alinhar).
+- Aceite e2e fechado: draft `28f57f4b` → fila de Aprovações → aprovado (reviewer_id/reviewed_at). Custo imagem real ≈ US$ 0,24.
 
 ### 2026-06-08 (sessão 15 continuação — aprovação Frente Segurança + execução)
 - Wandson: "Já aprovei na Frente Segurança"
@@ -106,7 +116,7 @@ _Última sessão: 2026-06-08 (Cowork — sessão 15 continuação: **Frente Segu
 - PRs #200–203 criados (aprovação pendente → executada na sessão 15)
 
 ### 2026-06-08 (sessão paralela — ESTÚDIO DE CONTEÚDO: E1+E2+E3 + aceite e2e)
-- E1 #190 (migration 004, RLS provada) · E2 #191+fixes E2b #194+E2c #195 · E3 #192 (tela fiel). Aceite e2e: brief→arte Brand Guard→bucket US$0,2386/234s. Resta E4.
+- E1 #190 · E2 #191/#194/#195 · E3 #192 · **E4 #208 + E4b #213** (fix tela Aprovações). Aceite e2e completo: brief→arte Brand Guard→bucket US$0,2386/234s→rascunho na fila→aprovado.
 
 ### 2026-06-08 (sessão 13 — Cowork: PR9 + PR10 — multi-tenant + monetização)
 - D7 decidida · PR9 #187 (Clientes + gating D7) · PR10 #189 (assinaturas Asaas)
