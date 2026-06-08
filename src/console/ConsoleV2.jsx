@@ -1,14 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
 import AtivarLoja from './AtivarLoja.jsx';
+import Clientes from './Clientes.jsx';
 import './console.css';
 
 // ============================================================
-// Console v2 · F1 — Defesa Comercial (copiloto)  [D6 aprovada 2026-06-07]
-// PR6: ciclo completo do caso — aguardando_ok → aprovado → enviado →
-// ganho (com valor recuperado) | perdido. "R$ defendido" acumula via view.
-// PR7: onboarding self-service (Ativar loja).
-// Radar segue com DADOS DE EXEMPLO (sem fonte de dados ainda).
+// Console v2 · F1+ — [D6 aprovada e REABERTA pelo fundador em 2026-06-07]
+// PR6: ciclo do caso · PR7: Ativar loja · PR9: Clientes (multi-tenant)
+// + gating D7: Defesa só com assinatura (tenant_agents); Radar grátis.
 // ============================================================
 
 const GRUPOS = [
@@ -22,10 +21,10 @@ const GRUPOS = [
     { id: 'x1', label: 'Análise de Loja' }, { id: 'x2', label: 'Cardápio' }, { id: 'x3', label: 'Multicanal' },
   ]},
   { label: 'Dados', locked: true, items: [{ id: 'x4', label: 'Custos de IA' }] },
-  { label: 'Admin', locked: true, items: [{ id: 'x5', label: 'White-label' }] },
+  { label: 'Admin', items: [{ id: 'clientes', label: 'Clientes (plataforma)' }] },
 ];
 
-const TITULOS = { visao: 'Visão Geral', defesa: 'Defesa Comercial', radar: 'Radar', ativar: 'Ativar loja' };
+const TITULOS = { visao: 'Visão Geral', defesa: 'Defesa Comercial', radar: 'Radar', ativar: 'Ativar loja', clientes: 'Clientes' };
 
 const OK_STATUSES = ['ok', 'completed', 'success'];
 const fmtBRL = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -110,6 +109,25 @@ function VisaoGeral({ tenantNome, tenantDbId, onIrDefesa }) {
         <div style={{ marginTop: 12 }}>
           <button className="cv2-btn" onClick={onIrDefesa}>Abrir fila de Defesa</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function PaywallDefesa() {
+  return (
+    <div>
+      <h1>Defesa Comercial <span className="cv2-mock">NÃO ATIVA NESTE WORKSPACE</span></h1>
+      <div className="cv2-rule" />
+      <div className="cv2-card" style={{ maxWidth: 620 }}>
+        <h3>Pare de perder dinheiro com cancelamentos</h3>
+        <div style={{ fontSize: 13, color: 'var(--tx2)', lineHeight: 1.9 }}>
+          A Defesa Comercial vigia os cancelamentos e avaliações da sua loja 24h por dia, prepara a contestação com a melhor chance de vitória e espera o seu OK — pelo painel ou respondendo “@defesa ok” no WhatsApp. O painel mostra, mês a mês, quanto dinheiro foi defendido.
+        </div>
+        <div style={{ margin: '14px 0 6px', fontSize: 22, fontWeight: 800 }}>R$ 147<span style={{ fontSize: 13, fontWeight: 600, color: 'var(--tx2)' }}> /loja/mês · sem taxa de ativação</span></div>
+        <div style={{ fontSize: 12.5, color: 'var(--tx2)', marginBottom: 14 }}>O Radar gratuito continua disponível no menu ao lado — ele mostra quanto está vazando.</div>
+        <button className="cv2-btn" onClick={() => { window.location.href = 'mailto:wandson@consultdelivery.com.br?subject=Quero ativar a Defesa Comercial'; }}>Quero ativar a Defesa</button>
+        <div style={{ fontSize: 11.5, color: 'var(--tx2)', marginTop: 10 }}>Assinatura automática em breve — por enquanto a ativação é feita pela equipe Consult Delivery em até 1 dia útil.</div>
       </div>
     </div>
   );
@@ -284,7 +302,18 @@ function Radar({ tenantNome }) {
 
 export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
   const [tela, setTela] = useState('visao');
+  const [defesaOn, setDefesaOn] = useState(null); // null = carregando
   const tenantNome = tenantInfo?.name || 'Workspace';
+
+  useEffect(() => {
+    if (!tenantDbId) return;
+    let alive = true;
+    supabase.from('tenant_agents').select('*', { count: 'exact', head: true })
+      .eq('tenant_id', tenantDbId).eq('agent_id', 'defesa')
+      .then(({ count }) => { if (alive) setDefesaOn((count ?? 0) > 0); });
+    return () => { alive = false; };
+  }, [tenantDbId]);
+
   return (
     <div className="cv2">
       <aside className="cv2-sb">
@@ -293,15 +322,15 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
           <div>
             <span className="anton">Consult</span>
             <span className="anton">Delivery</span>
-            <small>CONSOLE · F1 BETA</small>
+            <small>CONSOLE · BETA</small>
           </div>
         </div>
         {GRUPOS.map((g, i) => (
           <div key={i}>
             <div className="cv2-grp">{g.label}</div>
             {g.items.map(it => g.locked ? (
-              <div key={it.id} className="cv2-item lock" title="Disponível na Fase 2 — após o gate D+90 (regra anti-dispersão da D6)">
-                {it.label}<span className="f2">F2</span>
+              <div key={it.id} className="cv2-item lock" title="Em construção — próximas fases do roadmap">
+                {it.label}<span className="f2">EM BREVE</span>
               </div>
             ) : (
               <div key={it.id} className={`cv2-item${tela === it.id ? ' on' : ''}`} onClick={() => setTela(it.id)}>{it.label}</div>
@@ -317,13 +346,14 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
           <span className="crumb">Console › <b>{TITULOS[tela] || tela}</b></span>
           <span style={{ flex: 1 }} />
           <span className="cv2-pill">Cliente <b>{tenantNome}</b></span>
-          <span className="cv2-pill"><b>BETA F1</b></span>
+          <span className="cv2-pill"><b>{defesaOn === false ? 'RADAR GRÁTIS' : 'BETA'}</b></span>
         </div>
         <div className="cv2-ct">
           {tela === 'visao' && <VisaoGeral tenantNome={tenantNome} tenantDbId={tenantDbId} onIrDefesa={() => setTela('defesa')} />}
-          {tela === 'defesa' && <Defesa tenantDbId={tenantDbId} userId={userId} />}
+          {tela === 'defesa' && (defesaOn === false ? <PaywallDefesa /> : <Defesa tenantDbId={tenantDbId} userId={userId} />)}
           {tela === 'radar' && <Radar tenantNome={tenantNome} />}
           {tela === 'ativar' && <AtivarLoja tenantDbId={tenantDbId} />}
+          {tela === 'clientes' && <Clientes userId={userId} />}
         </div>
       </div>
     </div>
