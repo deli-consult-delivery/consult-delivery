@@ -75,17 +75,17 @@ function fmtDate(iso) {
 // ── Shared input styles ───────────────────────────────────────────────────────
 const INPUT_STYLE = {
   display: 'block', width: '100%', marginTop: 4, padding: '8px 12px',
-  background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)',
-  borderRadius: 8, color: '#fff', fontSize: 14, boxSizing: 'border-box',
+  background: 'var(--white)', border: '1px solid var(--g-200)',
+  borderRadius: 8, color: 'var(--g-900)', fontSize: 14, boxSizing: 'border-box',
 };
-const SELECT_STYLE = { ...INPUT_STYLE, background: '#1a1a1a' };
-const LABEL_STYLE  = { color: '#ccc', fontSize: 13 };
+const SELECT_STYLE = { ...INPUT_STYLE, background: 'var(--white)' };
+const LABEL_STYLE  = { color: 'var(--g-700)', fontSize: 13 };
 
 // ── ProgressBar ───────────────────────────────────────────────────────────────
 function ProgressBar({ pct, height = 6 }) {
   const color = progressColor(pct);
   return (
-    <div style={{ height, background: 'rgba(255,255,255,0.08)', borderRadius: height, overflow: 'hidden' }}>
+    <div style={{ height, background: 'var(--g-200)', borderRadius: height, overflow: 'hidden' }}>
       <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: height, transition: 'width 0.3s' }} />
     </div>
   );
@@ -98,10 +98,10 @@ function Modal({ title, onClose, children }) {
       onClick={e => e.target === e.currentTarget && onClose()}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
     >
-      <div style={{ maxWidth: 560, width: '95%', maxHeight: '90vh', overflowY: 'auto', background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: 24 }}>
+      <div style={{ maxWidth: 560, width: '95%', maxHeight: '90vh', overflowY: 'auto', background: 'var(--white)', border: '1px solid var(--g-200)', borderRadius: 12, padding: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h2 style={{ margin: 0, fontSize: 18, color: '#fff' }}>{title}</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#888', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>×</button>
+          <h2 style={{ margin: 0, fontSize: 18, color: 'var(--g-900)' }}>{title}</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--g-500)', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>×</button>
         </div>
         {children}
       </div>
@@ -114,7 +114,7 @@ function ModalActions({ onClose, onSave, saving, saveLabel }) {
     <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
       <button
         onClick={onClose}
-        style={{ padding: '8px 20px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#ccc', cursor: 'pointer', fontSize: 14 }}
+        style={{ padding: '8px 20px', background: 'var(--g-100)', border: '1px solid var(--g-200)', borderRadius: 8, color: 'var(--g-700)', cursor: 'pointer', fontSize: 14 }}
       >
         Cancelar
       </button>
@@ -419,43 +419,43 @@ function TaskRow({ task, onToggleDone, onEdit, onDelete }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px',
-      borderRadius: 6, background: done ? 'rgba(34,197,94,0.05)' : 'rgba(255,255,255,0.03)',
-      border: `1px solid ${done ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.06)'}`,
+      borderRadius: 6, background: done ? 'rgba(34,197,94,0.05)' : 'var(--g-50)',
+      border: `1px solid ${done ? 'rgba(34,197,94,0.15)' : 'var(--g-200)'}`,
     }}>
       <button
         onClick={handleCheck}
         disabled={toggling}
         style={{
           width: 18, height: 18, flexShrink: 0, borderRadius: 4, cursor: toggling ? 'not-allowed' : 'pointer',
-          background: done ? '#22c55e' : 'rgba(255,255,255,0.08)',
-          border: `2px solid ${done ? '#22c55e' : 'rgba(255,255,255,0.2)'}`,
+          background: done ? '#22c55e' : 'var(--g-100)',
+          border: `2px solid ${done ? '#22c55e' : 'var(--g-200)'}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: '#fff', fontSize: 11, padding: 0,
         }}
       >
         {done && '✓'}
       </button>
-      <span style={{ flex: 1, fontSize: 13, color: done ? '#6b7280' : '#ccc', textDecoration: done ? 'line-through' : 'none' }}>
+      <span style={{ flex: 1, fontSize: 13, color: done ? '#6b7280' : 'var(--g-700)', textDecoration: done ? 'line-through' : 'none' }}>
         {task.title}
       </span>
       {task.assignee_agent && (
-        <span style={{ fontSize: 11, color: '#555', background: 'rgba(255,255,255,0.05)', borderRadius: 4, padding: '2px 6px' }}>
+        <span style={{ fontSize: 11, color: 'var(--g-500)', background: 'var(--g-100)', borderRadius: 4, padding: '2px 6px' }}>
           {task.assignee_agent}
         </span>
       )}
       {task.priority && task.priority !== 'medium' && (
-        <span style={{ fontSize: 11, color: PRIORITY_COLORS[task.priority] || '#6b7280', background: 'rgba(255,255,255,0.05)', borderRadius: 4, padding: '2px 6px', textTransform: 'capitalize' }}>
+        <span style={{ fontSize: 11, color: PRIORITY_COLORS[task.priority] || '#6b7280', background: 'var(--g-100)', borderRadius: 4, padding: '2px 6px', textTransform: 'capitalize' }}>
           {PRIORITY_OPTIONS.find(p => p.value === task.priority)?.label || task.priority}
         </span>
       )}
       <button
         onClick={() => onEdit(task)}
-        style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 13, padding: '2px 4px', lineHeight: 1 }}
+        style={{ background: 'none', border: 'none', color: 'var(--g-500)', cursor: 'pointer', fontSize: 13, padding: '2px 4px', lineHeight: 1 }}
         title="Editar"
       >✏️</button>
       <button
         onClick={() => onDelete(task)}
-        style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 13, padding: '2px 4px', lineHeight: 1 }}
+        style={{ background: 'none', border: 'none', color: 'var(--g-500)', cursor: 'pointer', fontSize: 13, padding: '2px 4px', lineHeight: 1 }}
         title="Remover"
       >🗑</button>
     </div>
@@ -469,18 +469,18 @@ function GoalCard({ goal, onEditGoal, onDeleteGoal, onAddTask, onEditTask, onDel
   const tasks = goal.tasks || [];
 
   return (
-    <div style={{ marginLeft: 20, marginBottom: 8, border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, overflow: 'hidden' }}>
+    <div style={{ marginLeft: 20, marginBottom: 8, border: '1px solid var(--g-200)', borderRadius: 8, overflow: 'hidden' }}>
       {/* Goal header */}
       <div
-        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', cursor: 'pointer', background: 'rgba(255,255,255,0.03)' }}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', cursor: 'pointer', background: 'var(--g-50)' }}
         onClick={() => setOpen(o => !o)}
       >
-        <span style={{ color: '#555', fontSize: 12, flexShrink: 0 }}>{open ? '▼' : '▶'}</span>
+        <span style={{ color: 'var(--g-500)', fontSize: 12, flexShrink: 0 }}>{open ? '▼' : '▶'}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 14, color: '#e5e5e5', fontWeight: 500 }}>{goal.title}</span>
-            <span style={{ fontSize: 12, color: '#888' }}>{fmtMetric(goal)}</span>
-            {goal.due_date && <span style={{ fontSize: 11, color: '#555' }}>até {fmtDate(goal.due_date)}</span>}
+            <span style={{ fontSize: 14, color: 'var(--g-900)', fontWeight: 500 }}>{goal.title}</span>
+            <span style={{ fontSize: 12, color: 'var(--g-500)' }}>{fmtMetric(goal)}</span>
+            {goal.due_date && <span style={{ fontSize: 11, color: 'var(--g-500)' }}>até {fmtDate(goal.due_date)}</span>}
           </div>
           <div style={{ marginTop: 4 }}>
             <ProgressBar pct={pct} height={4} />
@@ -490,20 +490,20 @@ function GoalCard({ goal, onEditGoal, onDeleteGoal, onAddTask, onEditTask, onDel
         <div style={{ display: 'flex', gap: 4 }} onClick={e => e.stopPropagation()}>
           <button
             onClick={() => onAddTask(goal)}
-            style={{ fontSize: 11, padding: '3px 8px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 5, color: '#aaa', cursor: 'pointer' }}
+            style={{ fontSize: 11, padding: '3px 8px', background: 'var(--g-100)', border: '1px solid var(--g-200)', borderRadius: 5, color: 'var(--g-700)', cursor: 'pointer' }}
           >
             + Tarefa
           </button>
-          <button onClick={() => onEditGoal(goal)} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 13, padding: '2px 4px' }} title="Editar meta">✏️</button>
-          <button onClick={() => onDeleteGoal(goal)} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 13, padding: '2px 4px' }} title="Remover meta">🗑</button>
+          <button onClick={() => onEditGoal(goal)} style={{ background: 'none', border: 'none', color: 'var(--g-500)', cursor: 'pointer', fontSize: 13, padding: '2px 4px' }} title="Editar meta">✏️</button>
+          <button onClick={() => onDeleteGoal(goal)} style={{ background: 'none', border: 'none', color: 'var(--g-500)', cursor: 'pointer', fontSize: 13, padding: '2px 4px' }} title="Remover meta">🗑</button>
         </div>
       </div>
 
       {/* Tasks */}
       {open && (
-        <div style={{ padding: '8px 14px 12px', background: 'rgba(0,0,0,0.2)' }}>
+        <div style={{ padding: '8px 14px 12px', background: 'var(--g-50)' }}>
           {tasks.length === 0 ? (
-            <div style={{ color: '#555', fontSize: 12, fontStyle: 'italic', padding: '4px 0' }}>Nenhuma tarefa ainda</div>
+            <div style={{ color: 'var(--g-500)', fontSize: 12, fontStyle: 'italic', padding: '4px 0' }}>Nenhuma tarefa ainda</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               {tasks.map(t => (
@@ -533,37 +533,37 @@ function ProjectCard({ project, allGoals, onEditProject, onDeleteProject, onAddG
   const pct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
 
   return (
-    <div style={{ marginLeft: 16, marginBottom: 8, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, overflow: 'hidden' }}>
+    <div style={{ marginLeft: 16, marginBottom: 8, border: '1px solid var(--g-200)', borderRadius: 8, overflow: 'hidden' }}>
       {/* Project header */}
       <div
-        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', cursor: 'pointer', background: 'rgba(255,255,255,0.025)' }}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', cursor: 'pointer', background: 'var(--g-50)' }}
         onClick={() => setOpen(o => !o)}
       >
-        <span style={{ color: '#555', fontSize: 12, flexShrink: 0 }}>{open ? '▼' : '▶'}</span>
+        <span style={{ color: 'var(--g-500)', fontSize: 12, flexShrink: 0 }}>{open ? '▼' : '▶'}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 14, color: '#d4d4d4', fontWeight: 500 }}>{project.title}</span>
-            <span style={{ fontSize: 12, color: '#666' }}>{goals.length} meta{goals.length !== 1 ? 's' : ''}</span>
+            <span style={{ fontSize: 14, color: 'var(--g-900)', fontWeight: 500 }}>{project.title}</span>
+            <span style={{ fontSize: 12, color: 'var(--g-500)' }}>{goals.length} meta{goals.length !== 1 ? 's' : ''}</span>
           </div>
           {goals.length > 0 && <div style={{ marginTop: 4 }}><ProgressBar pct={pct} height={3} /></div>}
         </div>
         <div style={{ display: 'flex', gap: 4 }} onClick={e => e.stopPropagation()}>
           <button
             onClick={() => onAddGoal(project)}
-            style={{ fontSize: 11, padding: '3px 8px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 5, color: '#aaa', cursor: 'pointer' }}
+            style={{ fontSize: 11, padding: '3px 8px', background: 'var(--g-100)', border: '1px solid var(--g-200)', borderRadius: 5, color: 'var(--g-700)', cursor: 'pointer' }}
           >
             + Meta
           </button>
-          <button onClick={() => onEditProject(project)} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 13, padding: '2px 4px' }} title="Editar projeto">✏️</button>
-          <button onClick={() => onDeleteProject(project)} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 13, padding: '2px 4px' }} title="Remover projeto">🗑</button>
+          <button onClick={() => onEditProject(project)} style={{ background: 'none', border: 'none', color: 'var(--g-500)', cursor: 'pointer', fontSize: 13, padding: '2px 4px' }} title="Editar projeto">✏️</button>
+          <button onClick={() => onDeleteProject(project)} style={{ background: 'none', border: 'none', color: 'var(--g-500)', cursor: 'pointer', fontSize: 13, padding: '2px 4px' }} title="Remover projeto">🗑</button>
         </div>
       </div>
 
       {/* Goals */}
       {open && (
-        <div style={{ padding: '8px 0 4px', background: 'rgba(0,0,0,0.15)' }}>
+        <div style={{ padding: '8px 0 4px', background: 'var(--g-50)' }}>
           {goals.length === 0 ? (
-            <div style={{ color: '#555', fontSize: 12, fontStyle: 'italic', padding: '4px 30px' }}>Nenhuma meta ainda</div>
+            <div style={{ color: 'var(--g-500)', fontSize: 12, fontStyle: 'italic', padding: '4px 30px' }}>Nenhuma meta ainda</div>
           ) : (
             <div style={{ padding: '0 8px' }}>
               {goals.map(g => (
@@ -601,8 +601,8 @@ function MissionCard({ mission, projects, goals, onEditMission, onDeleteMission,
 
   return (
     <div style={{
-      background: 'rgba(255,255,255,0.04)',
-      border: '1px solid rgba(255,255,255,0.1)',
+      background: 'var(--white)',
+      border: '1px solid var(--g-200)',
       borderRadius: 12,
       overflow: 'hidden',
       marginBottom: 16,
@@ -612,26 +612,26 @@ function MissionCard({ mission, projects, goals, onEditMission, onDeleteMission,
         style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', cursor: 'pointer' }}
         onClick={() => setOpen(o => !o)}
       >
-        <span style={{ color: '#777', fontSize: 13, flexShrink: 0 }}>{open ? '▼' : '▶'}</span>
+        <span style={{ color: 'var(--g-500)', fontSize: 13, flexShrink: 0 }}>{open ? '▼' : '▶'}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <h3 style={{ margin: 0, fontSize: 16, color: '#fff', fontWeight: 600 }}>{mission.title}</h3>
+            <h3 style={{ margin: 0, fontSize: 16, color: 'var(--g-900)', fontWeight: 600 }}>{mission.title}</h3>
             <span style={{ fontSize: 12, color: statusColor, background: `${statusColor}18`, borderRadius: 4, padding: '2px 8px' }}>
               {statusLabel}
             </span>
             {mission.due_date && (
-              <span style={{ fontSize: 12, color: '#666' }}>até {fmtDate(mission.due_date)}</span>
+              <span style={{ fontSize: 12, color: 'var(--g-500)' }}>até {fmtDate(mission.due_date)}</span>
             )}
           </div>
           {mission.description && (
-            <p style={{ margin: '2px 0 0', color: '#777', fontSize: 13 }}>{mission.description}</p>
+            <p style={{ margin: '2px 0 0', color: 'var(--g-700)', fontSize: 13 }}>{mission.description}</p>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
             <div style={{ flex: 1, maxWidth: 300 }}>
               <ProgressBar pct={pct} height={5} />
             </div>
             <span style={{ fontSize: 12, color: progressColor(pct), fontWeight: 600 }}>{pct}%</span>
-            <span style={{ fontSize: 12, color: '#555' }}>
+            <span style={{ fontSize: 12, color: 'var(--g-500)' }}>
               {doneTasks}/{totalTasks} tarefas · {mProjects.length} projeto{mProjects.length !== 1 ? 's' : ''} · {mGoals.length} meta{mGoals.length !== 1 ? 's' : ''}
             </span>
           </div>
@@ -639,20 +639,20 @@ function MissionCard({ mission, projects, goals, onEditMission, onDeleteMission,
         <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
           <button
             onClick={() => onAddProject(mission)}
-            style={{ fontSize: 12, padding: '5px 12px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: '#ccc', cursor: 'pointer' }}
+            style={{ fontSize: 12, padding: '5px 12px', background: 'var(--g-100)', border: '1px solid var(--g-200)', borderRadius: 6, color: 'var(--g-700)', cursor: 'pointer' }}
           >
             + Projeto
           </button>
-          <button onClick={() => onEditMission(mission)} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: 15, padding: '4px' }} title="Editar missão">✏️</button>
-          <button onClick={() => onDeleteMission(mission)} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: 15, padding: '4px' }} title="Remover missão">🗑</button>
+          <button onClick={() => onEditMission(mission)} style={{ background: 'none', border: 'none', color: 'var(--g-500)', cursor: 'pointer', fontSize: 15, padding: '4px' }} title="Editar missão">✏️</button>
+          <button onClick={() => onDeleteMission(mission)} style={{ background: 'none', border: 'none', color: 'var(--g-500)', cursor: 'pointer', fontSize: 15, padding: '4px' }} title="Remover missão">🗑</button>
         </div>
       </div>
 
       {/* Projects */}
       {open && (
-        <div style={{ padding: '4px 8px 12px', borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.1)' }}>
+        <div style={{ padding: '4px 8px 12px', borderTop: '1px solid var(--g-200)', background: 'var(--g-50)' }}>
           {mProjects.length === 0 ? (
-            <div style={{ color: '#555', fontSize: 13, fontStyle: 'italic', padding: '12px 10px' }}>
+            <div style={{ color: 'var(--g-500)', fontSize: 13, fontStyle: 'italic', padding: '12px 10px' }}>
               Nenhum projeto nesta missão.
             </div>
           ) : (
@@ -849,8 +849,8 @@ export default function GoalsScreen({ tenantDbId, onNavigate }) {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 22, color: '#fff', fontWeight: 700 }}>Metas & OKR</h1>
-          <p style={{ margin: '4px 0 0', color: '#888', fontSize: 14 }}>
+          <h1 style={{ margin: 0, fontSize: 22, color: 'var(--g-900)', fontWeight: 700 }}>Metas & OKR</h1>
+          <p style={{ margin: '4px 0 0', color: 'var(--g-500)', fontSize: 14 }}>
             Missões, projetos, metas e tarefas — tudo conectado
           </p>
         </div>
@@ -866,14 +866,14 @@ export default function GoalsScreen({ tenantDbId, onNavigate }) {
       {!loading && missions.length > 0 && (
         <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
           {[
-            { label: 'Missões',         value: totalMissions,  color: '#fff' },
+            { label: 'Missões',         value: totalMissions,  color: 'var(--g-900)' },
             { label: 'Metas ativas',    value: activeGoals,    color: '#22c55e' },
             { label: 'Tarefas hoje',    value: doneTodayCount, color: '#f59e0b' },
             { label: 'Progresso geral', value: `${totalPct}%`, color: progressColor(totalPct) },
           ].map(s => (
-            <div key={s.label} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '10px 18px', minWidth: 90 }}>
+            <div key={s.label} style={{ background: 'var(--white)', border: '1px solid var(--g-200)', borderRadius: 8, padding: '10px 18px', minWidth: 90 }}>
               <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
-              <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>{s.label}</div>
+              <div style={{ fontSize: 12, color: 'var(--g-500)', marginTop: 2 }}>{s.label}</div>
             </div>
           ))}
         </div>
@@ -889,11 +889,11 @@ export default function GoalsScreen({ tenantDbId, onNavigate }) {
 
       {/* Content */}
       {loading ? (
-        <div style={{ color: '#666', textAlign: 'center', padding: 60 }}>Carregando metas…</div>
+        <div style={{ color: 'var(--g-500)', textAlign: 'center', padding: 60 }}>Carregando metas…</div>
       ) : missions.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 20px', color: '#666' }}>
+        <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--g-500)' }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>🎯</div>
-          <div style={{ fontSize: 16, color: '#888', marginBottom: 8 }}>Nenhuma missão cadastrada</div>
+          <div style={{ fontSize: 16, color: 'var(--g-700)', marginBottom: 8 }}>Nenhuma missão cadastrada</div>
           <div style={{ fontSize: 13, marginBottom: 24 }}>
             Crie sua primeira missão para começar a rastrear metas.
           </div>
