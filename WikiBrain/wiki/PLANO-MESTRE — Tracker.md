@@ -38,7 +38,11 @@ _Última sessão: 2026-06-08 (Cowork — sessão 13: **PR9 multi-tenant + PR10 a
 - **PR10 ✅ (#189) + migrations 008/009 aplicadas:** assinaturas da Defesa via **fila-por-tabela** (`defesa_assinaturas`): tela grava `pendente` (policy INSERT admin, isolamento provado: admin insere/intruso bloqueado) → `defesa-criar-assinatura` (cron 5min) cria customer+subscription R$147 MONTHLY no Asaas → `defesa-sync-assinaturas` (cron 15min) **liga a Defesa quando paga** e desliga com 2+ vencidas. Cliente Asaas próprio (`ASAAS_DEFESA_*` com fallback) — **sandbox da Defesa sem tocar a config da CORA** (Wandson cadastrou as env vars).
 - **PROVA E2E EM SANDBOX (output bruto):** fila 02:53:59 → customer `cus_000008114142` + sub `sub_5oxdzvzhqufpzefz` + link `sandbox.asaas.com/i/w7k5q6...` em **68s** → Wandson confirmou pagamento → sync 03:30:35: status **ativa** · cobrança **RECEIVED** · **`tenant_agents` defesa criada SOZINHA** · notificação "ATIVADA" no sino. **Ciclo comercial autônomo: criar cliente → Radar grátis → assinar → pagou, ligou → atrasou 2, desligou.**
 - **Correção de registro:** a pendência "deploy do worker" da sessão 12 **não existia** — deploy do worker é AUTOMÁTICO via Actions em todo push à main (provado na página Deployments: `20260608.2` do commit do PR8, "Automatically triggered by pushes to main"). Allowlist do PR8 está ATIVA em produção desde 22:33 de 07/06.
-- **Sessão paralela do Estúdio de Conteúdo** rodando com handoff próprio (`docs/handoff/HANDOFF-ESTUDIO-CONTEUDO.md`, #188): GPT Image 2 via OpenRouter (key já existia no Trigger), Console v2 grupo Agentes IA, plano E1-E4. Coordenação: prefixo `feat/estudio-*`, rebase em ConsoleV2.
+- **🎨 SESSÃO PARALELA DO ESTÚDIO — E1+E2+E3 ENTREGUES E ACEITE E2E PROVADO (2026-06-08):**
+  - **E1 ✅ (#190) + migration `20260608_004` aplicada** (SQL aprovado): `estudio_criacoes` (fila→gerando→pronto→aprovado|erro, padrão PR10) + bucket público `estudio` + seed agente `estudio` (specialist, só consult). RLS provada: membro insere/intruso 0 e bloqueado no INSERT (42501).
+  - **E2 ✅ (#191) + E2b (#194) + E2c (#195):** task `estudio-gerar` (cron 2min) — copy claude-sonnet-4-6 no Brand Guard + imagem OpenRouter + PNG no bucket + `logAgentRun` custo real. 2 correções provadas com output bruto em produção: endpoint é `chat/completions`+`modalities` (404 no `/images/generations`) e slug real do GPT Image 2 é **`openai/gpt-5.4-image-2`** (`gpt-image-2` = 400; lista de modelos conferida na API). `ESTUDIO_IMAGE_MODEL` sobrescreve.
+  - **E3 ✅ (#192):** tela `Estudio.jsx` fiel ao design aprovado (3 colunas BRIEF·RESULTADO·BIBLIOTECA, 4 estados, poll 5s, exemplos clicáveis) + grupo Agentes IA com lock por item (só Estúdio liberado). Desvio registrado: sem chip de saldo OpenRouter (sem endpoint seguro no frontend; entra com GAP-4 Custos).
+  - **ACEITE E2E EM PRODUÇÃO (output bruto):** brief real pela tela ("Combo da semana") → fila → worker → **arte 1:1 no Brand Guard** (SMASH DUPLO · R$ 39,90, zero emoji) + legenda 214 chars ("Oferta válida", nunca "promoção") → PNG público no bucket (`…/estudio/9079bd4d…/b70a072d….png`) → `agent_runs` success **US$ 0,2386 · 234s** → thumbnail na Biblioteca; caminho de erro também provado (2 runs failed auditados + estado de erro na tela). Falta só **E4** (Enviar como rascunho de campanha → `agent_drafts`).
 - Restos de teste no banco (manter p/ inspeção do Wandson; limpar depois): tenant `Cliente Teste Sandbox` (fd7d9eb9) + assinatura ativa de teste + assinatura/customer no sandbox Asaas.
 - **⚠️ Pendentes antigos:** `.obsidian/*`/`log.md` · grants órfãos P-5 · rotação credenciais · 2 ajustes protótipo Claude Design.
 
@@ -47,7 +51,7 @@ _Última sessão: 2026-06-08 (Cowork — sessão 13: **PR9 multi-tenant + PR10 a
 ## 👉 Próxima ação
 
 1. **Etapa A — itens restantes:** PR11 (C5-C7: FASE 2 onda 2 — P-2 cutover logAgentRun · P-3 contract user_agent_access · P-4 tenant_agent_config · P-5 grants órfãos) · PR12 (C3: Radar real — decidir fonte de dados com o Wandson).
-2. **Depois da Etapa A:** Etapa B (telas GAP-1..4 no Console v2) → Etapa C (agentes novos / ex-F2) → Etapa D (white-label). Estúdio corre em paralelo na outra sessão.
+2. **Depois da Etapa A:** Etapa B (telas GAP-1..4 no Console v2) → Etapa C (agentes novos / ex-F2) → Etapa D (white-label). **Estúdio: resta E4** (botão "Enviar como rascunho de campanha" → `agent_drafts` canal painel) — sessão paralela.
 3. **Wandson — beta real:** ativar 1 loja real (tela Ativar loja) · vincular grupo · 1 semana de vigia · registrar ganho/perdido. Quando fechar a 1ª loja pagante de fora: trocar `ASAAS_DEFESA_ENVIRONMENT` p/ production (ou remover o override).
 4. Limpeza dos registros de teste (tenant sandbox + assinatura) quando o Wandson autorizar.
 
@@ -59,10 +63,10 @@ _Última sessão: 2026-06-08 (Cowork — sessão 13: **PR9 multi-tenant + PR10 a
 |-------|------|--------|-------------|
 | T1 | Plataforma CD (V1→V3) | 🔄 | Console v2: 5 telas reais + Clientes/paywall (PR9/PR10) |
 | T2 | EvoNexus-replica | ✅ onda 1 | onda 2 = PR11 (próximo da Etapa A) |
-| T3 | Visual-First / telas | 🔄 | F1 ✅ no design definitivo; Estúdio em design (sessão paralela) |
+| T3 | Visual-First / telas | ✅ | F1 + Estúdio entregues no design definitivo |
 | T4 | Hermes | 🔄 | aguarda GATE 0 |
 | T5 | Segurança | ✅ | RLS provada em defesa_casos/aprovadores/assinaturas (008/009) |
-| T6 | Agentes IA | ✅ | DEFESA+VIGIA+allowlist ativos; Estúdio em gestação |
+| T6 | Agentes IA | ✅ | DEFESA+VIGIA+allowlist ativos; **ESTÚDIO em produção (e2e provado)** |
 | T7 | PILOTO | 🔄 | Onda 03 não aplicada |
 | T8 | Infra/CI | ✅ | deploy triplo automático (Pages+Trigger+Bridge self-hosted) confirmado |
 | T9 | Negócio | 🔓 D6 reaberta | **PLATAFORMA VENDE E COBRA SOZINHA (sandbox provado) — falta 1º cliente real** |
@@ -70,6 +74,10 @@ _Última sessão: 2026-06-08 (Cowork — sessão 13: **PR9 multi-tenant + PR10 a
 ---
 
 ## 📋 Log de sessões
+
+### 2026-06-08 (sessão paralela — ESTÚDIO DE CONTEÚDO: E1+E2+E3 + aceite e2e)
+- Handoff #188 assumido · design aprovado conferido ao vivo no Claude Design · E1 #190 (migration 004 aplicada, RLS provada) · E2 #191 + fixes E2b #194 (endpoint chat/completions+modalities) e E2c #195 (slug `openai/gpt-5.4-image-2`) · E3 #192 (tela fiel, lock por item no Agentes IA)
+- Aceite e2e em produção: brief pela tela → arte + legenda Brand Guard → bucket + agent_runs US$0,2386/234s → biblioteca. Resta E4.
 
 ### 2026-06-08 (sessão 13 — Cowork: PR9 + PR10 — multi-tenant + monetização)
 - D7 decidida (Radar grátis até pagar · R$147 sem setup) · PR9 #187 (Clientes + gating D7) · PR10 #189 (assinaturas Asaas fila→cron→sync)
