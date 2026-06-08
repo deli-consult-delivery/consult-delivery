@@ -1,5 +1,10 @@
 import { getSupabase } from "./supabase";
 
+// UUID do tenant Consult Delivery — único tenant em produção.
+// Tasks de sistema (cron sem contexto de tenant) logeiam sob este tenant.
+// Após o cutover P-2, agent_runs.tenant_id é NOT NULL em todas as linhas.
+const CONSULT_TENANT_ID = "9079bd4d-4df7-4023-90fb-d79c8ba7e900";
+
 interface AgentRunLog {
   runId: string;
   agentSlug: string;
@@ -30,7 +35,7 @@ export async function logAgentRun({
         agent_id: agentSlug,
         input,
         output,
-        tenant_id: tenantId ?? null,
+        tenant_id: tenantId ?? CONSULT_TENANT_ID,
         triggered_by: triggeredBy ?? null,
         duration_ms: durationMs ?? null,
         cost_usd: costUsd ?? null,
