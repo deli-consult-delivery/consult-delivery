@@ -47,25 +47,34 @@ export default function InadimplentesScreen({ tenantDbId, userId }) {
     setLoading(true);
     setError(null);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      // Lê direto do Supabase (RLS por tenant já restringe). Antes batia no bridge
+      // server (VPS:3001), inacessível do navegador em HTTPS → "Failed to fetch".
+      let query = supabase
+        .from('cora_cobrancas')
+        .select('id,customer_name,customer_phone,customer_whatsapp,valor_atual,data_vencimento,status,notas,created_at')
+        .eq('tenant_id', tenantDbId)
+        .order('data_vencimento', { ascending: true });
 
-      const params = new URLSearchParams();
-      if (filterDias) params.set('dias_atraso', filterDias);
-      if (filterStatus) params.set('status', filterStatus);
-      if (filterValorMin) params.set('valor_min', filterValorMin);
+      query = filterStatus
+        ? query.eq('status', filterStatus)
+        : query.in('status', ['aberto', 'negociando', 'escalonado']);
 
-      const url = `${BRIDGE}/api/inadimplentes${params.toString() ? '?' + params : ''}`;
-      const resp = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'x-tenant-id': tenantDbId,
-        },
-      });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || 'Erro ao carregar inadimplentes');
-      setRows(data.rows || []);
-      setKpis(data.kpis || { total_devido: 0, qtd: 0 });
+      const { data: cobrancas, error: qErr } = await query;
+      if (qErr) throw new Error(qErr.message);
+
+      const now = Date.now();
+      let result = (cobrancas || []).map(r => ({
+        ...r,
+        dias_atraso: r.data_vencimento
+          ? Math.max(0, Math.floor((now - new Date(r.data_vencimento + 'T00:00:00').getTime()) / 86400000))
+          : 0,
+      }));
+      if (filterDias)     result = result.filter(r => r.dias_atraso >= parseInt(filterDias, 10));
+      if (filterValorMin) result = result.filter(r => (r.valor_atual || 0) >= parseFloat(filterValorMin));
+
+      const total_devido = result.reduce((s, r) => s + (parseFloat(r.valor_atual) || 0), 0);
+      setRows(result);
+      setKpis({ total_devido, qtd: result.length });
     } catch (e) {
       setError(e.message);
     } finally {
