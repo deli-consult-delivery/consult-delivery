@@ -5,6 +5,7 @@ import Clientes from './Clientes.jsx';
 import Estudio from './Estudio.jsx';
 import CustosIA from './CustosIA.jsx';
 import PainelAgentes from './PainelAgentes.jsx';
+import Execucoes from './Execucoes.jsx';
 import './console.css';
 
 // ============================================================
@@ -14,6 +15,7 @@ import './console.css';
 // E3: Estúdio de Conteúdo (grupo Agentes IA — lock por item).
 // T1: Custos de IA (grupo Dados — GAP-4).
 // T2: Painel de Agentes v2 (grupo Agentes IA — GAP-1+2).
+// T3: Execucoes (grupo Operacao — log de agent_runs).
 // ============================================================
 
 const GRUPOS = [
@@ -22,6 +24,7 @@ const GRUPOS = [
     { id: 'defesa', label: 'Defesa Comercial' },
     { id: 'radar', label: 'Radar (grátis)' },
     { id: 'ativar', label: 'Ativar loja' },
+    { id: 'execucoes', label: 'Execucoes' },
   ]},
   { label: 'Agentes IA', items: [
     { id: 'agentes', label: 'Painel de Agentes' },
@@ -32,7 +35,7 @@ const GRUPOS = [
   { label: 'Admin', items: [{ id: 'clientes', label: 'Clientes (plataforma)' }] },
 ];
 
-const TITULOS = { visao: 'Visão Geral', defesa: 'Defesa Comercial', radar: 'Radar', ativar: 'Ativar loja', clientes: 'Clientes', estudio: 'Estúdio de Conteúdo', custos: 'Custos de IA', agentes: 'Painel de Agentes' };
+const TITULOS = { visao: 'Visão Geral', defesa: 'Defesa Comercial', radar: 'Radar', ativar: 'Ativar loja', clientes: 'Clientes', estudio: 'Estúdio de Conteúdo', custos: 'Custos de IA', agentes: 'Painel de Agentes', execucoes: 'Execucoes' };
 
 const OK_STATUSES = ['ok', 'completed', 'success'];
 const fmtBRL = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -365,6 +368,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
           {tela === 'estudio' && <Estudio tenantDbId={tenantDbId} userId={userId} />}
           {tela === 'custos' && <CustosIA tenantDbId={tenantDbId} />}
           {tela === 'agentes' && <PainelAgentes tenantDbId={tenantDbId} />}
+          {tela === 'execucoes' && <Execucoes tenantDbId={tenantDbId} />}
         </div>
       </div>
     </div>
