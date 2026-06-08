@@ -20,7 +20,7 @@ Reabriu a D6 e mandou ir para a plataforma completa sem aguardar o gate D+90. **
 
 **PLANO DA PLATAFORMA COMPLETA — STATUS FINAL (sessão 17):**
 - **Etapa A (Consolidação):** ✅ PR8 (allowlist) · PR9 (multi-tenant) · PR10 (cobrança Asaas) · PR11 (FASE 2 onda 2)
-- **Etapa B (Console completo):** ✅ GAP-1..8 todos · Visão Geral com alertas · sidebar com ícones
+- **Etapa B (Console completo):** ✅ GAP-1..8 todos · Visão Geral com alertas · sidebar com ícones · **Chat ao Vivo (#226)**
 - **Etapa C (Agentes novos):** ✅ Análise de Loja · Cardápio · Multicanal (+ Estúdio, Defesa, Radar das fases anteriores)
 - **Etapa D (White-label):** ✅ tela Marca + tema por tenant
 - **Sidebar SEM nenhum item "em breve".** Plataforma completa.
@@ -34,7 +34,13 @@ Reabriu a D6 e mandou ir para a plataforma completa sem aguardar o gate D+90. **
 
 ## 🔴 Onde parou
 
-_Última sessão: 2026-06-08 (Cowork — **sessão 17 noite autônoma: PLATAFORMA COMPLETA entregue**)_
+_Última sessão: 2026-06-08 (Cowork — **sessão 18: Chat ao Vivo no Console v2 + QA tela por tela**)_
+
+### Sessão 18 — manhã (Chat ao Vivo + QA completo)
+- **Chat ao Vivo no Console v2 (#226):** integrado ao menu (Operação, 1º item). Reusa `ChatScreen` real (5101 linhas) em área cheia 100vh → **paridade total, zero stub/regressão**. **Realtime provado e2e:** msg `0023dd90-…` inserida no banco apareceu sozinha no chat (thread + lista) sem refresh. Não testei ENVIO (dispararia WhatsApp real — travado). Deploy verde `index-CxHENclL.js`.
+- **QA tela por tela:** build verde · Operação 5/5 + Visão Geral validadas no navegador · **20 tabelas-fonte conferidas (`.from`) — todas existem e respondem**, 0 erro. Telas com 0 linhas = estado-vazio legítimo. **Nenhuma correção necessária.**
+- **Relatório:** `docs/auditoria/CHAT-AO-VIVO-E-QA-2026-06-08.md`.
+- **⚠️ Pendente Wandson:** apagar msg de teste → `delete from messages where id='0023dd90-4bf9-4139-8667-ed3e85869772';`
 
 ### Sessão 17 — noite autônoma (Etapas C+D + itens 1/3 do Wandson)
 - **Item 1 (#220):** RLS das 3 tabelas abertas fechada (migration 010, intruso 0, tabelas vazias).
@@ -42,7 +48,7 @@ _Última sessão: 2026-06-08 (Cowork — **sessão 17 noite autônoma: PLATAFORM
 - **Etapa C (#222/#223):** agentes **Cardápio** e **Multicanal** (tasks + tela genérica `AgenteAnalise` + migration 011 + helper `agente-analise.ts`). Desbloqueados na sidebar. **Provados e2e:** Cardápio "23,8% conversão, problema é convencimento" US$0,0207 · Multicanal "taxas R$9.997,60" US$0,0160.
 - **Etapa B+ (#223):** Visão Geral com card "Atenção — precisa de você" (casos/assinaturas/relatórios) + navegação.
 - **Etapa D (#224):** **white-label** — tela Marca (cor+logo por tenant via `tenants.theme_color`/`logo_url`) + tema aplicado no Console v2. Sem SQL.
-- **QA final:** build verde (bundle `index-D-81b8Rz.js` contém tudo) · 20 agentes no catálogo · 270 policies RLS · 15 migrations no dia.
+- **QA final:** build verde · 20 agentes no catálogo · 270 policies RLS · 15 migrations no dia.
 - **Relatório final:** `docs/auditoria/NOITE-AUTONOMA-2026-06-08.md`.
 
 ### Sessão 16 — madrugada autônoma (auditoria + GAPs + Análise de Loja)
@@ -55,10 +61,13 @@ _Última sessão: 2026-06-08 (Cowork — **sessão 17 noite autônoma: PLATAFORM
 
 ## 👉 Próxima ação (decisões/aprovações do Wandson de manhã)
 
-1. **Validar a plataforma** (10 min): app → Console v2 → sidebar sem "em breve". Testar Cardápio (Gerar análise) e Marca (mudar cor → console troca de tema). Roteiro em `docs/auditoria/NOITE-AUTONOMA-2026-06-08.md`.
-2. **Aprovar/decidir** (lista no doc da noite §"revisão da manhã"): (a) limpar registros de teste — me autorize, deixei intacto; (b) revisar migrations 008-011 (aditivas); (c) `customer_groups.tenant_id` — rota do CRM precisa setar se usar grupos.
-3. **Beta real:** ativar 1 loja real · vincular grupo · vigia 1 semana. 1ª loja pagante → `ASAAS_DEFESA_ENVIRONMENT`=production.
-4. Pendências herdadas: rotação de credenciais · Hermes GATE 0 · onda 03 do PILOTO.
+1. **Validar o Chat ao Vivo** (5 min): Console v2 → Operação → Chat ao Vivo. Abre o chat real com as conversas. (Detalhe em `docs/auditoria/CHAT-AO-VIVO-E-QA-2026-06-08.md`.)
+2. **Apagar a msg de teste do QA:** `delete from messages where id='0023dd90-4bf9-4139-8667-ed3e85869772';`
+3. **Validar a plataforma** (10 min): sidebar sem "em breve". Testar Cardápio (Gerar análise) e Marca (mudar cor → console troca de tema). Roteiro em `docs/auditoria/NOITE-AUTONOMA-2026-06-08.md`.
+4. **Aprovar/decidir** (lista no doc da noite §"revisão da manhã"): (a) limpar registros de teste — me autorize, deixei intacto; (b) revisar migrations 008-011 (aditivas); (c) `customer_groups.tenant_id` — rota do CRM precisa setar se usar grupos.
+5. **Beta real:** ativar 1 loja real · vincular grupo · vigia 1 semana. 1ª loja pagante → `ASAAS_DEFESA_ENVIRONMENT`=production.
+6. **Follow-up opcional:** restyle visual do chat no padrão cv2 (cosmético; chat já 100% funcional).
+7. Pendências herdadas: rotação de credenciais · Hermes GATE 0 · onda 03 do PILOTO.
 
 ---
 
@@ -66,19 +75,22 @@ _Última sessão: 2026-06-08 (Cowork — **sessão 17 noite autônoma: PLATAFORM
 
 | Track | Nome | Status | Última ação |
 |-------|------|--------|-------------|
-| T1 | Plataforma CD | ✅ | **Console v2 COMPLETO** — sidebar sem item locked |
+| T1 | Plataforma CD | ✅ | **Console v2 COMPLETO** — sidebar sem item locked + Chat ao Vivo |
 | T2 | EvoNexus-replica | ✅ | FASE 2 onda 2 + GAP-1..8 + agentes |
-| T3 | Visual-First / telas | ✅ | F1 + Estúdio + GAPs + white-label |
+| T3 | Visual-First / telas | ✅ | F1 + Estúdio + GAPs + white-label + Chat ao Vivo |
 | T4 | Hermes | 🔄 | aguarda GATE 0 |
 | T5 | Segurança | ✅ | onda 2 + 3 tabelas abertas fechadas (270 policies) |
 | T6 | Agentes IA | ✅ | **6 agentes vivos:** Defesa, Vigia, Radar, Estúdio, Análise de Loja, Cardápio, Multicanal |
 | T7 | PILOTO | 🔄 | Onda 03 não aplicada |
 | T8 | Infra/CI | ✅ | deploy triplo automático |
-| T9 | Negócio | 🔓 D6 | **PLATAFORMA COMPLETA — vende, cobra, multi-tenant, white-label. Falta 1º cliente real.** |
+| T9 | Negócio | 🔓 D6 | **PLATAFORMA COMPLETA — vende, cobra, multi-tenant, white-label, chat ao vivo. Falta 1º cliente real.** |
 
 ---
 
 ## 📋 Log de sessões
+
+### 2026-06-08 (sessão 18 — Chat ao Vivo no Console v2 + QA tela por tela)
+- Chat ao Vivo integrado ao Console v2 (#226), reusa ChatScreen real em área cheia, realtime provado e2e (msg 0023dd90). QA: build verde, 20 tabelas-fonte íntegras, nenhuma tela quebrada, nenhuma correção. Relatório `docs/auditoria/CHAT-AO-VIVO-E-QA-2026-06-08.md`.
 
 ### 2026-06-08 (sessão 17 — noite autônoma: PLATAFORMA COMPLETA)
 - Itens 1/3 do Wandson (#220/#221). Etapa C: Cardápio+Multicanal (#222/#223, provados e2e). Etapa D: white-label (#224). Visão Geral com alertas. Migrations 010/011 aditivas. QA verde. Relatório final no doc da noite.
