@@ -32,24 +32,38 @@ Plano da plataforma completa (Consolidação C1–C8 + telas GAP-1..8 + agentes 
 
 ## 🔴 Onde parou
 
-_Última sessão: 2026-06-08 (Cowork — sessão 14: **FASE 2 onda 2 COMPLETA — PR S1..S4 merged, migrations 005–007 aplicadas**)_
+_Última sessão: 2026-06-08 (Cowork — Frente Agentes: execução fila de PRs #129/#136 + PR #206)_
 
-- **PR S1 ✅ merged (#200)** — P-2: `audit.ts` com `CONSULT_TENANT_ID`. Migration 005: `agent_runs.tenant_id` NOT NULL, policy `authenticated_view_global_runs` removida.
-- **PR S2 ✅ merged (#201)** — P-3: `usePermissions.js` dual-key (agent_id + agent_name). Dedup P-1 aplicado (DELETE `agent_name='main'` com RETURNING *, output registrado no PR). Migration 006: NOT NULL + UNIQUE `(tenant_id, user_id, agent_id)`.
-- **PR S3 ✅ merged (#202)** — P-4: helper `getTenantAgentConfig`. P-5: migration 007 grants órfãos revogados (Eduardo 1 linha + Wellida 2 linhas, `grants_orfaos_restantes=0`).
-- **PR S4 ✅ merged (#203)** — `qa-knowledge.md` com P7/P8 + 3 casos onda 2 + Schema Reference + advisors abertos mapeados.
-- **Advisors abertos (fora do escopo desta frente):** `customer_group_members`, `customer_groups`, `tarefas_analise` — RLS habilitado sem policies. Incluir em próxima frente.
-- **Lição onda 2:** remoção de membro de `tenant_members` NÃO cascateia em `user_agent_access`. Adicionar ON DELETE CASCADE ou trigger em futura onda.
+### Fila de PRs — executada (sessão Frente Agentes)
+- **PR #136 ✅ merged** (squash) — `fix(bot): corrige RLS bot_configs WITH CHECK + pre-wrap textareas`. SHA: `3b22d499`.
+- **PR #129 ⛔ fechado sem merge** — branch `wandson/fix-outros-horarios` preservada como cofre. Motivo: conflitos + branch acumulou 10+ features que já estavam em main por outros caminhos.
+- **PR #206 aberto** — `feat/agentes-bot-outros-horarios` → main: versiona a migration `20260603_001_bot_configs_extra_messages.sql` (ADD COLUMN IF NOT EXISTS extra_messages JSONB — coluna já existe no banco, SQL aprovado pelo Wandson). **Aguarda merge.**
+- **Descoberta:** todas as features do branch `wandson/fix-outros-horarios` (outros horários, mensagens por instância, fixes UI, transcrição de voz, fotos de perfil, notas por cliente + chat_tasks) já estão integradas em main. Só a migration SQL de versionamento faltava.
+
+### ⚠️ Checklist de paridade Chat → Console v2 (futuro redesign)
+Quando a tela Chat ao Vivo for portada para o Console v2 (grupo Chat / futuras Etapas), o redesign **deve incluir** as seguintes features que existem no `ChatScreen.jsx` clássico:
+- **Outros horários do bot** — slots extras com mensagem própria, alwaysOn por slot (`extra_messages JSONB` em `bot_configs`)
+- **Mensagens enviadas por instância** — `evolution_url`/`api_key` por instância (`selectedInstanceObjRef`)
+- **Fixes UI:** textarea compositor auto-expande, botão Selecionar na barra de filtros, sem barra de abas WA/Grupos/Interno
+- **Transcrição de voz** — Web Speech API (pt-BR), botão microfone no compositor
+- **Fotos de perfil WhatsApp** — carregamento em background ao abrir instância
+- **Notas por cliente** — `customer_note_entries`, botão "→ Criar tarefa", badge Breno
+- **Chat Tasks** — painel de tarefas operacionais (`chat_tasks`), drawer lateral, CRUD
+
+### Estado anterior (sessão 15)
+- **Frente Telas — Etapa B COMPLETA:** PRs #198, #199, #204, #205 — 9 telas no Console v2
+- **Frente Segurança — FASE 2 onda 2 COMPLETA:** PRs #200–203, migrations 005–007 aplicadas
 
 ---
 
 ## 👉 Próxima ação
 
-1. **PR12 (C3):** Radar real — decidir fonte de dados com o Wandson.
-2. **E4 (Estúdio):** botão "Enviar como rascunho de campanha" → `agent_drafts` (sessão paralela).
-3. **Beta real:** ativar 1 loja real (tela Ativar loja) · vincular grupo · 1 semana de vigia · registrar ganho/perdido. Quando fechar 1ª loja pagante de fora: trocar `ASAAS_DEFESA_ENVIRONMENT` para production.
-4. Limpeza registros de teste (tenant sandbox + assinatura) quando Wandson autorizar.
-5. Advisors abertos: `customer_group_members`, `customer_groups`, `tarefas_analise` — policies ou desabilitar RLS.
+1. **Mergear PR #206** — migration `20260603_001_bot_configs_extra_messages.sql` (aprovado, idempotente).
+2. **PR12 (C3):** Radar real — decidir fonte de dados com o Wandson.
+3. **E4 (Estúdio):** botão "Enviar como rascunho de campanha" → `agent_drafts`.
+4. **Beta real:** ativar 1 loja real (tela Ativar loja) · vincular grupo · 1 semana de vigia · registrar ganho/perdido. Quando fechar 1ª loja pagante de fora: trocar `ASAAS_DEFESA_ENVIRONMENT` para production.
+5. Limpeza registros de teste (tenant sandbox + assinatura) quando Wandson autorizar.
+6. Advisors abertos: `customer_group_members`, `customer_groups`, `tarefas_analise` — policies ou desabilitar RLS.
 
 ---
 
@@ -57,7 +71,7 @@ _Última sessão: 2026-06-08 (Cowork — sessão 14: **FASE 2 onda 2 COMPLETA �
 
 | Track | Nome | Status | Última ação |
 |-------|------|--------|-------------|
-| T1 | Plataforma CD (V1→V3) | 🔄 | Console v2: 5 telas reais + Clientes/paywall (PR9/PR10) |
+| T1 | Plataforma CD (V1→V3) | 🔄 | Console v2: **9 telas reais** (Etapa B completa) |
 | T2 | EvoNexus-replica | ✅ onda 2 | **FASE 2 onda 2 COMPLETA** — migrations 005–007 aplicadas |
 | T3 | Visual-First / telas | ✅ | F1 + Estúdio entregues no design definitivo |
 | T4 | Hermes | 🔄 | aguarda GATE 0 |
@@ -71,18 +85,34 @@ _Última sessão: 2026-06-08 (Cowork — sessão 14: **FASE 2 onda 2 COMPLETA �
 
 ## 📋 Log de sessões
 
-### 2026-06-08 (sessão 14 — Cowork: Frente Segurança FASE 2 onda 2 COMPLETA)
-- Leu handoffs + CLAUDE.md + Tracker + migrations 001–004 + audit.ts + usePermissions.js + bom-dia/envio-agendado + backup-supabase-diario
-- **P-2:** `CONSULT_TENANT_ID` em audit.ts (default centralizado, zero tasks alteradas)
-- **P-3:** usePermissions dual-key; dedup `agent_name='main'` (RETURNING * registrado no PR #201)
-- **P-4:** helper `getTenantAgentConfig` (soft-fail, service_role)
-- **P-5:** Eduardo (1) + Wellida (2 incl. can_approve_drafts=true no lara) — 3 grants deletados
-- **S4:** RLS de 7 tabelas verificada OK; advisors abertos mapeados
-- Migrations 005/006/007 aprovadas e aplicadas; 4 PRs (#200–203) merged
-- **Lição extra:** onda 1 criou duplicata `agent_name='main'`+`'deli'` → mesmo `agent_id='deli'`; dedup necessário antes do contrato UNIQUE
+### 2026-06-08 (Frente Agentes — Cowork: execução fila de PRs)
+- Leu COORDENACAO-MULTI-SESSAO.md + HANDOFF-FRENTE-AGENTES.md
+- PR #136 merged (squash): RLS bot_configs WITH CHECK + pre-wrap textareas
+- PR #129 fechado sem merge (branch preservada): conflitos + 10+ features já em main por outros caminhos
+- Varredura completa: todos os commits do branch (`outros horários`, `mensagens por instância`, `fixes UI`, `voz`, `fotos`, `notas + chat_tasks`) já integrados em main
+- PR #206 aberto: versiona migration `20260603_001_bot_configs_extra_messages.sql` (única lacuna encontrada)
+- Registrado checklist de paridade Chat→Console v2 neste Tracker
+
+### 2026-06-08 (sessão 15 continuação — aprovação Frente Segurança + execução)
+- Wandson: "Já aprovei na Frente Segurança"
+- Mergeados PRs #200, #201, #202, #203 (squash → main)
+- Migration 005 aplicada: `agent_runs.tenant_id NOT NULL`, policy removida, backfill idempotente
+- Migration 006 aplicada: `user_agent_access` NOT NULL (tenant_id + agent_id)
+- Migration 007 aplicada: 3 grants órfãos deletados
+- Validação: `runs_sem_tenant=0` · `grants_orfaos=0` ✅
+
+### 2026-06-08 (sessão 15 — Cowork: Frente Telas Etapa B — 4 telas Console v2)
+- **T1/GAP-4 PR #198:** `CustosIA.jsx` — KPIs custo total/execuções/avg, tabela por agente/dia, alerta pico (>2× média)
+- **T2/GAP-1+2 PR #199:** `PainelAgentes.jsx` — toggle tenant_agents, ConfigPanel, métricas 30d
+- **T3 PR #204:** `Execucoes.jsx` — log agent_runs com filtros agente/status/janela, expand JSONB collapsível
+- **T4/GAP-3 PR #205:** `AprovacoesUnificadas.jsx` — fila unificada agent_drafts + defesa_casos
+- Console v2 sidebar: **9 telas reais**
+
+### 2026-06-08 (sessão 14 — Cowork: Frente Segurança FASE 2 onda 2)
+- P-2..P-5 + S4 · PRs #200–203 criados (aprovação na sessão 15)
 
 ### 2026-06-08 (sessão paralela — ESTÚDIO DE CONTEÚDO: E1+E2+E3 + aceite e2e)
-- E1 #190 (migration 004, RLS provada) · E2 #191+fixes E2b #194+E2c #195 · E3 #192 (tela fiel). Aceite e2e: brief→arte Brand Guard→bucket US$0,2386/234s. Resta E4.
+- E1 #190 · E2 #191+E2b #194+E2c #195 · E3 #192. Aceite e2e US$0,2386/234s. Resta E4.
 
 ### 2026-06-08 (sessão 13 — Cowork: PR9 + PR10 — multi-tenant + monetização)
 - D7 decidida · PR9 #187 (Clientes + gating D7) · PR10 #189 (assinaturas Asaas)
