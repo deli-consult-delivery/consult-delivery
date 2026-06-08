@@ -51,8 +51,8 @@
 .cv2-spread{display:flex;justify-content:space-between;align-items:center}
 .cv2-caso{border:1px solid var(--line);border-radius:6px;padding:13px 15px;margin-bottom:10px;background:var(--panel)}
 .cv2-caso .draft{background:#faf9f8;border:1px solid var(--line);border-radius:4px;padding:9px 12px;margin-top:8px;font-size:12.5px}
-/* tela clássica reusada dentro do cv2 enquanto é convertida para o visual claro */
-.cv2-legado{flex:1;min-height:0;overflow:auto;background:#0d0d0d}
+/* tela clássica reusada dentro do cv2 — fundo claro nativo (o clássico já é claro: --g-50 #F9FAFB) */
+.cv2-legado{flex:1;min-height:0;overflow:auto;background:var(--bg)}
 
 /* ===== Chat ao Vivo v2 — layout claro do protótipo (docs/prototipo/console-v2.html) ===== */
 .cv2-chat{display:flex;flex:1;min-height:0;background:var(--panel);overflow:hidden}
