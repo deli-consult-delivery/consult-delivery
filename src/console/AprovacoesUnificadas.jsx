@@ -5,10 +5,12 @@ import { supabase } from '../lib/supabase.js';
 // T4 · Aprovacoes Unificadas (GAP-3)
 // Fila unificada de aprovacoes pendentes neste workspace:
 //   - agent_drafts: mensagens preparadas por agentes aguardando OK
-//     (canal != telegram_interno/painel = precisam aprovacao)
 //   - defesa_casos: status aguardando_ok (reaproveitado da Defesa)
-// Schema agent_drafts (inferred de 20260504_004_drafts_deli.sql):
-//   id, tenant_id, agent_id, channel, recipient, content, status, created_at
+// Schema REAL agent_drafts (conferido no banco 2026-06-08):
+//   id, tenant_id, agent_name, channel, target_id, subject, content, status,
+//   autonomy_level, reviewer_id, reviewed_at, metadata, created_at, ...
+// (correção E4b: a versão anterior usava agent_id/recipient/aprovado_* que
+//  NÃO existem — toda a fila de drafts degradava p/ vazia, incl. Defesa.)
 // ============================================================
 
 const CANAL_LABELS = {
@@ -21,8 +23,10 @@ const CANAL_LABELS = {
 };
 
 const DRAFT_STATUS_APROVAVEL = ['pending', 'aguardando_ok', 'rascunho'];
-// canais que disparam direto (sem aprovacao no painel)
-const CANAIS_DIRETOS = ['telegram_interno', 'painel'];
+// canal interno do copiloto do CEO: nunca entra na fila de aprovação do tenant
+const CANAIS_OCULTOS = ['telegram_interno'];
+// agentes já representados por outra fonte nesta tela (evita duplicata)
+const AGENTES_OCULTOS = ['defesa']; // Defesa aparece via defesa_casos
 
 function fmtData(iso) {
   if (!iso) return '—';
@@ -44,12 +48,13 @@ function ItemDraft({ item, onAprovar, onRejeitar, agindo }) {
             <span className="cv2-bdg mut" style={{ fontSize: 11 }}>
               {CANAL_LABELS[item.channel] || item.channel || 'canal desconhecido'}
             </span>
-            {item.agent_id && <span className="cv2-bdg mut" style={{ fontSize: 11 }}>{item.agent_id}</span>}
+            {item.agent_name && <span className="cv2-bdg mut" style={{ fontSize: 11 }}>{item.agent_name}</span>}
             <span style={{ fontSize: 11.5, color: 'var(--tx2)' }}>{fmtData(item.created_at)}</span>
           </div>
-          {item.recipient && (
+          {item.subject && <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>{item.subject}</div>}
+          {item.target_id && (
             <div style={{ fontSize: 12, color: 'var(--tx2)', marginBottom: 4 }}>
-              Para: <b style={{ color: 'var(--ink)' }}>{item.recipient}</b>
+              Para: <b style={{ color: 'var(--ink)' }}>{item.target_id}</b>
             </div>
           )}
           {!editando ? (
@@ -180,7 +185,7 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
       const [{ data: dr, error: e1 }, { data: ca, error: e2 }] = await Promise.all([
         supabase
           .from('agent_drafts')
-          .select('id, agent_id, channel, recipient, content, status, created_at')
+          .select('id, agent_name, channel, target_id, subject, content, status, created_at')
           .eq('tenant_id', tenantDbId)
           .in('status', DRAFT_STATUS_APROVAVEL)
           .order('created_at', { ascending: false })
@@ -197,8 +202,9 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
       // e1 pode ser erro de tabela inexistente (agent_drafts) — degradar graciosamente
       if (e2) throw e2;
 
-      // filtra canais que precisam aprovacao (exclui diretos)
-      const draftsAprovacao = (dr ?? []).filter(d => !CANAIS_DIRETOS.includes(d.channel));
+      // mostra drafts que precisam de aprovação: oculta canal interno do CEO e
+      // agentes já representados por outra fonte (Defesa vem via defesa_casos).
+      const draftsAprovacao = (dr ?? []).filter(d => !CANAIS_OCULTOS.includes(d.channel) && !AGENTES_OCULTOS.includes(d.agent_name));
 
       setDrafts(e1 ? [] : draftsAprovacao);
       setCasos(ca ?? []);
@@ -213,7 +219,7 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
     setAgindo(id);
     const { error } = await supabase
       .from('agent_drafts')
-      .update({ status: 'approved', content, aprovado_por: userId ?? null, aprovado_em: new Date().toISOString() })
+      .update({ status: 'approved', content, reviewer_id: userId ?? null, reviewed_at: new Date().toISOString() })
       .eq('id', id);
     setAgindo(null);
     if (error) { setErro(error.message); return; }
@@ -224,7 +230,7 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
     setAgindo(id);
     const { error } = await supabase
       .from('agent_drafts')
-      .update({ status: 'rejected', rejeitado_em: new Date().toISOString() })
+      .update({ status: 'rejected', reviewer_id: userId ?? null, reviewed_at: new Date().toISOString() })
       .eq('id', id);
     setAgindo(null);
     if (error) { setErro(error.message); return; }
