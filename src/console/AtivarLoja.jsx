@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase.js';
 //    >=300 pedidos/mês OU >=6 cancelamentos/mês)
 // 2. Vincula o grupo de WhatsApp (whatsapp_groups.loja_id)
 // 3. Ensina o fluxo (vigia automático + comandos @defesa)
+// PR8: seção "Aprovadores do @defesa" (allowlist de quem aprova via WhatsApp)
 // ============================================================
 
 function Kpi({ l, v, d, neg, mut }) {
@@ -14,7 +15,7 @@ function Kpi({ l, v, d, neg, mut }) {
     <div className="cv2-kpi">
       <div className="l">{l}</div>
       <div className="v">{v}</div>
-      <div className={`d${neg ? ' neg' : ''}${mut ? ' mut' : ''}`}>{d || ' '}</div>
+      <div className={`d${neg ? ' neg' : ''}${mut ? ' mut' : ''}`}>{d || ' '}</div>
     </div>
   );
 }
@@ -31,6 +32,10 @@ export default function AtivarLoja({ tenantDbId }) {
   const [grupos, setGrupos] = useState([]);
   const [lojas, setLojas] = useState(null);
   const [salvando, setSalvando] = useState(false);
+  const [aprovadores, setAprovadores] = useState([]);
+  const [aprNome, setAprNome] = useState('');
+  const [aprFone, setAprFone] = useState('');
+  const [aprSalvando, setAprSalvando] = useState(false);
   const [msg, setMsg] = useState(null);
   const [erro, setErro] = useState(null);
 
@@ -41,13 +46,15 @@ export default function AtivarLoja({ tenantDbId }) {
 
   const carregar = useCallback(async () => {
     if (!tenantDbId) return;
-    const [{ data: gs, error: e1 }, { data: ls, error: e2 }] = await Promise.all([
+    const [{ data: gs, error: e1 }, { data: ls, error: e2 }, { data: as_, error: e3 }] = await Promise.all([
       supabase.from('whatsapp_groups').select('id, group_name, loja_id, ativo').eq('tenant_id', tenantDbId).order('group_name'),
       supabase.from('lojas').select('id, nome, cidade, metadata, created_at').eq('tenant_id', tenantDbId).order('created_at', { ascending: false }).limit(30),
+      supabase.from('defesa_aprovadores').select('id, nome, telefone_jid, ativo, created_at').eq('tenant_id', tenantDbId).order('created_at'),
     ]);
-    if (e1 || e2) { setErro((e1 || e2).message); return; }
+    if (e1 || e2 || e3) { setErro((e1 || e2 || e3).message); return; }
     setGrupos(gs ?? []);
     setLojas(ls ?? []);
+    setAprovadores(as_ ?? []);
   }, [tenantDbId]);
 
   useEffect(() => { carregar(); }, [carregar]);
@@ -88,6 +95,34 @@ export default function AtivarLoja({ tenantDbId }) {
     } finally {
       setSalvando(false);
     }
+  }
+
+  async function addAprovador() {
+    setErro(null);
+    const digitos = aprFone.replace(/\D/g, '');
+    if (digitos.length < 10) { setErro('Telefone do aprovador incompleto (use DDI+DDD+numero, ex.: 5594999990000).'); return; }
+    setAprSalvando(true);
+    try {
+      const { error } = await supabase.from('defesa_aprovadores').insert({
+        tenant_id: tenantDbId,
+        telefone_jid: `${digitos}@s.whatsapp.net`,
+        nome: aprNome.trim() || null,
+      });
+      if (error) throw error;
+      setAprNome(''); setAprFone('');
+      await carregar();
+    } catch (err) { setErro(err?.message || 'falha ao adicionar aprovador'); }
+    finally { setAprSalvando(false); }
+  }
+
+  async function toggleAprovador(a) {
+    const { error } = await supabase.from('defesa_aprovadores').update({ ativo: !a.ativo }).eq('id', a.id);
+    if (error) setErro(error.message); else await carregar();
+  }
+
+  async function removeAprovador(a) {
+    const { error } = await supabase.from('defesa_aprovadores').delete().eq('id', a.id);
+    if (error) setErro(error.message); else await carregar();
   }
 
   return (
@@ -169,6 +204,42 @@ export default function AtivarLoja({ tenantDbId }) {
         </div>
       )}
       {lojas && !lojas.length && <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>Nenhuma loja cadastrada ainda.</div>}
+
+      <h1 style={{ fontSize: 15, marginTop: 22 }}>Aprovadores do @defesa <span className="cv2-mock" style={{ background: 'var(--green-soft)', color: 'var(--green)' }}>SEGURANÇA</span></h1>
+      <div className="cv2-rule" />
+      <div className="cv2-sub">Quem pode aprovar/descartar casos respondendo <b>@defesa ok</b> no WhatsApp. Lista vazia = qualquer participante do grupo (modo aberto, com rastro). Com 1+ aprovadores ativos, comandos de outros números são ignorados e geram alerta.</div>
+      <div className="cv2-card">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 10, alignItems: 'end' }}>
+          <div>
+            <label style={labelStyle}>Nome</label>
+            <input style={inputStyle} value={aprNome} onChange={e => setAprNome(e.target.value)} placeholder="Ex.: Wandson" />
+          </div>
+          <div>
+            <label style={labelStyle}>WhatsApp (DDI+DDD+número, só dígitos)</label>
+            <input style={inputStyle} value={aprFone} onChange={e => setAprFone(e.target.value)} placeholder="Ex.: 5594999990000" />
+          </div>
+          <button className="cv2-btn" disabled={aprSalvando} onClick={addAprovador}>{aprSalvando ? 'Salvando…' : 'Adicionar'}</button>
+        </div>
+        {aprovadores.length > 0 && (
+          <table style={{ marginTop: 14 }}>
+            <thead><tr><th>Nome</th><th>WhatsApp</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              {aprovadores.map(a => (
+                <tr key={a.id}>
+                  <td><b>{a.nome || '—'}</b></td>
+                  <td>{a.telefone_jid.replace('@s.whatsapp.net', '')}</td>
+                  <td>{a.ativo ? <span className="cv2-bdg ok">ativo</span> : <span className="cv2-bdg mut">inativo</span>}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <button className="cv2-btn ghost" onClick={() => toggleAprovador(a)}>{a.ativo ? 'Desativar' : 'Reativar'}</button>{' '}
+                    <button className="cv2-btn ghost" onClick={() => removeAprovador(a)}>Remover</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {!aprovadores.length && <div style={{ marginTop: 12, color: 'var(--tx2)', fontSize: 13 }}>Nenhum aprovador cadastrado — modo aberto (qualquer participante aprova, com rastro de quem foi).</div>}
+      </div>
     </div>
   );
 }
