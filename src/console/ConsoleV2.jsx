@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase.js';
 import AtivarLoja from './AtivarLoja.jsx';
 import Clientes from './Clientes.jsx';
 import Estudio from './Estudio.jsx';
+import CustosIA from './CustosIA.jsx';
 import './console.css';
 
 // ============================================================
@@ -10,6 +11,7 @@ import './console.css';
 // PR6: ciclo do caso · PR7: Ativar loja · PR9: Clientes (multi-tenant)
 // + gating D7: Defesa só com assinatura (tenant_agents); Radar grátis.
 // E3: Estúdio de Conteúdo (grupo Agentes IA — lock por item).
+// T1: Custos de IA (grupo Dados — GAP-4).
 // ============================================================
 
 const GRUPOS = [
@@ -23,11 +25,11 @@ const GRUPOS = [
     { id: 'estudio', label: 'Estúdio de Conteúdo' },
     { id: 'x1', label: 'Análise de Loja', locked: true }, { id: 'x2', label: 'Cardápio', locked: true }, { id: 'x3', label: 'Multicanal', locked: true },
   ]},
-  { label: 'Dados', locked: true, items: [{ id: 'x4', label: 'Custos de IA' }] },
+  { label: 'Dados', items: [{ id: 'custos', label: 'Custos de IA' }] },
   { label: 'Admin', items: [{ id: 'clientes', label: 'Clientes (plataforma)' }] },
 ];
 
-const TITULOS = { visao: 'Visão Geral', defesa: 'Defesa Comercial', radar: 'Radar', ativar: 'Ativar loja', clientes: 'Clientes', estudio: 'Estúdio de Conteúdo' };
+const TITULOS = { visao: 'Visão Geral', defesa: 'Defesa Comercial', radar: 'Radar', ativar: 'Ativar loja', clientes: 'Clientes', estudio: 'Estúdio de Conteúdo', custos: 'Custos de IA' };
 
 const OK_STATUSES = ['ok', 'completed', 'success'];
 const fmtBRL = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -83,7 +85,7 @@ function Kpi({ l, v, d, neg, mut }) {
     <div className="cv2-kpi">
       <div className="l">{l}</div>
       <div className="v">{v}</div>
-      <div className={`d${neg ? ' neg' : ''}${mut ? ' mut' : ''}`}>{d || ' '}</div>
+      <div className={`d${neg ? ' neg' : ''}${mut ? ' mut' : ''}`}>{d || ' '}</div>
     </div>
   );
 }
@@ -125,7 +127,7 @@ function PaywallDefesa() {
       <div className="cv2-card" style={{ maxWidth: 620 }}>
         <h3>Pare de perder dinheiro com cancelamentos</h3>
         <div style={{ fontSize: 13, color: 'var(--tx2)', lineHeight: 1.9 }}>
-          A Defesa Comercial vigia os cancelamentos e avaliações da sua loja 24h por dia, prepara a contestação com a melhor chance de vitória e espera o seu OK — pelo painel ou respondendo “@defesa ok” no WhatsApp. O painel mostra, mês a mês, quanto dinheiro foi defendido.
+          A Defesa Comercial vigia os cancelamentos e avaliações da sua loja 24h por dia, prepara a contestação com a melhor chance de vitória e espera o seu OK — pelo painel ou respondendo "@defesa ok" no WhatsApp. O painel mostra, mês a mês, quanto dinheiro foi defendido.
         </div>
         <div style={{ margin: '14px 0 6px', fontSize: 22, fontWeight: 800 }}>R$ 147<span style={{ fontSize: 13, fontWeight: 600, color: 'var(--tx2)' }}> /loja/mês · sem taxa de ativação</span></div>
         <div style={{ fontSize: 12.5, color: 'var(--tx2)', marginBottom: 14 }}>O Radar gratuito continua disponível no menu ao lado — ele mostra quanto está vazando.</div>
@@ -212,7 +214,7 @@ function Defesa({ tenantDbId, userId }) {
     <div>
       <h1>Defesa Comercial <span className="cv2-mock" style={{ background: 'var(--green-soft)', color: 'var(--green)' }}>FILA REAL</span></h1>
       <div className="cv2-rule" />
-      <div className="cv2-sub">Casos preparados pelo agente — revise e dê o OK (aqui ou respondendo “@defesa ok” na conversa do caso).{erro ? ` · erro: ${erro}` : ''}</div>
+      <div className="cv2-sub">Casos preparados pelo agente — revise e dê o OK (aqui ou respondendo "@defesa ok" na conversa do caso).{erro ? ` · erro: ${erro}` : ''}</div>
       <div className="cv2-kpis">
         <Kpi l="Aguardando seu OK" v={fila ? fila.length : '…'} d="revisar agora" neg={fila ? fila.length > 0 : false} />
         <Kpi l="Em andamento" v={andamento ? andamento.length : '…'} d="aprovados/enviados — registre o resultado" mut />
@@ -247,7 +249,7 @@ function Defesa({ tenantDbId, userId }) {
 
       <h1 style={{ fontSize: 15, marginTop: 22 }}>Em andamento — registre o resultado</h1>
       <div className="cv2-rule" />
-      <div className="cv2-sub">Quando o marketplace responder, marque <b>Ganho</b> (informe o valor recuperado — alimenta o painel “R$ defendido”) ou <b>Perdido</b>.</div>
+      <div className="cv2-sub">Quando o marketplace responder, marque <b>Ganho</b> (informe o valor recuperado — alimenta o painel "R$ defendido") ou <b>Perdido</b>.</div>
       {andamento && andamento.map(c => (
         <div key={c.id}>
           <CasoCard c={c}>
@@ -293,7 +295,7 @@ function Radar({ tenantNome }) {
         <table>
           <thead><tr><th>Sinal</th><th>Impacto</th><th>Ação sugerida</th></tr></thead>
           <tbody>
-            <tr><td>3 cancelamentos com perfil de “golpe do estorno”</td><td><span className="cv2-bdg err">R$ 198</span></td><td>contestáveis — a Defesa prepara em minutos</td></tr>
+            <tr><td>3 cancelamentos com perfil de "golpe do estorno"</td><td><span className="cv2-bdg err">R$ 198</span></td><td>contestáveis — a Defesa prepara em minutos</td></tr>
             <tr><td>Avaliação 1★ sem resposta há 3 dias</td><td><span className="cv2-bdg warn">ranking</span></td><td>resposta pronta aguardando OK</td></tr>
             <tr><td>Tempo médio de resposta a avaliações: 2,4 dias</td><td><span className="cv2-bdg warn">conversão</span></td><td>meta com Defesa: minutos</td></tr>
           </tbody>
@@ -358,6 +360,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
           {tela === 'ativar' && <AtivarLoja tenantDbId={tenantDbId} />}
           {tela === 'clientes' && <Clientes userId={userId} />}
           {tela === 'estudio' && <Estudio tenantDbId={tenantDbId} userId={userId} />}
+          {tela === 'custos' && <CustosIA tenantDbId={tenantDbId} />}
         </div>
       </div>
     </div>
