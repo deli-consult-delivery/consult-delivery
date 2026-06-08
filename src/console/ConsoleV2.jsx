@@ -19,6 +19,7 @@ import Habilidades from './Habilidades.jsx';
 import Templates from './Templates.jsx';
 import AgenteAnalise from './AgenteAnalise.jsx';
 import Marca from './Marca.jsx';
+import ChatV2 from './ChatV2.jsx';
 import { Gatilhos, Topicos, TarefasAgendadas, Links, Provedores, Integracoes, Sistemas, Arquivos } from './CvNovas.jsx';
 // telas reusadas do console clássico (funcionais — visual convertido nas ondas 2-3)
 import ChatScreen from '../screens/ChatScreen.jsx';
@@ -38,6 +39,7 @@ import './console.css';
 // ============================================================
 // Console v2 — estrutura IDÊNTICA ao protótipo (docs/prototipo/console-v2.html)
 // 5 grupos · ícones do protótipo · topbar fiel (créditos/tenant/sino/avatar).
+// Chat ao Vivo = ChatV2 (visual claro) com fallback para o chat clássico completo.
 // ============================================================
 
 const GRUPOS = [
@@ -446,6 +448,7 @@ function Defesa({ tenantDbId, userId }) {
 export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, onExit }) {
   const [tela, setTela] = useState('visao');
   const [defesaOn, setDefesaOn] = useState(null);
+  const [chatFull, setChatFull] = useState(false);
   const [tenantsList, sel, setSel] = useTenants(userId, { dbId: propDbId, slug: tenantInfo?.id, nome: tenantInfo?.name });
 
   // tenant ativo = selecionado no topo (todas as telas seguem isto)
@@ -464,6 +467,9 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       .then(({ count }) => { if (alive) setDefesaOn((count ?? 0) > 0); });
     return () => { alive = false; };
   }, [tenantDbId]);
+
+  // ao sair do chat, volta o ChatV2 (claro) como padrão
+  useEffect(() => { if (tela !== 'chat') setChatFull(false); }, [tela]);
 
   const temaStyle = brand?.cor ? { '--red': brand.cor, '--red-dark': brand.cor, '--red-soft': brand.cor + '1a' } : undefined;
   const ehChat = tela === 'chat';
@@ -543,7 +549,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
         </div>
       </aside>
       <div className="cv2-main">
-        {ehChat ? (
+        {ehChat && chatFull ? (
           <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
             <ChatScreen tenant={tenantSlug} tenantDbId={tenantDbId} onNavigate={setTela} deepLinkConvId={null} />
           </div>
@@ -568,7 +574,9 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
               </span>
               <span className="cv2-avatar">{inicial}</span>
             </div>
-            {ehLegado ? (
+            {ehChat ? (
+              <ChatV2 tenantDbId={tenantDbId} userId={userId} onFull={() => setChatFull(true)} />
+            ) : ehLegado ? (
               <div className="cv2-legado">{render()}</div>
             ) : (
               <div className="cv2-ct">{render()}</div>
