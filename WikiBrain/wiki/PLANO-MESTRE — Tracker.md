@@ -20,7 +20,7 @@ Com a F1 entregue e aceita no mesmo dia (PR1–PR7, tracker #184), o Wandson dec
 
 **D7 (decidida na sessão 13):** plano inicial de cliente novo = **Radar grátis até pagar**; assinatura **R$147/loja/mês SEM taxa de setup** (no beta). Defesa liga/desliga pela assinatura (override manual na tela Clientes). Recusas permanentes (OAuth-de-assinatura · % sobre faturamento) **não** foram reabertas.
 
-Plano da plataforma completa (Consolidação C1–C8 + telas GAP-1..8 + agentes + white-label): redigido na sessão 12. **Etapa A (Consolidação) APROVADA** — PR8 ✅ · PR9 ✅ · PR10 ✅.
+Plano da plataforma completa (Consolidação C1–C8 + telas GAP-1..8 + agentes + white-label): redigido na sessão 12. **Etapa A (Consolidação) APROVADA** — PR8 ✅ · PR9 ✅ · PR10 ✅. **Etapa B (Telas GAP-1..4) CONCLUÍDA** — PR T1 #198 ✅ · PR T2 #199 ✅ · PR T3 #204 ✅ · PR T4 #205 ✅.
 
 ---
 
@@ -32,28 +32,32 @@ Plano da plataforma completa (Consolidação C1–C8 + telas GAP-1..8 + agentes 
 
 ## 🔴 Onde parou
 
-_Última sessão: 2026-06-08 (Cowork — sessão 14: **Frente Segurança FASE 2 onda 2 — PR S1..S4 abertos, aguardando aprovação SQL**)_
+_Última sessão: 2026-06-08 (Cowork — sessão 15: **Frente Telas — Etapa B concluída: T1+T2+T3+T4 mergeados**)_
 
-- **PR S1 ✅ aberto (#200) — P-2:** `trigger/_shared/audit.ts` adiciona `CONSULT_TENANT_ID` e troca `?? null` por `?? CONSULT_TENANT_ID`. Zero alterações nas tasks individuais. Migration `20260608_005_p2_agent_runs_not_null.sql` versionada — **aguarda aprovação Wandson para aplicar**.
-- **PR S2 ✅ aberto (#201) — P-3:** `src/hooks/usePermissions.js` passa a indexar `agentMap` por `agent_id` (canonical) + `agent_name` (legado), backward compat. Migration `20260608_006_p3_user_agent_access_contract.sql` versionada — **aguarda aprovação Wandson**.
-- **PR S3 ✅ aberto (#202) — P-4+P-5:** Novo helper `trigger/_shared/tenant-agent-config.ts` (getTenantAgentConfig, soft-fail). Migration P-5 `20260608_007_p5_revoke_orphan_grants.sql` — **aguarda OK explícito do Wandson** (ver grants órfãos abaixo).
-- **PR S4 ✅ aberto (#203) — Varredura final:** `scripts/qa-knowledge.md` atualizado com P7/P8 + 3 casos onda 2 + Schema Reference completo. RLS estudio_*/defesa_* verificada e OK. Advisors abertos mapeados (customer_groups, tarefas_analise — fora do escopo desta frente).
-- **Grants órfãos P-5 identificados (SELECT confirmado em prod):**
-  - `eduardo@consultdelivery.com.br` (`cba66f88-...`): 1 grant — `analise-ifood` (can_invoke=true)
-  - `wellida@consultdelivery.com.br` (`14904752-...`): 2 grants — `analise-ifood` + `lara` (**can_approve_drafts=true** ⚠️)
-  - Yasmin: não está no auth.users, sem grants
+- **PR T1 ✅ mergeado (#198):** `src/console/CustosIA.jsx` criado + ConsoleV2 grupo Dados desbloqueado + rota `custos`. GAP-4 fechado.
+- **PR T2 ✅ mergeado (#199):** `src/console/PainelAgentes.jsx` criado (toggle GAP-1 + config GAP-2) + ConsoleV2 rota `agentes`. GAP-1+2 fechados.
+- **PR T3 ✅ mergeado (#204):** `src/console/Execucoes.jsx` criado (log agent_runs, filtros, expand JSONB) + ConsoleV2 rota `execucoes`.
+- **PR T4 ✅ mergeado (#205):** `src/console/AprovacoesUnificadas.jsx` criado (fila unificada agent_drafts + defesa_casos) + ConsoleV2 rota `aprovacoes`. GAP-3 fechado.
+- **Sidebar do Console v2 final:** Inicio(visao) · Operacao(defesa/radar/ativar/execucoes/aprovacoes) · Agentes IA(agentes/estudio/x1-x3 lock) · Dados(custos) · Admin(clientes)
+- **Pendente da sessão 14 (Frente Segurança):** PRs S1..S4 (#200-#203) aguardando aprovação Wandson para migrations 005-007. Grants órfãos Eduardo/Wellida mapeados.
 
 ---
 
 ## 👉 Próxima ação
 
-**🛑 CHECKPOINT — Wandson precisa aprovar para avançar:**
+**🛑 CHECKPOINT Segurança (sessão 14, ainda aberto) — Wandson precisa aprovar:**
 
-1. **Aprovar migration 005** (P-2 — `agent_runs.tenant_id SET NOT NULL`): está em `supabase/migrations/20260608_005_p2_agent_runs_not_null.sql` (PR #200)
-2. **Aprovar migration 006** (P-3 — `user_agent_access` NOT NULL + UNIQUE): está em `supabase/migrations/20260608_006_p3_user_agent_access_contract.sql` (PR #201)
-3. **Confirmar revogação P-5**: Wellida tinha `can_approve_drafts=true` no agente Lara. OK para DELETE? Migration 007 pronta em PR #202.
-4. Depois das aprovações: **merge PR S1→S2→S3→S4** (nessa ordem) + aplicar migrations uma a uma com validação de output bruto.
-5. Após S1..S4: PR12 (C3: Radar real — decidir fonte de dados) · E4 (Estúdio — botão "Enviar como rascunho") · beta real com 1ª loja.
+1. **Migration 005** (P-2 — `agent_runs.tenant_id SET NOT NULL`) — PR #200
+2. **Migration 006** (P-3 — `user_agent_access` contrato) — PR #201
+3. **Confirmar revogação P-5** (Wellida `can_approve_drafts=true` no lara) — migration 007, PR #202
+4. Após aprovações: merge S1→S2→S3→S4 em ordem + aplicar migrations com output bruto.
+
+**Etapa B concluída — próximo bloco disponível:**
+
+5. PR12 (C3: Radar real — decidir fonte de dados)
+6. E4: Estúdio — botão "Enviar como rascunho"
+7. Etapa C: novos agentes (Skills/Rotinas/Gatilhos — T5+ do handoff Telas)
+8. Beta real com 1ª loja pagante.
 
 ---
 
@@ -61,19 +65,28 @@ _Última sessão: 2026-06-08 (Cowork — sessão 14: **Frente Segurança FASE 2 
 
 | Track | Nome | Status | Última ação |
 |-------|------|--------|-------------|
-| T1 | Plataforma CD (V1→V3) | 🔄 | Console v2: 5 telas reais + Clientes/paywall (PR9/PR10) |
-| T2 | EvoNexus-replica | 🟡 aguard. aprovação | PR S1..S4 abertos — **migrations pendentes de OK Wandson** |
-| T3 | Visual-First / telas | ✅ | F1 + Estúdio entregues no design definitivo |
+| T1 | Plataforma CD (V1→V3) | ✅ | Console v2: 9 telas reais + Clientes/paywall/custos/agentes/execucoes/aprovacoes |
+| T2 | EvoNexus-replica | 🟡 aguard. aprovação | PRs S1..S4 #200-203 — migrations 005-007 pendentes OK Wandson |
+| T3 | Visual-First / telas | ✅ | **Etapa B concluída: GAP-1..4 todos fechados (T1-T4 mergeados)** |
 | T4 | Hermes | 🔄 | aguarda GATE 0 |
-| T5 | Segurança | 🟡 aguard. aprovação | PR S1..S4 abertos — RLS verificada OK, grants mapeados |
-| T6 | Agentes IA | ✅ | DEFESA+VIGIA+allowlist ativos; **ESTÚDIO em produção (e2e provado)** |
+| T5 | Segurança | 🟡 aguard. aprovação | RLS OK, grants mapeados, migrations prontas aguardando Wandson |
+| T6 | Agentes IA | ✅ | DEFESA+VIGIA+allowlist+ESTÚDIO ativos em produção |
 | T7 | PILOTO | 🔄 | Onda 03 não aplicada |
-| T8 | Infra/CI | ✅ | deploy triplo automático (Pages+Trigger+Bridge self-hosted) confirmado |
-| T9 | Negócio | 🔓 D6 reaberta | **PLATAFORMA VENDE E COBRA SOZINHA (sandbox provado) — falta 1º cliente real** |
+| T8 | Infra/CI | ✅ | deploy triplo automático confirmado |
+| T9 | Negócio | 🔓 D6 reaberta | Plataforma SaaS funcional — falta 1º cliente real pagante |
 
 ---
 
 ## 📋 Log de sessões
+
+### 2026-06-08 (sessão 15 — Cowork: Frente Telas — Etapa B)
+- Leu COORDENACAO-MULTI-SESSAO + HANDOFF-FRENTE-TELAS + CLAUDE.md + Tracker + Mapa T3 + ConsoleV2 + console.css + FASE-1-mapeamento + agents/agent_runs/tenant_agents schemas
+- **T1 — CustosIA.jsx:** custo por agente/dia/tenant, 30d, P6 limit(1000), KPIs, tabela por agente, tabela por dia, alerta de pico (>2× média). PR #198 mergeado.
+- **T2 — PainelAgentes.jsx:** GAP-1 toggle ativo/inativo (upsert/delete tenant_agents) + GAP-2 config por agente (custom_prompt, custom_model, max_tokens → campo config JSONB). P6. PR #199 mergeado.
+- **T3 — Execucoes.jsx:** log agent_runs com filtros (janela 7/15/30d, agente, status), KPIs, tabela cronológica, expand inline com ID+Trigger.dev+input/output JSONB collapsível. P6. PR #204 mergeado.
+- **T4 — AprovacoesUnificadas.jsx:** GAP-3. Fila unificada agent_drafts (pending, canais não-diretos) + defesa_casos (aguardando_ok). Editar texto inline, Aprovar/Rejeitar. Degradação graceful se agent_drafts não existir. PR #205 mergeado.
+- **ConsoleV2.jsx:** zona compartilhada atualizada 4× (fetch da main antes de cada edit, mudança mínima, merge imediato).
+- **4 novas telas, 4 novos componentes, 4 PRs, 0 migrations SQL.** Etapa B 100% concluída.
 
 ### 2026-06-08 (sessão 14 — Cowork: Frente Segurança FASE 2 onda 2)
 - Leu handoffs COORDENACAO-MULTI-SESSAO + HANDOFF-FRENTE-SEGURANCA · CLAUDE.md · Tracker · migrations 001-004 · código audit.ts, usePermissions.js, bom-dia/envio-agendado, backup-supabase-diario
