@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
+import { CvSprite, Ico } from './CvIcons.jsx';
+// telas cv2 (visual claro)
 import AtivarLoja from './AtivarLoja.jsx';
 import Clientes from './Clientes.jsx';
 import Estudio from './Estudio.jsx';
@@ -17,83 +19,85 @@ import Habilidades from './Habilidades.jsx';
 import Templates from './Templates.jsx';
 import AgenteAnalise from './AgenteAnalise.jsx';
 import Marca from './Marca.jsx';
+import { Gatilhos, Topicos, TarefasAgendadas, Links, Provedores, Integracoes, Sistemas, Arquivos } from './CvNovas.jsx';
+// telas reusadas do console clássico (funcionais — visual convertido nas ondas 2-3)
 import ChatScreen from '../screens/ChatScreen.jsx';
+import DeliScreen from '../screens/DeliScreen.jsx';
+import CrmScreen from '../screens/CRMScreen.jsx';
+import MiaAuditScreen from '../screens/MiaAuditScreen.jsx';
+import InadimplentesScreen from '../screens/InadimplentesScreen.jsx';
+import AutomacoesScreen from '../screens/AutomacoesScreen.jsx';
+import HeartbeatsScreen from '../screens/HeartbeatsScreen.jsx';
+import GoalsScreen from '../screens/GoalsScreen.jsx';
+import MemoriesScreen from '../screens/MemoriesScreen.jsx';
+import KnowledgeBaseScreen from '../screens/KnowledgeBaseScreen.jsx';
+import SettingsScreen from '../screens/SettingsScreen.jsx';
+import LojasScreen from '../screens/lojas/LojasScreen.jsx';
 import './console.css';
 
 // ============================================================
-// Console v2 · plataforma completa (noite autônoma 2026-06-08)
-// Operação (+ Chat ao Vivo) · Agentes IA · Dados · Admin
-// Chat ao Vivo = componente de produção ChatScreen reusado em área
-// cheia (100% paridade: realtime, mídia, lead, departamentos, tarefas).
+// Console v2 — estrutura IDÊNTICA ao protótipo (docs/prototipo/console-v2.html)
+// 5 grupos · ícones do protótipo · + abas novas mescladas. Onda 1.
 // ============================================================
 
-const ICONS = {
-  visao:      ['M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z', 'M9 22V12h6v10'],
-  chat:       ['M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'],
-  defesa:     ['M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'],
-  radar:      ['M22 12h-4l-3 9L9 3l-3 9H2'],
-  ativar:     ['M3 21h18', 'M5 21V7l8-4v18', 'M19 21V11l-6-4'],
-  execucoes:  ['M8 6h13', 'M8 12h13', 'M8 18h13', 'M3 6h.01', 'M3 12h.01', 'M3 18h.01'],
-  aprovacoes: ['M22 11.08V12a10 10 0 1 1-5.93-9.14', 'M22 4 12 14.01l-3-3'],
-  agentes:    ['M12 2v2', 'M5 8h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z', 'M9 13h.01', 'M15 13h.01'],
-  analise:    ['M3 3v18h18', 'M7 14l3-3 3 3 4-5'],
-  estudio:    ['M3 3h18v18H3z', 'M3 15l5-5 4 4 3-3 6 6'],
-  cardapio:   ['M4 19.5A2.5 2.5 0 0 1 6.5 17H20', 'M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'],
-  multicanal: ['M12 2 2 7l10 5 10-5-10-5z', 'M2 17l10 5 10-5', 'M2 12l10 5 10-5'],
-  config:     ['M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', 'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'],
-  habilidades:['M13 2L3 14h9l-1 8 10-12h-9l1-8z'],
-  custos:     ['M12 1v22', 'M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'],
-  importar:   ['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', 'M7 10l5-5 5 5', 'M12 5v12'],
-  clientes:   ['M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M23 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'],
-  acesso:     ['M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z', 'M9 12l2 2 4-4'],
-  auditoria:  ['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', 'M14 2v6h6', 'M16 13H8', 'M16 17H8'],
-  templates:  ['M3 3h18v18H3z', 'M3 9h18', 'M9 21V9'],
-  marca:      ['M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z'],
-  lock:       ['M5 11h14v10H5z', 'M8 11V7a4 4 0 0 1 8 0v4'],
-};
-
-function Ico({ name }) {
-  const paths = ICONS[name] || ICONS.lock;
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      {paths.map((d, i) => <path key={i} d={d} />)}
-    </svg>
-  );
-}
-
 const GRUPOS = [
-  { label: 'Início', items: [{ id: 'visao', label: 'Visão Geral' }] },
+  { label: 'Início', items: [
+    { id: 'visao', ic: 'i-grid', label: 'Visão Geral' },
+    { id: 'deli', ic: 'i-bot', label: 'DELI' },
+  ]},
   { label: 'Operação', items: [
-    { id: 'chat', label: 'Chat ao Vivo' },
-    { id: 'defesa', label: 'Defesa Comercial' },
-    { id: 'radar', label: 'Radar (grátis)' },
-    { id: 'ativar', label: 'Ativar loja' },
-    { id: 'execucoes', label: 'Execuções' },
-    { id: 'aprovacoes', label: 'Aprovações' },
+    { id: 'crm', ic: 'i-users', label: 'Clientes' },
+    { id: 'lojas', ic: 'i-store', label: 'Lojas' },
+    { id: 'chat', ic: 'i-chat', label: 'Chat ao Vivo' },
+    { id: 'mia', ic: 'i-eye', label: 'Conversas · MIA' },
+    { id: 'aprovacoes', ic: 'i-check', label: 'Aprovações' },
+    { id: 'cobranca', ic: 'i-cash', label: 'Cobrança' },
+    { id: 'defesa', ic: 'i-shield', label: 'Defesa Comercial' },
+    { id: 'radar', ic: 'i-radio', label: 'Radar (grátis)' },
+    { id: 'ativar', ic: 'i-plug', label: 'Ativar loja' },
   ]},
   { label: 'Agentes IA', items: [
-    { id: 'agentes', label: 'Painel de Agentes' },
-    { id: 'analise', label: 'Análise de Loja' },
-    { id: 'cardapio', label: 'Cardápio' },
-    { id: 'multicanal', label: 'Multicanal' },
-    { id: 'estudio', label: 'Estúdio de Conteúdo' },
-    { id: 'config', label: 'Config de Agentes' },
-    { id: 'habilidades', label: 'Habilidades' },
+    { id: 'catalogo', ic: 'i-box', label: 'Catálogo' },
+    { id: 'estudio', ic: 'i-palette', label: 'Estúdio de Conteúdo' },
+    { id: 'habilidades', ic: 'i-zap', label: 'Habilidades' },
+    { id: 'analise', ic: 'i-chart', label: 'Análise de Loja' },
+    { id: 'cardapio', ic: 'i-menu', label: 'Cardápio' },
+    { id: 'multicanal', ic: 'i-layers', label: 'Multicanal' },
+    { id: 'rotinas', ic: 'i-clock', label: 'Rotinas' },
+    { id: 'tarefas', ic: 'i-list', label: 'Tarefas agendadas' },
+    { id: 'gatilhos', ic: 'i-zap', label: 'Gatilhos' },
+    { id: 'heartbeats', ic: 'i-radio', label: 'Heartbeats' },
+    { id: 'atividade', ic: 'i-list', label: 'Atividade' },
+    { id: 'metas', ic: 'i-target', label: 'Metas' },
+    { id: 'topicos', ic: 'i-flag', label: 'Tópicos' },
+    { id: 'modelos', ic: 'i-doc', label: 'Modelos' },
+    { id: 'config', ic: 'i-gear', label: 'Config de Agentes' },
   ]},
   { label: 'Dados', items: [
-    { id: 'custos', label: 'Custos de IA' },
-    { id: 'importar', label: 'Importar relatórios' },
+    { id: 'arquivos', ic: 'i-folder', label: 'Arquivos' },
+    { id: 'links', ic: 'i-link', label: 'Links compartilhados' },
+    { id: 'memoria', ic: 'i-brain', label: 'Memória dos agentes' },
+    { id: 'conhecimento', ic: 'i-book', label: 'Conhecimento (RAG)' },
+    { id: 'custos', ic: 'i-dollar', label: 'Custos de IA' },
+    { id: 'importar', ic: 'i-save', label: 'Importar relatórios' },
   ]},
-  { label: 'Admin', items: [
-    { id: 'clientes', label: 'Clientes (plataforma)' },
-    { id: 'marca', label: 'Marca' },
-    { id: 'acesso', label: 'Acesso por usuário' },
-    { id: 'auditoria', label: 'Auditoria' },
-    { id: 'templates', label: 'Templates' },
+  { label: 'Sistema', items: [
+    { id: 'configsys', ic: 'i-gear', label: 'Configurações' },
+    { id: 'clientesplat', ic: 'i-users', label: 'Clientes (plataforma)' },
+    { id: 'marca', ic: 'i-droplet', label: 'Marca' },
+    { id: 'provedores', ic: 'i-cpu', label: 'Provedores de IA' },
+    { id: 'integracoes', ic: 'i-plug', label: 'Integrações' },
+    { id: 'sistemas', ic: 'i-box', label: 'Sistemas externos' },
+    { id: 'acesso', ic: 'i-key', label: 'Acesso por usuário' },
+    { id: 'auditoria', ic: 'i-scroll', label: 'Auditoria' },
   ]},
 ];
 
-const TITULOS = { visao: 'Visão Geral', chat: 'Chat ao Vivo', defesa: 'Defesa Comercial', radar: 'Radar', ativar: 'Ativar loja', clientes: 'Clientes', estudio: 'Estúdio de Conteúdo', custos: 'Custos de IA', agentes: 'Painel de Agentes', execucoes: 'Execuções', aprovacoes: 'Aprovações', importar: 'Importar relatórios', analise: 'Análise de Loja', config: 'Config de Agentes', habilidades: 'Habilidades', acesso: 'Acesso por usuário', auditoria: 'Auditoria', templates: 'Templates', cardapio: 'Cardápio', multicanal: 'Multicanal', marca: 'Marca' };
+const LABELS = {};
+GRUPOS.forEach(g => g.items.forEach(it => { LABELS[it.id] = it.label; }));
+
+// telas reusadas do clássico (dark) — renderizadas em área cheia até converter
+const LEGADO = new Set(['deli', 'crm', 'lojas', 'mia', 'cobranca', 'rotinas', 'heartbeats', 'metas', 'memoria', 'conhecimento', 'configsys']);
 
 const OK_STATUSES = ['ok', 'completed', 'success'];
 const fmtBRL = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -158,7 +162,7 @@ function useAlertas(tenantDbId) {
       if (!alive) return;
       const lista = [];
       if ((casos ?? 0) > 0) lista.push({ cls: 'err', txt: `${casos} caso(s) de Defesa aguardando seu OK`, ir: 'defesa' });
-      if ((atrasadas ?? 0) > 0) lista.push({ cls: 'err', txt: `${atrasadas} assinatura(s) atrasada(s)`, ir: 'clientes' });
+      if ((atrasadas ?? 0) > 0) lista.push({ cls: 'err', txt: `${atrasadas} assinatura(s) atrasada(s)`, ir: 'cobranca' });
       if ((fontesPend ?? 0) > 0) lista.push({ cls: 'warn', txt: `${fontesPend} relatório(s) em processamento`, ir: 'importar' });
       setAl(lista);
     })();
@@ -394,7 +398,7 @@ function Defesa({ tenantDbId, userId }) {
 
 export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
   const [tela, setTela] = useState('visao');
-  const [defesaOn, setDefesaOn] = useState(null); // null = carregando
+  const [defesaOn, setDefesaOn] = useState(null);
   const [brand, recarregarBrand] = useBranding(tenantDbId);
   const tenantNome = brand?.nome || tenantInfo?.name || 'Workspace';
   const tenantSlug = tenantInfo?.id;
@@ -410,9 +414,63 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
 
   const temaStyle = brand?.cor ? { '--red': brand.cor, '--red-dark': brand.cor, '--red-soft': brand.cor + '1a' } : undefined;
   const ehChat = tela === 'chat';
+  const ehLegado = LEGADO.has(tela);
+
+  const nav = setTela; // navegação interna do cv2
+
+  function render() {
+    switch (tela) {
+      // INÍCIO
+      case 'visao': return <VisaoGeral tenantNome={tenantNome} tenantDbId={tenantDbId} onNav={nav} />;
+      case 'deli': return <DeliScreen tenantDbId={tenantDbId} userId={userId} />;
+      // OPERAÇÃO
+      case 'crm': return <CrmScreen tenant={tenantSlug} tenantDbId={tenantDbId} onNavigate={nav} />;
+      case 'lojas': return <LojasScreen tenantDbId={tenantDbId} userId={userId} />;
+      case 'mia': return <MiaAuditScreen tenantDbId={tenantDbId} />;
+      case 'aprovacoes': return <AprovacoesUnificadas tenantDbId={tenantDbId} userId={userId} />;
+      case 'cobranca': return <InadimplentesScreen tenantDbId={tenantDbId} userId={userId} />;
+      case 'defesa': return defesaOn === false ? <PaywallDefesa /> : <Defesa tenantDbId={tenantDbId} userId={userId} />;
+      case 'radar': return <RadarReal tenantNome={tenantNome} tenantDbId={tenantDbId} />;
+      case 'ativar': return <AtivarLoja tenantDbId={tenantDbId} />;
+      // AGENTES IA
+      case 'catalogo': return <PainelAgentes tenantDbId={tenantDbId} />;
+      case 'estudio': return <Estudio tenantDbId={tenantDbId} userId={userId} />;
+      case 'habilidades': return <Habilidades tenantDbId={tenantDbId} userId={userId} />;
+      case 'analise': return <AnaliseLoja tenantDbId={tenantDbId} userId={userId} />;
+      case 'cardapio': return <AgenteAnalise tenantDbId={tenantDbId} userId={userId} agente="cardapio" titulo="Cardápio" descricao="O agente analisa o funil e os itens do cardápio e sugere otimizações de nomes, descrições e preços." />;
+      case 'multicanal': return <AgenteAnalise tenantDbId={tenantDbId} userId={userId} agente="multicanal" titulo="Multicanal" descricao="O agente consolida as métricas dos seus canais de delivery num panorama único e aponta onde focar." />;
+      case 'rotinas': return <AutomacoesScreen tenantDbId={tenantDbId} onNavigate={nav} />;
+      case 'tarefas': return <TarefasAgendadas />;
+      case 'gatilhos': return <Gatilhos />;
+      case 'heartbeats': return <HeartbeatsScreen tenantDbId={tenantDbId} onNavigate={nav} />;
+      case 'atividade': return <Execucoes tenantDbId={tenantDbId} />;
+      case 'metas': return <GoalsScreen tenantDbId={tenantDbId} onNavigate={nav} />;
+      case 'topicos': return <Topicos />;
+      case 'modelos': return <Templates tenantDbId={tenantDbId} userId={userId} />;
+      case 'config': return <AgenteConfig tenantDbId={tenantDbId} />;
+      // DADOS
+      case 'arquivos': return <Arquivos tenantDbId={tenantDbId} />;
+      case 'links': return <Links />;
+      case 'memoria': return <MemoriesScreen tenantDbId={tenantDbId} />;
+      case 'conhecimento': return <KnowledgeBaseScreen tenantDbId={tenantDbId} />;
+      case 'custos': return <CustosIA tenantDbId={tenantDbId} />;
+      case 'importar': return <ImportarRelatorios tenantDbId={tenantDbId} userId={userId} />;
+      // SISTEMA
+      case 'configsys': return <SettingsScreen tenant={tenantSlug} tenantDbId={tenantDbId} userId={userId} onTenantChange={() => {}} />;
+      case 'clientesplat': return <Clientes userId={userId} />;
+      case 'marca': return <Marca tenantDbId={tenantDbId} onChanged={recarregarBrand} />;
+      case 'provedores': return <Provedores />;
+      case 'integracoes': return <Integracoes />;
+      case 'sistemas': return <Sistemas />;
+      case 'acesso': return <AcessoUsuarios tenantDbId={tenantDbId} />;
+      case 'auditoria': return <AuditLog tenantDbId={tenantDbId} />;
+      default: return <div className="cv2-card">Tela não encontrada.</div>;
+    }
+  }
 
   return (
     <div className="cv2" style={temaStyle}>
+      <CvSprite />
       <aside className="cv2-sb">
         <div className="cv2-brand">
           <img src={brand?.logo || '/assets/rocket-logo.png'} alt="" style={{ width: 22, height: 22, objectFit: 'contain' }} />
@@ -424,13 +482,9 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
         {GRUPOS.map((g, i) => (
           <div key={i}>
             <div className="cv2-grp">{g.label}</div>
-            {g.items.map(it => (g.locked || it.locked) ? (
-              <div key={it.id} className="cv2-item lock" title="Em construção — próximas fases do roadmap">
-                <Ico name="lock" />{it.label}<span className="f2">EM BREVE</span>
-              </div>
-            ) : (
+            {g.items.map(it => (
               <div key={it.id} className={`cv2-item${tela === it.id ? ' on' : ''}`} onClick={() => setTela(it.id)}>
-                <Ico name={it.id} />{it.label}
+                <Ico name={it.ic} />{it.label}
               </div>
             ))}
           </div>
@@ -441,40 +495,23 @@ export default function ConsoleV2({ tenantInfo, tenantDbId, userId, onExit }) {
       </aside>
       <div className="cv2-main">
         {ehChat ? (
-          // Chat ao Vivo em área cheia: o ChatScreen traz seu próprio layout 100vh.
           <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
             <ChatScreen tenant={tenantSlug} tenantDbId={tenantDbId} onNavigate={setTela} deepLinkConvId={null} />
           </div>
         ) : (
           <>
             <div className="cv2-tb">
-              <span className="crumb">Console › <b>{TITULOS[tela] || tela}</b></span>
-              <span style={{ flex: 1 }} />
+              <span className="crumb">Console › <b>{LABELS[tela] || tela}</b></span>
+              <input className="search" placeholder="Buscar clientes, lojas, conversas, agentes…" />
               <span className="cv2-pill">Cliente <b>{tenantNome}</b></span>
               <span className="cv2-pill"><b>{defesaOn === false ? 'RADAR GRÁTIS' : 'BETA'}</b></span>
+              <span className="cv2-avatar">{(tenantNome || 'CD').slice(0, 2).toUpperCase()}</span>
             </div>
-            <div className="cv2-ct">
-              {tela === 'visao' && <VisaoGeral tenantNome={tenantNome} tenantDbId={tenantDbId} onNav={setTela} />}
-              {tela === 'defesa' && (defesaOn === false ? <PaywallDefesa /> : <Defesa tenantDbId={tenantDbId} userId={userId} />)}
-              {tela === 'radar' && <RadarReal tenantNome={tenantNome} tenantDbId={tenantDbId} />}
-              {tela === 'ativar' && <AtivarLoja tenantDbId={tenantDbId} />}
-              {tela === 'clientes' && <Clientes userId={userId} />}
-              {tela === 'estudio' && <Estudio tenantDbId={tenantDbId} userId={userId} />}
-              {tela === 'custos' && <CustosIA tenantDbId={tenantDbId} />}
-              {tela === 'agentes' && <PainelAgentes tenantDbId={tenantDbId} />}
-              {tela === 'execucoes' && <Execucoes tenantDbId={tenantDbId} />}
-              {tela === 'aprovacoes' && <AprovacoesUnificadas tenantDbId={tenantDbId} userId={userId} />}
-              {tela === 'importar' && <ImportarRelatorios tenantDbId={tenantDbId} userId={userId} />}
-              {tela === 'analise' && <AnaliseLoja tenantDbId={tenantDbId} userId={userId} />}
-              {tela === 'cardapio' && <AgenteAnalise tenantDbId={tenantDbId} userId={userId} agente="cardapio" titulo="Cardápio" descricao="O agente analisa o funil e os itens do cardápio e sugere otimizações de nomes, descrições e preços." />}
-              {tela === 'multicanal' && <AgenteAnalise tenantDbId={tenantDbId} userId={userId} agente="multicanal" titulo="Multicanal" descricao="O agente consolida as métricas dos seus canais de delivery num panorama único e aponta onde focar." />}
-              {tela === 'config' && <AgenteConfig tenantDbId={tenantDbId} />}
-              {tela === 'habilidades' && <Habilidades tenantDbId={tenantDbId} userId={userId} />}
-              {tela === 'acesso' && <AcessoUsuarios tenantDbId={tenantDbId} />}
-              {tela === 'auditoria' && <AuditLog tenantDbId={tenantDbId} />}
-              {tela === 'templates' && <Templates tenantDbId={tenantDbId} userId={userId} />}
-              {tela === 'marca' && <Marca tenantDbId={tenantDbId} onChanged={recarregarBrand} />}
-            </div>
+            {ehLegado ? (
+              <div className="cv2-legado">{render()}</div>
+            ) : (
+              <div className="cv2-ct">{render()}</div>
+            )}
           </>
         )}
       </div>
