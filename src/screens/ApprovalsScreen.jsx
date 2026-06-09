@@ -4,9 +4,9 @@ import { supabase } from '../lib/supabase.js';
 const BRIDGE_URL = import.meta.env.VITE_BRIDGE_URL || 'https://bridge.consultdelivery.com.br';
 
 const SEVERITY_COLORS = {
-  verde:    { bg: 'rgba(0,200,81,0.12)',   border: 'rgba(0,200,81,0.3)',   text: '#00C851', label: 'Verde' },
-  amarelo:  { bg: 'rgba(255,183,0,0.12)',  border: 'rgba(255,183,0,0.3)',  text: '#FFB700', label: 'Amarelo' },
-  vermelho: { bg: 'rgba(183,12,0,0.12)',   border: 'rgba(183,12,0,0.3)',   text: '#B70C00', label: 'Vermelho' },
+  verde:    { bg: 'var(--green-soft)', border: '#bfe3cb', text: 'var(--green)', label: 'Verde' },
+  amarelo:  { bg: 'var(--amber-soft)', border: '#ecd9a8', text: 'var(--amber)', label: 'Amarelo' },
+  vermelho: { bg: 'var(--red-soft)',   border: '#ecc7c2', text: 'var(--red)',   label: 'Vermelho' },
 };
 
 async function authHeader() {
@@ -78,26 +78,26 @@ function ApprovalCard({ approval, onDecision }) {
         }}>
           {sev.label}
         </span>
-        <span style={{ fontSize: 12, color: '#888', fontWeight: 600 }}>@{approval.agent_slug}</span>
-        <span style={{ fontSize: 11, color: '#555', marginLeft: 'auto' }}>
-          {remaining && <span style={{ color: isExpired ? '#ef4444' : '#666' }}>{remaining}</span>}
+        <span style={{ fontSize: 12, color: 'var(--tx2)', fontWeight: 600 }}>@{approval.agent_slug}</span>
+        <span style={{ fontSize: 11, color: 'var(--tx2)', marginLeft: 'auto' }}>
+          {remaining && <span style={{ color: isExpired ? 'var(--red)' : 'var(--tx2)' }}>{remaining}</span>}
         </span>
       </div>
 
       {/* Ação */}
-      <p style={{ margin: '0 0 6px', fontSize: 13, color: '#e5e5e5', fontWeight: 500 }}>
+      <p style={{ margin: '0 0 6px', fontSize: 13, color: 'var(--tx)', fontWeight: 500 }}>
         {approval.action_label}
       </p>
-      <p style={{ margin: '0 0 10px', fontSize: 11, color: '#666' }}>
-        Tipo: <span style={{ color: '#888' }}>{approval.action_type}</span>
+      <p style={{ margin: '0 0 10px', fontSize: 11, color: 'var(--tx2)' }}>
+        Tipo: <span style={{ color: 'var(--tx)' }}>{approval.action_type}</span>
         {' · '}{new Date(approval.created_at).toLocaleString('pt-BR')}
       </p>
 
       {/* Payload resumido */}
       {approval.action_payload && (
         <div style={{
-          background: 'rgba(0,0,0,0.3)', borderRadius: 4, padding: '6px 10px',
-          marginBottom: 10, fontSize: 11, color: '#777', fontFamily: 'monospace',
+          background: '#faf9f8', border: '1px solid var(--line)', borderRadius: 4, padding: '6px 10px',
+          marginBottom: 10, fontSize: 11, color: 'var(--tx2)', fontFamily: 'monospace',
           maxHeight: 60, overflow: 'hidden', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
         }}>
           {JSON.stringify(approval.action_payload, null, 2).slice(0, 200)}
@@ -109,15 +109,15 @@ function ApprovalCard({ approval, onDecision }) {
       {isDone && (
         <div style={{
           display: 'inline-block', borderRadius: 4, padding: '2px 10px', fontSize: 12, fontWeight: 600,
-          background: approval.status === 'approved' ? 'rgba(0,200,81,0.15)' : 'rgba(183,12,0,0.15)',
-          color: approval.status === 'approved' ? '#00C851' : '#B70C00',
+          background: approval.status === 'approved' ? 'var(--green-soft)' : 'var(--red-soft)',
+          color: approval.status === 'approved' ? 'var(--green)' : 'var(--red)',
           marginBottom: approval.review_note ? 6 : 0,
         }}>
           {approval.status === 'approved' ? 'Aprovado' : 'Rejeitado'}
         </div>
       )}
       {isDone && approval.review_note && (
-        <p style={{ margin: '4px 0 0', fontSize: 12, color: '#666', fontStyle: 'italic' }}>
+        <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--tx2)', fontStyle: 'italic' }}>
           "{approval.review_note}"
         </p>
       )}
@@ -132,9 +132,9 @@ function ApprovalCard({ approval, onDecision }) {
               placeholder="Nota (opcional)..."
               style={{
                 width: '100%', boxSizing: 'border-box',
-                background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: 4, padding: '6px 10px', color: '#ccc', fontSize: 12,
-                marginBottom: 8,
+                background: '#faf9f8', border: '1px solid var(--line)',
+                borderRadius: 4, padding: '6px 10px', color: 'var(--tx)', fontSize: 12,
+                marginBottom: 8, outline: 'none', fontFamily: 'inherit',
               }}
             />
           )}
@@ -143,8 +143,8 @@ function ApprovalCard({ approval, onDecision }) {
               onClick={() => decide('approved')}
               disabled={loading}
               style={{
-                background: 'rgba(0,200,81,0.15)', border: '1px solid rgba(0,200,81,0.4)',
-                borderRadius: 6, padding: '5px 14px', color: '#00C851', fontSize: 12,
+                background: 'var(--green-soft)', border: '1px solid #bfe3cb',
+                borderRadius: 6, padding: '5px 14px', color: 'var(--green)', fontSize: 12,
                 cursor: 'pointer', fontWeight: 600,
               }}
             >
@@ -154,8 +154,8 @@ function ApprovalCard({ approval, onDecision }) {
               onClick={() => decide('rejected')}
               disabled={loading}
               style={{
-                background: 'rgba(183,12,0,0.15)', border: '1px solid rgba(183,12,0,0.4)',
-                borderRadius: 6, padding: '5px 14px', color: '#B70C00', fontSize: 12,
+                background: 'var(--red-soft)', border: '1px solid #ecc7c2',
+                borderRadius: 6, padding: '5px 14px', color: 'var(--red)', fontSize: 12,
                 cursor: 'pointer', fontWeight: 600,
               }}
             >
@@ -164,8 +164,8 @@ function ApprovalCard({ approval, onDecision }) {
             <button
               onClick={() => setShowNote(v => !v)}
               style={{
-                background: 'none', border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: 6, padding: '5px 10px', color: '#666', fontSize: 11,
+                background: 'none', border: '1px solid var(--line)',
+                borderRadius: 6, padding: '5px 10px', color: 'var(--tx2)', fontSize: 11,
                 cursor: 'pointer',
               }}
             >
@@ -177,7 +177,7 @@ function ApprovalCard({ approval, onDecision }) {
 
       {/* Verde: auto-aprovado */}
       {!isDone && approval.severity === 'verde' && (
-        <div style={{ fontSize: 11, color: '#00C851' }}>Auto-aprovado (Verde)</div>
+        <div style={{ fontSize: 11, color: 'var(--green)' }}>Auto-aprovado (Verde)</div>
       )}
     </div>
   );
@@ -216,7 +216,7 @@ export default function ApprovalsScreen({ tenantDbId }) {
   const approved  = approvals.filter(a => a.status === 'approved');
 
   return (
-    <div style={{ height: '100%', overflowY: 'auto', background: '#111', color: '#e5e5e5', padding: '20px' }}>
+    <div style={{ height: '100%', overflowY: 'auto', background: 'var(--bg)', color: 'var(--tx)', padding: '20px' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
         <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Aprovações de Agentes</h2>
@@ -232,8 +232,8 @@ export default function ApprovalsScreen({ tenantDbId }) {
         <button
           onClick={() => setShowAll(v => !v)}
           style={{
-            background: 'none', border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: 6, padding: '6px 12px', color: '#666', fontSize: 12,
+            background: 'none', border: '1px solid var(--line)',
+            borderRadius: 6, padding: '6px 12px', color: 'var(--tx2)', fontSize: 12,
             cursor: 'pointer',
           }}
         >
@@ -242,8 +242,8 @@ export default function ApprovalsScreen({ tenantDbId }) {
         <button
           onClick={load}
           style={{
-            background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: 6, padding: '6px 12px', color: '#888', fontSize: 12,
+            background: 'var(--panel)', border: '1px solid var(--line)',
+            borderRadius: 6, padding: '6px 12px', color: 'var(--tx2)', fontSize: 12,
             cursor: 'pointer',
           }}
         >
@@ -252,7 +252,7 @@ export default function ApprovalsScreen({ tenantDbId }) {
       </div>
 
       {loading ? (
-        <p style={{ color: '#555', textAlign: 'center', marginTop: 60 }}>Carregando...</p>
+        <p style={{ color: 'var(--tx2)', textAlign: 'center', marginTop: 60 }}>Carregando...</p>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
           {/* Coluna Vermelho */}
@@ -263,13 +263,13 @@ export default function ApprovalsScreen({ tenantDbId }) {
                 Vermelho
               </h3>
               {vermelho.length > 0 && (
-                <span style={{ background: 'rgba(183,12,0,0.15)', color: '#B70C00', borderRadius: 10, padding: '1px 8px', fontSize: 11, fontWeight: 700 }}>
+                <span style={{ background: 'var(--red-soft)', color: '#B70C00', borderRadius: 10, padding: '1px 8px', fontSize: 11, fontWeight: 700 }}>
                   {vermelho.length}
                 </span>
               )}
             </div>
             {vermelho.length === 0 ? (
-              <p style={{ fontSize: 12, color: '#333', textAlign: 'center', padding: '20px 0' }}>Nenhuma ação crítica.</p>
+              <p style={{ fontSize: 12, color: 'var(--tx2)', textAlign: 'center', padding: '20px 0' }}>Nenhuma ação crítica.</p>
             ) : (
               vermelho.map(a => <ApprovalCard key={a.id} approval={a} onDecision={handleDecision} />)
             )}
@@ -279,17 +279,17 @@ export default function ApprovalsScreen({ tenantDbId }) {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
               <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#FFB700', display: 'inline-block' }} />
-              <h3 style={{ margin: 0, fontSize: 13, color: '#FFB700', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              <h3 style={{ margin: 0, fontSize: 13, color: 'var(--amber)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 Amarelo
               </h3>
               {amarelo.length > 0 && (
-                <span style={{ background: 'rgba(255,183,0,0.15)', color: '#FFB700', borderRadius: 10, padding: '1px 8px', fontSize: 11, fontWeight: 700 }}>
+                <span style={{ background: 'var(--amber-soft)', color: 'var(--amber)', borderRadius: 10, padding: '1px 8px', fontSize: 11, fontWeight: 700 }}>
                   {amarelo.length}
                 </span>
               )}
             </div>
             {amarelo.length === 0 ? (
-              <p style={{ fontSize: 12, color: '#333', textAlign: 'center', padding: '20px 0' }}>Nenhuma ação pendente.</p>
+              <p style={{ fontSize: 12, color: 'var(--tx2)', textAlign: 'center', padding: '20px 0' }}>Nenhuma ação pendente.</p>
             ) : (
               amarelo.map(a => <ApprovalCard key={a.id} approval={a} onDecision={handleDecision} />)
             )}
@@ -299,17 +299,17 @@ export default function ApprovalsScreen({ tenantDbId }) {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
               <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#00C851', display: 'inline-block' }} />
-              <h3 style={{ margin: 0, fontSize: 13, color: '#00C851', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              <h3 style={{ margin: 0, fontSize: 13, color: 'var(--green)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 Auto-aprovado
               </h3>
               {(verde.length + approved.length) > 0 && (
-                <span style={{ background: 'rgba(0,200,81,0.12)', color: '#00C851', borderRadius: 10, padding: '1px 8px', fontSize: 11, fontWeight: 700 }}>
+                <span style={{ background: 'var(--green-soft)', color: 'var(--green)', borderRadius: 10, padding: '1px 8px', fontSize: 11, fontWeight: 700 }}>
                   {verde.length + approved.length}
                 </span>
               )}
             </div>
             {verde.length === 0 && approved.length === 0 ? (
-              <p style={{ fontSize: 12, color: '#333', textAlign: 'center', padding: '20px 0' }}>Nenhuma ação verde.</p>
+              <p style={{ fontSize: 12, color: 'var(--tx2)', textAlign: 'center', padding: '20px 0' }}>Nenhuma ação verde.</p>
             ) : (
               <>
                 {verde.map(a => <ApprovalCard key={a.id} approval={a} onDecision={handleDecision} />)}
