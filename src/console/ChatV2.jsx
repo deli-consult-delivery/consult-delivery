@@ -474,7 +474,7 @@ export default function ChatV2({ tenantDbId, userId, onFull }) {
               </div>
               {/* ações (hover) */}
               {!m.del && (
-                <div className="cv2-msg-acts" style={{ position: 'absolute', top: -10, [m.out ? 'left' : 'right']: 6, display: 'flex', gap: 2, background: '#fff', border: '1px solid var(--line)', borderRadius: 999, padding: '1px 4px', opacity: 0, transition: 'opacity .12s' }}>
+                <div className="cv2-msg-acts" style={{ position: 'absolute', top: -10, [m.out ? 'left' : 'right']: 6, display: 'flex', gap: 2, background: '#fff', border: '1px solid var(--line)', borderRadius: 999, padding: '1px 4px' }}>
                   <button title="Responder" onClick={() => setReplyTo(m)} style={actBtn}><Ico name="i-reply" size={12} /></button>
                   <button title="Reagir" onClick={() => setReagindo(r => r === m.id ? null : m.id)} style={actBtn}>😊</button>
                   {m.out && <button title="Apagar" onClick={() => apagar(m)} style={{ ...actBtn, color: 'var(--red)' }}>🗑️</button>}
