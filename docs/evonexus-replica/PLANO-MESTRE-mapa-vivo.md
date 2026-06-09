@@ -119,7 +119,7 @@
 - [x] Deploy key SSH dedicada — PAT fora do caminho do git ✅
 - [ ] ⏳ **Rotação de credenciais** (adiado):
   - [ ] Revogar 4 PATs GitHub (deli-agent-vps, Nexus, claude-code, Claude IA)
-  - [ ] Rotacionar `DASHBOARD_API_TOKEN` (EvoNexus)
+  - [ ] Rotacionar `DASHBOARD_API_TOKEN` — ⚠️ verificado 2026-06-09: é do **dashboard EvoNexus** (container Swarm `evo-nexus_dashboard`), **não** bridge/Infisical, e **zero dependência do CD**. Recomendado **🅰 aposentar** (`docker service rm` + limpar plaintext) em vez de rotacionar. Detalhe: `gate0-rotacao-credenciais.md` §3.
   - [ ] Rotacionar token Telegram (BotFather)
   - [ ] Limpar cópias em texto na VPS (`.git-credentials`, history, `.claude/*.jsonl`)
 - [ ] ⏳ Hardening: gateway root → usuário dedicado · remover `claude-debug` key · fail2ban `bantime.increment`

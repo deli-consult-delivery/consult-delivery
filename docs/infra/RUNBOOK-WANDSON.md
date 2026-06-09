@@ -25,8 +25,8 @@ Os três primeiros são SEUS. Depois deles, eu (orquestrador) implemento as tool
 Resumo do que fazer (detalhe e comandos no doc):
 1. **4 PATs do GitHub** — revogar e recriar *fine-grained*, escopo mínimo (só o repo `consult-delivery`): `deli-agent-vps`, `Nexus`, `claude-code`, `Claude IA`.
 2. **Token do Telegram** — `@BotFather` → `/revoke` → gerar novo → editar `/root/.hermes/.env` (`TELEGRAM_BOT_TOKEN=`) → `systemctl restart hermes-gateway` → **esperar ~15s e confirmar `active (running)` estável antes de testar** (o `FAILURE` transitório de poucos segundos no restart é normal — não teste na janela de troca de processo). ⚠️ **Não** é Infisical nem `pm2 restart bridge-server` — o token mora no `.env` do Hermes e o serviço é `hermes-gateway` (systemd). O bot é o **`@DeliConsultBot`** (um único `/revoke` cobre tudo — não há bot separado). (✅ rotação executada e validada com sucesso em 2026-06-09)
-3. **`DASHBOARD_API_TOKEN`** — gerar novo: `openssl rand -hex 32`.
-4. **Remover SSH key `claude-debug`** das authorized_keys da VPS.
+3. **`DASHBOARD_API_TOKEN`** — ⚠️ **não é bridge/Infisical**: é do **dashboard EvoNexus** (container Docker Swarm `evo-nexus_dashboard`), e **nenhum código do CD depende dele** (verificado 2026-06-09). Como EvoNexus é POC "não usar em prod", o caminho recomendado é **🅰 aposentar** (`docker service rm evo-nexus_dashboard` + `rm -rf /root/recovery`) em vez de rotacionar. Detalhe e opção 🅱 no doc §3.
+4. **Remover SSH key `claude-debug`** das authorized_keys da VPS — ⚠️ aparece **3× em cada** arquivo; a linha 2 tem a `claude-debug` **colada na chave `hostinger-managed-key`** → **não** use `grep -v`/`sed -d` (apagaria a hostinger). Receita segura (filtra pelo blob, com backup) no doc §4.
 5. **Limpar plaintext na VPS** — `.git-credentials`, history do shell, `.claude/*.jsonl`.
 6. **Hygiene Actions Secrets** — conferir que nenhum secret rotacionado ficou velho no GitHub Actions.
 7. **Propagar** os novos valores: Infisical → VPS → GitHub Actions → Trigger.dev. **Nunca colar valor em commit/chat/log** — só o NOME do segredo.
