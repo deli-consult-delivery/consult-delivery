@@ -88,9 +88,33 @@ WITH rls_setup AS (
 SELECT * FROM agent_runs; -- ERRADO
 ```
 
+### P9 — Vazamento de tema (data-theme no `<html>`) em superfície escopada-clara
+```
+# Console v2 (.cv2) é sempre claro, mas as telas LEGADO clássicas embutidas usam
+# a escala --g-*/--white/--black do :root. O console clássico aplica
+# data-theme="cinza"|"escuro" no <html> (App.jsx), que INVERTE essa escala.
+# Como .cv2 não redefinia --g-*, a escala escura vazava para os embeds:
+#   - --white vira surface escura     → "página preta"
+#   - bg:#fff hardcoded + --g-900 #fff → "branco no branco" (texto invisível)
+# Detecção: a tela só fica escura quando o usuário tem tema escuro salvo
+# (localStorage cd-theme). Em tema claro parece OK → bug intermitente por usuário.
+# Verificação no bundle de prod (deploy correto):
+curl -s https://app.consultdelivery.com.br/$(curl -s https://app.consultdelivery.com.br/ | grep -o 'assets/index-[^"]*\.css' | head -1) | grep -o '\.cv2{--g-900:#111827'
+# Esperado: match (override de escala clara presente)
+```
+Fix: redeclarar a escala light (`--g-*`, `--white`, `--black`, `*-soft` não cobertos pelo cv2) no escopo `.cv2` em `console.css`. Resolvido na sessão 27 (PR #262).
+
 ---
 
 ## Casos Resolvidos
+
+### [2026-06-09] Console v2 — telas LEGADO pretas / branco-no-branco (vazamento de tema)
+**Arquivo:** `src/console/console.css` (escopo `.cv2`)  
+**Sintoma:** Wandson reportou "páginas com cores escuras, preto" e "umas que ficaram branca mas não dá pra ver as letras" em telas do Console v2 (claro).  
+**Causa raiz (P9):** o console clássico salva o tema do usuário e aplica `data-theme="cinza"|"escuro"` no `document.documentElement` (`App.jsx:272-276`), o que **inverte** a escala `--g-*`/`--white`/`--black` definida no `:root` (`index.css`). O bloco `.cv2` define `--bg`/`--panel` próprios mas **não** redefinia `--g-*` → as telas clássicas (LEGADO) embutidas herdavam a escala invertida (escura). Dois sintomas, uma raiz: `--white` virava surface escura ("preto"); telas com `background:#fff` hardcoded + texto `var(--g-900)` (que virava `#FFFFFF`) ficavam branco-no-branco.  
+**Fix:** redeclarar a escala light (`--g-900..--g-50`, `--white`, `--black`, `--black-soft`, `--success/warn/info-soft`) no escopo `.cv2`. **Não** sobrescrever `--red-soft` (o cv2 já o define como `#faeae8` — sobrescrever mudaria os badges nativos do cv2).  
+**Teste de regressão:** build verde + grep do override no CSS de prod (ver P9). Confirmado live em `index-BcUDSZH6.css`.  
+**Lição:** qualquer superfície que fixa um tema (claro) mas embute componentes que leem custom properties globais DEVE redeclarar essas properties no seu escopo — senão um `data-theme` no ancestral (`<html>`) vaza pela herança de CSS custom properties. Atributo de tema no `<html>` tem alcance global; escopo de cor precisa de reset explícito.
 
 ### [2026-06-08] FASE 2 onda 2 — Runs de sistema gravavam tenant_id = NULL
 **Arquivo:** `trigger/_shared/audit.ts`  
