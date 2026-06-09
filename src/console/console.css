@@ -2,6 +2,11 @@
 @import url('https://fonts.googleapis.com/css2?family=Anton&family=Montserrat:wght@400;500;600;700;800&display=swap');
 .cv2{--bg:#f5f5f4;--panel:#fff;--line:#e6e4e1;--ink:#0D0D0D;--tx:#1c1b1a;--tx2:#76716c;--red:#B70C00;--red-dark:#8A0900;--red-soft:#faeae8;--green:#1e7d43;--green-soft:#e8f3ec;--amber:#9a6a10;--amber-soft:#faf1dd;display:flex;height:100vh;background:var(--bg);color:var(--tx);font-family:'Montserrat',sans-serif;font-size:13.5px;font-weight:500;overflow:hidden}
 .cv2 *{box-sizing:border-box}
+/* Console v2 é sempre claro. Reseta a escala --g-* (e --white/--black) para os
+   valores LIGHT do :root, anulando qualquer data-theme="cinza"/"escuro" salvo no
+   <html> do console clássico. Sem isto, telas LEGADO embutidas no cv2 herdam a
+   escala invertida (escura) → "páginas pretas / branco no branco". */
+.cv2{--g-900:#111827;--g-700:#374151;--g-600:#4B5563;--g-500:#6B7280;--g-400:#9CA3AF;--g-300:#D1D5DB;--g-200:#E5E7EB;--g-100:#F3F4F6;--g-50:#F9FAFB;--white:#FFFFFF;--black:#0D0D0D;--black-soft:#1A1A1A;--success-soft:#D1FAE5;--warn-soft:#FEF3C7;--info-soft:#DBEAFE}
 .cv2 .anton{font-family:'Anton',sans-serif;text-transform:uppercase;font-weight:400;letter-spacing:.2px}
 .cv2-sb{width:236px;min-width:236px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;overflow-y:auto}
 .cv2-brand{display:flex;align-items:center;gap:10px;padding:16px;border-bottom:1px solid var(--line)}
