@@ -4,12 +4,12 @@ import { supabase } from '../lib/supabase.js';
 const BRIDGE_URL = import.meta.env.VITE_BRIDGE_URL || 'https://bridge.consultdelivery.com.br';
 
 const STATUS_COLORS = {
-  open:        { bg: 'rgba(150,150,150,0.15)', text: '#aaa',    label: 'Aberto' },
-  in_progress: { bg: 'rgba(59,130,246,0.15)',  text: '#60a5fa', label: 'Em andamento' },
-  blocked:     { bg: 'rgba(249,115,22,0.15)',  text: '#fb923c', label: 'Bloqueado' },
-  review:      { bg: 'rgba(168,85,247,0.15)',  text: '#c084fc', label: 'Revisão' },
-  resolved:    { bg: 'rgba(34,197,94,0.15)',   text: '#4ade80', label: 'Resolvido' },
-  closed:      { bg: 'rgba(100,100,100,0.15)', text: '#666',    label: 'Fechado' },
+  open:        { bg: 'var(--bg)',          text: 'var(--tx2)',  label: 'Aberto' },
+  in_progress: { bg: '#e6effd',            text: '#1d4ed8',     label: 'Em andamento' },
+  blocked:     { bg: 'var(--amber-soft)',  text: 'var(--amber)', label: 'Bloqueado' },
+  review:      { bg: '#f1e9fb',            text: '#7c3aed',     label: 'Revisão' },
+  resolved:    { bg: 'var(--green-soft)',  text: 'var(--green)', label: 'Resolvido' },
+  closed:      { bg: 'var(--bg)',          text: 'var(--tx2)',  label: 'Fechado' },
 };
 
 const PRIORITY_COLORS = {
@@ -71,8 +71,8 @@ function TicketCard({ ticket, selected, onClick }) {
       style={{
         padding: '12px 14px',
         borderRadius: 6,
-        border: `1px solid ${selected ? '#B70C00' : 'rgba(255,255,255,0.08)'}`,
-        background: selected ? 'rgba(183,12,0,0.07)' : '#1a1a1a',
+        border: `1px solid ${selected ? '#B70C00' : 'var(--line)'}`,
+        background: selected ? 'var(--red-soft)' : 'var(--panel)',
         cursor: 'pointer',
         marginBottom: 6,
         transition: 'border-color 0.15s, background 0.15s',
@@ -80,7 +80,7 @@ function TicketCard({ ticket, selected, onClick }) {
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
         <PriorityDot priority={ticket.priority} />
-        <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: '#e5e5e5', lineHeight: 1.4 }}>
+        <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: 'var(--tx)', lineHeight: 1.4 }}>
           {ticket.title}
         </span>
       </div>
@@ -88,14 +88,14 @@ function TicketCard({ ticket, selected, onClick }) {
         <StatusBadge status={ticket.status} />
         {ticket.assignee_agent && (
           <span style={{
-            background: 'rgba(255,255,255,0.06)', color: '#888',
+            background: 'var(--bg)', color: 'var(--tx2)',
             padding: '1px 7px', borderRadius: 4, fontSize: 11,
           }}>
             {ticket.assignee_agent}
           </span>
         )}
         {isLocked && (
-          <span style={{ fontSize: 11, color: '#fb923c' }}>
+          <span style={{ fontSize: 11, color: 'var(--amber)' }}>
             Locked: {ticket.locked_by}
           </span>
         )}
@@ -192,12 +192,13 @@ function TicketDetail({ ticket, onUpdate, onClose }) {
             value={editTitle}
             onChange={e => setEditTitle(e.target.value)}
             style={{
-              flex: 1, background: '#222', border: '1px solid rgba(255,255,255,0.2)',
-              borderRadius: 6, padding: '8px 12px', color: '#fff', fontSize: 16, fontWeight: 600,
+              flex: 1, background: '#faf9f8', border: '1px solid var(--line)',
+              borderRadius: 6, padding: '8px 12px', color: 'var(--tx)', fontSize: 16, fontWeight: 600,
+              outline: 'none', fontFamily: 'inherit',
             }}
           />
         ) : (
-          <h2 style={{ flex: 1, margin: 0, fontSize: 16, fontWeight: 600, color: '#e5e5e5' }}>
+          <h2 style={{ flex: 1, margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--tx)' }}>
             {ticket.title}
           </h2>
         )}
@@ -212,7 +213,7 @@ function TicketDetail({ ticket, onUpdate, onClose }) {
           ) : (
             <button onClick={() => setEditing(true)} style={btnStyle('#333')}>Editar</button>
           )}
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: 18 }}>×</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--tx2)', cursor: 'pointer', fontSize: 18 }}>×</button>
         </div>
       </div>
 
@@ -225,7 +226,7 @@ function TicketDetail({ ticket, onUpdate, onClose }) {
             style={{
               ...btnStyle(ticket.status === s ? '#B70C00' : '#222'),
               padding: '4px 10px', fontSize: 12,
-              border: ticket.status === s ? 'none' : '1px solid rgba(255,255,255,0.1)',
+              border: ticket.status === s ? 'none' : '1px solid var(--line)',
             }}
           >
             {STATUS_COLORS[s]?.label}
@@ -235,13 +236,14 @@ function TicketDetail({ ticket, onUpdate, onClose }) {
 
       {/* Assignee */}
       <div style={{ marginBottom: 16 }}>
-        <label style={{ fontSize: 11, color: '#666', display: 'block', marginBottom: 4 }}>Agente responsável</label>
+        <label style={{ fontSize: 11, color: 'var(--tx2)', display: 'block', marginBottom: 4 }}>Agente responsável</label>
         <select
           value={ticket.assignee_agent || ''}
           onChange={handleAssigneeChange}
           style={{
-            background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)',
-            borderRadius: 6, padding: '6px 10px', color: '#ccc', fontSize: 13,
+            background: '#faf9f8', border: '1px solid var(--line)',
+            borderRadius: 6, padding: '6px 10px', color: 'var(--tx)', fontSize: 13,
+            outline: 'none', cursor: 'pointer',
           }}
         >
           <option value="">Nenhum</option>
@@ -252,56 +254,56 @@ function TicketDetail({ ticket, onUpdate, onClose }) {
       {/* Descrição */}
       {editing ? (
         <div style={{ marginBottom: 16 }}>
-          <label style={{ fontSize: 11, color: '#666', display: 'block', marginBottom: 4 }}>Descrição</label>
+          <label style={{ fontSize: 11, color: 'var(--tx2)', display: 'block', marginBottom: 4 }}>Descrição</label>
           <textarea
             value={editDesc}
             onChange={e => setEditDesc(e.target.value)}
             rows={4}
             style={{
-              width: '100%', background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)',
-              borderRadius: 6, padding: '8px 12px', color: '#ccc', fontSize: 13, resize: 'vertical',
-              boxSizing: 'border-box',
+              width: '100%', background: '#faf9f8', border: '1px solid var(--line)',
+              borderRadius: 6, padding: '8px 12px', color: 'var(--tx)', fontSize: 13, resize: 'vertical',
+              boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit',
             }}
           />
         </div>
       ) : ticket.description ? (
-        <p style={{ fontSize: 13, color: '#888', marginBottom: 16, lineHeight: 1.6 }}>
+        <p style={{ fontSize: 13, color: 'var(--tx2)', marginBottom: 16, lineHeight: 1.6 }}>
           {ticket.description}
         </p>
       ) : null}
 
       {/* Lock status */}
       {ticket.locked_at && (
-        <div style={{ background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.3)', borderRadius: 6, padding: '8px 12px', marginBottom: 16, fontSize: 12, color: '#fb923c' }}>
+        <div style={{ background: 'var(--amber-soft)', border: '1px solid #ecd9a8', borderRadius: 6, padding: '8px 12px', marginBottom: 16, fontSize: 12, color: 'var(--amber)' }}>
           Em checkout por: <strong>{ticket.locked_by}</strong>
         </div>
       )}
 
       {/* Timeline */}
       <div style={{ flex: 1, marginBottom: 16 }}>
-        <h4 style={{ margin: '0 0 10px', fontSize: 12, color: '#555', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+        <h4 style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--tx2)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
           Timeline
         </h4>
         {timeline.length === 0 && (
-          <p style={{ fontSize: 12, color: '#444' }}>Nenhum evento ainda.</p>
+          <p style={{ fontSize: 12, color: 'var(--tx2)' }}>Nenhum evento ainda.</p>
         )}
         {timeline.map((item, i) => (
           <div key={item.id || i} style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'flex-start' }}>
             <span style={{
               width: 8, height: 8, borderRadius: '50%', marginTop: 4, flexShrink: 0,
-              background: item._type === 'comment' ? '#60a5fa' : '#4b5563',
+              background: item._type === 'comment' ? '#1d4ed8' : 'var(--tx2)',
             }} />
             <div style={{ flex: 1 }}>
               {item._type === 'comment' ? (
                 <>
-                  <span style={{ fontSize: 11, color: '#666' }}>{item.author} · {new Date(item.created_at).toLocaleString('pt-BR')}</span>
-                  <p style={{ margin: '2px 0 0', fontSize: 13, color: '#ccc' }}>{item.body}</p>
+                  <span style={{ fontSize: 11, color: 'var(--tx2)' }}>{item.author} · {new Date(item.created_at).toLocaleString('pt-BR')}</span>
+                  <p style={{ margin: '2px 0 0', fontSize: 13, color: 'var(--tx)' }}>{item.body}</p>
                 </>
               ) : (
-                <span style={{ fontSize: 12, color: '#555' }}>
-                  <strong style={{ color: '#777' }}>{item.actor}</strong> — {item.event_type}
+                <span style={{ fontSize: 12, color: 'var(--tx2)' }}>
+                  <strong style={{ color: 'var(--tx)' }}>{item.actor}</strong> — {item.event_type}
                   {item.new_value ? ` → ${item.new_value}` : ''}
-                  <span style={{ marginLeft: 8, color: '#444' }}>{new Date(item.created_at).toLocaleString('pt-BR')}</span>
+                  <span style={{ marginLeft: 8, color: 'var(--tx2)' }}>{new Date(item.created_at).toLocaleString('pt-BR')}</span>
                 </span>
               )}
             </div>
@@ -317,8 +319,9 @@ function TicketDetail({ ticket, onUpdate, onClose }) {
           onKeyDown={e => e.key === 'Enter' && handleComment()}
           placeholder="Adicionar comentário..."
           style={{
-            flex: 1, background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: 6, padding: '8px 12px', color: '#ccc', fontSize: 13,
+            flex: 1, background: '#faf9f8', border: '1px solid var(--line)',
+            borderRadius: 6, padding: '8px 12px', color: 'var(--tx)', fontSize: 13,
+            outline: 'none', fontFamily: 'inherit',
           }}
         />
         <button onClick={handleComment} disabled={saving || !comment.trim()} style={btnStyle('#B70C00')}>
@@ -330,9 +333,17 @@ function TicketDetail({ ticket, onUpdate, onClose }) {
 }
 
 function btnStyle(bg) {
+  if (bg === '#B70C00') {
+    return {
+      background: 'var(--red)', border: 'none', borderRadius: 6,
+      padding: '6px 14px', color: '#fff', fontSize: 12,
+      cursor: 'pointer', fontWeight: 500,
+    };
+  }
+  // secundário (era #333/#222 escuro) → claro
   return {
-    background: bg, border: 'none', borderRadius: 6,
-    padding: '6px 14px', color: '#fff', fontSize: 12,
+    background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 6,
+    padding: '6px 14px', color: 'var(--tx)', fontSize: 12,
     cursor: 'pointer', fontWeight: 500,
   };
 }
@@ -405,21 +416,21 @@ export default function AgentInboxScreen({ tenantDbId }) {
   const AGENTS = ['deli', 'lara', 'vera', 'breno', 'cora', 'sofia', 'max'];
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#111', color: '#e5e5e5' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--tx)' }}>
       {/* Stats header */}
-      <div style={{ display: 'flex', gap: 12, padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+      <div style={{ display: 'flex', gap: 12, padding: '16px 20px', borderBottom: '1px solid var(--line)' }}>
         {[
-          { label: 'Abertos',      value: stats.open,        color: '#aaa' },
-          { label: 'Em andamento', value: stats.in_progress, color: '#60a5fa' },
-          { label: 'Bloqueados',   value: stats.blocked,     color: '#fb923c' },
-          { label: 'Resolvidos',   value: stats.resolved,    color: '#4ade80' },
+          { label: 'Abertos',      value: stats.open,        color: 'var(--tx2)' },
+          { label: 'Em andamento', value: stats.in_progress, color: '#1d4ed8' },
+          { label: 'Bloqueados',   value: stats.blocked,     color: 'var(--amber)' },
+          { label: 'Resolvidos',   value: stats.resolved,    color: 'var(--green)' },
         ].map(s => (
           <div key={s.label} style={{
-            background: '#1a1a1a', borderRadius: 8, padding: '10px 16px',
-            border: '1px solid rgba(255,255,255,0.08)', minWidth: 80, textAlign: 'center',
+            background: 'var(--panel)', borderRadius: 8, padding: '10px 16px',
+            border: '1px solid var(--line)', minWidth: 80, textAlign: 'center',
           }}>
             <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
-            <div style={{ fontSize: 11, color: '#555' }}>{s.label}</div>
+            <div style={{ fontSize: 11, color: 'var(--tx2)' }}>{s.label}</div>
           </div>
         ))}
         <div style={{ flex: 1 }} />
@@ -433,15 +444,16 @@ export default function AgentInboxScreen({ tenantDbId }) {
 
       {/* New ticket form */}
       {showNew && (
-        <div style={{ padding: '12px 20px', background: '#1a1a1a', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ padding: '12px 20px', background: 'var(--panel)', borderBottom: '1px solid var(--line)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <input
             value={newTitle}
             onChange={e => setNewTitle(e.target.value)}
             placeholder="Título do ticket..."
             onKeyDown={e => e.key === 'Enter' && handleCreate()}
             style={{
-              flex: 1, minWidth: 200, background: '#111', border: '1px solid rgba(255,255,255,0.12)',
-              borderRadius: 6, padding: '8px 12px', color: '#ccc', fontSize: 13,
+              flex: 1, minWidth: 200, background: '#faf9f8', border: '1px solid var(--line)',
+              borderRadius: 6, padding: '8px 12px', color: 'var(--tx)', fontSize: 13,
+              outline: 'none', fontFamily: 'inherit',
             }}
           />
           <select value={newAgent} onChange={e => setNewAgent(e.target.value)} style={selectStyle()}>
@@ -462,12 +474,12 @@ export default function AgentInboxScreen({ tenantDbId }) {
         {/* Lista */}
         <div style={{
           width: selected ? 320 : '100%', maxWidth: selected ? 360 : '100%',
-          borderRight: selected ? '1px solid rgba(255,255,255,0.08)' : 'none',
+          borderRight: selected ? '1px solid var(--line)' : 'none',
           display: 'flex', flexDirection: 'column',
           transition: 'width 0.2s',
         }}>
           {/* Filtros */}
-          <div style={{ padding: '10px 14px', display: 'flex', gap: 8, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ padding: '10px 14px', display: 'flex', gap: 8, borderBottom: '1px solid var(--line)' }}>
             <select value={filterAgent} onChange={e => setFilterAgent(e.target.value)} style={selectStyle()}>
               <option value="">Todos agentes</option>
               {AGENTS.map(a => <option key={a} value={a}>{a}</option>)}
@@ -481,9 +493,9 @@ export default function AgentInboxScreen({ tenantDbId }) {
           {/* Lista de tickets */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '10px 14px' }}>
             {loading ? (
-              <p style={{ color: '#555', fontSize: 13, textAlign: 'center', marginTop: 40 }}>Carregando...</p>
+              <p style={{ color: 'var(--tx2)', fontSize: 13, textAlign: 'center', marginTop: 40 }}>Carregando...</p>
             ) : tickets.length === 0 ? (
-              <p style={{ color: '#444', fontSize: 13, textAlign: 'center', marginTop: 40 }}>
+              <p style={{ color: 'var(--tx2)', fontSize: 13, textAlign: 'center', marginTop: 40 }}>
                 Nenhum ticket encontrado.
               </p>
             ) : (
@@ -516,7 +528,8 @@ export default function AgentInboxScreen({ tenantDbId }) {
 
 function selectStyle() {
   return {
-    background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)',
-    borderRadius: 6, padding: '6px 10px', color: '#ccc', fontSize: 12,
+    background: '#faf9f8', border: '1px solid var(--line)',
+    borderRadius: 6, padding: '6px 10px', color: 'var(--tx)', fontSize: 12,
+    outline: 'none', cursor: 'pointer',
   };
 }
