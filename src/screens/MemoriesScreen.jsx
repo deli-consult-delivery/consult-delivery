@@ -42,9 +42,9 @@ const KIND_LABELS = {
 };
 
 function importanceBadgeStyle(imp) {
-  if (imp <= 3) return { background: '#333', color: '#aaa' };
-  if (imp <= 6) return { background: '#5a4500', color: '#fbbf24' };
-  return { background: '#5a0000', color: '#f87171' };
+  if (imp <= 3) return { background: 'var(--bg)', color: 'var(--tx2)', border: '1px solid var(--line)' };
+  if (imp <= 6) return { background: 'var(--amber-soft)', color: 'var(--amber)' };
+  return { background: 'var(--red-soft)', color: 'var(--red)' };
 }
 
 function fmtDate(iso) {
@@ -94,17 +94,19 @@ function MemoryModal({ memory, onClose, onSaved, bridgeHeaders }) {
   }
 
   const overlay = {
-    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+    position: 'fixed', inset: 0, background: 'rgba(28,27,26,0.45)',
     display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
   };
   const box = {
-    background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)',
-    borderRadius: 12, padding: 28, width: '100%', maxWidth: 520,
+    background: 'var(--panel)', border: '1px solid var(--line)',
+    borderRadius: 8, padding: 28, width: '100%', maxWidth: 520,
+    boxShadow: '0 12px 40px rgba(0,0,0,0.18)',
   };
-  const label = { display: 'block', fontSize: 12, color: '#888', marginBottom: 5 };
+  const label = { display: 'block', fontSize: 12, color: 'var(--tx2)', marginBottom: 5 };
   const input  = {
-    width: '100%', background: '#111', border: '1px solid rgba(255,255,255,0.12)',
-    borderRadius: 6, padding: '8px 10px', color: '#fff', fontSize: 14, boxSizing: 'border-box',
+    width: '100%', background: '#faf9f8', border: '1px solid var(--line)',
+    borderRadius: 4, padding: '8px 10px', color: 'var(--tx)', fontSize: 14, boxSizing: 'border-box',
+    outline: 'none', fontFamily: 'inherit',
   };
   const select = { ...input, cursor: 'pointer' };
 
@@ -112,10 +114,10 @@ function MemoryModal({ memory, onClose, onSaved, bridgeHeaders }) {
     <div style={overlay} onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={box}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h2 style={{ margin: 0, fontSize: 18, color: '#fff' }}>
+          <h2 style={{ margin: 0, fontSize: 18, color: 'var(--tx)' }}>
             {isEdit ? 'Editar memória' : 'Nova memória'}
           </h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#888', fontSize: 20, cursor: 'pointer' }}>×</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--tx2)', fontSize: 20, cursor: 'pointer' }}>×</button>
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -152,9 +154,9 @@ function MemoryModal({ memory, onClose, onSaved, bridgeHeaders }) {
               type="range" min={1} max={10} step={1}
               value={form.importance}
               onChange={e => set('importance', e.target.value)}
-              style={{ width: '100%', accentColor: '#B70C00' }}
+              style={{ width: '100%', accentColor: 'var(--red)' }}
             />
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#555', marginTop: 2 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--tx2)', marginTop: 2 }}>
               <span>Trivial (1)</span><span>Crítico (10)</span>
             </div>
           </div>
@@ -168,15 +170,13 @@ function MemoryModal({ memory, onClose, onSaved, bridgeHeaders }) {
             />
           </div>
 
-          {error && <p style={{ color: '#f87171', fontSize: 13, marginBottom: 12 }}>{error}</p>}
+          {error && <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</p>}
 
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-            <button type="button" onClick={onClose}
-              style={{ padding: '8px 18px', borderRadius: 6, background: '#2a2a2a', border: '1px solid rgba(255,255,255,0.1)', color: '#ccc', cursor: 'pointer', fontSize: 14 }}>
+            <button type="button" className="cv2-btn sec" onClick={onClose}>
               Cancelar
             </button>
-            <button type="submit" disabled={saving}
-              style={{ padding: '8px 18px', borderRadius: 6, background: '#B70C00', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>
+            <button type="submit" className="cv2-btn" disabled={saving}>
               {saving ? 'Salvando...' : isEdit ? 'Salvar' : 'Criar'}
             </button>
           </div>
@@ -261,26 +261,25 @@ export default function MemoriesScreen({ tenantDbId }) {
   const agentGroups = [...new Set(filtered.map(m => m.agent_id))];
 
   const s = {
-    screen:  { padding: '24px 20px', color: '#fff', fontFamily: 'inherit' },
-    header:  { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-    title:   { margin: 0, fontSize: 22, fontWeight: 700 },
     filters: { display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' },
-    sel:     { background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6,
-               padding: '7px 10px', color: '#fff', fontSize: 13, cursor: 'pointer' },
-    btn:     { padding: '8px 16px', borderRadius: 6, background: '#B70C00', border: 'none',
-               color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 600 },
-    card:    { background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10,
+    sel:     { background: '#faf9f8', border: '1px solid var(--line)', borderRadius: 4,
+               padding: '7px 10px', color: 'var(--tx)', fontSize: 13, cursor: 'pointer', outline: 'none', fontFamily: 'inherit' },
+    card:    { background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 6,
                padding: 16, marginBottom: 10 },
     tag:     { display: 'inline-block', padding: '2px 8px', borderRadius: 4,
-               background: '#2a2a2a', fontSize: 11, color: '#aaa', marginRight: 6 },
+               background: 'var(--bg)', border: '1px solid var(--line)', fontSize: 11, color: 'var(--tx2)', marginRight: 6 },
     badge:   { display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600 },
   };
 
   return (
-    <div style={s.screen}>
-      <div style={s.header}>
-        <h1 style={s.title}>Memória dos Agentes</h1>
-        <button style={s.btn} onClick={() => setModal('new')}>+ Nova Memória</button>
+    <div className="cv2-ct">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+        <div>
+          <h1>Memória dos Agentes</h1>
+          <div className="cv2-rule" />
+          <div className="cv2-sub">Fatos, preferências, histórico e decisões que cada agente guarda na memória central.</div>
+        </div>
+        <button className="cv2-btn" onClick={() => setModal('new')}>+ Nova Memória</button>
       </div>
 
       {/* Filtros */}
@@ -291,7 +290,7 @@ export default function MemoriesScreen({ tenantDbId }) {
         <select style={s.sel} value={filterKind} onChange={e => setFilterKind(e.target.value)}>
           {KIND_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-        <label style={{ fontSize: 13, color: '#888' }}>
+        <label style={{ fontSize: 13, color: 'var(--tx2)' }}>
           Importância mínima:&nbsp;
           <input
             type="number" min={1} max={10} value={filterImp}
@@ -305,8 +304,7 @@ export default function MemoriesScreen({ tenantDbId }) {
       {agentGroups.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
           {agentGroups.map(slug => (
-            <button key={slug} onClick={() => setConfirmWipe(slug)}
-              style={{ padding: '4px 12px', borderRadius: 6, background: '#2a0000', border: '1px solid #5a0000', color: '#f87171', fontSize: 12, cursor: 'pointer' }}>
+            <button key={slug} className="cv2-btn danger" style={{ fontSize: 12, padding: '4px 12px' }} onClick={() => setConfirmWipe(slug)}>
               Limpar memória {slug.toUpperCase()}
             </button>
           ))}
@@ -316,30 +314,28 @@ export default function MemoriesScreen({ tenantDbId }) {
       {/* Confirm wipe dialog */}
       {confirmWipe && (
         <div style={{
-          background: '#1a1a1a', border: '1px solid #B70C00', borderRadius: 8,
+          background: 'var(--red-soft)', border: '1px solid var(--red)', borderRadius: 6,
           padding: 16, marginBottom: 16,
         }}>
-          <p style={{ margin: '0 0 12px', fontSize: 14 }}>
+          <p style={{ margin: '0 0 12px', fontSize: 14, color: 'var(--tx)' }}>
             Excluir <strong>todas</strong> as memórias do agente <strong>{confirmWipe.toUpperCase()}</strong>? Esta ação é irreversível.
           </p>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => handleWipe(confirmWipe)}
-              style={{ padding: '6px 14px', borderRadius: 6, background: '#B70C00', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 13 }}>
+            <button className="cv2-btn" onClick={() => handleWipe(confirmWipe)}>
               Confirmar exclusão
             </button>
-            <button onClick={() => setConfirmWipe(null)}
-              style={{ padding: '6px 14px', borderRadius: 6, background: '#2a2a2a', border: '1px solid rgba(255,255,255,0.1)', color: '#ccc', cursor: 'pointer', fontSize: 13 }}>
+            <button className="cv2-btn sec" onClick={() => setConfirmWipe(null)}>
               Cancelar
             </button>
           </div>
         </div>
       )}
 
-      {loading && <p style={{ color: '#777' }}>Carregando...</p>}
-      {error   && <p style={{ color: '#f87171' }}>Erro: {error}</p>}
+      {loading && <p style={{ color: 'var(--tx2)' }}>Carregando...</p>}
+      {error   && <p style={{ color: 'var(--red)' }}>Erro: {error}</p>}
 
       {!loading && !error && filtered.length === 0 && (
-        <p style={{ color: '#555', marginTop: 40, textAlign: 'center' }}>Nenhuma memória encontrada.</p>
+        <p style={{ color: 'var(--tx2)', marginTop: 40, textAlign: 'center' }}>Nenhuma memória encontrada.</p>
       )}
 
       {filtered.map(m => {
@@ -358,40 +354,38 @@ export default function MemoriesScreen({ tenantDbId }) {
                   <span style={{ ...s.badge, ...importanceBadgeStyle(m.importance) }}>
                     imp {m.importance}
                   </span>
-                  <span style={{ ...s.badge, background: '#1e3a5f', color: '#93c5fd' }}>
+                  <span style={{ ...s.badge, background: 'var(--bg)', border: '1px solid var(--line)', color: 'var(--tx2)' }}>
                     {KIND_LABELS[m.kind] || m.kind}
                   </span>
                   {m.expires_at && (
-                    <span style={{ fontSize: 11, color: '#888' }}>
+                    <span style={{ fontSize: 11, color: 'var(--tx2)' }}>
                       expira {fmtDate(m.expires_at)}
                     </span>
                   )}
                 </div>
 
                 {/* Conteúdo */}
-                <p style={{ margin: '0 0 8px', fontSize: 14, lineHeight: 1.5, color: '#ddd', wordBreak: 'break-word' }}>
+                <p style={{ margin: '0 0 8px', fontSize: 14, lineHeight: 1.5, color: 'var(--tx)', wordBreak: 'break-word' }}>
                   {truncated ? content.slice(0, 200) + '…' : content}
                 </p>
                 {content.length > 200 && (
                   <button onClick={() => setExpanded(prev => ({ ...prev, [m.id]: !isExpanded }))}
-                    style={{ background: 'none', border: 'none', color: '#B70C00', cursor: 'pointer', fontSize: 12, padding: 0 }}>
+                    style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: 12, padding: 0 }}>
                     {isExpanded ? 'Ver menos' : 'Ver mais'}
                   </button>
                 )}
 
-                <div style={{ fontSize: 11, color: '#555', marginTop: 6 }}>
+                <div style={{ fontSize: 11, color: 'var(--tx2)', marginTop: 6 }}>
                   {fmtDate(m.created_at)}
                 </div>
               </div>
 
               {/* Ações */}
               <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                <button onClick={() => setModal(m)}
-                  style={{ padding: '5px 12px', borderRadius: 6, background: '#2a2a2a', border: '1px solid rgba(255,255,255,0.1)', color: '#ccc', cursor: 'pointer', fontSize: 12 }}>
+                <button className="cv2-btn sec" style={{ fontSize: 12, padding: '5px 12px' }} onClick={() => setModal(m)}>
                   Editar
                 </button>
-                <button onClick={() => handleDelete(m.id)}
-                  style={{ padding: '5px 12px', borderRadius: 6, background: '#2a0000', border: '1px solid #5a0000', color: '#f87171', cursor: 'pointer', fontSize: 12 }}>
+                <button className="cv2-btn danger" style={{ fontSize: 12, padding: '5px 12px' }} onClick={() => handleDelete(m.id)}>
                   Excluir
                 </button>
               </div>
