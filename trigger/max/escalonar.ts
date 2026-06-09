@@ -49,7 +49,7 @@ export const maxEscalonar = task({
     }
 
     const systemPrompt = `Você é MAX, consultor técnico da Consult Delivery.
-Analise o problema abaixo e determine se requer escalação para atendimento humano (Eduardo) e qual a prioridade.
+Analise o problema abaixo e determine se requer escalação para atendimento humano (Wandson) e qual a prioridade.
 
 ## Critérios de prioridade
 - **critica**: sistema totalmente fora, perda de receita ativa, falha de segurança, dados em risco
@@ -62,8 +62,8 @@ Analise o problema abaixo e determine se requer escalação para atendimento hum
   "precisa_humano": boolean,
   "prioridade": "baixa" | "media" | "alta" | "critica",
   "motivo": "string — justificativa da prioridade em 1-2 frases",
-  "resumo_ticket": "string — resumo em 2-3 linhas para Eduardo agir rapidamente",
-  "proximo_passo": "string — primeiro passo que Eduardo deve tomar"
+  "resumo_ticket": "string — resumo em 2-3 linhas para Wandson agir rapidamente",
+  "proximo_passo": "string — primeiro passo que Wandson deve tomar"
 }
 
 Responda em português brasileiro.`;
@@ -115,7 +115,7 @@ Responda em português brasileiro.`;
       proximo_passo: parsed.proximo_passo ?? "Verificar com a equipe.",
     });
 
-    // 4. Criar draft para Eduardo se requer escalação
+    // 4. Criar draft para Wandson se requer escalação
     if (output.precisa_humano) {
       const prioEmoji: Record<string, string> = {
         critica: "🔴",
@@ -134,7 +134,7 @@ Responda em português brasileiro.`;
           subject: `${emoji} Escalação ${output.prioridade.toUpperCase()}: ${output.resumo_ticket.slice(0, 100)}`,
           body: `**Problema relatado:**\n${input.problema}\n\n**Soluções tentadas:**\n${
             input.solucoes_tentadas ?? "Nenhuma informada"
-          }\n\n**Análise MAX:**\n${output.motivo}\n\n**Próximo passo para Eduardo:**\n${output.proximo_passo}`,
+          }\n\n**Análise MAX:**\n${output.motivo}\n\n**Próximo passo para Wandson:**\n${output.proximo_passo}`,
           autonomy_level: output.prioridade === "critica" ? "vermelho" : "amarelo",
           metadata: {
             run_id: ctx.run.id,
@@ -151,7 +151,7 @@ Responda em português brasileiro.`;
           tenant_id: input.tenant_id,
           user_id: null,
           role: "assistant",
-          content: `${emoji} **MAX** escalou problema (prioridade: ${output.prioridade})\n\n${output.resumo_ticket.slice(0, 200)}\n\n👤 Eduardo notificado via Drafts Pendentes.`,
+          content: `${emoji} **MAX** escalou problema (prioridade: ${output.prioridade})\n\n${output.resumo_ticket.slice(0, 200)}\n\n👤 Wandson notificado via Drafts Pendentes.`,
           metadata: {
             source_agent: "max",
             source_task: "max-escalonar",

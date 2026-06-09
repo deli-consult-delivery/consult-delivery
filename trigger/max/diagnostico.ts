@@ -77,7 +77,7 @@ export const maxDiagnostico = task({
 ## Seu papel
 - Diagnosticar problemas técnicos relacionados a iFood, WhatsApp Business, PDVs e delivery
 - Fornecer soluções claras e passo-a-passo baseadas na base de conhecimento
-- Decidir quando escalar para atendimento humano (Eduardo)
+- Decidir quando escalar para atendimento humano (Wandson)
 
 ## Base de conhecimento disponível
 ${kbBlock}
@@ -111,7 +111,7 @@ ${kbBlock}
 
     // 5. Detectar se precisa escalação
     const needsEscalation =
-      /escal|humano|Eduardo|atendimento manual|suporte presencial|não consigo resolver|fora do escopo|contate a equipe/i.test(
+      /escal|humano|Wandson|atendimento manual|suporte presencial|não consigo resolver|fora do escopo|contate a equipe/i.test(
         solutionText
       );
 
