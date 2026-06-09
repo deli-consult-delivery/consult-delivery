@@ -24,12 +24,19 @@ Os três primeiros são SEUS. Depois deles, eu (orquestrador) implemento as tool
 
 Resumo do que fazer (detalhe e comandos no doc):
 1. **4 PATs do GitHub** — revogar e recriar *fine-grained*, escopo mínimo (só o repo `consult-delivery`): `deli-agent-vps`, `Nexus`, `claude-code`, `Claude IA`.
-2. **Token do Telegram** — `@BotFather` → `/revoke` → gerar novo. (afeta Hermes e @DeliConsultBot)
+2. **Token do Telegram** — `@BotFather` → `/revoke` → gerar novo → editar `/root/.hermes/.env` (`TELEGRAM_BOT_TOKEN=`) → `systemctl restart hermes-gateway`. ⚠️ **Não** é Infisical nem `pm2 restart bridge-server` — o token mora no `.env` do Hermes e o serviço é `hermes-gateway` (systemd). (verificado no inventário 2026-06-09)
 3. **`DASHBOARD_API_TOKEN`** — gerar novo: `openssl rand -hex 32`.
 4. **Remover SSH key `claude-debug`** das authorized_keys da VPS.
 5. **Limpar plaintext na VPS** — `.git-credentials`, history do shell, `.claude/*.jsonl`.
 6. **Hygiene Actions Secrets** — conferir que nenhum secret rotacionado ficou velho no GitHub Actions.
 7. **Propagar** os novos valores: Infisical → VPS → GitHub Actions → Trigger.dev. **Nunca colar valor em commit/chat/log** — só o NOME do segredo.
+
+**📍 Achados do inventário read-only (2026-06-09) — já mapeados pra você:**
+- **Telegram** → token em `/root/.hermes/.env`, serviço `hermes-gateway` (systemd). Não é Infisical/bridge.
+- **`claude-debug`** → está em **2** arquivos: `/root/.ssh/authorized_keys` **e** `/home/wandson/.ssh/authorized_keys` (remover dos dois).
+- **`~/.git-credentials`** → token GitHub em texto, mas o remote já é SSH → **resíduo, seguro remover**.
+- **`/root/recovery/`** → pasta com `.env` + `.credentials.json` + logs em texto → maior foco de limpeza (§5).
+- **Infisical** → **sem CLI** na VPS (só painel web `172.18.0.3:8080`); o Hermes lê do `.env` direto.
 
 ✅ **Critério de pronto:** verificação final do doc passa (tokens antigos não autenticam mais; novos propagados nos 4 lugares).
 

@@ -9,7 +9,7 @@ Itens (T5 do tracker): **4 PATs GitHub · DASHBOARD_API_TOKEN · token Telegram 
 ---
 
 ## 0. Preparação (5 min)
-- [ ] Tenha à mão: acesso ao GitHub (Settings), ao Infisical (`172.18.0.3:8080`), ao painel do Trigger.dev, ao BotFather do Telegram, e SSH na VPS.
+- [ ] Tenha à mão: acesso ao GitHub (Settings), ao Infisical (`172.18.0.3:8080` — **só painel web, não há CLI na VPS**), ao painel do Trigger.dev, ao BotFather do Telegram, e SSH na VPS.
 - [ ] Snapshot do que está rodando: `pm2 list` (ou `systemctl status bridge-server`) e `npx trigger.dev@4.4.6 whoami` — pra comparar depois.
 
 ---
@@ -25,11 +25,14 @@ Itens (T5 do tracker): **4 PATs GitHub · DASHBOARD_API_TOKEN · token Telegram 
 **Verificar:**
 - [ ] `git -C ~/consult-delivery fetch` na VPS funciona com o novo token.
 
-## 2. Token do Telegram (@DeliConsultBot)
+## 2. Token do Telegram (Hermes)
+> ⚠️ **Corrigido (inventário 2026-06-09):** o token do Telegram do Hermes **não está no Infisical nem no bridge**. Ele vive em `/root/.hermes/.env` (linha `TELEGRAM_BOT_TOKEN=`, permissão `600`) e quem consome é o serviço **`hermes-gateway` (systemd)** — `pm2 restart bridge-server` é o serviço **errado** pra este passo. O `bridge-server` não lê Telegram nenhum. E `/root/hermes-agent/.env` tem as chaves de Telegram **comentadas** (é template — não editar lá).
+
 - [ ] Telegram → **@BotFather → /revoke** (gera token novo e invalida o antigo).
-- [ ] Atualizar no **Infisical** (a chave usada pelo bridge/Trigger.dev — ex.: `TELEGRAM_BOT_TOKEN`).
-- [ ] Reiniciar quem consome: `pm2 restart bridge-server` (e redeploy do Trigger.dev se o token for lido em build: `npx trigger.dev@4.4.6 deploy`).
-- [ ] Verificar: mande `/start` pro bot e confirme que responde.
+- [ ] Editar `/root/.hermes/.env` (editor interativo, p/ não vazar no histórico): `nano /root/.hermes/.env` → trocar o valor de `TELEGRAM_BOT_TOKEN=` pelo novo → salvar.
+- [ ] Reiniciar o serviço certo: `systemctl restart hermes-gateway` → conferir `systemctl status hermes-gateway --no-pager`.
+- [ ] Verificar: mande `/start` (ou qualquer msg) pro bot e confirme que responde.
+- [ ] **@DeliConsultBot** (analista-iFood): se for um bot **separado** com token próprio, ele tem outro `TELEGRAM_BOT_TOKEN` em outro lugar (não localizado no inventário). Se for o **mesmo** bot do gateway, o passo acima já cobre. → rastrear a fonte do token dele antes de revogar, p/ não derrubar o que não devia.
 
 ## 3. DASHBOARD_API_TOKEN
 - [ ] Gerar valor novo (token aleatório forte): `openssl rand -hex 32`.
@@ -38,11 +41,21 @@ Itens (T5 do tracker): **4 PATs GitHub · DASHBOARD_API_TOKEN · token Telegram 
 - [ ] Verificar: a chamada protegida por esse token responde 200 (e 401 com o token velho).
 
 ## 4. Remover a SSH key `claude-debug`
-- [ ] Na VPS: edite `~/.ssh/authorized_keys` (root **e** qualquer usuário) e **apague a linha** com o comentário `claude-debug`. Confira: `grep -n claude-debug ~/.ssh/authorized_keys /home/*/.ssh/authorized_keys 2>/dev/null`.
+> 📍 **Achado (inventário 2026-06-09):** a key `claude-debug` está em **DOIS** arquivos — `/root/.ssh/authorized_keys` **e** `/home/wandson/.ssh/authorized_keys`. Remover das duas.
+
+- [ ] Confira onde está: `grep -n claude-debug /root/.ssh/authorized_keys /home/wandson/.ssh/authorized_keys 2>/dev/null`.
+- [ ] Edite **cada** arquivo (`nano <arquivo>`) e **apague a linha** com o comentário `claude-debug` — mantendo as suas keys boas.
 - [ ] Verificar: tente conectar com aquela key antiga → deve ser **recusado**; sua key principal continua funcionando.
 
 ## 5. Limpar cópias de segredos na VPS
+> 📍 **Achados (inventário 2026-06-09):**
+> - **`~/.git-credentials`** existe com 1 token GitHub em texto (`https://<token>@github.com`). O `git remote origin` já é **SSH** (`git@github.com:...`), então esse arquivo é **resíduo inútil** → **seguro remover**: `rm -f ~/.git-credentials`.
+> - **`/root/recovery/`** é o maior foco de plaintext: contém `recovery/config/.env`, `recovery/claude/.credentials.json` e vários `oracle_*.jsonl`/transcripts com segredos em texto. Conferir se ainda precisa dela; se não, `rm -rf /root/recovery` limpa tudo de uma vez.
+> - Plaintext também em `/root/.claude.json` e `/root/.bash_history` (esperado p/ ferramentas; limpar history após rotação).
+
 - [ ] Procure plaintext esquecido: `grep -rIl --exclude-dir=node_modules -E "sk-ant-|TELEGRAM|TRIGGER_SECRET|API_KEY" /root /home 2>/dev/null` (revise antes de apagar).
+- [ ] `rm -f ~/.git-credentials` (resíduo — remote já é SSH).
+- [ ] Revisar e, se não precisar mais, `rm -rf /root/recovery`.
 - [ ] Remova `.env`/dumps/backups soltos que não deviam existir; mantenha os segredos **só no Infisical**.
 - [ ] `history -c` em sessões onde colou segredo; limpe `~/.bash_history` se tiver token em texto.
 

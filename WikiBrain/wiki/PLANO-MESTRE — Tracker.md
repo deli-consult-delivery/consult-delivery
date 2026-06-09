@@ -43,7 +43,9 @@ A sessão **Cowork** (desktop) parou aqui e passou o bastão para a **sessão Cl
 
 ## 🔴 Onde parou
 
-_Última sessão: 2026-06-09 (VPS — **sessão 30: orquestrador + LEVA 3 (Integrações) FECHADA + reconciliação de docs stale**. Wandson deu `ok` no SQL → migration `20260609_004` (`tenant_integracoes`) **APLICADA** (`success:true`), RLS E2E provado (membro=4 / não-membro=0), 4 integrações reais populadas via service_role, **PR #275 mergeado** (squash `f2dde20`), branch deletada. Corrigido: T7 Onda 03 estava marcada "não aplicada" no Tracker — VERIFICADO em prod (9 conv/16 msg), já está no ar desde 2026-05-22; só falta Onda 04.)_
+_Última sessão: 2026-06-09 (VPS — **sessão 30 continuação 3: GATE 0 passo-a-passo + inventário read-only + correção de docs**. Entreguei ao Wandson o GATE 0 com "onde rodar cada comando" (🖥️ SSH vs 🌐 painel). Inventário read-only da VPS revelou que o passo do Telegram nos docs estava **errado**: o token do Hermes vive em `/root/.hermes/.env` e o serviço é `hermes-gateway` (systemd), **não** Infisical/`bridge-server`. Corrigi `gate0-rotacao-credenciais.md` + `RUNBOOK-WANDSON.md` com isso + 3 achados (`claude-debug` em 2 authorized_keys · `~/.git-credentials` resíduo · `/root/recovery/` plaintext). A rotação em si segue reservada ao Wandson. **T4 (Hermes) continua bloqueado pelo GATE 0 dele.**)_
+
+_Sessão anterior: 2026-06-09 (VPS — sessão 30: orquestrador + LEVA 3 (Integrações) FECHADA. Migration `20260609_004` aplicada, RLS E2E (membro=4/não-membro=0), **PR #275 mergeado** `f2dde20`. T7 Onda 03 verificada em prod desde 2026-05-22.)_
 
 ### Sessão 30 — VPS (modo ORQUESTRADOR + LEVA 3 + reconciliação de docs stale)
 Continuação do modelo maestro. Diretiva do Wandson: terminar T4/T7/Integrações(LEVA 3), agentes em paralelo, ele orquestra. O que rolou:
@@ -205,6 +207,18 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 - **Decisão consciente: NÃO escrever o SQL do `ceo_agent` especulativamente.** Depende do A/B **e** o bloqueio real é o GATE 0 (Wandson). SQL é autorado na sessão de build pós-GATE 0. Evita o anti-padrão de chutar modelagem.
 - Atualizados: `admin-mcp-design.md` (§2 decisão + §2.1 achado + §6 passo 3), `RUNBOOK-WANDSON.md` (§3.1 escopo ✅ + TL;DR), `mapa-vivo` (T4·3B), Tracker (Onde parou / próxima ação 2g / status T4 / este log).
 - Branch `wandson/ceo-agent-decisao-escopo` (só docs, reversível).
+
+### 2026-06-09 (sessão 30 — continuação 3: GATE 0 passo-a-passo + inventário read-only + correção de docs)
+- **Pedido do Wandson:** "GATE 0 me passa como fazer" + "me passa onde rodar cada comando" + (depois) "qual o comando" pro passo do Telegram.
+- **Inventário read-only da VPS (autorizado; só leitura, rotação segue reservada ao Wandson).** Confirmado que esta sessão roda **na própria VPS** (`root@srv1600147`, `187.127.25.24`) → os comandos são os que ele rodaria por SSH. Achados (output bruto):
+  - **Telegram do Hermes:** token em `/root/.hermes/.env` (`TELEGRAM_BOT_TOKEN=`, `600`), serviço **`hermes-gateway` (systemd)** — `ExecStart=python -m hermes_cli.main gateway run`, `WorkingDirectory=/root/.hermes`. **NÃO** é Infisical nem `pm2 restart bridge-server` (o bridge nem referencia Telegram). `/root/hermes-agent/.env` tem as chaves Telegram **comentadas** (template).
+  - **`claude-debug`** em **2** authorized_keys: `/root/.ssh/` **e** `/home/wandson/.ssh/`.
+  - **`~/.git-credentials`** com token GitHub em texto, mas `origin` já é **SSH** → resíduo, seguro remover.
+  - **`/root/recovery/`** = maior foco de plaintext (`config/.env`, `claude/.credentials.json`, `oracle_*.jsonl`).
+  - **Infisical sem CLI** na VPS (só painel web). `pm2`: só `bridge-server` (online, ↺ cumulativo, não crash-loop).
+  - Bloqueado pelo classifier (corretamente): `docker exec env` (dump de segredo de container vivo) — não era necessário.
+- **Correção de docs (factualmente errados no passo Telegram):** `gate0-rotacao-credenciais.md` §2 reescrita (`/root/.hermes/.env` + `systemctl restart hermes-gateway`, nota @DeliConsultBot a rastrear) + §0 (Infisical só painel) + §4 (claude-debug em 2 lugares) + §5 (`.git-credentials` + `/root/recovery`); `RUNBOOK-WANDSON.md` §1 item 2 corrigido + bloco "Achados do inventário".
+- Branch `wandson/gate0-correcao-telegram-systemd` (só docs, reversível).
 
 ### 2026-06-09 (sessão 29 — VPS: modo orquestrador + LEVA 2 gated)
 - **Pipeline LEVA 2 (gated por `ok` do SQL):** 2 executores `cd-frontend-component` paralelos (arquivos disjuntos: `CvNovas.jsx`+`ConsoleV2.jsx` vs `CRMScreen.jsx`) → revisão central de segurança (XSS `esc()` no `<Tela>`/`dangerouslySetInnerHTML`, badge por classe-constante, inserts RLS-friendly com `tenant_id`, secrets) → build verde → PR #271 (migration) + #272 (frontend) abertos → SQL completo apresentado → **`ok` do Wandson**.
