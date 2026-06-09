@@ -246,7 +246,7 @@ const ClientesView = ({ tenant, tenantDbId, onNavigate, onImportClick }) => {
           </div>
         </div>
 
-        {!loading && !loadError && customer && <Customer360 customer={customer} onNavigate={onNavigate}/>}
+        {!loading && !loadError && customer && <Customer360 customer={customer} tenantDbId={tenantDbId} onNavigate={onNavigate}/>}
       </div>
     </>
   );
@@ -734,7 +734,7 @@ const CrmStat = ({ label, value, icon, color }) => (
   </div>
 );
 
-const Customer360 = ({ customer, onNavigate }) => {
+const Customer360 = ({ customer, tenantDbId, onNavigate }) => {
   const [tab, setTab] = uSCrm('overview');
   const tabs = [
     { id: 'overview', label: 'Visão geral' },
@@ -792,7 +792,7 @@ const Customer360 = ({ customer, onNavigate }) => {
         {tab === 'orders'   && <OrdersTab customer={customer}/>}
         {tab === 'chats'    && <ChatsTab customer={customer}/>}
         {tab === 'payments' && <PaymentsTab customer={customer}/>}
-        {tab === 'notes'    && <NotesTab customer={customer}/>}
+        {tab === 'notes'    && <NotesTab customer={customer} tenantDbId={tenantDbId}/>}
       </div>
     </div>
   );
@@ -850,18 +850,155 @@ const PaymentsTab = () => (
   <TabEmpty icon="dollar">Nenhum pagamento registrado para este cliente.</TabEmpty>
 );
 
-const NotesTab = () => (
-  <div>
-    <textarea
-      className="input"
-      placeholder="Adicione uma nota interna sobre este cliente…"
-      style={{ width:'100%', minHeight: 100, resize:'vertical' }}
-    />
-    <div style={{ marginTop: 12, display:'flex', justifyContent:'flex-end', alignItems:'center' }}>
-      <button className="btn-primary" style={{ fontSize: 13 }}>Salvar nota</button>
+// Formata um timestamptz para data/hora legível pt-BR. Falha graciosa se inválido.
+function formatNoteDate(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
+const NotesTab = ({ customer, tenantDbId }) => {
+  const [notes, setNotes] = uSCrm([]);
+  const [loading, setLoading] = uSCrm(true);
+  const [text, setText] = uSCrm('');
+  const [saving, setSaving] = uSCrm(false);
+  const [deletingId, setDeletingId] = uSCrm(null);
+  const [saveError, setSaveError] = uSCrm(null);
+
+  const customerId = customer?.id || null;
+
+  // Carrega notas do cliente ao montar / trocar de cliente.
+  // Falha graciosa: se a tabela ainda não existe (migration não aplicada) → lista vazia, sem quebrar a aba.
+  useEffect(() => {
+    let cancelled = false;
+    if (!customerId) { setNotes([]); setLoading(false); return; }
+    setLoading(true);
+    supabase
+      .from('crm_notas')
+      .select('id, texto, autor_nome, created_at')
+      .eq('customer_id', customerId)
+      .order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) setNotes([]);
+        else setNotes(data || []);
+        setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [customerId]);
+
+  async function handleSave() {
+    const body = text.trim();
+    if (!body || saving || !customerId) return;
+    setSaving(true);
+    setSaveError(null);
+
+    // Auth opcional: se houver usuário logado, preenche autor; senão deixa nulo e segue.
+    let autorId = null;
+    let autorNome = null;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        autorId = user.id;
+        autorNome = user.user_metadata?.full_name || user.user_metadata?.name || user.email || null;
+      }
+    } catch {
+      // sem sessão → segue com autor nulo
+    }
+
+    const { data, error } = await supabase
+      .from('crm_notas')
+      .insert({
+        tenant_id: tenantDbId,
+        customer_id: customerId,
+        texto: body,
+        autor_id: autorId,
+        autor_nome: autorNome,
+      })
+      .select('id, texto, autor_nome, created_at')
+      .single();
+
+    if (error) {
+      setSaveError('Não foi possível salvar a nota.');
+    } else {
+      setNotes(prev => [data, ...prev]);
+      setText('');
+    }
+    setSaving(false);
+  }
+
+  async function handleDelete(id) {
+    if (deletingId) return;
+    setDeletingId(id);
+    const { error } = await supabase.from('crm_notas').delete().eq('id', id);
+    if (!error) setNotes(prev => prev.filter(n => n.id !== id));
+    setDeletingId(null);
+  }
+
+  const canSave = text.trim().length > 0 && !saving && !!customerId;
+
+  return (
+    <div>
+      <textarea
+        className="input"
+        value={text}
+        onChange={e => setText(e.target.value)}
+        placeholder="Adicione uma nota interna sobre este cliente…"
+        aria-label="Nova nota interna sobre o cliente"
+        style={{ width:'100%', minHeight: 100, resize:'vertical' }}
+      />
+      <div style={{ marginTop: 12, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        <span style={{ fontSize: 12, color: saveError ? '#EF4444' : 'var(--g-400)' }}>
+          {saveError || ''}
+        </span>
+        <button
+          className="btn-primary"
+          style={{ fontSize: 13, opacity: canSave ? 1 : 0.5, cursor: canSave ? 'pointer' : 'not-allowed' }}
+          disabled={!canSave}
+          onClick={handleSave}
+        >
+          {saving ? 'Salvando…' : 'Salvar nota'}
+        </button>
+      </div>
+
+      <div style={{ marginTop: 20, display:'flex', flexDirection:'column', gap: 10 }}>
+        {loading ? (
+          <TabEmpty>Carregando notas…</TabEmpty>
+        ) : notes.length === 0 ? (
+          <TabEmpty icon="paper">Nenhuma nota registrada para este cliente ainda.</TabEmpty>
+        ) : (
+          notes.map(n => (
+            <div
+              key={n.id}
+              style={{ background:'var(--g-50)', border:'1px solid var(--g-200)', borderRadius: 10, padding:'12px 14px' }}
+            >
+              <div style={{ fontSize: 13, color:'var(--g-900)', lineHeight: 1.5, whiteSpace:'pre-wrap' }}>{n.texto}</div>
+              <div style={{ marginTop: 8, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span style={{ fontSize: 11, color:'var(--g-500)' }}>
+                  {(n.autor_nome || 'Sistema')} · {formatNoteDate(n.created_at)}
+                </span>
+                <button
+                  onClick={() => handleDelete(n.id)}
+                  disabled={deletingId === n.id}
+                  aria-label="Excluir nota"
+                  style={{ background:'none', border:'none', color:'var(--g-400)', cursor: deletingId === n.id ? 'not-allowed' : 'pointer', fontSize: 12, padding:'2px 6px', borderRadius: 4 }}
+                  onMouseEnter={e => e.currentTarget.style.color = '#EF4444'}
+                  onMouseLeave={e => e.currentTarget.style.color = 'var(--g-400)'}
+                >
+                  {deletingId === n.id ? '…' : '🗑️'}
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 /* ─── IMPORT CSV MODAL ─── */
 const ImportCSVModal = ({ tenantDbId, onClose, onImported }) => {

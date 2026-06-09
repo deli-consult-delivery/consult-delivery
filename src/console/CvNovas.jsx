@@ -416,13 +416,43 @@ export function Arquivos({ tenantDbId, userId }) {
 // TELAS DE REFERÊNCIA (leitura — configuração feita pela equipe CD)
 // ============================================================
 const NOTA = 'Leitura — a configuração desta tela é feita pela equipe Consult Delivery (cofre Infisical).';
-export function Provedores() {
-  return <Tela titulo="Provedores de IA" sub="Cada cliente pode usar a própria chave (BYO-key via cofre)." cols={['Provider', 'Modelo padrão', 'Chave', 'Status']}
-    rows={[
-      ['Anthropic', 'claude-sonnet-4-6', '•••• cofre', '<span class="cv2-bdg ok">ativo</span>'],
-      ['OpenRouter', 'gpt-image (Estúdio)', '•••• cofre', '<span class="cv2-bdg ok">ativo</span>'],
-      ['Ollama Cloud', 'kimi-k2.6', '—', '<span class="cv2-bdg mut">fallback</span>'],
-    ]} nota={NOTA} />;
+
+// helper de escape p/ valores vindos do banco (vão p/ dangerouslySetInnerHTML em <Tela>)
+const esc = v => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// Hook de leitura read-only por tenant (mesmo padrão de Arquivos/CrudTela).
+// Robusto: query falha ou tabela inexistente → rows = [] (estado vazio gracioso).
+function useRefRows(table, tenantDbId, mapRow) {
+  const [rows, setRows] = useState([]);
+
+  const load = useCallback(async () => {
+    if (!tenantDbId) { setRows([]); return; }
+    const { data, error } = await supabase.from(table)
+      .select('*').eq('tenant_id', tenantDbId).order('ordem', { ascending: true });
+    if (error || !data) { setRows([]); return; }
+    setRows(data.map(mapRow));
+  }, [table, tenantDbId, mapRow]);
+
+  useEffect(() => { load(); }, [load]);
+  return rows;
+}
+
+const ST_PROV = { ativo: 'ok', fallback: 'mut', inativo: 'mut' };
+
+export function Provedores({ tenantDbId }) {
+  const mapRow = useCallback(rec => {
+    const cls = ST_PROV[rec.status] || 'mut';
+    const st = esc(rec.status || '—');
+    return [
+      esc(rec.provider),
+      esc(rec.modelo_padrao || '—'),
+      rec.chave_ref ? esc(rec.chave_ref) : '—',
+      `<span class="cv2-bdg ${cls}">${st}</span>`,
+    ];
+  }, []);
+  const rows = useRefRows('tenant_provedores', tenantDbId, mapRow);
+  return <Tela titulo="Provedores de IA" sub="Cada cliente pode usar a própria chave (BYO-key via cofre)."
+    cols={['Provider', 'Modelo padrão', 'Chave', 'Status']} rows={rows} nota={NOTA} />;
 }
 export function Integracoes() {
   return <Tela titulo="Integrações" sub="Conexões do cliente — credenciais no cofre." cols={['Integração', 'Status', 'Usada por']}
@@ -433,10 +463,13 @@ export function Integracoes() {
       ['Telegram interno', '<span class="cv2-bdg ok">conectada</span>', 'DELI · alertas'],
     ]} nota="Leitura — a conexão é feita pela equipe Consult Delivery." />;
 }
-export function Sistemas() {
-  return <Tela titulo="Sistemas externos" sub="Atalhos e referências dos sistemas do cliente." cols={['Sistema', 'Endereço', 'Tipo']}
-    rows={[
-      ['Painel iFood', 'portal.ifood.com.br', 'canal'],
-      ['Asaas', 'asaas.com', 'pagamento'],
-    ]} nota="Leitura — referência dos sistemas do cliente." />;
+export function Sistemas({ tenantDbId }) {
+  const mapRow = useCallback(rec => [
+    esc(rec.nome),
+    esc(rec.endereco || '—'),
+    esc(rec.tipo || '—'),
+  ], []);
+  const rows = useRefRows('tenant_sistemas', tenantDbId, mapRow);
+  return <Tela titulo="Sistemas externos" sub="Atalhos e referências dos sistemas do cliente."
+    cols={['Sistema', 'Endereço', 'Tipo']} rows={rows} nota="Leitura — referência dos sistemas do cliente." />;
 }
