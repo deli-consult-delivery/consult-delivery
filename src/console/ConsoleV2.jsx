@@ -598,9 +598,9 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       case 'configsys': return <SettingsScreen tenant={tenantSlug} tenantDbId={tenantDbId} userId={userId} onTenantChange={() => {}} />;
       case 'clientesplat': return <Clientes userId={userId} />;
       case 'marca': return <Marca tenantDbId={tenantDbId} onChanged={recarregarBrand} />;
-      case 'provedores': return <Provedores />;
+      case 'provedores': return <Provedores tenantDbId={tenantDbId} />;
       case 'integracoes': return <Integracoes />;
-      case 'sistemas': return <Sistemas />;
+      case 'sistemas': return <Sistemas tenantDbId={tenantDbId} />;
       case 'acesso': return <AcessoUsuarios tenantDbId={tenantDbId} />;
       case 'auditoria': return <AuditLog tenantDbId={tenantDbId} />;
       default: return <div className="cv2-card">Tela não encontrada.</div>;
