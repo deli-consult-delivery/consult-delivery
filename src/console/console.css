@@ -75,6 +75,8 @@
 .cv2-chat .msg.me{margin-left:auto;background:var(--red-soft);border-color:#ecd0cb}
 .cv2-chat .msg .who{font-size:10px;color:var(--tx2);margin-bottom:3px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
 .cv2-chat .msg .tm{font-size:9.5px;color:var(--tx2);text-align:right;margin-top:4px;font-weight:600}
+.cv2-chat .cv2-msg-acts{opacity:0;transition:opacity .12s}
+.cv2-chat .msg:hover .cv2-msg-acts{opacity:1}
 .cv2-chat .composer{display:flex;align-items:center;gap:9px;background:#fff;border-top:1px solid var(--line);padding:11px 14px}
 .cv2-chat .composer input{flex:1;border:1px solid var(--line);border-radius:999px;padding:9px 16px;font-size:13px;outline:none;font-weight:500;font-family:inherit;color:var(--tx)}
 .cv2-chat .composer input:focus{border-color:var(--red)}
