@@ -43,7 +43,15 @@ A sessão **Cowork** (desktop) parou aqui e passou o bastão para a **sessão Cl
 
 ## 🔴 Onde parou
 
-_Última sessão: 2026-06-09 (VPS — **sessão 24: badge de não-lidas no Chat ao Vivo v2**)_
+_Última sessão: 2026-06-09 (VPS — **sessão 25: Automações 100% no visual claro + decisão ChatScreen**)_
+
+### Sessão 25 — VPS (visual-claro: família Automações completa + decisão ChatScreen)
+Fechou a varredura **dark→claro** das telas embarcadas no Console v2. As 8 abas do `AutomacoesScreen` (que renderizam embeds dentro do console claro) estavam com vários blocos escuros remanescentes — convertidas uma-PR-por-tela (presentation-only, lógica de fetch/handler **byte-idêntica**):
+- **`AgentRunsScreen`** (#256), **`AgentInboxScreen`** (#258, sha `99dc15b`), **`AgentBuilderScreen`** (#259, sha `8bed994`) — último embed escuro do `AutomacoesScreen`. Agora **todas as 8 abas** (Heartbeats, Metas, Agentes, Memórias, Execuções, Conhecimento, Inbox, Aprovações) estão no claro.
+- **Mapeamento dark→claro consolidado** (tokens `cv2-*` do `console.css`): bg painel `#1a1a1a/#111/#222`→`var(--panel)`; inputs→`#faf9f8`; texto claro→`var(--tx)/var(--tx2)`; bordas→`var(--line)`; overlay→`rgba(28,27,26,0.45)`; status verde/vermelho/âmbar/azul/roxo→tokens `*-soft`. **Dots decorativos e chips de avatar de marca (`#B70C00`+`#fff`) mantidos** — leem bem no claro.
+- **Decisão registrada — `ChatScreen.jsx` permanece ESCURO de propósito.** É a superfície imersiva full-screen do Chat ao Vivo clássico (`ehChat && chatFull` em `ConsoleV2.jsx`), estilo WhatsApp, **não** embarcada na moldura clara como os LEGADO. Converter os ~190 tokens escuros da tela funcional mais crítica numa noite autônoma = alto risco / zero ganho funcional. Mantida. (O Chat ao Vivo **claro** é o `ChatV2.jsx`, já 100% funcional — sessões 22/24.)
+- **Residuais varridos e confirmados intencionais:** `var(--text,#111827)`/`var(--card-bg,#fff)` (fallbacks claro-corretos em Inadimplentes), sentinela `#222` do `btnStyle` secundário (Inbox), card de plano premium com gradiente escuro deliberado + texto branco (Settings/Billing).
+- Builds verdes (`vite build` ✓ ~4.8–5.0s) em cada PR. Sem migration, sem VPS, sem mensagem a cliente.
 
 ### Sessão 24 — VPS (badge de não-lidas no Chat ao Vivo v2)
 Backlog autônomo: o Chat ao Vivo v2 não tinha contador de não-lidas — a coluna `conversations.unread_count` **já existia** (corrige a suposição das sessões 22/PMA-item-2 de que "precisa migration"; **não precisa**). Implementado em `ChatV2.jsx`, **sem migration**:
@@ -115,7 +123,8 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 
 1. **5 telas novas funcionais** — ✅ **CONCLUÍDO.** SQL aprovado e aplicado, teste de isolamento RLS (intruso=0) + smoke CRUD passaram, PR #239 mergeado, deploy verde (`index-m6QCbjtk.js`). Gatilhos/Tópicos/Tarefas/Links/Arquivos com CRUD real no visual claro. → próximo foco: item 2.
 2. **Chat ao Vivo 100% funcional** — ✅ **CONCLUÍDO (sessões 22+24).** `ChatV2.jsx` com paridade total: mídia inbound (img/sticker/vídeo/áudio/documento), formatação WhatsApp, ticks de entrega, citação/reply, reações (render+envio), apagar/revoke, colar imagem, realtime UPDATE (#243) **+ badge de não-lidas (#248, sessão 24 — `unread_count` já existia, sem migration)**. → próximo foco: item 2b (backlog de telas PARCIAIS).
-2b. **Backlog autônomo — telas PARCIAIS → funcionais** (sem migration-apply/VPS/mensagens-a-cliente): ✅ busca global da topbar (sessão 23, PR #246); ✅ badge de não-lidas no chat (sessão 24, PR #248). **Auditado:** backends de Análise de Loja/Cardápio/Multicanal/Radar **já existem** (cron `*/5` drenando filas `pendente`), Importar Relatórios e Análise de Loja **já estão wired** — nenhuma tela do console renderiza mock puro. Restam só os que **exigem** migration/VPS: upload Storage em Arquivos (precisa bucket+RLS), expiry/contagem em Links (precisa endpoint de redirect+VPS) → **bloqueados** até o Wandson liberar. Próximo foco autônomo: varrer telas legadas/`CvNovas` por gaps funcionais residuais sem migration.
+2b. **Backlog autônomo — telas PARCIAIS → funcionais** (sem migration-apply/VPS/mensagens-a-cliente): ✅ busca global da topbar (sessão 23, PR #246); ✅ badge de não-lidas no chat (sessão 24, PR #248). **Auditado:** backends de Análise de Loja/Cardápio/Multicanal/Radar **já existem** (cron `*/5` drenando filas `pendente`), Importar Relatórios e Análise de Loja **já estão wired** — nenhuma tela do console renderiza mock puro. Restam só os que **exigem** migration/VPS: upload Storage em Arquivos (precisa bucket+RLS), expiry/contagem em Links (precisa endpoint de redirect+VPS) → **bloqueados** até o Wandson liberar.
+2c. **Visual-claro (dark→claro das telas embarcadas)** — ✅ **CONCLUÍDO (sessão 25).** Família Automações (8 abas) toda no claro; último embed escuro `AgentBuilderScreen` (#259). `ChatScreen.jsx` permanece escuro **de propósito** (superfície imersiva full-screen; o Chat claro é o `ChatV2.jsx`). Nenhuma tela LEGADO embarcada no Console v2 segue escura. Próximo foco autônomo: varrer gaps funcionais residuais sem migration em telas legadas/`CvNovas`.
 3. **Bridge crash-loop** (⚠️ VPS — reservado ao Wandson): `pm2 logs bridge-server --err --lines 50`; achar a causa dos 136 restarts e estabilizar.
 4. **Pendências do Wandson (não fazer sem ele):** apagar msg de teste `delete from messages where id='0023dd90-4bf9-4139-8667-ed3e85869772';` · limpar registros de teste (tenant "Cliente Teste Sandbox") · `ASAAS_DEFESA_ENVIRONMENT`=production no 1º cliente pagante.
 5. **GATE 0 (quando o Wandson quiser)** — `docs/infra/gate0-rotacao-credenciais.md`. Depois, agente persistente na VPS: `docs/infra/claude-code-vps-setup.md`.
@@ -129,7 +138,7 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 |-------|------|--------|-------------|
 | T1 | Plataforma CD | ✅ | Console v2 idêntico ao protótipo, **todas as telas no visual claro** |
 | T2 | EvoNexus-replica | ✅ | FASE 2 onda 2 + GAP-1..8 + agentes |
-| T3 | Visual-First / telas | ✅ | **Busca global da topbar funcional** (#246) · Chat ao Vivo 100% funcional (#243) · 5 telas novas com CRUD real (#239) |
+| T3 | Visual-First / telas | ✅ | **Família Automações 100% no claro** (#256/#258/#259) · busca global (#246) · Chat ao Vivo 100% funcional (#243) · 5 telas novas com CRUD (#239) |
 | T4 | Hermes | 🔄 | aguarda GATE 0 |
 | T5 | Segurança | 🔄 | 270 policies OK · **GATE 0 (rotação) pendente** — checklist #237 |
 | T6 | Agentes IA | ✅ | 6 agentes vivos: Defesa, Vigia, Radar, Estúdio, Análise de Loja, Cardápio, Multicanal |
@@ -140,6 +149,10 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 ---
 
 ## 📋 Log de sessões
+
+### 2026-06-09 (sessão 25 — VPS: Automações 100% no claro + decisão ChatScreen)
+- Varredura dark→claro das telas embarcadas no Console v2 **concluída**. Família `AutomacoesScreen` (8 abas) toda no claro: `AgentRunsScreen` (#256), `AgentInboxScreen` (#258, sha `99dc15b`), `AgentBuilderScreen` (#259, sha `8bed994` — último embed escuro). Presentation-only, lógica de fetch/handler byte-idêntica; dots decorativos e chips de avatar de marca (`#B70C00`+`#fff`) preservados. Builds verdes (`vite build` ✓ ~4.8–5.0s).
+- **Decisão:** `ChatScreen.jsx` (Chat ao Vivo clássico) **permanece escuro de propósito** — superfície imersiva full-screen (`ehChat && chatFull`), não embarcada na moldura clara; converter os ~190 tokens da tela funcional mais crítica numa noite autônoma = alto risco/zero ganho. O Chat ao Vivo no visual claro é o `ChatV2.jsx` (já 100% funcional, sessões 22/24). Residuais escuros restantes confirmados intencionais (fallbacks claro-corretos, sentinela `#222` do btnStyle, card de plano premium com gradiente). Item 2c ✅.
 
 ### 2026-06-09 (sessão 24 — VPS: badge de não-lidas no Chat ao Vivo v2)
 - `ChatV2.jsx`: contador de não-lidas, **sem migration** (`conversations.unread_count` já existia — corrige a suposição de que precisava migration). Seed do `unread_count` no `loadConvs`; subscription realtime do tenant inteiro (`messages` por `tenant_id`) que bumpa não-lidas em conversa não-aberta (`activeIdRef` evita closure obsoleta), atualiza preview/hora e sobe pro topo; `abrirConv` zera local + persiste `unread_count=0`. `console.css`: `.conv .badge` + `.conv.unread` (nome/preview negrito). Build verde (`vite build` ✓ 5.21s). **PR #248 mergeado (squash, sha `c5ae8aa`)** · deploy verde `index-CCZE5bjF.js`→`index-C6KcnCaT.js`. Item 2 (Chat 100%) e item 2b avançam.
