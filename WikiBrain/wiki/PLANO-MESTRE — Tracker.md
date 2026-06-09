@@ -43,7 +43,9 @@ A sessão **Cowork** (desktop) parou aqui e passou o bastão para a **sessão Cl
 
 ## 🔴 Onde parou
 
-_Última sessão: 2026-06-09 (VPS — **sessão 30 continuação 3: GATE 0 passo-a-passo + inventário read-only + correção de docs**. Entreguei ao Wandson o GATE 0 com "onde rodar cada comando" (🖥️ SSH vs 🌐 painel). Inventário read-only da VPS revelou que o passo do Telegram nos docs estava **errado**: o token do Hermes vive em `/root/.hermes/.env` e o serviço é `hermes-gateway` (systemd), **não** Infisical/`bridge-server`. Corrigi `gate0-rotacao-credenciais.md` + `RUNBOOK-WANDSON.md` com isso + 3 achados (`claude-debug` em 2 authorized_keys · `~/.git-credentials` resíduo · `/root/recovery/` plaintext). A rotação em si segue reservada ao Wandson. **T4 (Hermes) continua bloqueado pelo GATE 0 dele.**)_
+_Última sessão: 2026-06-09 (VPS — **sessão 30 continuação 4: rotação do token Telegram EXECUTADA pelo Wandson + diagnóstico ao vivo**. Wandson rodou o GATE 0 passo 2 (`/revoke` no @BotFather → editou `/root/.hermes/.env` → `systemctl restart hermes-gateway`) e o bot "parou de responder". Diagnóstico read-only na VPS (sem imprimir o token): `getMe` → `ok:true` (token válido, bot `@DeliConsultBot` id `8779855473`) · `getWebhookInfo` vazio · 1 só processo · `ss -tnp` mostrou **socket ESTAB ao vivo com `149.154.166.110:443` (Telegram)**. **Causa real: janela de ~8s do restart** (status=1/FAILURE transitório = processo velho saindo por SIGTERM, não o token) — Wandson testou na troca de processo. Re-teste → **✅ funcionou**. Resolvido o item aberto: **@DeliConsultBot = o próprio bot do Hermes** (um único `/revoke` cobre tudo, sem bot separado). Docs atualizados: `gate0-rotacao-credenciais.md` §2 (nota do restart + receita de diagnóstico) + `RUNBOOK-WANDSON.md`. **T4 (Hermes) segue bloqueado pelo resto do GATE 0** — falta PATs GitHub, DASHBOARD_API_TOKEN, claude-debug, limpeza plaintext, `claudedev`.)_
+
+_Sessão anterior: 2026-06-09 (VPS — **sessão 30 continuação 3: GATE 0 passo-a-passo + inventário read-only + correção de docs**. Entreguei ao Wandson o GATE 0 com "onde rodar cada comando" (🖥️ SSH vs 🌐 painel). Inventário read-only da VPS revelou que o passo do Telegram nos docs estava **errado**: o token do Hermes vive em `/root/.hermes/.env` e o serviço é `hermes-gateway` (systemd), **não** Infisical/`bridge-server`. Corrigi `gate0-rotacao-credenciais.md` + `RUNBOOK-WANDSON.md` com isso + 3 achados (`claude-debug` em 2 authorized_keys · `~/.git-credentials` resíduo · `/root/recovery/` plaintext). A rotação em si segue reservada ao Wandson. **T4 (Hermes) continua bloqueado pelo GATE 0 dele.**)_
 
 _Sessão anterior: 2026-06-09 (VPS — sessão 30: orquestrador + LEVA 3 (Integrações) FECHADA. Migration `20260609_004` aplicada, RLS E2E (membro=4/não-membro=0), **PR #275 mergeado** `f2dde20`. T7 Onda 03 verificada em prod desde 2026-05-22.)_
 
@@ -193,6 +195,20 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 ---
 
 ## 📋 Log de sessões
+
+### 2026-06-09 (sessão 30 — continuação 4: token Telegram rotacionado pelo Wandson + diagnóstico ao vivo)
+- **Wandson executou o GATE 0 passo 2** (rotação do token Telegram do Hermes): `@BotFather /revoke` → editou `/root/.hermes/.env` linha 3 → `systemctl restart hermes-gateway`. **Sintoma: "o bot parou de funcionar".**
+- **Diagnóstico read-only na VPS (sem nunca imprimir o token):**
+  - `.env` íntegro: linha 3, **46 chars** (tamanho de token válido), sem aspas/espaço; mtime `21:34` (editado mesmo).
+  - `getMe` → `{"ok":true,..."username":"DeliConsultBot","id":8779855473}` → **token VÁLIDO**.
+  - `getWebhookInfo` → `url:""`, `pending_update_count:0` → sem webhook, polling livre, gateway consumindo.
+  - `pgrep` → **1 só** processo gateway (88659) → sem conflito 409.
+  - `ss -tnp` → **`ESTAB 187.127.25.24:52726 → 149.154.166.110:443` (Telegram) no pid=88659** → conexão de polling **ao vivo**.
+- **Causa real = janela do restart, não o token.** Log: `21:36:14 Main process exited, status=1/FAILURE` (processo velho saindo por SIGTERM) seguido imediatamente de `Started` (pid 88659). ~8s de sobreposição em que o bot fica fora do ar. Wandson testou nessa janela.
+- **Re-teste após estabilizar → ✅ "deu certo".**
+- **Item aberto resolvido:** `@DeliConsultBot` **é o mesmo bot do gateway Hermes** (o `getMe` do token do `.hermes/.env` resolve pra ele). Um único `/revoke` cobre tudo — não há bot Telegram separado pro Hermes. (O rótulo "analista-iFood" em circulação é o mesmo bot.)
+- **Docs:** `gate0-rotacao-credenciais.md` §2 ganhou (a) nota "aguardar status estável antes de testar" + (b) receita de diagnóstico read-only (getMe/getWebhookInfo/ss/pgrep, sem vazar token) + (c) confirmação @DeliConsultBot=Hermes. `RUNBOOK-WANDSON.md` §1.2 idem. Branch `wandson/gate0-telegram-restart-nota` (só docs, reversível).
+- **GATE 0 restante (do Wandson):** 4 PATs GitHub · `DASHBOARD_API_TOKEN` · remover `claude-debug` (2 arquivos) · limpar plaintext (`~/.git-credentials`, `/root/recovery`) · depois `claudedev`. T4 só destrava aí.
 
 ### 2026-06-09 (sessão 30 — continuação: Tarefa 7 verificada + runbook do Wandson)
 - **Pedido do Wandson:** "faça o que você consegue + me passe a parte que depende de mim." Fiz o autônomo restante e consolidei a fila dele.
