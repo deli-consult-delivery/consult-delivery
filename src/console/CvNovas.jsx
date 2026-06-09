@@ -59,6 +59,9 @@ function CrudTela({ titulo, sub, table, tenantDbId, userId, cols, fields, toRow,
   const [form, setForm] = useState({});
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [editId, setEditId] = useState(null);   // id da linha em edição inline
+  const [editForm, setEditForm] = useState({});  // valores editáveis dessa linha
+  const [editErr, setEditErr] = useState('');
 
   const load = useCallback(async () => {
     if (!tenantDbId) { setLoading(false); return; }
@@ -97,6 +100,52 @@ function CrudTela({ titulo, sub, table, tenantDbId, userId, cols, fields, toRow,
     if (!error) setRows(rs => rs.filter(r => r.id !== id));
   }
 
+  // ----- edição inline -----
+  function startEdit(rec) {
+    setEditErr('');
+    setAdding(false);                      // não deixa o form de "novo" aberto junto
+    const init = {};
+    for (const f of fields) {
+      const raw = rec[f.key];
+      // datetime do banco (ISO) → valor aceito pelo <input datetime-local>
+      if (f.type === 'datetime' && raw) {
+        const d = new Date(raw);
+        if (!isNaN(d)) {
+          const pad = n => String(n).padStart(2, '0');
+          init[f.key] = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        } else init[f.key] = '';
+      } else {
+        init[f.key] = raw ?? '';
+      }
+    }
+    setEditForm(init);
+    setEditId(rec.id);
+  }
+
+  function cancelEdit() { setEditId(null); setEditForm({}); setEditErr(''); }
+
+  async function saveEdit() {
+    setEditErr('');
+    const patch = {};
+    for (const f of fields) {
+      let v = editForm[f.key];
+      if (v === undefined || v === '') v = f.default ?? null;
+      if (f.type === 'datetime' && v) v = new Date(v).toISOString();
+      if (f.type === 'number' && v != null && v !== '') v = Number(v);
+      patch[f.key] = v;
+    }
+    const missing = fields.filter(f => f.required && !patch[f.key]);
+    if (missing.length) { setEditErr('Preencha: ' + missing.map(m => m.label).join(', ')); return; }
+    setBusy(true);
+    const { data, error } = await supabase.from(table).update(patch)
+      .eq('id', editId).eq('tenant_id', tenantDbId).select().single();
+    setBusy(false);
+    if (error) { setEditErr(error.message); return; }
+    // patch otimista: substitui a linha pelo registro retornado (ou pelo patch)
+    setRows(rs => rs.map(r => r.id === editId ? (data || { ...r, ...patch }) : r));
+    cancelEdit();
+  }
+
   const allCols = [...cols, ''];
   return (
     <div>
@@ -130,11 +179,32 @@ function CrudTela({ titulo, sub, table, tenantDbId, userId, cols, fields, toRow,
             {loading ? (
               <tr><td colSpan={allCols.length} style={{ textAlign: 'center', color: 'var(--tx2)', padding: 28 }}>carregando…</td></tr>
             ) : rows.length ? rows.map(rec => {
+              if (editId === rec.id) {
+                // 1 input por field editável; colunas read-only restantes ficam vazias
+                // para manter o alinhamento com o cabeçalho (cols.length + ações).
+                const fillers = Math.max(0, cols.length - fields.length);
+                return (
+                  <tr key={rec.id} style={{ background: '#faf9f8' }}>
+                    {fields.map(f => (
+                      <td key={f.key}>
+                        <Campo f={f} value={editForm[f.key]} onChange={v => setEditForm(s => ({ ...s, [f.key]: v }))} />
+                      </td>
+                    ))}
+                    {Array.from({ length: fillers }).map((_, i) => <td key={`fill-${i}`} />)}
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <button className="cv2-btn" disabled={busy} onClick={saveEdit} style={{ padding: '4px 10px', fontSize: 11, marginRight: 6 }}>{busy ? 'Salvando…' : 'Salvar'}</button>
+                      <button className="cv2-btn sec" disabled={busy} onClick={cancelEdit} style={{ padding: '4px 10px', fontSize: 11 }}>Cancelar</button>
+                      {editErr && <div style={{ color: 'var(--red)', fontSize: 11, marginTop: 6, fontWeight: 600 }}>{editErr}</div>}
+                    </td>
+                  </tr>
+                );
+              }
               const cells = toRow(rec);
               return (
                 <tr key={rec.id}>
                   {cells.map((cell, j) => <td key={j}>{cell}</td>)}
-                  <td style={{ textAlign: 'right' }}>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button className="cv2-btn sec" disabled={busy} onClick={() => startEdit(rec)} style={{ padding: '4px 10px', fontSize: 11, marginRight: 6 }}>Editar</button>
                     <button className="cv2-btn danger" disabled={busy} onClick={() => remove(rec.id)} style={{ padding: '4px 10px', fontSize: 11 }}>Excluir</button>
                   </td>
                 </tr>
