@@ -163,7 +163,7 @@ Resumo de categorias: **CORE** dashboard/agentes/oracle→DELI/skills/atividade/
 ## T4 — Hermes (copiloto CEO)
 
 - [x] **3A — instalar isolado na VPS** ✅ (kimi-k2.6 · Docker · Telegram allowlist Wandson)
-- [ ] ⏳ **3B — acesso à CD via admin MCP** — bloqueado por: 🔒 GATE 0 rotação (Wandson) · [x] ✅ **admin MCP desenhado** (`docs/infra/admin-mcp-design.md` — `ceo_agent` escopado, read amplo + write só propõe-e-aprova via drafts, auditado) · ⏳ gateway root→usuário dedicado (Wandson). **Não fecha sem GATE 0.**
+- [ ] ⏳ **3B — acesso à CD via admin MCP** — bloqueado por: 🔒 GATE 0 rotação (Wandson) · [x] ✅ **admin MCP desenhado** (`docs/infra/admin-mcp-design.md` — `ceo_agent` escopado, read amplo + write só propõe-e-aprova via drafts, auditado) · [x] ✅ **runbook do Wandson** consolidado (`docs/infra/RUNBOOK-WANDSON.md` — ordem GATE 0 → `claudedev` → decisão+`ok` SQL `ceo_agent`) · ⏳ gateway root→usuário dedicado (Wandson) · 🛑 decisão: `ceo_agent` vê todos os tenants ou só pagantes. **Não fecha sem GATE 0.**
 
 ---
 
@@ -189,7 +189,7 @@ Resumo de categorias: **CORE** dashboard/agentes/oracle→DELI/skills/atividade/
 
 ## T7 — Feature PILOTO
 
-- [x] Ondas 01+02 merged · [x] ✅ **Onda 03 (Loja-GPT) EM PROD desde 2026-05-22** (verificado 2026-06-09: tabelas `loja_gpt_conversations`/`loja_gpt_messages`, 9 conv/16 msg; task `loja-gpt-responder`; 5 endpoints Bridge; `TabIaEspecialista`; ver `docs/piloto/PILOTO-03-LOJA-GPT.md`) · [ ] ⏳ Onda 04 (WhatsApp + Loom)
+- [x] Ondas 01+02 merged · [x] ✅ **Onda 03 (Loja-GPT) EM PROD desde 2026-05-22** (verificado 2026-06-09: tabelas `loja_gpt_conversations`/`loja_gpt_messages`, 9 conv/16 msg; task `loja-gpt-responder`; 5 endpoints Bridge; `TabIaEspecialista`; ver `docs/piloto/PILOTO-03-LOJA-GPT.md`) · [ ] 🔄 Onda 04 (WhatsApp + Loom) — **iniciada**: [x] Tarefa 7 ✅ parser `parseRespostaCliente` em prod no `main` (`c5f3afc`, 18 testes verdes, verificado 2026-06-09); resto bloqueado por Wandson (Evolution + cliente real + migrations gated) → `docs/infra/RUNBOOK-WANDSON.md`
 
 ---
 

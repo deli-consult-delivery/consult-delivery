@@ -51,6 +51,8 @@ Continuação do modelo maestro. Diretiva do Wandson: terminar T4/T7/Integraçõ
 - **Reconciliação T7 (output bruto > resumo confiante).** O Tracker (linha 175) e o `PLANO-MESTRE.md` diziam "Onda 03 não aplicada". **Falso.** Query no banco: `loja_gpt_conversations`/`loja_gpt_messages` existem, **9 conversas / 16 mensagens** reais — Onda 03 (Loja-GPT) está em prod desde **2026-05-22** (ver `docs/piloto/PILOTO-03-LOJA-GPT.md`). Corrigi Tracker + PLANO-MESTRE. **T7 restante = só Onda 04 (WhatsApp+Loom)**, que o Wandson não pediu explicitamente.
 - **T4 (Hermes) segue bloqueado por GATE 0** (rotação de credenciais — reservado ao Wandson). Só a parte de design (doc do admin MCP) é minha; não fecha sem o GATE 0 dele.
 - **Pós-`ok` (executado nesta sessão):** `20260609_004` aplicada · RLS E2E provado · seed via service_role · #275 mergeado · branch deletada. ✅
+- **Onda 04 / Tarefa 7 — verificada ✅ JÁ FEITA.** O Wandson pediu "faça o autônomo + me passe a parte que depende de mim". Varri a Onda 04 atrás da única peça pura/não-gated/segura-p/-cliente: o parser `parseRespostaCliente` (`trigger/_shared/parse-resposta-cliente.ts`). **Já existe e está em prod no `main`** (`c5f3afc`), **18 testes vitest verdes** (output bruto: `Test Files 1 passed (1) · Tests 18 passed (18)`). Não reconstruí — confirmei e segui. Corrigido stale "Onda 04 não iniciada" no mapa-vivo → agora "iniciada (Tarefa 7 ✅)".
+- **Runbook do Wandson entregue** (a parte reservada a ele): `docs/infra/RUNBOOK-WANDSON.md` — ordem **GATE 0 → usuário `claudedev` na VPS → decisão+`ok` no SQL do `ceo_agent`**, consolidando `gate0-rotacao-credenciais.md` + `claude-code-vps-setup.md` + `admin-mcp-design.md`. Destrava T4 (Hermes) inteiro. **Decisão 🛑 pendente do Wandson:** `ceo_agent` vê todos os tenants ou só pagantes (default proposto: todos).
 
 ### Sessão 29 — VPS (modo ORQUESTRADOR + LEVA 2: 3 telas saem do mock via migration aprovada)
 Continuação do modelo maestro. Pipeline da LEVA 2 (precisava `ok` do SQL — gated): **2 executores `cd-frontend-component` em paralelo** (arquivos disjuntos: `CvNovas.jsx`+`ConsoleV2.jsx` vs `CRMScreen.jsx`) → revisão central de segurança (XSS via `esc()`, RLS-friendly inserts, secrets) → build verde → **PR #271 (migration) + #272 (frontend) abertos** → apresentei o SQL completo ao Wandson → **`ok` recebido**.
@@ -177,7 +179,7 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 | T1 | Plataforma CD | ✅ | Console v2 idêntico ao protótipo, **todas as telas no visual claro** |
 | T2 | EvoNexus-replica | ✅ | FASE 2 onda 2 + GAP-1..8 + agentes |
 | T3 | Visual-First / telas | ✅ | **LEVA 3 ✅ FECHADA: Integrações sai do mock (`tenant_integracoes`, migration `20260609_004` APLICADA + RLS E2E membro=4/não-membro=0 + seed 4 reais; PR #275 mergeado `f2dde20`). Série LEVA completa — telas de referência 100% fora do mock.** · LEVA 2: Provedores/Sistemas/Notas-CRM saem do mock (migration `20260609_003` aplicada + RLS E2E; PRs #271/#272) · LEVA 1: CRM lê customers real (#268) + edição inline Cv Novas (#267) + Eduardo→Wandson MAX (#266) + padrão Trigger breno (#265) · Chat ao Vivo = ChatScreen clássico (PR #262) · Arquivos upload/download real (PR #261) · Família Automações 100% no claro (#256/#258/#259) · busca global (#246) · 5 telas novas com CRUD (#239) |
-| T4 | Hermes | 🔄 | aguarda GATE 0 |
+| T4 | Hermes | 🔄 | design admin-MCP ✅ + **runbook do Wandson entregue** (`docs/infra/RUNBOOK-WANDSON.md`: GATE 0 → `claudedev` → `ok` SQL `ceo_agent`). Aguarda GATE 0 + decisão 🛑 (todos tenants vs só pagantes) |
 | T5 | Segurança | 🔄 | 270 policies OK · **GATE 0 (rotação) pendente** — checklist #237 |
 | T6 | Agentes IA | ✅ | 6 agentes vivos: Defesa, Vigia, Radar, Estúdio, Análise de Loja, Cardápio, Multicanal |
 | T7 | PILOTO | 🔄 | **Onda 03 (Loja-GPT) JÁ em prod desde 2026-05-22** (verificado: tabelas `loja_gpt_conversations`/`loja_gpt_messages`, 9 conv/16 msg; task `loja-gpt-responder`; 5 endpoints Bridge; `TabIaEspecialista`). Falta só Onda 04 (WhatsApp+Loom) |
@@ -187,6 +189,13 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 ---
 
 ## 📋 Log de sessões
+
+### 2026-06-09 (sessão 30 — continuação: Tarefa 7 verificada + runbook do Wandson)
+- **Pedido do Wandson:** "faça o que você consegue + me passe a parte que depende de mim." Fiz o autônomo restante e consolidei a fila dele.
+- **Onda 04 / Tarefa 7 ✅ já feita.** Varri a Onda 04 atrás da única peça pura/não-gated/cliente-safe — o parser `parseRespostaCliente` (`trigger/_shared/parse-resposta-cliente.ts`). **Já em prod no `main`** (`c5f3afc`), **18 testes vitest verdes** (`Tests 18 passed (18)`). Não reconstruí; confirmei. Corrigido stale "Onda 04 não iniciada" no mapa-vivo.
+- **Runbook do Wandson** criado: `docs/infra/RUNBOOK-WANDSON.md` (ordem GATE 0 → `claudedev` → decisão+`ok` SQL `ceo_agent`; consolida gate0 + claude-code-vps-setup + admin-mcp-design). Destrava T4.
+- **🛑 Decisão pendente do Wandson:** `ceo_agent` enxerga todos os tenants ou só pagantes (default proposto: todos). Sem isso não escrevo o SQL do papel.
+- Branch `wandson/onda04-parser-verificado-runbook` (só docs, reversível).
 
 ### 2026-06-09 (sessão 29 — VPS: modo orquestrador + LEVA 2 gated)
 - **Pipeline LEVA 2 (gated por `ok` do SQL):** 2 executores `cd-frontend-component` paralelos (arquivos disjuntos: `CvNovas.jsx`+`ConsoleV2.jsx` vs `CRMScreen.jsx`) → revisão central de segurança (XSS `esc()` no `<Tela>`/`dangerouslySetInnerHTML`, badge por classe-constante, inserts RLS-friendly com `tenant_id`, secrets) → build verde → PR #271 (migration) + #272 (frontend) abertos → SQL completo apresentado → **`ok` do Wandson**.
