@@ -189,17 +189,15 @@ export default function KnowledgeBaseScreen({ tenantDbId }) {
   };
 
   return (
-    <div style={{ padding: 24, minHeight: '100%', background: '#111', color: '#fff' }}>
+    <div className="cv2-ct">
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18, gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>Base de Conhecimento</h1>
-          <p style={{ fontSize: 13, color: '#888', margin: '4px 0 0' }}>Artigos e contexto para os agentes</p>
+          <h1>Base de Conhecimento</h1>
+          <div className="cv2-rule" />
+          <div className="cv2-sub">Artigos e contexto para os agentes</div>
         </div>
-        <button
-          onClick={openCreate}
-          style={{ padding: '8px 18px', background: '#B70C00', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}
-        >
+        <button className="cv2-btn" onClick={openCreate}>
           + Novo Artigo
         </button>
       </div>
@@ -211,13 +209,13 @@ export default function KnowledgeBaseScreen({ tenantDbId }) {
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
             placeholder="Buscar por título ou conteúdo…"
-            style={{ flex: 1, padding: '8px 12px', background: '#1a1a1a', border: '1px solid #333', borderRadius: 8, color: '#fff', fontSize: 14 }}
+            style={{ flex: 1, padding: '8px 12px', background: '#faf9f8', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--tx)', fontSize: 14, outline: 'none', fontFamily: 'inherit' }}
           />
-          <button type="submit" style={{ padding: '8px 14px', background: '#222', border: '1px solid #444', borderRadius: 8, color: '#ccc', cursor: 'pointer', fontSize: 13 }}>
+          <button type="submit" className="cv2-btn sec">
             Buscar
           </button>
           {searchQuery && (
-            <button type="button" onClick={() => { setSearchInput(''); setSearchQuery(''); fetchArticles(); }} style={{ padding: '8px 10px', background: 'none', border: '1px solid #444', borderRadius: 8, color: '#aaa', cursor: 'pointer', fontSize: 12 }}>
+            <button type="button" onClick={() => { setSearchInput(''); setSearchQuery(''); fetchArticles(); }} className="cv2-btn sec" title="Limpar busca">
               ✕
             </button>
           )}
@@ -226,7 +224,7 @@ export default function KnowledgeBaseScreen({ tenantDbId }) {
         <select
           value={filterAgent}
           onChange={e => setFilterAgent(e.target.value)}
-          style={{ padding: '8px 12px', background: '#1a1a1a', border: '1px solid #333', borderRadius: 8, color: '#fff', fontSize: 14, cursor: 'pointer' }}
+          style={{ padding: '8px 12px', background: '#faf9f8', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--tx)', fontSize: 14, cursor: 'pointer', outline: 'none', fontFamily: 'inherit' }}
         >
           {AGENT_OPTIONS.map(opt => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -236,55 +234,52 @@ export default function KnowledgeBaseScreen({ tenantDbId }) {
 
       {/* Error */}
       {error && (
-        <div style={{ padding: 12, background: '#2a0a0a', border: '1px solid #B70C00', borderRadius: 8, color: '#f87171', marginBottom: 16, fontSize: 13 }}>
+        <div style={{ padding: 12, background: 'var(--red-soft)', border: '1px solid var(--red)', borderRadius: 6, color: 'var(--red)', marginBottom: 16, fontSize: 13 }}>
           Erro: {error}
         </div>
       )}
 
       {/* Articles list */}
       {loading ? (
-        <div style={{ textAlign: 'center', color: '#888', padding: 40 }}>Carregando…</div>
+        <div style={{ textAlign: 'center', color: 'var(--tx2)', padding: 40 }}>Carregando…</div>
       ) : articles.length === 0 ? (
-        <div style={{ textAlign: 'center', color: '#888', padding: 60 }}>
+        <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)', padding: 40, fontSize: 13 }}>
           {searchQuery ? `Nenhum artigo encontrado para "${searchQuery}".` : 'Nenhum artigo cadastrado ainda.'}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {articles.map(article => (
-            <div key={article.id} style={{
-              background: '#1a1a1a',
-              border: `1px solid ${article.is_active ? '#2a2a2a' : '#1a1010'}`,
-              borderRadius: 10,
-              padding: 16,
-              opacity: article.is_active ? 1 : 0.55,
+            <div key={article.id} className="cv2-card" style={{
+              borderColor: article.is_active ? 'var(--line)' : 'var(--red-soft)',
+              opacity: article.is_active ? 1 : 0.6,
             }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                    <span style={{ fontWeight: 600, fontSize: 15 }}>{article.title}</span>
+                    <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--tx)' }}>{article.title}</span>
                     {article.agent_slug && (
                       <span style={{
                         fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
-                        background: agentColor(article.agent_slug) + '22',
+                        background: agentColor(article.agent_slug) + '1a',
                         color: agentColor(article.agent_slug),
-                        border: `1px solid ${agentColor(article.agent_slug)}55`,
+                        border: `1px solid ${agentColor(article.agent_slug)}44`,
                       }}>
                         {article.agent_slug.toUpperCase()}
                       </span>
                     )}
                     {!article.agent_slug && (
-                      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: '#333', color: '#aaa' }}>
+                      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: 'var(--bg)', border: '1px solid var(--line)', color: 'var(--tx2)' }}>
                         Global
                       </span>
                     )}
                   </div>
-                  <p style={{ fontSize: 13, color: '#aaa', margin: '0 0 8px', lineHeight: 1.5 }}>
+                  <p style={{ fontSize: 13, color: 'var(--tx2)', margin: '0 0 8px', lineHeight: 1.5 }}>
                     {article.content.length > 150 ? article.content.slice(0, 150) + '…' : article.content}
                   </p>
                   {article.tags?.length > 0 && (
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
                       {article.tags.map(tag => (
-                        <span key={tag} style={{ fontSize: 11, padding: '2px 8px', background: '#2a2a2a', border: '1px solid #444', borderRadius: 20, color: '#ccc' }}>
+                        <span key={tag} style={{ fontSize: 11, padding: '2px 8px', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 20, color: 'var(--tx2)' }}>
                           #{tag}
                         </span>
                       ))}
@@ -297,26 +292,20 @@ export default function KnowledgeBaseScreen({ tenantDbId }) {
                     title={article.is_active ? 'Desativar' : 'Ativar'}
                     style={{
                       width: 36, height: 20, borderRadius: 10, border: 'none', cursor: 'pointer',
-                      background: article.is_active ? '#B70C00' : '#333',
-                      position: 'relative', transition: 'background 0.2s',
+                      background: article.is_active ? 'var(--green)' : '#cbc9c5',
+                      position: 'relative', transition: 'background 0.2s', flexShrink: 0,
                     }}
                   >
                     <span style={{
                       position: 'absolute', top: 2, left: article.is_active ? 18 : 2,
                       width: 16, height: 16, borderRadius: 8, background: '#fff',
-                      transition: 'left 0.2s',
+                      transition: 'left 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
                     }} />
                   </button>
-                  <button
-                    onClick={() => openEdit(article)}
-                    style={{ padding: '5px 12px', background: '#222', border: '1px solid #444', borderRadius: 6, color: '#ccc', cursor: 'pointer', fontSize: 12 }}
-                  >
+                  <button onClick={() => openEdit(article)} className="cv2-btn sec" style={{ padding: '5px 12px', fontSize: 12 }}>
                     Editar
                   </button>
-                  <button
-                    onClick={() => handleDelete(article.id)}
-                    style={{ padding: '5px 12px', background: '#1a0808', border: '1px solid #B70C0055', borderRadius: 6, color: '#f87171', cursor: 'pointer', fontSize: 12 }}
-                  >
+                  <button onClick={() => handleDelete(article.id)} className="cv2-btn danger" style={{ padding: '5px 12px', fontSize: 12 }}>
                     Excluir
                   </button>
                 </div>
@@ -329,24 +318,24 @@ export default function KnowledgeBaseScreen({ tenantDbId }) {
       {/* Modal */}
       {showModal && (
         <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000,
+          position: 'fixed', inset: 0, background: 'rgba(28,27,26,0.45)', zIndex: 1000,
           display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
         }}>
-          <div style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 12, padding: 28, width: '100%', maxWidth: 600, maxHeight: '90vh', overflowY: 'auto' }}>
+          <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8, padding: 28, width: '100%', maxWidth: 600, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,0.18)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: 'var(--tx)' }}>
                 {editing ? 'Editar Artigo' : 'Novo Artigo'}
               </h2>
-              <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', fontSize: 20, padding: '0 4px' }}>✕</button>
+              <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', color: 'var(--tx2)', cursor: 'pointer', fontSize: 20, padding: '0 4px' }}>✕</button>
             </div>
 
             <form onSubmit={handleSave}>
               <div style={{ marginBottom: 14 }}>
-                <label style={{ display: 'block', fontSize: 13, color: '#aaa', marginBottom: 6 }}>Agente</label>
+                <label style={{ display: 'block', fontSize: 13, color: 'var(--tx2)', marginBottom: 6 }}>Agente</label>
                 <select
                   value={form.agent_slug}
                   onChange={e => setForm(f => ({ ...f, agent_slug: e.target.value }))}
-                  style={{ width: '100%', padding: '8px 12px', background: '#111', border: '1px solid #333', borderRadius: 8, color: '#fff', fontSize: 14 }}
+                  style={{ width: '100%', padding: '8px 12px', background: '#faf9f8', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--tx)', fontSize: 14, outline: 'none', fontFamily: 'inherit' }}
                 >
                   {AGENT_OPTIONS.map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -355,46 +344,46 @@ export default function KnowledgeBaseScreen({ tenantDbId }) {
               </div>
 
               <div style={{ marginBottom: 14 }}>
-                <label style={{ display: 'block', fontSize: 13, color: '#aaa', marginBottom: 6 }}>Título *</label>
+                <label style={{ display: 'block', fontSize: 13, color: 'var(--tx2)', marginBottom: 6 }}>Título *</label>
                 <input
                   required
                   value={form.title}
                   onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
                   placeholder="Título do artigo"
-                  style={{ width: '100%', padding: '8px 12px', background: '#111', border: '1px solid #333', borderRadius: 8, color: '#fff', fontSize: 14, boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '8px 12px', background: '#faf9f8', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--tx)', fontSize: 14, boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit' }}
                 />
               </div>
 
               <div style={{ marginBottom: 14 }}>
-                <label style={{ display: 'block', fontSize: 13, color: '#aaa', marginBottom: 6 }}>Conteúdo * (suporta Markdown)</label>
+                <label style={{ display: 'block', fontSize: 13, color: 'var(--tx2)', marginBottom: 6 }}>Conteúdo * (suporta Markdown)</label>
                 <textarea
                   required
                   value={form.content}
                   onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
                   placeholder="Escreva o conteúdo do artigo…"
                   rows={10}
-                  style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #333', borderRadius: 8, color: '#fff', fontSize: 13, resize: 'vertical', lineHeight: 1.6, boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '10px 12px', background: '#faf9f8', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--tx)', fontSize: 13, resize: 'vertical', lineHeight: 1.6, boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit' }}
                 />
               </div>
 
               <div style={{ marginBottom: 14 }}>
-                <label style={{ display: 'block', fontSize: 13, color: '#aaa', marginBottom: 6 }}>Tags</label>
+                <label style={{ display: 'block', fontSize: 13, color: 'var(--tx2)', marginBottom: 6 }}>Tags</label>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input
                     value={tagInput}
                     onChange={e => setTagInput(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
                     placeholder="Adicionar tag…"
-                    style={{ flex: 1, padding: '7px 12px', background: '#111', border: '1px solid #333', borderRadius: 8, color: '#fff', fontSize: 13 }}
+                    style={{ flex: 1, padding: '7px 12px', background: '#faf9f8', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--tx)', fontSize: 13, outline: 'none', fontFamily: 'inherit' }}
                   />
-                  <button type="button" onClick={addTag} style={{ padding: '7px 14px', background: '#222', border: '1px solid #444', borderRadius: 8, color: '#ccc', cursor: 'pointer', fontSize: 13 }}>
+                  <button type="button" onClick={addTag} className="cv2-btn sec">
                     Adicionar
                   </button>
                 </div>
                 {currentTags.length > 0 && (
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
                     {currentTags.map(tag => (
-                      <span key={tag} style={{ fontSize: 12, padding: '3px 10px', background: '#2a2a2a', border: '1px solid #444', borderRadius: 20, color: '#ccc', cursor: 'pointer' }} onClick={() => removeTag(tag)}>
+                      <span key={tag} style={{ fontSize: 12, padding: '3px 10px', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 20, color: 'var(--tx2)', cursor: 'pointer' }} onClick={() => removeTag(tag)}>
                         #{tag} ✕
                       </span>
                     ))}
@@ -403,11 +392,11 @@ export default function KnowledgeBaseScreen({ tenantDbId }) {
               </div>
 
               <div style={{ marginBottom: 22 }}>
-                <label style={{ display: 'block', fontSize: 13, color: '#aaa', marginBottom: 6 }}>Fonte</label>
+                <label style={{ display: 'block', fontSize: 13, color: 'var(--tx2)', marginBottom: 6 }}>Fonte</label>
                 <select
                   value={form.source}
                   onChange={e => setForm(f => ({ ...f, source: e.target.value }))}
-                  style={{ width: '100%', padding: '8px 12px', background: '#111', border: '1px solid #333', borderRadius: 8, color: '#fff', fontSize: 14 }}
+                  style={{ width: '100%', padding: '8px 12px', background: '#faf9f8', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--tx)', fontSize: 14, outline: 'none', fontFamily: 'inherit' }}
                 >
                   <option value="manual">Manual</option>
                   <option value="imported">Importado</option>
@@ -416,10 +405,10 @@ export default function KnowledgeBaseScreen({ tenantDbId }) {
               </div>
 
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                <button type="button" onClick={() => setShowModal(false)} style={{ padding: '9px 20px', background: '#222', border: '1px solid #444', borderRadius: 8, color: '#ccc', cursor: 'pointer', fontSize: 14 }}>
+                <button type="button" onClick={() => setShowModal(false)} className="cv2-btn sec">
                   Cancelar
                 </button>
-                <button type="submit" disabled={saving} style={{ padding: '9px 24px', background: '#B70C00', border: 'none', borderRadius: 8, color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 14, opacity: saving ? 0.6 : 1 }}>
+                <button type="submit" disabled={saving} className="cv2-btn" style={{ opacity: saving ? 0.6 : 1 }}>
                   {saving ? 'Salvando…' : (editing ? 'Salvar alterações' : 'Criar artigo')}
                 </button>
               </div>
