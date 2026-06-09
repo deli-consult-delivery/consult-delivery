@@ -43,7 +43,13 @@ A sessão **Cowork** (desktop) parou aqui e passou o bastão para a **sessão Cl
 
 ## 🔴 Onde parou
 
-_Última sessão: 2026-06-09 (VPS — **sessão 26: Arquivos com upload/download real — bucket privado + RLS (PR #261, aguarda ok do SQL)**)_
+_Última sessão: 2026-06-09 (VPS — **sessão 27: auditoria do Console v2 — Chat ao Vivo = ChatScreen clássico, dedup Rotinas/Metas, escala clara nas telas LEGADO (PR #262 mergeado)**)_
+
+### Sessão 27 — VPS (auditoria Console v2: chat de produção, dedup, contraste)
+Wandson pediu (produção iminente): "Chat ao Vivo 100% funcional com TODAS as funções do chat antigo + status", varrer página-por-página, telas escuras/branco-no-branco, e páginas duplicadas (duas "Metas"; "Rotinas" com sub-telas que já existem). Três frentes, **PR #262 mergeado** (squash, sha `76ad03b`):
+- **🔁 CORREÇÃO da decisão das sessões 22/24 — Chat ao Vivo NÃO usa mais o `ChatV2.jsx`.** Verificação empírica: `ChatV2.jsx` (572 linhas) **não tinha paridade** com o `ChatScreen` clássico (5101 linhas) — a alegação "100% funcional" das sessões 22/24 estava **incorreta**. Como o Wandson vai usar em produção JÁ, `ConsoleV2.jsx` agora renderiza o **`ChatScreen` clássico imersivo full-screen** no item "Chat ao Vivo" (todas as funções/status do chat antigo). Removidos `import ChatV2`, estado `chatFull` + seu `useEffect`. ChatV2 **descontinuado** (não alcançava paridade).
+- **🧹 Dedup Rotinas/Metas.** Removido o agregador **Rotinas** (`AutomacoesScreen`, 8 abas que duplicavam itens dedicados) do Console v2. As 2 superfícies **únicas** viraram itens de nav próprios e claros (em `cv2-ct`): **Construtor de Agentes** (`AgentBuilderScreen`) + **Inbox dos Agentes** (`AgentInboxScreen`). Sai a duplicata "duas Metas" — resta só o `metas` de topo (`GoalsScreen`). `AutomacoesScreen` preservado (segue no console clássico via `App.jsx`).
+- **🎨 Telas escuras / branco-no-branco — root cause.** `data-theme="cinza"/"escuro"` salvo pelo console clássico é aplicado no `<html>` (App.jsx:272-276) e **inverte** a escala `--g-*`/`--white`/`--black`. `.cv2` não resetava essas vars → vazavam para as telas LEGADO embutidas (`--white`=surface escura → "página preta"; `bg:#fff` hardcoded + `--g-900`=branco → "branco no branco"). **Fix:** `console.css` reseta `--g-*`/`--white`/`--black`/`*-soft` para os valores **light** do `:root` dentro do escopo `.cv2`. Single root-cause corrige os dois sintomas. Build verde (`vite build` ✓ 4.54s).
 
 ### Sessão 26 — VPS (Storage em Arquivos — opção 1, peça 1/3)
 Wandson pediu "começa pela opção 1" (migrations dinâmicas). Pela regra "1 arquivo por vez", opção 1 vira 3 migrations; começou pela mais limpa e verificável: **Storage em Arquivos**. A tabela `tenant_files` já existia (#239) mas a tela só tinha upload **fake** (formulário de texto; o cliente digitava `storage_path` à mão, sem upload nem download).
@@ -128,9 +134,9 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 ## 👉 Próxima ação (para a sessão da VPS continuar)
 
 1. **5 telas novas funcionais** — ✅ **CONCLUÍDO.** SQL aprovado e aplicado, teste de isolamento RLS (intruso=0) + smoke CRUD passaram, PR #239 mergeado, deploy verde (`index-m6QCbjtk.js`). Gatilhos/Tópicos/Tarefas/Links/Arquivos com CRUD real no visual claro. → próximo foco: item 2.
-2. **Chat ao Vivo 100% funcional** — ✅ **CONCLUÍDO (sessões 22+24).** `ChatV2.jsx` com paridade total: mídia inbound (img/sticker/vídeo/áudio/documento), formatação WhatsApp, ticks de entrega, citação/reply, reações (render+envio), apagar/revoke, colar imagem, realtime UPDATE (#243) **+ badge de não-lidas (#248, sessão 24 — `unread_count` já existia, sem migration)**. → próximo foco: item 2b (backlog de telas PARCIAIS).
+2. **Chat ao Vivo 100% funcional** — ✅ **CONCLUÍDO (sessão 27, PR #262).** **🔁 Decisão revista:** o Chat ao Vivo do Console v2 **NÃO** usa mais o `ChatV2.jsx` — ele **não tinha paridade** com o clássico (572 vs 5101 linhas); a alegação "100%" das sessões 22/24 estava incorreta. `ConsoleV2.jsx` agora renderiza o **`ChatScreen` clássico imersivo** (todas as funções/status do chat antigo), pronto para produção. `ChatV2.jsx` descontinuado. → próximo foco: item 2b (backlog de telas PARCIAIS).
 2b. **Backlog autônomo — telas PARCIAIS → funcionais** (sem migration-apply/VPS/mensagens-a-cliente): ✅ busca global da topbar (sessão 23, PR #246); ✅ badge de não-lidas no chat (sessão 24, PR #248). **Auditado:** backends de Análise de Loja/Cardápio/Multicanal/Radar **já existem** (cron `*/5` drenando filas `pendente`), Importar Relatórios e Análise de Loja **já estão wired** — nenhuma tela do console renderiza mock puro. Restam só os que **exigem** migration/VPS: upload Storage em Arquivos → **migration pronta + frontend wired em PR #261, aguarda `ok` do SQL** (sessão 26); expiry/contagem em Links (precisa endpoint de redirect+VPS) → ainda **bloqueado**.
-2c. **Visual-claro (dark→claro das telas embarcadas)** — ✅ **CONCLUÍDO (sessão 25).** Família Automações (8 abas) toda no claro; último embed escuro `AgentBuilderScreen` (#259). `ChatScreen.jsx` permanece escuro **de propósito** (superfície imersiva full-screen; o Chat claro é o `ChatV2.jsx`). Nenhuma tela LEGADO embarcada no Console v2 segue escura. Próximo foco autônomo: varrer gaps funcionais residuais sem migration em telas legadas/`CvNovas`.
+2c. **Visual-claro (dark→claro das telas embarcadas)** — ✅ **CONCLUÍDO (sessão 25 + 27).** Família Automações (8 abas) toda no claro; último embed escuro `AgentBuilderScreen` (#259). `ChatScreen.jsx` permanece escuro **de propósito** (superfície imersiva full-screen estilo WhatsApp — e agora É o Chat ao Vivo oficial do Console v2, sessão 27). Sessão 27 fechou a causa-raiz das "páginas pretas/branco-no-branco": `.cv2` reseta a escala `--g-*` para o light, anulando o `data-theme` salvo (PR #262). Nenhuma tela LEGADO embarcada segue escura por bug. Próximo foco autônomo: varrer gaps funcionais residuais sem migration em telas legadas/`CvNovas`.
 3. **Bridge crash-loop** (⚠️ VPS — reservado ao Wandson): `pm2 logs bridge-server --err --lines 50`; achar a causa dos 136 restarts e estabilizar.
 4. **Pendências do Wandson (não fazer sem ele):** apagar msg de teste `delete from messages where id='0023dd90-4bf9-4139-8667-ed3e85869772';` · limpar registros de teste (tenant "Cliente Teste Sandbox") · `ASAAS_DEFESA_ENVIRONMENT`=production no 1º cliente pagante.
 5. **GATE 0 (quando o Wandson quiser)** — `docs/infra/gate0-rotacao-credenciais.md`. Depois, agente persistente na VPS: `docs/infra/claude-code-vps-setup.md`.
@@ -144,7 +150,7 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 |-------|------|--------|-------------|
 | T1 | Plataforma CD | ✅ | Console v2 idêntico ao protótipo, **todas as telas no visual claro** |
 | T2 | EvoNexus-replica | ✅ | FASE 2 onda 2 + GAP-1..8 + agentes |
-| T3 | Visual-First / telas | ✅ | **Arquivos upload/download real** (PR #261, aguarda ok SQL) · Família Automações 100% no claro (#256/#258/#259) · busca global (#246) · Chat ao Vivo 100% funcional (#243) · 5 telas novas com CRUD (#239) |
+| T3 | Visual-First / telas | ✅ | **Chat ao Vivo = ChatScreen clássico (100% funções) + dedup Rotinas/Metas + escala clara nas LEGADO (PR #262)** · Arquivos upload/download real (PR #261, aguarda ok SQL) · Família Automações 100% no claro (#256/#258/#259) · busca global (#246) · 5 telas novas com CRUD (#239) |
 | T4 | Hermes | 🔄 | aguarda GATE 0 |
 | T5 | Segurança | 🔄 | 270 policies OK · **GATE 0 (rotação) pendente** — checklist #237 |
 | T6 | Agentes IA | ✅ | 6 agentes vivos: Defesa, Vigia, Radar, Estúdio, Análise de Loja, Cardápio, Multicanal |
@@ -155,6 +161,12 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 ---
 
 ## 📋 Log de sessões
+
+### 2026-06-09 (sessão 27 — VPS: auditoria Console v2 — chat de produção + dedup + contraste)
+- **PR #262 mergeado** (squash, sha `76ad03b`). 3 frentes da auditoria pedida pelo Wandson (produção iminente):
+- **Chat ao Vivo = `ChatScreen` clássico.** 🔁 Reverte a decisão das sessões 22/24: `ChatV2.jsx` (572 linhas) **não tinha paridade** com o clássico (5101 linhas) — "100% funcional" estava incorreto. `ConsoleV2.jsx` passa a renderizar o `ChatScreen` clássico imersivo full-screen no item "Chat ao Vivo" (todas as funções/status). Removidos `import ChatV2` + estado `chatFull` + `useEffect`. ChatV2 descontinuado.
+- **Dedup Rotinas/Metas.** Agregador `AutomacoesScreen` (Rotinas, 8 abas duplicadas) removido do Console v2; as 2 únicas (`AgentBuilderScreen`, `AgentInboxScreen`) viraram itens de nav claros. Some a 2ª "Metas". `AutomacoesScreen` preservado no console clássico (App.jsx).
+- **Telas escuras / branco-no-branco.** Root cause: `data-theme` salvo no `<html>` (App.jsx:272-276) inverte `--g-*`/`--white`/`--black`; `.cv2` não resetava → vazava p/ telas LEGADO. Fix em `console.css`: reseta a escala para os valores light do `:root` no escopo `.cv2`. Single root-cause → corrige os 2 sintomas. Build verde (`vite build` ✓ 4.54s).
 
 ### 2026-06-09 (sessão 25 — VPS: Automações 100% no claro + decisão ChatScreen)
 - Varredura dark→claro das telas embarcadas no Console v2 **concluída**. Família `AutomacoesScreen` (8 abas) toda no claro: `AgentRunsScreen` (#256), `AgentInboxScreen` (#258, sha `99dc15b`), `AgentBuilderScreen` (#259, sha `8bed994` — último embed escuro). Presentation-only, lógica de fetch/handler byte-idêntica; dots decorativos e chips de avatar de marca (`#B70C00`+`#fff`) preservados. Builds verdes (`vite build` ✓ ~4.8–5.0s).
