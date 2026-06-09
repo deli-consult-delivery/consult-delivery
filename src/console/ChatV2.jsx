@@ -140,12 +140,21 @@ export default function ChatV2({ tenantDbId, userId, onFull }) {
   const recRef = useRef(null);
   const chunksRef = useRef([]);
   const streamRef = useRef(null);
+  const activeIdRef = useRef(null);
+  useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
+
+  // abre a conversa e zera o contador de não-lidas (local + persistido)
+  const abrirConv = useCallback((convId) => {
+    setActiveId(convId);
+    setConvs(cs => (cs || []).map(c => c.id === convId ? { ...c, unread: 0 } : c));
+    if (tenantDbId) supabase.from('conversations').update({ unread_count: 0 }).eq('id', convId).eq('tenant_id', tenantDbId);
+  }, [tenantDbId]);
 
   // conversas do tenant + preview da última mensagem
   const loadConvs = useCallback(async () => {
     if (!tenantDbId) return;
     const { data } = await supabase.from('conversations')
-      .select('id, whatsapp_chat_id, group_name, contact_name, push_name, is_group, updated_at, status, department_id, customer_id')
+      .select('id, whatsapp_chat_id, group_name, contact_name, push_name, is_group, updated_at, status, department_id, customer_id, unread_count')
       .eq('tenant_id', tenantDbId).order('updated_at', { ascending: false }).limit(60);
     const rows = data || [];
     const prev = await Promise.all(rows.map(r =>
@@ -158,6 +167,7 @@ export default function ChatV2({ tenantDbId, userId, onFull }) {
         id: c.id, nome, chatId: c.whatsapp_chat_id, isGroup: c.is_group,
         prev: previewTxt(prev[i]?.data), hora: hora(c.updated_at),
         status: c.status, deptId: c.department_id || null, customerId: c.customer_id || null,
+        unread: c.unread_count || 0,
       };
     });
     setConvs(mapped);
@@ -210,6 +220,31 @@ export default function ChatV2({ tenantDbId, userId, onFull }) {
       }).subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [activeId, loadMsgs]);
+
+  // realtime do tenant inteiro — atualiza preview/ordem e bumpa não-lidas
+  // nas conversas que NÃO estão abertas (a aberta é tratada no efeito acima).
+  useEffect(() => {
+    if (!tenantDbId) return;
+    const ch = supabase.channel('chatv2-inbox-' + tenantDbId)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `tenant_id=eq.${tenantDbId}` }, payload => {
+        const m = payload.new;
+        const bump = m.direction === 'inbound' && m.conversation_id !== activeIdRef.current;
+        setConvs(cs => {
+          if (!cs) return cs;
+          const idx = cs.findIndex(c => c.id === m.conversation_id);
+          if (idx === -1) return cs; // conversa fora das 60 carregadas — ignora
+          const c = cs[idx];
+          const updated = {
+            ...c,
+            prev: previewTxt(m),
+            hora: hora(m.created_at || undefined),
+            unread: bump ? (c.unread || 0) + 1 : c.unread,
+          };
+          return [updated, ...cs.filter((_, i) => i !== idx)]; // sobe pro topo
+        });
+      }).subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [tenantDbId]);
 
   useEffect(() => { if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight; }, [msgs]);
 
@@ -398,13 +433,16 @@ export default function ChatV2({ tenantDbId, userId, onFull }) {
           {convs == null && <div className="empty">Carregando conversas…</div>}
           {convs && !lista.length && <div className="empty">Nenhuma conversa.</div>}
           {lista.map(c => (
-            <div key={c.id} className={`conv${c.id === activeId ? ' on' : ''}`} onClick={() => setActiveId(c.id)}>
+            <div key={c.id} className={`conv${c.id === activeId ? ' on' : ''}${c.unread > 0 ? ' unread' : ''}`} onClick={() => abrirConv(c.id)}>
               <div className="cav" style={{ background: cor(c.nome) }}>{(c.nome || '?').slice(0, 1).toUpperCase()}</div>
               <div style={{ minWidth: 0 }}>
                 <div className="nm">{c.nome}</div>
                 <div className="pv">{c.prev || (c.isGroup ? 'Grupo' : 'Conversa')}</div>
               </div>
-              <div className="mt">{c.hora}</div>
+              <div className="mt">
+                {c.hora}
+                {c.unread > 0 && <div className="badge">{c.unread > 99 ? '99+' : c.unread}</div>}
+              </div>
             </div>
           ))}
         </div>

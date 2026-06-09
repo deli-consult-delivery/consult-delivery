@@ -68,7 +68,10 @@
 .cv2-chat .conv .cav{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:14px;flex:none}
 .cv2-chat .conv .nm{font-size:12.5px;font-weight:700;color:var(--ink)}
 .cv2-chat .conv .pv{font-size:11.5px;color:var(--tx2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px;font-weight:500}
-.cv2-chat .conv .mt{margin-left:auto;text-align:right;font-size:10px;color:var(--tx2);font-weight:600}
+.cv2-chat .conv .mt{margin-left:auto;text-align:right;font-size:10px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.cv2-chat .conv.unread .nm{font-weight:800}
+.cv2-chat .conv.unread .pv{color:var(--tx);font-weight:600}
+.cv2-chat .conv .badge{min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--red);color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1}
 .cv2-chat .col2{flex:1;display:flex;flex-direction:column;background:#faf9f8;min-width:0}
 .cv2-chat .col2 .hd{display:flex;align-items:center;gap:10px;padding:11px 16px;background:#fff;border-bottom:1px solid var(--line)}
 .cv2-chat .thread{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column}
