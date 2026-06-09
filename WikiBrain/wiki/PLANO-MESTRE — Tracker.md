@@ -43,7 +43,17 @@ A sessão **Cowork** (desktop) parou aqui e passou o bastão para a **sessão Cl
 
 ## 🔴 Onde parou
 
-_Última sessão: 2026-06-09 (VPS — **sessão 20: 5 telas novas funcionais com CRUD**)_
+_Última sessão: 2026-06-09 (VPS — **sessão 21: Chat claro v2 com mídia/áudio/transferir/finalizar**)_
+
+### Sessão 21 — VPS (Chat claro v2 funcional — item 2)
+Executou a Próxima ação #2. O `ChatV2.jsx` deixou de delegar mídia/áudio/transferência à "versão completa" — agora faz tudo no visual claro, reusando `lib/evolution.js` e os padrões do `ChatScreen.jsx`:
+- **Mídia:** botão de clipe → input de arquivo oculto (imagem/vídeo/pdf/áudio) → `FileReader`→base64 → insert otimista em `messages` (`media_type`) + `sendMediaMessage`. Imagens com `media_url` renderizam inline na thread.
+- **Áudio (PTT):** `MediaRecorder` (ogg/opus) → base64 → `sendAudioMessage` + insert otimista (`media_type:'audio'`). Botão do microfone troca para "enviar" quando há texto; fica vermelho gravando.
+- **Transferir:** dropdown no header → `update conversations.department_id` (escopo `tenant_id`), atualiza estado local + col3 mostra o depto.
+- **Finalizar:** botão → `update conversations {status:'finalizado', status_v2:'closed', finished_by}` (enum `closed` verificado em `pg_enum`).
+- Faixa de aviso inline para falhas (sem `alert`). Limpa o microfone no unmount.
+- **Reações** seguem na versão completa (fora do escopo desta entrega).
+- Build verde (`vite build` ✓ 5.0s, 219 módulos; warnings de chunk/dynamic-import pré-existentes).
 
 ### Sessão 20 — VPS (5 telas novas funcionais — PR #239)
 Pegou o handoff Cowork→VPS e executou a Próxima ação #1. Gatilhos, Tópicos, Tarefas agendadas, Links e Arquivos saíram de mock/estado-vazio para **CRUD real** no visual claro do protótipo:
@@ -76,7 +86,7 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 ## 👉 Próxima ação (para a sessão da VPS continuar)
 
 1. **5 telas novas funcionais** — ✅ **CONCLUÍDO.** SQL aprovado e aplicado, teste de isolamento RLS (intruso=0) + smoke CRUD passaram, PR #239 mergeado, deploy verde (`index-m6QCbjtk.js`). Gatilhos/Tópicos/Tarefas/Links/Arquivos com CRUD real no visual claro. → próximo foco: item 2.
-2. **Chat claro v2** — adicionar ao `ChatV2.jsx` o que hoje só existe na "versão completa": envio de mídia/áudio, transferir/finalizar, reações. Reusar a lógica do `ChatScreen.jsx`.
+2. **Chat claro v2** — ✅ **CONCLUÍDO.** `ChatV2.jsx` ganhou mídia, áudio (PTT), transferir e finalizar reusando `lib/evolution.js` + padrões do `ChatScreen.jsx`. Build verde. (Reações ficam na versão completa.) → próximo foco: item 3.
 3. **Bridge crash-loop** — `pm2 logs bridge-server --err --lines 50`; achar a causa dos 136 restarts e estabilizar.
 4. **Pendências do Wandson (não fazer sem ele):** apagar msg de teste `delete from messages where id='0023dd90-4bf9-4139-8667-ed3e85869772';` · limpar registros de teste (tenant "Cliente Teste Sandbox") · `ASAAS_DEFESA_ENVIRONMENT`=production no 1º cliente pagante.
 5. **GATE 0 (quando o Wandson quiser)** — `docs/infra/gate0-rotacao-credenciais.md`. Depois, agente persistente na VPS: `docs/infra/claude-code-vps-setup.md`.
@@ -90,7 +100,7 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 |-------|------|--------|-------------|
 | T1 | Plataforma CD | ✅ | Console v2 idêntico ao protótipo, **todas as telas no visual claro** |
 | T2 | EvoNexus-replica | ✅ | FASE 2 onda 2 + GAP-1..8 + agentes |
-| T3 | Visual-First / telas | ✅ | 5 telas novas com CRUD real — migration aplicada, RLS isolada, #239 mergeado, deploy verde |
+| T3 | Visual-First / telas | ✅ | Chat claro v2 com mídia/áudio/transferir/finalizar (item 2) · 5 telas novas com CRUD real (#239) |
 | T4 | Hermes | 🔄 | aguarda GATE 0 |
 | T5 | Segurança | 🔄 | 270 policies OK · **GATE 0 (rotação) pendente** — checklist #237 |
 | T6 | Agentes IA | ✅ | 6 agentes vivos: Defesa, Vigia, Radar, Estúdio, Análise de Loja, Cardápio, Multicanal |
@@ -101,6 +111,9 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 ---
 
 ## 📋 Log de sessões
+
+### 2026-06-09 (sessão 21 — VPS: Chat claro v2 com mídia/áudio/transferir/finalizar)
+- `ChatV2.jsx`: mídia (clipe→input oculto→base64→`sendMediaMessage`, imagem inline via `media_url`), áudio PTT (`MediaRecorder` ogg/opus→`sendAudioMessage`), transferir (`update conversations.department_id`), finalizar (`status_v2:'closed'`, enum verificado). Inserts otimistas em `messages` casam com o dedup do webhook. Aviso inline em vez de `alert`. Build verde (`vite build` ✓). Branch `wandson/chatv2-midia-audio-transfer` → PR. Próxima ação #2 ✅.
 
 ### 2026-06-09 (sessão 20 — VPS: 5 telas novas funcionais com CRUD)
 - PR #239: migration aditiva `20260609_001` (5 tabelas `tenant_*` + RLS por tenant nos 4 verbos) + `CrudTela` em `CvNovas.jsx` + wiring em `ConsoleV2.jsx`. Build verde (esbuild rc=0).
