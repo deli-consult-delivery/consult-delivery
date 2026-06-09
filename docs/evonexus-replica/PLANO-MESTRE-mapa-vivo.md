@@ -103,8 +103,8 @@
   - [x] Gateway + Telegram, allowlist só Wandson (`8745522380`)
   - [x] Modelo confirmado: `kimi-k2.6` via Ollama Cloud (teste 47×18=846 ✅)
   - [x] Terminal backend = Docker (isolamento na VPS compartilhada)
-- [ ] ⏳ **3B — acesso à CD via admin MCP** — bloqueado por:
-  - [ ] 🔒 GATE 0 rotação de credenciais (ver T5)
+- [ ] 🔄 **3B — acesso à CD via admin MCP** — **GATE 0 destravado (2026-06-09)**, falta:
+  - [x] ✅ GATE 0 rotação de credenciais — concluído pelo Wandson (ver T5)
   - [x] ✅ Desenhar o admin MCP (principal `ceo_agent` escopado + tools de leitura + escrita propõe-e-aprova) — `docs/infra/admin-mcp-design.md` (sessão 30, 2026-06-09)
   - [x] ✅ Decisão de escopo `ceo_agent` = **todos os tenants** (Wandson, 2026-06-09) + achado cross-tenant documentado (§2.1, Opção A) — runbook em `docs/infra/RUNBOOK-WANDSON.md`
   - [ ] ⏳ SQL do `ceo_agent` — autorado na sessão de build **pós-GATE 0** (não especulativo)
@@ -117,12 +117,13 @@
 - [x] fail2ban ativo (jail sshd) ✅
 - [x] SSH key-only (`PasswordAuthentication no`) ✅
 - [x] Deploy key SSH dedicada — PAT fora do caminho do git ✅
-- [ ] ⏳ **Rotação de credenciais** (adiado):
-  - [ ] Revogar 4 PATs GitHub (deli-agent-vps, Nexus, claude-code, Claude IA)
-  - [ ] Rotacionar `DASHBOARD_API_TOKEN` — ⚠️ verificado 2026-06-09: é do **dashboard EvoNexus** (container Swarm `evo-nexus_dashboard`), **não** bridge/Infisical, e **zero dependência do CD**. Recomendado **🅰 aposentar** (`docker service rm` + limpar plaintext) em vez de rotacionar. Detalhe: `gate0-rotacao-credenciais.md` §3.
-  - [ ] Rotacionar token Telegram (BotFather)
-  - [ ] Limpar cópias em texto na VPS (`.git-credentials`, history, `.claude/*.jsonl`)
-- [ ] ⏳ Hardening: gateway root → usuário dedicado · remover `claude-debug` key · fail2ban `bantime.increment`
+- [x] ✅ **Rotação de credenciais — CONCLUÍDA pelo Wandson (2026-06-09):**
+  - [x] Revogar 4 PATs GitHub (deli-agent-vps, Nexus, claude-code, Claude IA) ✅
+  - [x] `DASHBOARD_API_TOKEN` — **decisão do Wandson: MANTER como está** (ele usa o EvoNexus). É do dashboard EvoNexus (container Swarm `evo-nexus_dashboard`), zero dependência do CD; o plaintext (`/root/recovery`) foi limpo, mitigando a exposição. (Pendência menor não-bloqueante: `/opt/evo-nexus/.env` está `666` → `chmod 600` opcional.)
+  - [x] Rotacionar token Telegram (BotFather) ✅
+  - [x] Limpar cópias em texto na VPS (`.git-credentials`, history, `.claude/*.jsonl`) ✅
+  - [x] Remover SSH key `claude-debug` das authorized_keys ✅
+- [ ] ⏳ Hardening restante: gateway root → usuário dedicado (`claudedev`, pré-req de T4·3B) · fail2ban `bantime.increment`
 
 ---
 
@@ -136,7 +137,11 @@
 
 **MIA — Monitor IA de Conversas**
 - [x] Spec completa (`docs/mia/MIA-PLANO-COMPLETO.md`)
-- [ ] ⏳ Implementação (batch 15min via Trigger.dev, aprovação humana via `sugestoes_ia`)
+- [x] ✅ **Implementação — COMPLETA e APLICADA em prod** (verificado 2026-06-09, output bruto):
+  - Worker `trigger/agents/monitor-conversas-15min.ts` (id `mia-monitor-conversas-15min`, cron `*/15 * * * *`) em `main` (PRs #102/#103) e no path de deploy (`trigger.config.ts` `dirs:["./trigger"]`).
+  - Migrations aplicadas: `mia_analises` (`20260527204835`) + `mia_schema_full` (`20260528033645`). Tabelas vivas: `sugestoes_ia`, `loja_whatsapp_vinculo`, `mia_audit_log`, `analises`.
+  - Bridge: rota `mia-vinculos` montada (`bridge-server/index.js:1483`). UI: 5 componentes em `src/components/cliente-foco/` + telas `WhatsappVinculosScreen`/`MiaAuditScreen`.
+- [ ] ⏳ **Ativação operacional — reservada ao Wandson** (não é dev): env vars LLM no Trigger.dev · deploy/habilitar o worker · cadastrar vínculos em `/config-whatsapp-vinculos` · smoke `scripts/smoke-kimi-consultor.ts`. Checklist em `docs/mia/MIA-PLANO-COMPLETO.md` §Pendências manuais.
 
 **Planejados**
 - [ ] ⏳ LARA (CRM/drip 90 dias) — spec feita, não implementada
@@ -157,8 +162,8 @@
 
 - [ ] ⚠️ CI/CD: auto-deploy no push de `main` sobrescreve deploys manuais de feature branch — fix arquitetural pendente
 - [ ] ⚠️ Branches da VPS divergem de origin (commits diretos sem push) — backup em `backup/vps-bomdia-encerramento-2026-05-22`
-- [ ] ⏳ Limpar 5 tenants seed (pizza-joao, burger, acai, sushi, tapioca)
-- [ ] ⏳ Adicionar `is_active` na tabela `tenants`
+- [x] ✅ Limpar 5 tenants seed (pizza-joao, burger, acai, sushi, tapioca) — **feito** (verificado 2026-06-09: só 2 tenants no banco, 0 seeds).
+- [x] ✅ Adicionar `is_active` na tabela `tenants` — **feito** (coluna existe; 2 tenants, ambos ativos).
 - [ ] ⏳ Deletar branch `yasmin/dev`
 - [ ] ⏳ **Onboardar primeiro cliente real** (PRIORIDADE de negócio)
 
