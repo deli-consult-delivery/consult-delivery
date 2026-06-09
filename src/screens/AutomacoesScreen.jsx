@@ -29,8 +29,8 @@ export default function AutomacoesScreen({ tenantDbId, onNavigate }) {
       {/* Tab bar */}
       <div style={{
         display: 'flex', gap: 4, padding: '0 20px',
-        borderBottom: '1px solid rgba(255,255,255,0.08)',
-        background: '#111',
+        borderBottom: '1px solid var(--line)',
+        background: 'var(--panel)',
       }}>
         {TABS.map(tab => (
           <button
@@ -40,8 +40,8 @@ export default function AutomacoesScreen({ tenantDbId, onNavigate }) {
               padding: '12px 18px',
               background: 'none',
               border: 'none',
-              borderBottom: activeTab === tab.id ? '2px solid #B70C00' : '2px solid transparent',
-              color: activeTab === tab.id ? '#fff' : '#777',
+              borderBottom: activeTab === tab.id ? '2px solid var(--red)' : '2px solid transparent',
+              color: activeTab === tab.id ? 'var(--ink)' : 'var(--tx2)',
               cursor: 'pointer',
               fontSize: 14,
               fontWeight: activeTab === tab.id ? 600 : 400,
