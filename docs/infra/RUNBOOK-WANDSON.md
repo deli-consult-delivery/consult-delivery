@@ -59,16 +59,15 @@ Resumo (comandos no doc):
 **Design completo:** [`docs/infra/admin-mcp-design.md`](admin-mcp-design.md) §2 e §6.
 **O que é:** o Hermes acessa a CD com um papel novo de **leitura ampla + escrita só via draft** (nunca `admin`, nunca aprova o próprio draft).
 
-**O que eu preciso de você (2 coisas):**
+**O que eu preciso de você (agora só 1 coisa):**
 
-1. **Decisão travada 🛑** (`admin-mcp-design.md` §2): o `ceo_agent` enxerga **todos os tenants** (visão CEO) ou **só os pagantes/ativos**?
-   *Default proposto:* **todos**, marcando quais são seed/teste. → responda `todos` ou `só pagantes`.
+1. ✅ **Decisão de escopo — JÁ RESPONDIDA (2026-06-09):** `ceo_agent` enxerga **todos os tenants** (visão CEO), marcando quais são seed/teste. Gravado em `admin-mcp-design.md` §2.
 
-2. **`ok` no SQL da migration** que cria o papel `ceo_agent` + permissões (read amplo / write só draft).
+2. **`ok` no SQL** que cria a identidade `ceo_agent` + permissões (read amplo / write só draft).
    Eu **escrevo e te mostro o SQL** (padrão migration versionada, aditivo, RLS) e **espero seu `ok`** antes de aplicar — igual fizemos na LEVA 3.
-   *Ainda não escrevi este SQL* porque ele depende da decisão (1) acima.
+   *Ainda não escrevi este SQL* de propósito: ele depende de uma escolha de modelagem (Opção A vs B em `admin-mcp-design.md` §2.1 — o RBAC é per-tenant, o `ceo_agent` é cross-tenant) que eu resolvo **na sessão de build, depois do GATE 0**. Escrever antes do GATE 0 seria SQL que nem dá pra aplicar.
 
-✅ **Critério de pronto:** decisão (1) respondida + `ok` no SQL → eu aplico (1 arquivo, output bruto, teste de isolamento RLS) e sigo para implementar as tools.
+✅ **Critério de pronto:** GATE 0 feito → eu autoro o SQL (Opção A recomendada) e te mostro → seu `ok` → eu aplico (1 arquivo, output bruto, teste de isolamento RLS) e sigo para as tools.
 
 ---
 
@@ -102,7 +101,7 @@ O restante da Onda 04 (épico de 9–13 dias) tem pré-requisitos e passos **res
 
 1. **GATE 0** (§1) — rotacionar credenciais. *Destrava tudo.*
 2. **`claudedev`** (§2) — usuário não-root na VPS.
-3. **Responder** `todos` ou `só pagantes` para o escopo do `ceo_agent` (§3.1).
-4. Quando eu te mostrar o **SQL do `ceo_agent`**, dar `ok` (§3.2).
+3. ~~Responder escopo do `ceo_agent`~~ ✅ **já respondido: todos os tenants.**
+4. Quando eu te mostrar o **SQL do `ceo_agent`** (eu autoro pós-GATE 0), dar `ok` (§3.2).
 
-Feito isso, T4 (Hermes) destranca inteiro e eu sigo sozinho.
+Feito o GATE 0 + `claudedev`, T4 (Hermes) destranca e eu sigo sozinho (autoro o SQL, você dá `ok`, eu aplico e ligo as tools).

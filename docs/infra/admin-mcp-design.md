@@ -23,7 +23,21 @@ O Hermes é mono-usuário (Wandson) e mono-tenant na intenção, mas a CD é **m
 - **Permissões (write):** **nenhuma escrita direta a tabelas cliente-facing.** Só pode **criar drafts** (proposta) e **disparar tasks Trigger.dev de leitura/análise** (ex.: pedir um relatório VERA, rodar uma análise de loja). Nunca aprovar o próprio draft.
 - **Multi-tenant:** o `ceo_agent` é da **CD (equipe)**, não de um tenant. Lê via `service_role`-equivalente com escopo de leitura — mas **toda query passa por uma view/endpoint que registra `tenant_id` no audit**, nunca SQL livre.
 
-> Decisão travada p/ Wandson: o `ceo_agent` enxerga **todos os tenants** (visão CEO) ou **só os tenants ativos/pagantes**? Default proposto: **todos**, com marcação de quais são seed/teste. 🛑 confirmar.
+> ✅ **Decisão (Wandson, 2026-06-09):** o `ceo_agent` enxerga **TODOS os tenants** (visão CEO), com **marcação de quais são seed/teste** (não esconder os de teste — sinalizar). Resolve o 🛑 que estava aberto aqui.
+
+### 2.1 ⚠️ Achado de modelagem — `ceo_agent` é cross-tenant, o RBAC é per-tenant
+
+Ao escrever o SQL para o `ceo_agent`, bati num descasamento que **precisa ser resolvido na sessão de build (pós-GATE 0), não chutado agora**:
+
+- O RBAC atual (`supabase/migrations/20260504_001_rbac.sql`) é **inteiramente per-tenant**: `roles.tenant_id UUID NOT NULL REFERENCES tenants(id)`, e todo escopo de papel/permissão passa por `tenant_members WHERE user_id = auth.uid()` (admin = `role='admin'`). Um papel vive **dentro de um tenant**.
+- O `ceo_agent` é **cross-tenant por natureza** (principal da equipe CD, lê todos os tenants — decisão acima). Ele **não encaixa** como uma linha em `roles` sem uma decisão de modelagem.
+
+**Duas opções (a decidir no build, não aqui):**
+
+- **Opção A (preferida):** `ceo_agent` **não é um papel RBAC**. É o **principal do admin MCP**, rodando como o usuário de SO `claudedev` (§4), que lê via credencial `service_role`-equivalente **com audit obrigatório** e enforcement na **camada do MCP/gateway** (allowlist de tools §3), não na tabela `roles`. Casa com o princípio §1.3 ("escopo mínimo, não admin total") e §5 (audit em toda chamada) sem forçar um conceito de "papel global" no schema per-tenant.
+- **Opção B:** introduzir um conceito de **papel global** no RBAC (ex.: `roles.tenant_id NULL` = global, ou tabela `global_roles` separada). Mais invasivo, mexe num schema que hoje assume `tenant_id NOT NULL` em todo lugar — risco de afrouxar RLS sem querer.
+
+**Encaminhamento:** o **SQL/DDL concreto do `ceo_agent` é autorado na sessão de build de T4·3B, DEPOIS do GATE 0** (não especulativamente agora), porque (a) depende desta escolha A/B e (b) o bloqueio real é o GATE 0 do Wandson — SQL escrito antes não seria aplicado mesmo. A recomendação que vai pro Wandson com o SQL será a **Opção A** (sem nova coluna global; enforcement no MCP), salvo motivo novo.
 
 ---
 
@@ -72,7 +86,7 @@ Read tools **nunca** retornam: chaves/secrets, conteúdo de mensagem de cliente 
 
 1. [ ] 🔒 **GATE 0** completo (Wandson) — `docs/infra/gate0-rotacao-credenciais.md`.
 2. [ ] Usuário `claudedev` + token escopado na VPS (Wandson) — `docs/infra/claude-code-vps-setup.md`.
-3. [ ] Migration RBAC: papel `ceo_agent` + permissões (read amplo / write só draft). **SQL aprovado pelo Wandson antes de aplicar.**
+3. [ ] Identidade `ceo_agent` (read amplo / write só draft): **resolver Opção A vs B (§2.1) na sessão de build** → autorar o SQL/config → **aprovado pelo Wandson antes de aplicar**. Escopo já decidido: **todos os tenants** (§2).
 4. [ ] Implementar tools de leitura (§3.1) primeiro; validar audit em cada uma.
 5. [ ] Implementar `cd_propor_draft` reusando `drafts_deli`; provar que Hermes **não** consegue aprovar.
 6. [ ] Teste de isolamento: Hermes não lê segredo nenhum; não muta tabela cliente-facing direto.
