@@ -1,21 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
-import { sendTextMessage, sendMediaMessage, sendAudioMessage } from '../lib/evolution.js';
+import { sendTextMessage, sendMediaMessage, sendAudioMessage, sendReaction, deleteWhatsAppMessage } from '../lib/evolution.js';
 import { Ico } from './CvIcons.jsx';
 
 // ============================================================
 // Chat ao Vivo v2 — layout claro idêntico ao protótipo
 // (docs/prototipo/console-v2.html · tela chat). Dados reais:
 // conversas + mensagens + realtime + envio (reusa lib/evolution).
-// Mídia, áudio (PTT), transferir e finalizar reusam a mesma
-// lógica do ChatScreen clássico. "Versão completa" segue como
-// fallback para bots/tarefas/reações.
+// Surface completo: mídia (img/vídeo/áudio/doc), formatação
+// WhatsApp, status de entrega, citação/reply, reações, apagar,
+// transferir e finalizar — sem depender da versão clássica.
 // ============================================================
 
 const COR = ['#B70C00', '#1f4f9c', '#1e7d43', '#9a6a10', '#6d28d9', '#0e7490', '#b45309'];
 const cor = s => COR[[...String(s || '?')].reduce((a, c) => a + c.charCodeAt(0), 0) % COR.length];
 const hora = ts => ts ? new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
-const previewTxt = m => !m ? '' : (m.media_type ? '📎 mídia' : (m.content || m.body || ''));
+const previewTxt = m => !m ? '' : (m.deleted_at ? '🚫 mensagem apagada' : (m.media_type ? '📎 mídia' : (m.content || m.body || '')));
 
 // tipo de mídia a partir do MIME (igual ao ChatScreen)
 const mediaTipo = mime => /^image\//.test(mime) ? 'image' : /^video\//.test(mime) ? 'video' : /^audio\//.test(mime) ? 'audio' : 'document';
@@ -26,12 +26,100 @@ const toBase64 = file => new Promise((res, rej) => {
   r.onerror = rej;
   r.readAsDataURL(file);
 });
-// rótulo da mídia na thread
-const midiaLabel = m => m.mtype === 'audio' ? '🎙️ Áudio'
-  : m.mtype === 'video' ? '🎬 Vídeo'
-  : m.mtype === 'document' ? `📄 ${m.txt || 'Documento'}`
-  : m.mtype === 'image' ? (m.txt || '🖼️ Imagem')
-  : m.txt;
+
+const REACOES = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
+// ─── formatação WhatsApp (negrito *…*, itálico _…_, ~tachado~, `code`, links) ──
+const WA_REGEX = /(\*[^*\n]+\*|_[^_\n]+_|~[^~\n]+~|`[^`\n]+`|https?:\/\/[^\s<>"')\]]+|www\.[^\s<>"')\]]+)/g;
+function formatWA(text) {
+  if (!text) return null;
+  const out = [];
+  text.split('\n').forEach((line, li) => {
+    if (li > 0) out.push(<br key={`br-${li}`} />);
+    if (!line) return;
+    let last = 0, match;
+    WA_REGEX.lastIndex = 0;
+    while ((match = WA_REGEX.exec(line)) !== null) {
+      if (match.index > last) out.push(line.slice(last, match.index));
+      const t = match[0], key = `wa-${li}-${match.index}`;
+      if (t.startsWith('*') && t.endsWith('*')) out.push(<strong key={key} style={{ fontWeight: 700 }}>{t.slice(1, -1)}</strong>);
+      else if (t.startsWith('_') && t.endsWith('_')) out.push(<em key={key}>{t.slice(1, -1)}</em>);
+      else if (t.startsWith('~') && t.endsWith('~')) out.push(<del key={key}>{t.slice(1, -1)}</del>);
+      else if (t.startsWith('`') && t.endsWith('`')) out.push(<code key={key} style={{ background: 'rgba(0,0,0,0.06)', borderRadius: 3, padding: '0 3px', fontFamily: 'monospace', fontSize: '0.9em' }}>{t.slice(1, -1)}</code>);
+      else { const href = t.startsWith('http') ? t : `https://${t}`; out.push(<a key={key} href={href} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--red)', textDecoration: 'underline', wordBreak: 'break-all' }}>{t}</a>); }
+      last = match.index + t.length;
+    }
+    if (last < line.length) out.push(line.slice(last));
+  });
+  return out.length ? out : null;
+}
+
+// ─── citação (quoted_content): aceita formato próprio e formato Evolution ──
+function quotedText(q) {
+  if (!q) return null;
+  if (typeof q.text === 'string') return q.text;
+  const msg = q.message;
+  if (!msg) return '📎 Mídia';
+  if (msg.conversation) return msg.conversation;
+  if (msg.extendedTextMessage?.text) return msg.extendedTextMessage.text;
+  if (msg.imageMessage) return msg.imageMessage.caption || '🖼 Imagem';
+  if (msg.videoMessage) return msg.videoMessage.caption || '🎬 Vídeo';
+  if (msg.audioMessage) return '🎵 Áudio';
+  if (msg.documentMessage) return `📄 ${msg.documentMessage.fileName || 'Documento'}`;
+  return '📎 Mídia';
+}
+function quotedSender(q) {
+  if (!q) return null;
+  if (q.agentName) return q.agentName;
+  if (q.from === 'out' || q.key?.fromMe) return 'Você';
+  return q.pushName || 'Cliente';
+}
+
+// ─── tick de entrega (0=erro 1=pendente 2=enviado 3=entregue 4=lido) ──
+function Tick({ s }) {
+  if (s === 0) return <span title="erro ao enviar" style={{ color: 'var(--red)', fontWeight: 700 }}>!</span>;
+  const color = (s >= 4) ? '#53BDEB' : 'var(--tx2)';
+  if (s === null || s === undefined || s === 1)
+    return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--tx2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-label="pendente"><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15 14" /></svg>;
+  if (s === 2)
+    return <svg width="14" height="12" viewBox="0 0 20 16" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-label="enviado"><polyline points="4 8 8 12 16 4" /></svg>;
+  return <svg width="16" height="12" viewBox="0 0 24 16" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-label={s >= 4 ? 'lido' : 'entregue'}><polyline points="3 8 7 12 15 4" /><polyline points="9 12 13 16 21 8" /></svg>;
+}
+
+// ─── documento (data: URL precisa virar Blob para abrir/baixar) ──
+function abrirDoc(url, nome) {
+  if (!url) return;
+  if (!url.startsWith('data:')) { window.open(url, '_blank'); return; }
+  const [header, b64] = url.split(',');
+  const mime = header.match(/:(.*?);/)?.[1] || 'application/octet-stream';
+  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const blobUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
+  if (mime.startsWith('image/') || mime === 'application/pdf') window.open(blobUrl, '_blank');
+  else { const a = document.createElement('a'); a.href = blobUrl; a.download = nome || 'arquivo'; a.click(); }
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 4000);
+}
+
+// ─── render de mídia da bolha (tema claro) ──
+function Media({ m }) {
+  if (!m.mtype) return null;
+  const url = m.murl;
+  if (m.mtype === 'image' || (m.mtype === 'document' && url?.startsWith('data:image/'))) {
+    return url
+      ? <img src={url} alt={m.txt || 'imagem'} style={{ maxWidth: 220, maxHeight: 220, borderRadius: 6, display: 'block', cursor: 'pointer' }} onClick={() => window.open(url, '_blank')} />
+      : <span style={{ fontSize: 12, color: 'var(--tx2)' }}>🖼️ carregando imagem…</span>;
+  }
+  if (m.mtype === 'sticker') return url ? <img src={url} alt="figurinha" style={{ width: 110, height: 110, objectFit: 'contain' }} /> : <span style={{ fontSize: 26 }}>🔖</span>;
+  if (m.mtype === 'video') return url ? <video src={url} controls style={{ maxWidth: 240, borderRadius: 6, display: 'block' }} /> : <span style={{ fontSize: 12, color: 'var(--tx2)' }}>🎬 carregando vídeo…</span>;
+  if (m.mtype === 'audio') return url ? <audio src={url} controls style={{ height: 36, maxWidth: 230 }} /> : <span style={{ fontSize: 12, color: 'var(--tx2)' }}>🎙️ carregando áudio…</span>;
+  // documento
+  return (
+    <div onClick={() => abrirDoc(url, m.txt)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: url ? 'pointer' : 'default', padding: '7px 9px', background: 'rgba(0,0,0,0.04)', borderRadius: 6, fontSize: 12 }}>
+      <span>📄</span><span style={{ flex: 1 }}>{m.txt || 'Documento'}</span>
+      {!url && <span style={{ fontSize: 10, opacity: 0.5 }}>carregando…</span>}
+      {url && <Ico name="i-clip" size={12} />}
+    </div>
+  );
+}
 
 export default function ChatV2({ tenantDbId, userId, onFull }) {
   const [convs, setConvs] = useState(null);
@@ -45,6 +133,8 @@ export default function ChatV2({ tenantDbId, userId, onFull }) {
   const [enviando, setEnviando] = useState(false);
   const [gravando, setGravando] = useState(false);
   const [aviso, setAviso] = useState('');
+  const [replyTo, setReplyTo] = useState(null);
+  const [reagindo, setReagindo] = useState(null); // id da msg com a barra de emoji aberta
   const threadRef = useRef(null);
   const fileRef = useRef(null);
   const recRef = useRef(null);
@@ -59,7 +149,7 @@ export default function ChatV2({ tenantDbId, userId, onFull }) {
       .eq('tenant_id', tenantDbId).order('updated_at', { ascending: false }).limit(60);
     const rows = data || [];
     const prev = await Promise.all(rows.map(r =>
-      supabase.from('messages').select('content, body, direction, media_type, created_at').eq('conversation_id', r.id).order('created_at', { ascending: false }).limit(1).maybeSingle()));
+      supabase.from('messages').select('content, body, direction, media_type, deleted_at, created_at').eq('conversation_id', r.id).order('created_at', { ascending: false }).limit(1).maybeSingle()));
     const mapped = rows.map((c, i) => {
       const phone = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
       const gname = c.group_name && !/^\d{10,}$/.test(c.group_name) ? c.group_name : null;
@@ -93,12 +183,15 @@ export default function ChatV2({ tenantDbId, userId, onFull }) {
     id: m.id, out: m.direction === 'outbound', txt: m.content || m.body || '',
     mtype: m.media_type || null, murl: m.media_url || null,
     who: m.sender_name, tm: hora(m.created_at),
+    reactions: Array.isArray(m.reactions) ? m.reactions : [],
+    quoted: m.quoted_content || null,
+    ds: m.delivery_status, del: !!m.deleted_at, waId: m.whatsapp_msg_id || null,
   });
 
-  // mensagens da conversa + realtime
+  // mensagens da conversa + realtime (INSERT novas, UPDATE p/ reações/ticks/apagar)
   const loadMsgs = useCallback(async (convId) => {
     const { data } = await supabase.from('messages')
-      .select('id, direction, content, body, created_at, sender_name, media_type, media_url')
+      .select('id, direction, content, body, created_at, sender_name, media_type, media_url, reactions, quoted_content, delivery_status, deleted_at, whatsapp_msg_id')
       .eq('conversation_id', convId).order('created_at', { ascending: true }).limit(80);
     setMsgs((data || []).map(mapMsg));
   }, []);
@@ -110,6 +203,10 @@ export default function ChatV2({ tenantDbId, userId, onFull }) {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${activeId}` }, payload => {
         const nm = mapMsg(payload.new);
         setMsgs(prev => prev.some(x => x.id === nm.id) ? prev : [...prev, nm]);
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `conversation_id=eq.${activeId}` }, payload => {
+        const nm = mapMsg(payload.new);
+        setMsgs(prev => prev.map(x => x.id === nm.id ? nm : x));
       }).subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [activeId, loadMsgs]);
@@ -123,16 +220,25 @@ export default function ChatV2({ tenantDbId, userId, onFull }) {
   async function enviar() {
     const text = draft.trim();
     if (!text || !active || enviando) return;
+    const quoting = replyTo;
     setDraft('');
+    setReplyTo(null);
     setEnviando(true);
     try {
+      // quoted_content para nosso render + payload Evolution
+      const quotedContent = quoting
+        ? { waMsgId: quoting.waId, from: quoting.out ? 'out' : 'in', text: quoting.txt || quotedText(quoting.quoted) || '', mediaType: quoting.mtype || undefined }
+        : null;
       // salva no banco ANTES (dedup do webhook) — o realtime renderiza a msg
       await supabase.from('messages').insert({
         tenant_id: tenantDbId, conversation_id: active.id, direction: 'outbound',
-        content: text, sender_name: null, created_at: new Date().toISOString(),
+        content: text, sender_name: null, quoted_content: quotedContent, created_at: new Date().toISOString(),
       });
       if (instance && active.chatId) {
-        await sendTextMessage(instance.instance_name, active.chatId, text, null, instance.evolution_url, instance.api_key);
+        const evoQuoted = quoting && quoting.waId
+          ? { key: { id: quoting.waId, fromMe: quoting.out, remoteJid: active.chatId }, message: { conversation: quoting.txt || '' } }
+          : null;
+        await sendTextMessage(instance.instance_name, active.chatId, text, evoQuoted, instance.evolution_url, instance.api_key);
       }
     } catch (err) {
       console.error('ChatV2 envio:', err);
@@ -163,6 +269,14 @@ export default function ChatV2({ tenantDbId, userId, onFull }) {
     const f = e.target.files?.[0];
     e.target.value = '';
     if (f) enviarMidia(f);
+  }
+
+  // colar imagem do clipboard → envia como mídia
+  function onPaste(e) {
+    const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+    if (!item) return;
+    const f = item.getAsFile();
+    if (f) { e.preventDefault(); enviarMidia(f); }
   }
 
   // ---- áudio PTT (grava ogg/opus → base64 → sendWhatsAppAudio) ----
@@ -201,6 +315,39 @@ export default function ChatV2({ tenantDbId, userId, onFull }) {
     } catch (err) {
       console.error('ChatV2 microfone:', err);
       flash('Microfone indisponível.');
+    }
+  }
+
+  // ---- reagir a uma mensagem ----
+  async function reagir(m, emoji) {
+    setReagindo(null);
+    if (!active || !m.waId) { flash('Mensagem sem ID do WhatsApp.'); return; }
+    if (!instance || !active.chatId) { flash('Sem instância WhatsApp conectada.'); return; }
+    // otimista: registra a reação do operador (jid 'me')
+    const nova = [...(m.reactions || []).filter(r => r.jid !== 'me'), { jid: 'me', emoji, name: 'Você' }];
+    setMsgs(prev => prev.map(x => x.id === m.id ? { ...x, reactions: nova } : x));
+    try {
+      await supabase.from('messages').update({ reactions: nova }).eq('id', m.id).eq('tenant_id', tenantDbId);
+      await sendReaction(instance.instance_name, active.chatId, m.waId, emoji, m.out);
+    } catch (err) {
+      console.error('ChatV2 reação:', err);
+      flash('Falha ao reagir.');
+    }
+  }
+
+  // ---- apagar mensagem (revoke no WhatsApp + soft-delete no banco) ----
+  async function apagar(m) {
+    if (!active) return;
+    if (!window.confirm('Apagar esta mensagem para todos?')) return;
+    setMsgs(prev => prev.map(x => x.id === m.id ? { ...x, del: true } : x));
+    try {
+      if (instance && active.chatId && m.waId) {
+        await deleteWhatsAppMessage(instance.instance_name, active.chatId, m.waId, m.out);
+      }
+      await supabase.from('messages').update({ deleted_at: new Date().toISOString() }).eq('id', m.id).eq('tenant_id', tenantDbId);
+    } catch (err) {
+      console.error('ChatV2 apagar:', err);
+      flash('Falha ao apagar mensagem.');
     }
   }
 
@@ -283,27 +430,82 @@ export default function ChatV2({ tenantDbId, userId, onFull }) {
             </select>
           )}
           {active && <button className="cv2-btn sec" style={{ padding: '5px 11px', fontSize: 11.5 }} onClick={finalizar} disabled={enviando} title="Finalizar conversa">Finalizar</button>}
-          <button className="cv2-btn sec" style={{ padding: '5px 11px', fontSize: 11.5 }} onClick={onFull} title="Abrir o chat completo (bots, tarefas, reações)">Versão completa</button>
+          <button className="cv2-btn sec" style={{ padding: '5px 11px', fontSize: 11.5 }} onClick={onFull} title="Abrir o chat completo (bots, tarefas)">Versão completa</button>
         </div>
         <div className="thread" ref={threadRef}>
           {active && !msgs.length && <div className="empty">Sem mensagens nesta conversa.</div>}
           {msgs.map(m => (
-            <div key={m.id} className={`msg${m.out ? ' me' : ''}`}>
+            <div key={m.id} className={`msg${m.out ? ' me' : ''}`} style={{ position: 'relative' }}
+              onMouseLeave={() => setReagindo(r => r === m.id ? null : r)}>
               {m.who && !m.out && <div className="who">{m.who}</div>}
-              {m.mtype === 'image' && m.murl
-                ? <img src={m.murl} alt={m.txt || 'imagem'} style={{ maxWidth: 220, borderRadius: 6, display: 'block' }} />
-                : (m.mtype ? midiaLabel(m) : m.txt)}
-              <div className="tm">{m.tm}</div>
+              {/* citação */}
+              {m.quoted && !m.del && (
+                <div style={{ marginBottom: 5, padding: '4px 9px', borderLeft: '3px solid var(--red)', background: 'rgba(0,0,0,0.04)', borderRadius: '0 5px 5px 0', fontSize: 11, maxWidth: 260, overflow: 'hidden' }}>
+                  <div style={{ color: 'var(--red)', fontWeight: 700, marginBottom: 1, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{quotedSender(m.quoted)}</div>
+                  <div style={{ color: 'var(--tx2)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{quotedText(m.quoted) || '📎 Mídia'}</div>
+                </div>
+              )}
+              {/* corpo */}
+              {m.del
+                ? <span style={{ fontStyle: 'italic', color: 'var(--tx2)' }}>🚫 mensagem apagada</span>
+                : <>
+                    <Media m={m} />
+                    {m.txt && m.mtype !== 'document' && m.mtype !== 'audio' && <div style={{ wordBreak: 'break-word', marginTop: m.mtype ? 5 : 0 }}>{formatWA(m.txt)}</div>}
+                  </>}
+              {/* reações agregadas */}
+              {!m.del && m.reactions?.length > 0 && (() => {
+                const g = {};
+                m.reactions.forEach(r => { if (r.emoji) g[r.emoji] = (g[r.emoji] || 0) + 1; });
+                const entries = Object.entries(g);
+                if (!entries.length) return null;
+                return (
+                  <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+                    {entries.map(([emoji, n]) => (
+                      <span key={emoji} style={{ background: '#fff', border: '1px solid var(--line)', borderRadius: 12, padding: '0 6px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                        {emoji}{n > 1 && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--tx2)' }}>{n}</span>}
+                      </span>
+                    ))}
+                  </div>
+                );
+              })()}
+              {/* rodapé: hora + tick */}
+              <div className="tm" style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+                {m.tm}{m.out && !m.del && <Tick s={m.ds} />}
+              </div>
+              {/* ações (hover) */}
+              {!m.del && (
+                <div className="cv2-msg-acts" style={{ position: 'absolute', top: -10, [m.out ? 'left' : 'right']: 6, display: 'flex', gap: 2, background: '#fff', border: '1px solid var(--line)', borderRadius: 999, padding: '1px 4px', opacity: 0, transition: 'opacity .12s' }}>
+                  <button title="Responder" onClick={() => setReplyTo(m)} style={actBtn}><Ico name="i-reply" size={12} /></button>
+                  <button title="Reagir" onClick={() => setReagindo(r => r === m.id ? null : m.id)} style={actBtn}>😊</button>
+                  {m.out && <button title="Apagar" onClick={() => apagar(m)} style={{ ...actBtn, color: 'var(--red)' }}>🗑️</button>}
+                </div>
+              )}
+              {/* barra de emojis */}
+              {reagindo === m.id && (
+                <div style={{ position: 'absolute', top: -34, [m.out ? 'left' : 'right']: 6, display: 'flex', gap: 2, background: '#fff', border: '1px solid var(--line)', borderRadius: 999, padding: '3px 6px', boxShadow: '0 2px 8px rgba(0,0,0,.12)', zIndex: 5 }}>
+                  {REACOES.map(e => <button key={e} onClick={() => reagir(m, e)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 1 }}>{e}</button>)}
+                </div>
+              )}
             </div>
           ))}
         </div>
         {aviso && <div style={{ padding: '4px 14px', fontSize: 11.5, color: 'var(--red)', fontWeight: 600 }}>{aviso}</div>}
+        {/* barra de citação ativa */}
+        {replyTo && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px', borderTop: '1px solid var(--line)', background: '#faf9f8', fontSize: 11.5 }}>
+            <div style={{ borderLeft: '3px solid var(--red)', paddingLeft: 8, flex: 1, minWidth: 0 }}>
+              <div style={{ color: 'var(--red)', fontWeight: 700 }}>Respondendo {replyTo.out ? 'você' : (active?.nome || 'cliente')}</div>
+              <div style={{ color: 'var(--tx2)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{replyTo.txt || (replyTo.mtype ? '📎 mídia' : '')}</div>
+            </div>
+            <button onClick={() => setReplyTo(null)} style={{ ...actBtn, fontSize: 14 }} title="Cancelar">✕</button>
+          </div>
+        )}
         <div className="composer">
           <input ref={fileRef} type="file" hidden
             accept="image/*,video/*,application/pdf,audio/*" onChange={onPickFile} />
           <button className="cbtn" title="Anexar mídia" onClick={() => fileRef.current?.click()} disabled={!active || semInstancia}><Ico name="i-clip" size={15} /></button>
           <input placeholder={semInstancia ? 'Sem instância WhatsApp conectada' : (gravando ? 'Gravando áudio… toque no microfone para enviar' : 'Escreva uma mensagem… (Enter envia)')}
-            value={draft} onChange={e => setDraft(e.target.value)}
+            value={draft} onChange={e => setDraft(e.target.value)} onPaste={onPaste}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(); } }}
             disabled={!active || gravando} />
           {draft.trim()
@@ -322,9 +524,11 @@ export default function ChatV2({ tenantDbId, userId, onFull }) {
         <div className="kv"><span>Depto.</span><b>{deps.find(d => d.id === active?.deptId)?.name || '—'}</b></div>
         <h4>Monitoramento</h4>
         <div style={{ fontSize: 11.5, color: 'var(--tx2)', lineHeight: 1.7, fontWeight: 500 }}>
-          Conversa monitorada pela MIA. Mídia, áudio, transferência e finalização já funcionam aqui. Para bots, tarefas e reações, use a <b style={{ color: 'var(--red)', cursor: 'pointer' }} onClick={onFull}>versão completa</b>.
+          Conversa monitorada pela MIA. Mídia, áudio, citação, reações, status de entrega e apagar já funcionam aqui. Para bots e tarefas, use a <b style={{ color: 'var(--red)', cursor: 'pointer' }} onClick={onFull}>versão completa</b>.
         </div>
       </div>
     </div>
   );
 }
+
+const actBtn = { background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, lineHeight: 1, padding: '2px 3px', color: 'var(--tx2)' };

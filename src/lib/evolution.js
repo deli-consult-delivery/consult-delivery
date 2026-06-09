@@ -264,6 +264,20 @@ export async function deleteWhatsAppMessage(instanceName, remoteJid, whatsappMsg
   return res.json();
 }
 
+// Reagir a uma mensagem (emoji). reaction = '' remove a reação.
+export async function sendReaction(instanceName, remoteJid, whatsappMsgId, reaction, fromMe = false) {
+  const res = await fetch(`${EVO_URL}/message/sendReaction/${instanceName}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ key: { remoteJid, fromMe, id: whatsappMsgId }, reaction }),
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => res.statusText);
+    throw new Error(`Evolution sendReaction ${res.status}: ${errText}`);
+  }
+  return res.json();
+}
+
 // Marcar mensagens como lidas
 export async function markAsRead(instanceName, remoteJid, msgIds) {
   const res = await fetch(`${EVO_URL}/chat/markMessageAsRead/${instanceName}`, {
