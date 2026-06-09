@@ -5,7 +5,7 @@
 // CRUD real contra Supabase (tabelas tenant_* · RLS por tenant).
 // Sem dado fake: estado vazio até o cliente cadastrar.
 // ============================================================
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase.js';
 
 // ---------- Tela read-only (referência: Provedores/Integrações/Sistemas) -----
@@ -229,18 +229,117 @@ export function Links({ tenantDbId, userId }) {
     acao="+ Novo link" />;
 }
 
+// Upload real para o bucket privado 'tenant-files' (RLS por tenant via path
+// '<tenant_id>/<uuid>-<arquivo>'). Download por signed URL temporária.
+const FILES_BUCKET = 'tenant-files';
+const linkBtn = { color: 'var(--red)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', padding: 0, font: 'inherit', textAlign: 'left' };
+
 export function Arquivos({ tenantDbId, userId }) {
-  return <CrudTela titulo="Arquivos" sub="Workspace do cliente — cada um enxerga só a sua pasta."
-    table="tenant_files" tenantDbId={tenantDbId} userId={userId}
-    cols={['Arquivo', 'Pasta', 'Tamanho', 'Modificado']}
-    fields={[
-      { key: 'name', label: 'Arquivo', type: 'text', required: true, wide: true },
-      { key: 'folder', label: 'Pasta', type: 'text', default: '/' },
-      { key: 'size_bytes', label: 'Tamanho (bytes)', type: 'number' },
-      { key: 'storage_path', label: 'Caminho (storage)', type: 'text', wide: true },
-    ]}
-    toRow={r => [r.name, r.folder || '/', fmtTam(r.size_bytes), fmtDataCurta(r.updated_at || r.created_at)]}
-    acao="+ Enviar arquivo" />;
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const fileRef = useRef(null);
+
+  const load = useCallback(async () => {
+    if (!tenantDbId) { setLoading(false); return; }
+    setLoading(true);
+    const { data, error } = await supabase.from('tenant_files').select('*')
+      .eq('tenant_id', tenantDbId).order('created_at', { ascending: false }).limit(200);
+    if (!error) setRows(data || []);
+    setLoading(false);
+  }, [tenantDbId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function onPick(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';            // permite reenviar o mesmo arquivo depois
+    if (!file || !tenantDbId) return;
+    setErr(''); setBusy(true);
+    try {
+      const safe = file.name.replace(/[^\w.\-]+/g, '_');
+      const path = `${tenantDbId}/${crypto.randomUUID()}-${safe}`;
+      const { error: upErr } = await supabase.storage.from(FILES_BUCKET)
+        .upload(path, file, { contentType: file.type || undefined, upsert: false });
+      if (upErr) throw upErr;
+      const payload = { tenant_id: tenantDbId, name: file.name, folder: '/', size_bytes: file.size, storage_path: path };
+      if (userId) payload.created_by = userId;
+      const { error: insErr } = await supabase.from('tenant_files').insert(payload);
+      if (insErr) {
+        await supabase.storage.from(FILES_BUCKET).remove([path]);  // evita órfão no storage
+        throw insErr;
+      }
+      await load();
+    } catch (ex) {
+      setErr(ex?.message || String(ex));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function download(rec) {
+    if (!rec.storage_path) return;
+    setErr('');
+    const { data, error } = await supabase.storage.from(FILES_BUCKET).createSignedUrl(rec.storage_path, 120);
+    if (error) { setErr(error.message); return; }
+    if (data?.signedUrl) window.open(data.signedUrl, '_blank', 'noopener');
+  }
+
+  async function remove(rec) {
+    setBusy(true);
+    if (rec.storage_path) await supabase.storage.from(FILES_BUCKET).remove([rec.storage_path]);
+    const { error } = await supabase.from('tenant_files').delete().eq('id', rec.id).eq('tenant_id', tenantDbId);
+    setBusy(false);
+    if (!error) setRows(rs => rs.filter(r => r.id !== rec.id));
+  }
+
+  return (
+    <div>
+      <h1>Arquivos</h1>
+      <div className="cv2-rule" />
+      <div className="cv2-sub">Workspace do cliente — cada um enxerga só a sua pasta.</div>
+      <div className="cv2-card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div className="cv2-spread" style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
+          <b style={{ fontSize: 13 }}>Arquivos</b>
+          <button className="cv2-btn" disabled={busy || !tenantDbId} onClick={() => fileRef.current?.click()}>
+            {busy ? 'Enviando…' : '+ Enviar arquivo'}
+          </button>
+          <input ref={fileRef} type="file" style={{ display: 'none' }} onChange={onPick} />
+        </div>
+
+        {err && <div style={{ color: 'var(--red)', fontSize: 12, padding: '10px 16px', fontWeight: 600, borderBottom: '1px solid var(--line)' }}>{err}</div>}
+
+        <table className="cv2-tbl">
+          <thead><tr><th>Arquivo</th><th>Pasta</th><th>Tamanho</th><th>Modificado</th><th></th></tr></thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--tx2)', padding: 28 }}>carregando…</td></tr>
+            ) : rows.length ? rows.map(rec => (
+              <tr key={rec.id}>
+                <td>
+                  {rec.storage_path
+                    ? <button className="cv2-btn-link" style={linkBtn} onClick={() => download(rec)}>{rec.name}</button>
+                    : rec.name}
+                </td>
+                <td>{rec.folder || '/'}</td>
+                <td>{fmtTam(rec.size_bytes)}</td>
+                <td>{fmtDataCurta(rec.updated_at || rec.created_at)}</td>
+                <td style={{ textAlign: 'right' }}>
+                  <button className="cv2-btn danger" disabled={busy} onClick={() => remove(rec)} style={{ padding: '4px 10px', fontSize: 11 }}>Excluir</button>
+                </td>
+              </tr>
+            )) : (
+              <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--tx2)', padding: 28 }}>— nenhum registro ainda —</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div className="cv2-sub" style={{ marginTop: 10, fontSize: 11.5 }}>
+        Arquivos privados, isolados por cliente. O link de download é temporário (expira em 2 minutos).
+      </div>
+    </div>
+  );
 }
 
 // ============================================================
