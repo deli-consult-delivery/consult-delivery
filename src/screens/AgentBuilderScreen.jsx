@@ -5,31 +5,32 @@ const API = import.meta.env.VITE_BRIDGE_URL || 'https://bridge.consultdelivery.c
 
 // ── Cores e helpers ───────────────────────────────────────────────────────────
 const S = {
-  bg:      '#111',
-  surface: 'rgba(255,255,255,0.04)',
-  border:  '1px solid rgba(255,255,255,0.1)',
-  accent:  '#B70C00',
-  text:    '#fff',
-  muted:   'rgba(255,255,255,0.5)',
+  bg:      'var(--bg)',
+  surface: 'var(--panel)',
+  border:  '1px solid var(--line)',
+  accent:  'var(--red)',
+  text:    'var(--tx)',
+  muted:   'var(--tx2)',
   input: {
-    background: 'rgba(255,255,255,0.06)',
-    border: '1px solid rgba(255,255,255,0.12)',
-    color: '#fff',
+    background: '#faf9f8',
+    border: '1px solid var(--line)',
+    color: 'var(--tx)',
     borderRadius: 8,
     padding: '9px 12px',
     fontSize: 14,
     width: '100%',
     boxSizing: 'border-box',
     outline: 'none',
+    fontFamily: 'inherit',
   },
   label: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.6)',
+    color: 'var(--tx2)',
     marginBottom: 4,
     display: 'block',
   },
   btnPrimary: {
-    background: '#B70C00',
+    background: 'var(--red)',
     color: '#fff',
     border: 'none',
     borderRadius: 8,
@@ -39,9 +40,9 @@ const S = {
     cursor: 'pointer',
   },
   btnGhost: {
-    background: 'transparent',
-    color: 'rgba(255,255,255,0.6)',
-    border: '1px solid rgba(255,255,255,0.15)',
+    background: 'var(--panel)',
+    color: 'var(--tx)',
+    border: '1px solid var(--line)',
     borderRadius: 8,
     padding: '9px 18px',
     fontSize: 14,
@@ -49,8 +50,8 @@ const S = {
   },
   btnDanger: {
     background: 'transparent',
-    color: '#ef4444',
-    border: '1px solid rgba(239,68,68,0.3)',
+    color: 'var(--red)',
+    border: '1px solid #ecc7c2',
     borderRadius: 8,
     padding: '7px 14px',
     fontSize: 13,
@@ -108,13 +109,13 @@ function Modal({ open, onClose, title, children, width = 520 }) {
       onClick={e => e.target === e.currentTarget && onClose()}
       style={{
         position: 'fixed', inset: 0, zIndex: 100,
-        background: 'rgba(0,0,0,0.7)',
+        background: 'rgba(28,27,26,0.45)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: 16,
       }}
     >
       <div style={{
-        background: '#1a1a1a',
+        background: 'var(--panel)',
         border: S.border,
         borderRadius: 14,
         width: '100%', maxWidth: width,
@@ -246,7 +247,7 @@ function AgentFormModal({ open, onClose, agent, onSaved }) {
             onChange={e => set('custom_model', e.target.value)}
           >
             {MODELS.map(m => (
-              <option key={m.value} value={m.value} style={{ background: '#222' }}>{m.label}</option>
+              <option key={m.value} value={m.value} style={{ background: 'var(--panel)' }}>{m.label}</option>
             ))}
           </select>
         </div>
@@ -261,7 +262,7 @@ function AgentFormModal({ open, onClose, agent, onSaved }) {
             onChange={e => set('custom_max_tokens', e.target.value)}
           />
         </div>
-        {err && <div style={{ color: '#ef4444', fontSize: 13 }}>{err}</div>}
+        {err && <div style={{ color: 'var(--red)', fontSize: 13 }}>{err}</div>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 4 }}>
           <button style={S.btnGhost} onClick={onClose} disabled={saving}>Cancelar</button>
           <button style={S.btnPrimary} onClick={handleSave} disabled={saving}>
@@ -316,7 +317,7 @@ function AgentConfigModal({ open, onClose, agent }) {
             onClick={() => setEnabled(v => !v)}
             style={{
               width: 44, height: 24, borderRadius: 12,
-              background: enabled ? '#B70C00' : 'rgba(255,255,255,0.15)',
+              background: enabled ? 'var(--red)' : 'var(--line)',
               border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s',
             }}
           >
@@ -335,8 +336,8 @@ function AgentConfigModal({ open, onClose, agent }) {
             placeholder="Deixe vazio para usar o prompt padrão do agente…"
           />
         </div>
-        {err && <div style={{ color: '#ef4444', fontSize: 13 }}>{err}</div>}
-        {ok  && <div style={{ color: '#22c55e', fontSize: 13 }}>Configuração salva.</div>}
+        {err && <div style={{ color: 'var(--red)', fontSize: 13 }}>{err}</div>}
+        {ok  && <div style={{ color: 'var(--green)', fontSize: 13 }}>Configuração salva.</div>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
           <button style={S.btnGhost} onClick={onClose} disabled={saving}>Fechar</button>
           <button style={S.btnPrimary} onClick={handleSave} disabled={saving}>
@@ -396,7 +397,7 @@ function AgentTestModal({ open, onClose, agent }) {
           />
           <div style={{ fontSize: 11, color: S.muted, marginTop: 4 }}>Ctrl+Enter para executar</div>
         </div>
-        {err && <div style={{ color: '#ef4444', fontSize: 13 }}>{err}</div>}
+        {err && <div style={{ color: 'var(--red)', fontSize: 13 }}>{err}</div>}
         <button style={{ ...S.btnPrimary, opacity: running || !prompt.trim() ? 0.6 : 1 }} onClick={handleRun} disabled={running || !prompt.trim()}>
           {running ? 'Executando…' : 'Executar'}
         </button>
@@ -414,7 +415,7 @@ function AgentTestModal({ open, onClose, agent }) {
                     {h.tokens && <span style={{ marginLeft: 8 }}>{h.tokens} tokens</span>}
                     {h.duration && <span style={{ marginLeft: 8 }}>{h.duration}ms</span>}
                   </div>
-                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginBottom: 6 }}>
+                  <div style={{ fontSize: 12, color: 'var(--tx2)', marginBottom: 6 }}>
                     <b style={{ color: S.text }}>Prompt:</b> {h.prompt.slice(0, 120)}{h.prompt.length > 120 ? '…' : ''}
                   </div>
                   <div style={{ fontSize: 13, color: S.text, lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
@@ -466,12 +467,12 @@ function AgentCard({ agent, isCustom, onEdit, onDelete, onConfig, onTest }) {
           </div>
         </div>
         {!isCustom && (
-          <span style={{ fontSize: 10, background: 'rgba(255,255,255,0.08)', borderRadius: 6, padding: '3px 8px', color: S.muted }}>
+          <span style={{ fontSize: 10, background: 'var(--bg)', borderRadius: 6, padding: '3px 8px', color: S.muted }}>
             Global
           </span>
         )}
         {isCustom && (
-          <span style={{ fontSize: 10, background: 'rgba(183,12,0,0.18)', borderRadius: 6, padding: '3px 8px', color: '#ff6b6b' }}>
+          <span style={{ fontSize: 10, background: 'var(--red-soft)', borderRadius: 6, padding: '3px 8px', color: 'var(--red)' }}>
             Custom
           </span>
         )}
@@ -564,7 +565,7 @@ export default function AgentBuilderScreen({ tenantDbId }) {
       </div>
 
       {err && (
-        <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: 12, color: '#ef4444', marginBottom: 20, fontSize: 14 }}>
+        <div style={{ background: 'var(--red-soft)', border: '1px solid #ecc7c2', borderRadius: 8, padding: 12, color: 'var(--red)', marginBottom: 20, fontSize: 14 }}>
           {err}
         </div>
       )}
