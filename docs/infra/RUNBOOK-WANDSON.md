@@ -24,7 +24,7 @@ Os três primeiros são SEUS. Depois deles, eu (orquestrador) implemento as tool
 
 Resumo do que fazer (detalhe e comandos no doc):
 1. **4 PATs do GitHub** — revogar e recriar *fine-grained*, escopo mínimo (só o repo `consult-delivery`): `deli-agent-vps`, `Nexus`, `claude-code`, `Claude IA`.
-2. **Token do Telegram** — `@BotFather` → `/revoke` → gerar novo → editar `/root/.hermes/.env` (`TELEGRAM_BOT_TOKEN=`) → `systemctl restart hermes-gateway`. ⚠️ **Não** é Infisical nem `pm2 restart bridge-server` — o token mora no `.env` do Hermes e o serviço é `hermes-gateway` (systemd). (verificado no inventário 2026-06-09)
+2. **Token do Telegram** — `@BotFather` → `/revoke` → gerar novo → editar `/root/.hermes/.env` (`TELEGRAM_BOT_TOKEN=`) → `systemctl restart hermes-gateway` → **esperar ~15s e confirmar `active (running)` estável antes de testar** (o `FAILURE` transitório de poucos segundos no restart é normal — não teste na janela de troca de processo). ⚠️ **Não** é Infisical nem `pm2 restart bridge-server` — o token mora no `.env` do Hermes e o serviço é `hermes-gateway` (systemd). O bot é o **`@DeliConsultBot`** (um único `/revoke` cobre tudo — não há bot separado). (✅ rotação executada e validada com sucesso em 2026-06-09)
 3. **`DASHBOARD_API_TOKEN`** — gerar novo: `openssl rand -hex 32`.
 4. **Remover SSH key `claude-debug`** das authorized_keys da VPS.
 5. **Limpar plaintext na VPS** — `.git-credentials`, history do shell, `.claude/*.jsonl`.

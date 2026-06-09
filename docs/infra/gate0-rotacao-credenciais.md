@@ -31,8 +31,15 @@ Itens (T5 do tracker): **4 PATs GitHub · DASHBOARD_API_TOKEN · token Telegram 
 - [ ] Telegram → **@BotFather → /revoke** (gera token novo e invalida o antigo).
 - [ ] Editar `/root/.hermes/.env` (editor interativo, p/ não vazar no histórico): `nano /root/.hermes/.env` → trocar o valor de `TELEGRAM_BOT_TOKEN=` pelo novo → salvar.
 - [ ] Reiniciar o serviço certo: `systemctl restart hermes-gateway` → conferir `systemctl status hermes-gateway --no-pager`.
+- [ ] **Aguardar ~10–15s e re-conferir o status antes de testar.** Durante o `restart` os dois processos se sobrepõem por alguns segundos e o systemd registra um `status=1/FAILURE` transitório (o processo velho saindo por SIGTERM) — **isso é normal**, não é o token. Se você mandar `/start` nessa janela de poucos segundos, o bot "não responde" porque ainda está trocando de processo. Confirme `Active: active (running)` **estável** primeiro. *(aprendido na rotação 2026-06-09: o bot "parou" e o motivo era só essa janela — token estava válido e o gateway já reconectado.)*
 - [ ] Verificar: mande `/start` (ou qualquer msg) pro bot e confirme que responde.
-- [ ] **@DeliConsultBot** (analista-iFood): se for um bot **separado** com token próprio, ele tem outro `TELEGRAM_BOT_TOKEN` em outro lugar (não localizado no inventário). Se for o **mesmo** bot do gateway, o passo acima já cobre. → rastrear a fonte do token dele antes de revogar, p/ não derrubar o que não devia.
+- [ ] ✅ **@DeliConsultBot = é o mesmo bot do gateway Hermes** (confirmado 2026-06-09: o token no `/root/.hermes/.env` resolve via `getMe` para `@DeliConsultBot`, id `8779855473`). Ou seja, **um único `/revoke` neste bot cobre tudo** — não há bot Telegram separado pro Hermes. (O rótulo "analista-iFood" em circulação é o mesmo bot.)
+
+**Diagnóstico rápido se o bot não responder após a troca** (tudo read-only, sem imprimir o token):
+- [ ] Token válido? `set -a; TELEGRAM_BOT_TOKEN="$(grep -m1 '^TELEGRAM_BOT_TOKEN=' /root/.hermes/.env | cut -d= -f2-)"; set +a; curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe"` → espera `"ok":true` + o `@username` certo.
+- [ ] Webhook setado bloqueando polling? `curl -s ".../getWebhookInfo"` → `url` deve estar **vazio** (modo long-polling).
+- [ ] Gateway conectado de fato? `ss -tnp | grep "pid=$(pgrep -f 'hermes_cli.main gateway')"` → deve mostrar `ESTAB ... 149.154.166.110:443` (IP do Telegram). Sem socket = não está pollando.
+- [ ] Só 1 processo? `pgrep -af 'hermes_cli.main gateway'` → mais de 1 = conflito de polling (erro 409).
 
 ## 3. DASHBOARD_API_TOKEN
 - [ ] Gerar valor novo (token aleatório forte): `openssl rand -hex 32`.
