@@ -146,7 +146,7 @@
 ## T7 — Feature PILOTO
 
 - [x] Onda 01 (Fundação) + Onda 02 (Pipeline de Tarefas) — merged
-- [ ] 🔄 Onda 03 (Loja-GPT) — migration SQL rascunhada, **não aplicada**
+- [x] ✅ Onda 03 (Loja-GPT) — **em prod desde 2026-05-22** (`loja_gpt_conversations`/`loja_gpt_messages`, 9 conv/16 msg verificadas em 2026-06-09). O "não aplicada" era stale.
 - [ ] ⏳ Onda 04 (WhatsApp + Loom) — não iniciada
 
 ---

@@ -156,6 +156,7 @@ Resumo de categorias: **CORE** dashboard/agentes/oracle→DELI/skills/atividade/
 - [x] **(a) Mapa de telas** — v0 em main (32 telas, MVP = 14) — 👉 aguarda revisão do Wandson
 - [ ] ⏳ **(b) Protótipo clicável** (React, dados fake) — Cowork constrói após revisão do mapa
 - [ ] ⏳ Travar inventário de telas + fluxos → só então código/DB
+- [x] **Série LEVA ✅ (sessão 30, 2026-06-09):** todas as telas de referência do Console v2 saíram do mock e leem do Supabase. LEVA 1 (CRM/customers) · LEVA 2 (`tenant_provedores`/`tenant_sistemas`/`crm_notas`, migration `20260609_003`) · LEVA 3 (`tenant_integracoes`, migration `20260609_004` aplicada + RLS E2E membro=4/não-membro=0 + seed 4 reais, PR #275 `f2dde20`). Padrão: tabela `tenant_id NOT NULL` + RLS SELECT-only via `is_member_of`, escrita por service_role (equipe CD), zero segredo no banco.
 
 ---
 
