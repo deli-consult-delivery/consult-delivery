@@ -43,7 +43,13 @@ A sessão **Cowork** (desktop) parou aqui e passou o bastão para a **sessão Cl
 
 ## 🔴 Onde parou
 
-_Última sessão: 2026-06-09 (VPS — **sessão 28: orquestrador + LEVA 1 — 4 PRs reversíveis paralelos mergeados (#265-#268): CRM lê customers real, edição inline no Cv Novas, limpeza Eduardo→Wandson no MAX, padrão Trigger no breno-renotificar**)_
+_Última sessão: 2026-06-09 (VPS — **sessão 29: orquestrador + LEVA 2 — migration `20260609_003` aplicada com `ok` do Wandson (tenant_provedores/tenant_sistemas/crm_notas), isolamento RLS validado E2E, PRs #271+#272 mergeados: Provedores/Sistemas/Notas-CRM saem do mock**)_
+
+### Sessão 29 — VPS (modo ORQUESTRADOR + LEVA 2: 3 telas saem do mock via migration aprovada)
+Continuação do modelo maestro. Pipeline da LEVA 2 (precisava `ok` do SQL — gated): **2 executores `cd-frontend-component` em paralelo** (arquivos disjuntos: `CvNovas.jsx`+`ConsoleV2.jsx` vs `CRMScreen.jsx`) → revisão central de segurança (XSS via `esc()`, RLS-friendly inserts, secrets) → build verde → **PR #271 (migration) + #272 (frontend) abertos** → apresentei o SQL completo ao Wandson → **`ok` recebido**.
+- **Migration `20260609_003` aplicada** (`apply_migration`, `success:true`): `tenant_provedores` (SELECT-only RLS), `tenant_sistemas` (SELECT-only RLS), `crm_notas` (CRUD 4 verbos). Verificação bruta: 3 tabelas, `rls_on=true`, policies `crm_notas`=4 / provedores=1 / sistemas=1.
+- **Teste de isolamento RLS E2E** (output bruto, nota committada + role `authenticated` + JWT): membro do tenant vê **1**, não-membro vê **0**; nota de teste limpa (0 restantes). `is_member_of` confirmado como expressão da policy.
+- **PR #271** (`7a527f9`) migration + **PR #272** (`7e90862`) frontend → **squash-merged**. Provedores/Sistemas (`tenant_provedores`/`tenant_sistemas`) e aba Notas do CRM (`crm_notas`) leem dados reais por tenant. `chave_ref` guarda só o NOME do secret no Infisical — nenhuma chave no banco.
 
 ### Sessão 28 — VPS (modo ORQUESTRADOR + LEVA 1: 4 entregas reversíveis em paralelo)
 Wandson redefiniu o modelo: **esta sessão = maestro** (planeja, distribui, revisa, QA, testa, fica livre p/ novos pedidos); a implementação pesada roda em **paralelo** via outros agentes; meta = velocidade + controle central + qualidade. Modelo aprovado por ele (AskUserQuestion): execução = equipe de agentes + lotes que ele comanda; gate de merge = QA automático + ele mergeia o reversível; foco = backlog do Tracker. Rodei o **pipeline de orquestração ponta-a-ponta** na LEVA 1 (backlog reversível/aditivo, sem migration-apply/VPS/mensagem-a-cliente):
@@ -148,7 +154,7 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 2b. **Backlog autônomo — telas PARCIAIS → funcionais** (sem migration-apply/VPS/mensagens-a-cliente): ✅ busca global da topbar (sessão 23, PR #246); ✅ badge de não-lidas no chat (sessão 24, PR #248). **Auditado:** backends de Análise de Loja/Cardápio/Multicanal/Radar **já existem** (cron `*/5` drenando filas `pendente`), Importar Relatórios e Análise de Loja **já estão wired** — nenhuma tela do console renderiza mock puro. Restam só os que **exigem** migration/VPS: ~~upload Storage em Arquivos~~ → **✅ APLICADO e mergeado (PR #261; bucket+4 RLS verificados no banco na sessão 28)**; expiry/contagem em Links (precisa endpoint de redirect+VPS) → ainda **bloqueado**.
 2c. **Visual-claro (dark→claro das telas embarcadas)** — ✅ **CONCLUÍDO (sessão 25 + 27).** Família Automações (8 abas) toda no claro; último embed escuro `AgentBuilderScreen` (#259). `ChatScreen.jsx` permanece escuro **de propósito** (superfície imersiva full-screen estilo WhatsApp — e agora É o Chat ao Vivo oficial do Console v2, sessão 27). Sessão 27 fechou a causa-raiz das "páginas pretas/branco-no-branco": `.cv2` reseta a escala `--g-*` para o light, anulando o `data-theme` salvo (PR #262). Nenhuma tela LEGADO embarcada segue escura por bug.
 2d. **LEVA 1 (backlog reversível) — ✅ CONCLUÍDO (sessão 28).** 4 PRs paralelos mergeados via pipeline de orquestração: CRM lê `customers` real (#268), edição inline no Cv Novas (#267), limpeza Eduardo→Wandson no MAX (#266), padrão Trigger no breno-renotificar (#265). Todos reversíveis, tsc+build verdes, `cd-lens` aprovou. → próximo foco autônomo: varrer gaps funcionais residuais **sem migration** em telas legadas/`CvNovas`.
-2e. **LEVA 2 (precisa `ok` do SQL do Wandson — versionar em PR aberto):** Sistemas externos (`tenant_sistemas`), tabela de notas do CRM, Provedores IA (`tenant_provedores`). **Bloqueado** até o Wandson aprovar cada SQL. _(upload Storage em Arquivos saiu desta lista — já aplicado e mergeado, PR #261.)_
+2e. **LEVA 2 — ✅ CONCLUÍDO (sessão 29).** Sistemas externos (`tenant_sistemas`), notas do CRM (`crm_notas`), Provedores IA (`tenant_provedores`). Migration `20260609_003` **aplicada com `ok` do Wandson** (isolamento RLS validado E2E: membro vê 1 / não-membro vê 0). **PRs #271 (migration) + #272 (frontend) mergeados.** As 3 telas saem do mock. _(upload Storage em Arquivos já estava aplicado e mergeado, PR #261.)_ → próximo foco autônomo: varrer gaps residuais funcionais; LEVA 3 ainda não definida (Integrações no Cv Novas segue mock — fora desta leva).
 3. **Bridge crash-loop** (⚠️ VPS — reservado ao Wandson): `pm2 logs bridge-server --err --lines 50`; achar a causa dos 136 restarts e estabilizar.
 4. **Pendências do Wandson (não fazer sem ele):** apagar msg de teste `delete from messages where id='0023dd90-4bf9-4139-8667-ed3e85869772';` · limpar registros de teste (tenant "Cliente Teste Sandbox") · `ASAAS_DEFESA_ENVIRONMENT`=production no 1º cliente pagante.
 5. **GATE 0 (quando o Wandson quiser)** — `docs/infra/gate0-rotacao-credenciais.md`. Depois, agente persistente na VPS: `docs/infra/claude-code-vps-setup.md`.
@@ -162,7 +168,7 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 |-------|------|--------|-------------|
 | T1 | Plataforma CD | ✅ | Console v2 idêntico ao protótipo, **todas as telas no visual claro** |
 | T2 | EvoNexus-replica | ✅ | FASE 2 onda 2 + GAP-1..8 + agentes |
-| T3 | Visual-First / telas | ✅ | **LEVA 1: CRM lê customers real (#268) + edição inline Cv Novas (#267) + Eduardo→Wandson MAX (#266) + padrão Trigger breno (#265)** · Chat ao Vivo = ChatScreen clássico (PR #262) · Arquivos upload/download real **aplicado** (PR #261, bucket+RLS verificados) · Família Automações 100% no claro (#256/#258/#259) · busca global (#246) · 5 telas novas com CRUD (#239) |
+| T3 | Visual-First / telas | ✅ | **LEVA 2: Provedores/Sistemas/Notas-CRM saem do mock (migration `20260609_003` aplicada + RLS E2E; PRs #271/#272)** · LEVA 1: CRM lê customers real (#268) + edição inline Cv Novas (#267) + Eduardo→Wandson MAX (#266) + padrão Trigger breno (#265) · Chat ao Vivo = ChatScreen clássico (PR #262) · Arquivos upload/download real (PR #261) · Família Automações 100% no claro (#256/#258/#259) · busca global (#246) · 5 telas novas com CRUD (#239) |
 | T4 | Hermes | 🔄 | aguarda GATE 0 |
 | T5 | Segurança | 🔄 | 270 policies OK · **GATE 0 (rotação) pendente** — checklist #237 |
 | T6 | Agentes IA | ✅ | 6 agentes vivos: Defesa, Vigia, Radar, Estúdio, Análise de Loja, Cardápio, Multicanal |
@@ -173,6 +179,12 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 ---
 
 ## 📋 Log de sessões
+
+### 2026-06-09 (sessão 29 — VPS: modo orquestrador + LEVA 2 gated)
+- **Pipeline LEVA 2 (gated por `ok` do SQL):** 2 executores `cd-frontend-component` paralelos (arquivos disjuntos: `CvNovas.jsx`+`ConsoleV2.jsx` vs `CRMScreen.jsx`) → revisão central de segurança (XSS `esc()` no `<Tela>`/`dangerouslySetInnerHTML`, badge por classe-constante, inserts RLS-friendly com `tenant_id`, secrets) → build verde → PR #271 (migration) + #272 (frontend) abertos → SQL completo apresentado → **`ok` do Wandson**.
+- **Migration `20260609_003` aplicada** (`apply_migration`, `success:true`): `tenant_provedores` + `tenant_sistemas` (SELECT-only RLS — escrita = equipe CD via service_role bypass) + `crm_notas` (CRUD 4 verbos). Verificação: 3 tabelas, `rls_on=true`, policies 1/1/4.
+- **Isolamento RLS E2E (output bruto):** nota `__RLS_TEST__` committada → `set local role authenticated` + JWT do membro → vê **1**; JWT de não-membro → vê **0**; nota removida (0 restantes). `is_member_of` (SECURITY DEFINER, `auth.uid()` vs `tenant_members`) confirmado como guarda da policy.
+- **PR #271** (`7a527f9`) + **PR #272** (`7e90862`) squash-merged. Provedores/Sistemas/Notas-CRM leem dados reais por tenant. `chave_ref` = só o NOME do secret no Infisical (nenhuma chave no banco). `main` = `7e90862`.
 
 ### 2026-06-09 (sessão 28 — VPS: modo orquestrador + LEVA 1 reversível)
 - **Modelo redefinido:** esta sessão vira **maestro** (planeja/distribui/revisa/QA/testa, fica livre p/ novos pedidos); implementação pesada em **paralelo**. Aprovado pelo Wandson (AskUserQuestion): equipe de agentes + lotes que ele comanda · gate = QA automático + ele mergeia o reversível · foco = backlog do Tracker.
