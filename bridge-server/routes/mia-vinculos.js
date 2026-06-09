@@ -255,24 +255,27 @@ module.exports = function buildMiaVinculosRouter({
 
       if (sug.tipo === 'fact') {
         // Insere em client_facts
+        // Schema pós-006: key (identificador/texto) + value JSONB, source_agent, confidence REAL 0-1.
+        // Mapeamento espelha a conversão da migration 006: key = texto, value = { text }.
         const fact = await supabaseInsert('client_facts', {
-          loja_id:    sug.loja_id,
-          tenant_id:  sug.tenant_id,
-          agent_name: 'mia',
-          category:   'mia',
-          fact:        conteudoFinal,
-          confidence: sug.confianca === 'alta' ? 90 : sug.confianca === 'media' ? 70 : 50,
+          loja_id:      sug.loja_id,
+          tenant_id:    sug.tenant_id,
+          source_agent: 'mia',
+          category:     'mia',
+          key:          conteudoFinal,
+          value:        { text: conteudoFinal },
+          confidence:   sug.confianca === 'alta' ? 0.9 : sug.confianca === 'media' ? 0.7 : 0.5,
         });
         resultado_id = fact?.id || null;
 
-        // Insere em client_timeline (append-only)
+        // Insere em client_timeline (append-only) — agent_name mantido nesta tabela
         await supabaseInsert('client_timeline', {
           loja_id:    sug.loja_id,
           tenant_id:  sug.tenant_id,
           agent_name: 'mia',
           event_type: 'fact_added',
-          summary:    `MIA: fact aprovado — "${conteudoFinal.slice(0, 100)}"`,
-          metadata:   { sugestao_id: id, fact_id: resultado_id, editado: foiEditada },
+          title:      `MIA: fact aprovado — "${conteudoFinal.slice(0, 100)}"`,
+          payload:    { sugestao_id: id, fact_id: resultado_id, editado: foiEditada },
         });
       } else if (sug.tipo === 'tarefa') {
         // Mapeia prioridade MIA → prioridade de tarefas_loja
@@ -382,13 +385,16 @@ module.exports = function buildMiaVinculosRouter({
       const access = await assertLojaAccess(req, res, loja_id);
       if (!access) return;
 
+      // Schema pós-006: key + value JSONB, source_agent, confidence REAL 0-1.
+      // API mantém contrato confidence 0-100 (frontend não envia → default 100 → 1.0).
       const row = await supabaseInsert('client_facts', {
         loja_id,
-        tenant_id:  access.tenant_id,
-        agent_name: `human:${req.user.id}`,
+        tenant_id:    access.tenant_id,
+        source_agent: `human:${req.user.id}`,
         category,
-        fact,
-        confidence: Math.min(100, Math.max(0, Number(confidence) || 100)),
+        key:          fact,
+        value:        { text: fact },
+        confidence:   Math.min(1, Math.max(0, (Number(confidence) || 100) / 100)),
       });
 
       console.log(`[mia-vinculos/doc POST] loja=${loja_id} user=${req.user.id}`);
@@ -411,10 +417,11 @@ module.exports = function buildMiaVinculosRouter({
       const access = await assertLojaAccess(req, res, rows[0].loja_id);
       if (!access) return;
 
+      // Schema pós-006: edição de texto atualiza key + value; confidence 0-100 → REAL 0-1.
       const updates = {};
-      if (fact)       updates.fact = fact;
+      if (fact)       { updates.key = fact; updates.value = { text: fact }; }
       if (category)   updates.category = category;
-      if (confidence !== undefined) updates.confidence = Math.min(100, Math.max(0, Number(confidence)));
+      if (confidence !== undefined) updates.confidence = Math.min(1, Math.max(0, Number(confidence) / 100));
 
       if (!Object.keys(updates).length) {
         return res.status(400).json({ error: 'nenhum campo válido para atualizar' });
