@@ -1,0 +1,20 @@
+{
+  "name": "cd-admin-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "Admin MCP do Hermes (copiloto CEO) — leitura ampla + escrita só via draft, auditado. Processo separado do bridge (admin-mcp-design.md). NÃO vai a runtime sem GATE 0 + claudedev + token service_role dedicado (reservado ao Wandson).",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "smoke": "node test/smoke.js",
+    "test:integration": "node test/integration.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "zod": "^3.23.8"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
