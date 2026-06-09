@@ -599,7 +599,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       case 'clientesplat': return <Clientes userId={userId} />;
       case 'marca': return <Marca tenantDbId={tenantDbId} onChanged={recarregarBrand} />;
       case 'provedores': return <Provedores tenantDbId={tenantDbId} />;
-      case 'integracoes': return <Integracoes />;
+      case 'integracoes': return <Integracoes tenantDbId={tenantDbId} />;
       case 'sistemas': return <Sistemas tenantDbId={tenantDbId} />;
       case 'acesso': return <AcessoUsuarios tenantDbId={tenantDbId} />;
       case 'auditoria': return <AuditLog tenantDbId={tenantDbId} />;

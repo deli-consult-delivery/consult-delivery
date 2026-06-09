@@ -105,7 +105,7 @@
   - [x] Terminal backend = Docker (isolamento na VPS compartilhada)
 - [ ] ⏳ **3B — acesso à CD via admin MCP** — bloqueado por:
   - [ ] 🔒 GATE 0 rotação de credenciais (ver T5)
-  - [ ] ⏳ Desenhar o admin MCP (principal `ceo_agent` escopado + tools de leitura + escrita propõe-e-aprova)
+  - [x] ✅ Desenhar o admin MCP (principal `ceo_agent` escopado + tools de leitura + escrita propõe-e-aprova) — `docs/infra/admin-mcp-design.md` (sessão 30, 2026-06-09)
   - [ ] ⏳ Gateway de root → usuário dedicado
 
 ---

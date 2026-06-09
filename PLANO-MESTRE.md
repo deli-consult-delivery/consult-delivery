@@ -162,7 +162,7 @@ Resumo de categorias: **CORE** dashboard/agentes/oracle→DELI/skills/atividade/
 ## T4 — Hermes (copiloto CEO)
 
 - [x] **3A — instalar isolado na VPS** ✅ (kimi-k2.6 · Docker · Telegram allowlist Wandson)
-- [ ] ⏳ **3B — acesso à CD via admin MCP** — bloqueado por: 🔒 GATE 0 rotação · ⏳ desenhar admin MCP · ⏳ gateway root→usuário dedicado
+- [ ] ⏳ **3B — acesso à CD via admin MCP** — bloqueado por: 🔒 GATE 0 rotação (Wandson) · [x] ✅ **admin MCP desenhado** (`docs/infra/admin-mcp-design.md` — `ceo_agent` escopado, read amplo + write só propõe-e-aprova via drafts, auditado) · ⏳ gateway root→usuário dedicado (Wandson). **Não fecha sem GATE 0.**
 
 ---
 
@@ -188,7 +188,7 @@ Resumo de categorias: **CORE** dashboard/agentes/oracle→DELI/skills/atividade/
 
 ## T7 — Feature PILOTO
 
-- [x] Ondas 01+02 merged · [ ] 🔄 Onda 03 (Loja-GPT) migration rascunhada, não aplicada · [ ] ⏳ Onda 04 (WhatsApp + Loom)
+- [x] Ondas 01+02 merged · [x] ✅ **Onda 03 (Loja-GPT) EM PROD desde 2026-05-22** (verificado 2026-06-09: tabelas `loja_gpt_conversations`/`loja_gpt_messages`, 9 conv/16 msg; task `loja-gpt-responder`; 5 endpoints Bridge; `TabIaEspecialista`; ver `docs/piloto/PILOTO-03-LOJA-GPT.md`) · [ ] ⏳ Onda 04 (WhatsApp + Loom)
 
 ---
 
