@@ -163,7 +163,7 @@ Resumo de categorias: **CORE** dashboard/agentes/oracle→DELI/skills/atividade/
 ## T4 — Hermes (copiloto CEO)
 
 - [x] **3A — instalar isolado na VPS** ✅ (kimi-k2.6 · Docker · Telegram allowlist Wandson)
-- [ ] ⏳ **3B — acesso à CD via admin MCP** — bloqueado por: 🔒 GATE 0 rotação (Wandson) · [x] ✅ **admin MCP desenhado** (`docs/infra/admin-mcp-design.md` — `ceo_agent` escopado, read amplo + write só propõe-e-aprova via drafts, auditado) · [x] ✅ **runbook do Wandson** consolidado (`docs/infra/RUNBOOK-WANDSON.md` — ordem GATE 0 → `claudedev` → decisão+`ok` SQL `ceo_agent`) · ⏳ gateway root→usuário dedicado (Wandson) · 🛑 decisão: `ceo_agent` vê todos os tenants ou só pagantes. **Não fecha sem GATE 0.**
+- [ ] ⏳ **3B — acesso à CD via admin MCP** — bloqueado por: 🔒 GATE 0 rotação (Wandson) · [x] ✅ **admin MCP desenhado** (`docs/infra/admin-mcp-design.md` — `ceo_agent` escopado, read amplo + write só propõe-e-aprova via drafts, auditado) · [x] ✅ **runbook do Wandson** consolidado (`docs/infra/RUNBOOK-WANDSON.md`) · [x] ✅ **escopo `ceo_agent` = todos os tenants** (Wandson 2026-06-09) + achado cross-tenant registrado (§2.1: RBAC é per-tenant, `ceo_agent` é cross-tenant → Opção A recomendada, SQL autorado pós-GATE 0, não especulativo) · ⏳ gateway root→usuário dedicado (Wandson). **Não fecha sem GATE 0.**
 
 ---
 

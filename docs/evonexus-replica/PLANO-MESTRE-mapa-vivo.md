@@ -106,6 +106,8 @@
 - [ ] ⏳ **3B — acesso à CD via admin MCP** — bloqueado por:
   - [ ] 🔒 GATE 0 rotação de credenciais (ver T5)
   - [x] ✅ Desenhar o admin MCP (principal `ceo_agent` escopado + tools de leitura + escrita propõe-e-aprova) — `docs/infra/admin-mcp-design.md` (sessão 30, 2026-06-09)
+  - [x] ✅ Decisão de escopo `ceo_agent` = **todos os tenants** (Wandson, 2026-06-09) + achado cross-tenant documentado (§2.1, Opção A) — runbook em `docs/infra/RUNBOOK-WANDSON.md`
+  - [ ] ⏳ SQL do `ceo_agent` — autorado na sessão de build **pós-GATE 0** (não especulativo)
   - [ ] ⏳ Gateway de root → usuário dedicado
 
 ---
