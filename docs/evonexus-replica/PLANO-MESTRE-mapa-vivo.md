@@ -60,14 +60,14 @@
 
 ## T1 — Plataforma CD (V1 → V3)
 
-**V1 (~95%)** `(memória·confirmar contra repo)`
-- [x] 1A–1F concluídas `(memória·confirmar)`
-- [x] 1G — AgentsPage real + Notificações `(memória·confirmar)`
-- [ ] 🔄 1E — DELI Realtime: finalizar triggers
+**V1 (~99%)** ✅ (verificado 2026-06-09 contra repo: 1A-1G mergeados, build verde)
+- [x] 1A–1F concluídas
+- [x] 1G — AgentsPage real + Notificações
+- [x] ✅ 1E — DELI Realtime: **funcional** — subscriptions vivas (`bridge-server` realtime), schema (`deli_triggers`/`deli_pending_approvals`/`deli_actions_log` + 4 seeds), 2 APIs de aprovação montadas (`/api/approvals` ↔ `agent_action_approvals` casado com `ApprovalsScreen.jsx`; `/api/deli/*` ↔ `deli_pending_approvals`). **Único pendente: reativar o cron do `trigger/deli/orchestrator-5min.ts` (hoje `0 0 29 2 1` = desligado por spam em 2026-05-26) → decisão do Wandson (frequência/custo), não é dev.**
 
 **V2 (jun–jul/2026)**
 - [ ] ⏳ Custom fields, automations, dashboards, CRM
-- [ ] ⏳ Ativar SOFIA / LARA / CORA
+- [ ] ⏳ Ativar SOFIA / LARA / CORA — **código já completo** (ver T6); "ativar" = habilitar por tenant + deploy (operacional)
 
 **V3 (ago/2026+)**
 - [ ] ⏳ Onboarding self-service, billing, white-label, marketplace de agentes
@@ -107,8 +107,8 @@
   - [x] ✅ GATE 0 rotação de credenciais — concluído pelo Wandson (ver T5)
   - [x] ✅ Desenhar o admin MCP (principal `ceo_agent` escopado + tools de leitura + escrita propõe-e-aprova) — `docs/infra/admin-mcp-design.md` (sessão 30, 2026-06-09)
   - [x] ✅ Decisão de escopo `ceo_agent` = **todos os tenants** (Wandson, 2026-06-09) + achado cross-tenant documentado (§2.1, Opção A) — runbook em `docs/infra/RUNBOOK-WANDSON.md`
-  - [ ] ⏳ SQL do `ceo_agent` — autorado na sessão de build **pós-GATE 0** (não especulativo)
-  - [ ] ⏳ Gateway de root → usuário dedicado
+  - [x] ✅ SQL do `ceo_agent` — **autorado (Opção A) em 2026-06-09**, aguardando `ok` do Wandson p/ aplicar: `supabase/migrations/20260609_001_ceo_agent_hermes.sql` (aditivo: coluna `agent_drafts.origin` com CHECK + índice parcial p/ drafts do Hermes; enforcement no MCP, sem papel RBAC global). Versionado em git, **NÃO aplicado**.
+  - [ ] ⏳ Gateway de root → usuário dedicado (`claudedev`) — reservado ao Wandson
 
 ---
 
@@ -129,11 +129,11 @@
 
 ## T6 — Agentes IA
 
-**Produção** `(confirmar status atual)`
+**Produção**
 - [x] BomDia · Encerramento · chat ao vivo
-- [ ] 🔄 DELI (orquestrador)
-- [ ] CORA (cobrança) — confirmar status
-- [ ] Analista iFood / loja-gpt — confirmar status
+- [ ] 🔄 DELI (orquestrador) — Realtime funcional; orchestrator-5min com cron pausado (decisão Wandson, ver 1E em T1)
+- [x] ✅ CORA (cobrança) — código completo: 4 tasks `trigger/cora/` + Asaas + migrations `20260514_016/019_cora` (verificado 2026-06-09). Não é "POC".
+- [x] Analista iFood / loja-gpt — em prod (Onda 03, ver T7)
 
 **MIA — Monitor IA de Conversas**
 - [x] Spec completa (`docs/mia/MIA-PLANO-COMPLETO.md`)
@@ -143,10 +143,13 @@
   - Bridge: rota `mia-vinculos` montada (`bridge-server/index.js:1483`). UI: 5 componentes em `src/components/cliente-foco/` + telas `WhatsappVinculosScreen`/`MiaAuditScreen`.
 - [ ] ⏳ **Ativação operacional — reservada ao Wandson** (não é dev): env vars LLM no Trigger.dev · deploy/habilitar o worker · cadastrar vínculos em `/config-whatsapp-vinculos` · smoke `scripts/smoke-kimi-consultor.ts`. Checklist em `docs/mia/MIA-PLANO-COMPLETO.md` §Pendências manuais.
 
-**Planejados**
-- [ ] ⏳ LARA (CRM/drip 90 dias) — spec feita, não implementada
-- [ ] ⏳ SOFIA (prospecção) — ICP definido, scrapers Apify aprovados, não implementada
-- [ ] ⏳ BRENO (atendimento off-hours) · MAX · VERA
+**Implementados — código completo** ✅ (verificado 2026-06-09, output bruto: 28 task files, todos com `task()` + `logAgentRun` + Zod + migrations aplicadas. O "não implementada/futuro" era stale.)
+- [x] ✅ LARA (CRM/régua) — 4 tasks `trigger/lara/` + migrations `20260506_001_lara_regua`, `20260525_006_lara_content`
+- [x] ✅ SOFIA (prospecção) — 5 tasks `trigger/sofia/` + migrations `20260515_022/023/024_sofia_prospects`, `20260525_006_sofia_leads`
+- [x] ✅ BRENO (atendimento off-hours) — 7 tasks `trigger/breno/` + migrations `20260515_020/021`, `20260604_001_breno_triagem`, `20260605_001/002`
+- [x] ✅ VERA (BI) — 5 tasks `trigger/vera/` + migrations `20260515_025_vera_tables`, `20260515_026_vera_views`
+- [x] ✅ MAX (consultor) — 3 tasks `trigger/max/` + migration `20260514_014_max_knowledge_base`
+- [ ] ⏳ Falta (operacional, não-dev): habilitação por tenant (`tenant_agents`) + deploy Trigger.dev + ativação — não é código.
 
 ---
 

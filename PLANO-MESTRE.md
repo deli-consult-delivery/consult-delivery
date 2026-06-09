@@ -163,7 +163,7 @@ Resumo de categorias: **CORE** dashboard/agentes/oracle→DELI/skills/atividade/
 ## T4 — Hermes (copiloto CEO)
 
 - [x] **3A — instalar isolado na VPS** ✅ (kimi-k2.6 · Docker · Telegram allowlist Wandson)
-- [ ] ⏳ **3B — acesso à CD via admin MCP** — bloqueado por: 🔒 GATE 0 rotação (Wandson) · [x] ✅ **admin MCP desenhado** (`docs/infra/admin-mcp-design.md` — `ceo_agent` escopado, read amplo + write só propõe-e-aprova via drafts, auditado) · [x] ✅ **runbook do Wandson** consolidado (`docs/infra/RUNBOOK-WANDSON.md`) · [x] ✅ **escopo `ceo_agent` = todos os tenants** (Wandson 2026-06-09) + achado cross-tenant registrado (§2.1: RBAC é per-tenant, `ceo_agent` é cross-tenant → Opção A recomendada, SQL autorado pós-GATE 0, não especulativo) · ⏳ gateway root→usuário dedicado (Wandson). **Não fecha sem GATE 0.**
+- [ ] 🔄 **3B — acesso à CD via admin MCP** — **GATE 0 concluído pelo Wandson (2026-06-09)** → desbloqueado: [x] ✅ **admin MCP desenhado** (`docs/infra/admin-mcp-design.md` — `ceo_agent` escopado, read amplo + write só propõe-e-aprova via drafts, auditado) · [x] ✅ **runbook do Wandson** (`docs/infra/RUNBOOK-WANDSON.md`) · [x] ✅ **escopo `ceo_agent` = todos os tenants** (Wandson) + achado cross-tenant (§2.1: RBAC per-tenant, `ceo_agent` cross-tenant → Opção A) · [x] ✅ **SQL do `ceo_agent` AUTORADO** (`supabase/migrations/20260609_001_ceo_agent_hermes.sql`, Opção A: aditivo — `agent_drafts.origin` com CHECK + índice parcial; enforcement no MCP, sem papel RBAC; verificado vs DB; **NÃO aplicado**) · ⏳ **falta Wandson:** `ok` no SQL (eu aplico) + usuário dedicado `claudedev` (gateway root→não-root). Depois eu construo as tools de leitura + `cd_propor_draft`.
 
 ---
 
