@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { CvSprite, Ico } from './CvIcons.jsx';
 // telas cv2 (visual claro)
@@ -97,6 +97,91 @@ const GRUPOS = [
 
 const LABELS = {};
 GRUPOS.forEach(g => g.items.forEach(it => { LABELS[it.id] = it.label; }));
+
+// ─── busca global (command palette) ──────────────────────────
+// telas (navegação) + lojas + conversas do tenant → navega ao selecionar.
+const NAV_ITEMS = GRUPOS.flatMap(g => g.items.map(it => ({ ...it, grupo: g.label })));
+const norm = s => (s || '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const nomeConv = c => c.contact_name
+  || (c.group_name && !/^\d{10,}$/.test(c.group_name) ? c.group_name : null)
+  || c.push_name || (c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '') || 'Conversa';
+
+function SecaoBusca({ titulo }) {
+  return <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px', color: 'var(--tx2)', padding: '7px 10px 3px' }}>{titulo}</div>;
+}
+function ItemBusca({ ic, principal, sec, onClick }) {
+  return (
+    <div onMouseDown={e => { e.preventDefault(); onClick(); }} className="cv2-search-item"
+      style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px', borderRadius: 5, cursor: 'pointer', fontSize: 13 }}>
+      <Ico name={ic} size={14} />
+      <span style={{ flex: 1, fontWeight: 600, color: 'var(--tx)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{principal}</span>
+      {sec && <span style={{ fontSize: 11, color: 'var(--tx2)', fontWeight: 500, flex: 'none' }}>{sec}</span>}
+    </div>
+  );
+}
+
+function GlobalSearch({ tenantDbId, onNavigate }) {
+  const [q, setQ] = useState('');
+  const [open, setOpen] = useState(false);
+  const [ent, setEnt] = useState({ lojas: [], convs: [] });
+  const boxRef = useRef(null);
+
+  useEffect(() => {
+    function onDoc(e) { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false); }
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+
+  // entidades (lojas + conversas) com debounce — termo saneado p/ filtro PostgREST .or()
+  useEffect(() => {
+    const safe = q.trim().replace(/[%,()*]/g, '');
+    if (safe.length < 2 || !tenantDbId) { setEnt({ lojas: [], convs: [] }); return; }
+    let alive = true;
+    const t = setTimeout(async () => {
+      const like = `%${safe}%`;
+      const [lj, cv] = await Promise.all([
+        supabase.from('lojas').select('id, nome, cidade').eq('tenant_id', tenantDbId).ilike('nome', like).limit(6),
+        supabase.from('conversations').select('id, contact_name, push_name, group_name, whatsapp_chat_id, is_group')
+          .eq('tenant_id', tenantDbId)
+          .or(`contact_name.ilike.${like},push_name.ilike.${like},group_name.ilike.${like}`).limit(6),
+      ]);
+      if (!alive) return;
+      setEnt({ lojas: lj.data || [], convs: cv.data || [] });
+    }, 250);
+    return () => { alive = false; clearTimeout(t); };
+  }, [q, tenantDbId]);
+
+  const termo = norm(q);
+  const navHits = termo.length < 1 ? [] : NAV_ITEMS.filter(it => norm(it.label).includes(termo)).slice(0, 7);
+  const temAlgo = navHits.length || ent.lojas.length || ent.convs.length;
+
+  function go(tela) { onNavigate(tela); setOpen(false); setQ(''); }
+
+  return (
+    <div ref={boxRef} style={{ flex: 1, maxWidth: 420, position: 'relative' }}>
+      <input className="search" style={{ width: '100%', maxWidth: 'none' }}
+        placeholder="Buscar telas, lojas, conversas…"
+        value={q}
+        onChange={e => { setQ(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={e => {
+          if (e.key === 'Escape') { setOpen(false); e.currentTarget.blur(); }
+          else if (e.key === 'Enter' && navHits[0]) go(navHits[0].id);
+        }} />
+      {open && q.trim().length >= 1 && (
+        <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: '#fff', border: '1px solid var(--line)', borderRadius: 6, boxShadow: '0 6px 20px rgba(0,0,0,.12)', zIndex: 50, maxHeight: 380, overflowY: 'auto', padding: 4 }}>
+          {!temAlgo && <div style={{ padding: '10px 12px', fontSize: 12.5, color: 'var(--tx2)' }}>Nada encontrado para “{q.trim()}”.</div>}
+          {navHits.length > 0 && <SecaoBusca titulo="Navegação" />}
+          {navHits.map(it => <ItemBusca key={'n-' + it.id} ic={it.ic} principal={it.label} sec={it.grupo} onClick={() => go(it.id)} />)}
+          {ent.lojas.length > 0 && <SecaoBusca titulo="Lojas" />}
+          {ent.lojas.map(l => <ItemBusca key={'l-' + l.id} ic="i-store" principal={l.nome} sec={l.cidade || ''} onClick={() => go('lojas')} />)}
+          {ent.convs.length > 0 && <SecaoBusca titulo="Conversas" />}
+          {ent.convs.map(c => <ItemBusca key={'c-' + c.id} ic={c.is_group ? 'i-users' : 'i-chat'} principal={nomeConv(c)} sec={c.is_group ? 'Grupo' : 'WhatsApp'} onClick={() => go('chat')} />)}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // telas reusadas do clássico (dark) — renderizadas em área cheia até converter
 const LEGADO = new Set(['deli', 'crm', 'lojas', 'mia', 'cobranca', 'rotinas', 'heartbeats', 'metas', 'memoria', 'conhecimento', 'configsys']);
@@ -557,7 +642,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
           <>
             <div className="cv2-tb">
               <span className="crumb">Console › <b>{LABELS[tela] || tela}</b></span>
-              <input className="search" placeholder="Buscar clientes, lojas, agentes, pedidos…" />
+              <GlobalSearch tenantDbId={tenantDbId} onNavigate={setTela} />
               <span className="cv2-pill" title={`Plano freemium · ${CREDITOS_MES.toLocaleString('pt-BR')} créditos/mês · 1 por execução de IA · ${runs ?? 0} usados`}>
                 <Ico name="i-zap" size={13} /> Créditos IA <b>{creditosTxt}</b>
               </span>
