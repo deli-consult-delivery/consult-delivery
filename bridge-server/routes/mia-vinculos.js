@@ -362,7 +362,7 @@ module.exports = function buildMiaVinculosRouter({
       if (!access) return;
 
       const rows = await sbFetch(
-        `client_facts?loja_id=eq.${encodeURIComponent(loja_id)}&order=created_at.desc&select=*`
+        `client_facts?loja_id=eq.${encodeURIComponent(loja_id)}&order=ts.desc&select=*`
       );
       res.json(rows || []);
     } catch (err) {
