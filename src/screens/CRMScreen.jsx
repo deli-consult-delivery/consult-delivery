@@ -4,7 +4,7 @@ import Icon from '../components/Icon.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
 import UserAvatar from '../components/UserAvatar.jsx';
 import { supabase } from '../lib/supabase.js';
-import { TENANTS, CRM_CUSTOMERS } from '../data.js';
+import { TENANTS } from '../data.js';
 import CustomFieldsSection from '../components/CustomFieldsSection.jsx';
 
 const CrmScreen = ({ tenant, tenantDbId, onNavigate }) => {
@@ -53,13 +53,64 @@ const CrmScreen = ({ tenant, tenantDbId, onNavigate }) => {
 };
 
 /* ─── CLIENTES (original layout) ─── */
+// Mapeia uma linha real da tabela `customers` (Supabase) para o shape que a UI consome.
+// Colunas reais: id, name, phone, email, avatar, segment, is_vip, tags, metadata, created_at.
+// Campos sem fonte real (lifetime, orders, last, nps, risk, city, channel) ficam vazios —
+// NÃO inventamos números: a UI mostra "—" / estado vazio honesto.
+function mapCustomerRow(row) {
+  return {
+    id: row.id,
+    name: row.name || 'Sem nome',
+    avatar: row.avatar || (row.name ? row.name.slice(0, 2).toUpperCase() : '??'),
+    phone: row.phone || '—',
+    email: row.email || '—',
+    segment: row.segment || (row.is_vip ? 'VIP' : 'Lead'),
+    tags: Array.isArray(row.tags) ? row.tags : [],
+    city: row.metadata?.company || '—',
+    channel: '—',
+    // Sem tabela de pedidos/pagamentos/NPS por trás → vazio honesto.
+    lifetime: null,
+    orders: null,
+    last: '—',
+    nps: null,
+    risk: null,
+  };
+}
+
 const ClientesView = ({ tenant, tenantDbId, onNavigate, onImportClick }) => {
-  const customers = CRM_CUSTOMERS[tenant] || [];
+  const [customers, setCustomers] = uSCrm([]);
+  const [loading, setLoading] = uSCrm(true);
+  const [loadError, setLoadError] = uSCrm(null);
 
   const [search, setSearch] = uSCrm('');
   const [segment, setSegment] = uSCrm('all');
   const [riskFilter, setRiskFilter] = uSCrm('all');
-  const [selected, setSelected] = uSCrm(customers[0]?.id);
+  const [selected, setSelected] = uSCrm(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!tenantDbId) { setCustomers([]); setLoading(false); return; }
+    setLoading(true);
+    setLoadError(null);
+    supabase
+      .from('customers')
+      .select('id, name, phone, email, avatar, segment, is_vip, tags, metadata, created_at')
+      .eq('tenant_id', tenantDbId)
+      .order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          setLoadError(error.message || 'Erro ao carregar clientes');
+          setCustomers([]);
+        } else {
+          const mapped = (data || []).map(mapCustomerRow);
+          setCustomers(mapped);
+          setSelected(prev => prev || mapped[0]?.id || null);
+        }
+        setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [tenantDbId]);
 
   const filtered = uMCrm(() => customers.filter(c => {
     if (search && !c.name.toLowerCase().includes(search.toLowerCase()) && !c.email.toLowerCase().includes(search.toLowerCase())) return false;
@@ -107,25 +158,9 @@ const ClientesView = ({ tenant, tenantDbId, onNavigate, onImportClick }) => {
       <div className="crm-stat-strip">
         <CrmStat label="Total de clientes" value={stats.total} icon="users" color="#6B7280"/>
         <CrmStat label="VIPs" value={stats.vip} icon="star" color="#B70C00"/>
-        <CrmStat label="Em risco" value={stats.risk} icon="alert" color="#EF4444"/>
+        <CrmStat label="Em risco" value="—" icon="alert" color="#EF4444"/>
         <CrmStat label="Leads ativos" value={stats.lead} icon="sparkles" color="#F59E0B"/>
-        <CrmStat label="LTV total" value={`R$ ${stats.ltv.toFixed(0).replace(/(\d)(?=(\d{3})+$)/g,'$1.')}`} icon="dollar" color="#10B981"/>
-      </div>
-
-      {/* AI insights banner */}
-      <div className="crm-ai-banner">
-        <AgentAvatar id="vera" size={36}/>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color:'white', marginBottom: 4 }}>
-            VERA encontrou padrões na sua base
-          </div>
-          <div style={{ fontSize: 12, color:'rgba(255,255,255,0.7)' }}>
-            <strong>{stats.risk} clientes</strong> em risco somam <strong>R$ 6.9k</strong> de LTV — vale uma campanha de reativação?
-          </div>
-        </div>
-        <button className="btn-primary" style={{ background:'white', color:'#0D0D0D' }}>
-          Ver sugestões <Icon name="arrowright" size={13}/>
-        </button>
+        <CrmStat label="LTV total" value="—" icon="dollar" color="#10B981"/>
       </div>
 
       {/* Two-column layout */}
@@ -162,37 +197,56 @@ const ClientesView = ({ tenant, tenantDbId, onNavigate, onImportClick }) => {
                 <Icon name="filter" size={12}/> Mais filtros
               </button>
             </div>
-            {filtered.map(c => {
-              const segColor = segments.find(s => s.id === c.segment)?.color || '#6B7280';
-              return (
-                <div
-                  key={c.id}
-                  className={`crm-list-row ${selected === c.id ? 'on' : ''}`}
-                  onClick={() => setSelected(c.id)}
-                >
-                  <UserAvatar name={c.avatar} size={36}/>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap: 6, marginBottom: 2 }}>
-                      <span style={{ fontSize: 14, fontWeight: 600, color:'var(--g-900)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name}</span>
-                      {c.risk === 'high' && <span className="crm-risk-dot" title="Alto risco"/>}
-                    </div>
-                    <div style={{ fontSize: 11, color:'var(--g-500)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                      {c.phone} · {c.orders} pedidos · {c.lifetime}
-                    </div>
-                  </div>
-                  <span className="crm-seg-pill" style={{ background: segColor + '22', color: segColor }}>{c.segment}</span>
-                </div>
-              );
-            })}
-            {filtered.length === 0 && (
+            {loading ? (
               <div style={{ padding: 40, textAlign:'center', color:'var(--g-400)', fontSize: 13 }}>
-                Nenhum cliente encontrado
+                Carregando clientes…
               </div>
+            ) : loadError ? (
+              <div style={{ padding: 40, textAlign:'center', color:'#EF4444', fontSize: 13 }}>
+                Erro ao carregar clientes: {loadError}
+              </div>
+            ) : customers.length === 0 ? (
+              <div style={{ padding: 40, textAlign:'center', color:'var(--g-400)', fontSize: 13, lineHeight: 1.6 }}>
+                Nenhum cliente cadastrado ainda.<br/>
+                <button className="btn-ghost" style={{ fontSize: 12, marginTop: 8 }} onClick={onImportClick}>
+                  <Icon name="paper" size={12}/> Importar via CSV
+                </button>
+              </div>
+            ) : (
+              <>
+                {filtered.map(c => {
+                  const segColor = segments.find(s => s.id === c.segment)?.color || '#6B7280';
+                  return (
+                    <div
+                      key={c.id}
+                      className={`crm-list-row ${selected === c.id ? 'on' : ''}`}
+                      onClick={() => setSelected(c.id)}
+                    >
+                      <UserAvatar name={c.avatar} size={36}/>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap: 6, marginBottom: 2 }}>
+                          <span style={{ fontSize: 14, fontWeight: 600, color:'var(--g-900)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name}</span>
+                          {c.risk === 'high' && <span className="crm-risk-dot" title="Alto risco"/>}
+                        </div>
+                        <div style={{ fontSize: 11, color:'var(--g-500)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                          {[c.phone !== '—' ? c.phone : null, c.email !== '—' ? c.email : null].filter(Boolean).join(' · ') || 'Sem contato'}
+                        </div>
+                      </div>
+                      <span className="crm-seg-pill" style={{ background: segColor + '22', color: segColor }}>{c.segment}</span>
+                    </div>
+                  );
+                })}
+                {filtered.length === 0 && (
+                  <div style={{ padding: 40, textAlign:'center', color:'var(--g-400)', fontSize: 13 }}>
+                    Nenhum cliente encontrado
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
 
-        {customer && <Customer360 customer={customer} onNavigate={onNavigate}/>}
+        {!loading && !loadError && customer && <Customer360 customer={customer} onNavigate={onNavigate}/>}
       </div>
     </>
   );
@@ -690,8 +744,8 @@ const Customer360 = ({ customer, onNavigate }) => {
     { id: 'notes',    label: 'Notas' },
   ];
   const segColor = { VIP:'#B70C00', Recorrente:'#10B981', Novo:'#3B82F6', Lead:'#F59E0B', 'Em risco':'#EF4444' }[customer.segment] || '#6B7280';
-  const riskColor = { low:'#10B981', medium:'#F59E0B', high:'#EF4444' }[customer.risk];
-  const riskLabel = { low:'Baixo', medium:'Médio', high:'Alto' }[customer.risk];
+  const riskColor = { low:'#10B981', medium:'#F59E0B', high:'#EF4444' }[customer.risk] || 'var(--g-400)';
+  const riskLabel = { low:'Baixo', medium:'Médio', high:'Alto' }[customer.risk] || '—';
   return (
     <div className="card crm-detail">
       <div className="crm-detail-hero">
@@ -719,10 +773,10 @@ const Customer360 = ({ customer, onNavigate }) => {
         </div>
       </div>
       <div className="crm-360-stats">
-        <div><div className="crm-360-stat-l">LTV</div><div className="crm-360-stat-v">{customer.lifetime}</div></div>
-        <div><div className="crm-360-stat-l">Pedidos</div><div className="crm-360-stat-v">{customer.orders}</div></div>
-        <div><div className="crm-360-stat-l">NPS</div><div className="crm-360-stat-v" style={{ color: customer.nps >= 9 ? '#10B981' : customer.nps >= 7 ? '#F59E0B' : '#EF4444' }}>{customer.nps ?? '—'}</div></div>
-        <div><div className="crm-360-stat-l">Último pedido</div><div className="crm-360-stat-v" style={{ fontSize: 16 }}>{customer.last}</div></div>
+        <div><div className="crm-360-stat-l">LTV</div><div className="crm-360-stat-v">{customer.lifetime ?? '—'}</div></div>
+        <div><div className="crm-360-stat-l">Pedidos</div><div className="crm-360-stat-v">{customer.orders ?? '—'}</div></div>
+        <div><div className="crm-360-stat-l">NPS</div><div className="crm-360-stat-v" style={{ color: customer.nps == null ? 'var(--g-400)' : customer.nps >= 9 ? '#10B981' : customer.nps >= 7 ? '#F59E0B' : '#EF4444' }}>{customer.nps ?? '—'}</div></div>
+        <div><div className="crm-360-stat-l">Último pedido</div><div className="crm-360-stat-v" style={{ fontSize: 16 }}>{customer.last ?? '—'}</div></div>
         <div><div className="crm-360-stat-l">Risco churn</div><div className="crm-360-stat-v" style={{ color: riskColor, fontSize: 16 }}><span style={{ display:'inline-block', width: 8, height: 8, borderRadius:'50%', background: riskColor, marginRight: 6 }}/>{riskLabel}</div></div>
       </div>
       <div className="crm-360-tags">
@@ -744,6 +798,14 @@ const Customer360 = ({ customer, onNavigate }) => {
   );
 };
 
+// Estado vazio honesto reutilizável para abas sem tabela de apoio cabeada.
+const TabEmpty = ({ icon, children }) => (
+  <div style={{ padding: '40px 20px', textAlign:'center', color:'var(--g-400)', fontSize: 13, lineHeight: 1.6 }}>
+    {icon && <div style={{ marginBottom: 10, opacity: 0.6 }}><Icon name={icon} size={28}/></div>}
+    {children}
+  </div>
+);
+
 const OverviewTab = ({ customer }) => (
   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap: 16 }}>
     <div className="crm-card-mini" style={{ background:'var(--g-50)', color:'var(--g-900)', borderColor:'var(--g-200)' }}>
@@ -752,9 +814,11 @@ const OverviewTab = ({ customer }) => (
         <span style={{ fontSize: 11, fontWeight: 800, color:'var(--red-light)', letterSpacing: 1, textTransform:'uppercase' }}>DELI · Insights</span>
       </div>
       <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.7, color:'var(--g-700)' }}>
-        <li>Cliente {customer.segment.toLowerCase()} desde 2024 — ticket médio R$ {(parseFloat(customer.lifetime.replace(/[^\d]/g,''))/Math.max(customer.orders,1)).toFixed(0)}</li>
-        <li>{customer.nps >= 8 ? 'NPS excelente — bom candidato para programa de indicação' : 'NPS abaixo do ideal — atenção nos próximos contatos'}</li>
-        <li>{customer.risk === 'high' ? 'Risco alto: 0 pedidos nos últimos 30 dias' : 'Engajamento saudável nos últimos 30 dias'}</li>
+        <li>Segmento atual: {customer.segment}</li>
+        {customer.tags.length > 0
+          ? <li>Tags: {customer.tags.map(t => `#${t}`).join(' ')}</li>
+          : <li>Sem tags atribuídas</li>}
+        <li style={{ color:'var(--g-500)' }}>Métricas de pedidos/NPS ainda não conectadas para este cliente.</li>
       </ul>
     </div>
     <div className="crm-card-mini">
@@ -769,105 +833,31 @@ const OverviewTab = ({ customer }) => (
     </div>
     <div className="crm-card-mini" style={{ gridColumn:'1 / -1' }}>
       <div style={{ fontSize: 11, fontWeight: 700, color:'var(--g-500)', textTransform:'uppercase', letterSpacing: 1, marginBottom: 12 }}>Linha do tempo</div>
-      <div className="crm-timeline">
-        {[
-          { agent:'cora',  text:'Negociou parcelamento em 2x', time:'há 2h' },
-          { agent:'breno', text:'Respondeu dúvida sobre cardápio', time:'ontem' },
-          { agent:'lara',  text:'Cliente engajou no post de Instagram', time:'2 dias' },
-          { agent:'deli',  text:'Marcado como VIP automaticamente', time:'5 dias' },
-          { agent:'breno', text:'Primeira mensagem no WhatsApp', time:'45 dias' },
-        ].map((e, i) => (
-          <div key={i} className="crm-timeline-item">
-            <AgentAvatar id={e.agent} size={26}/>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, color:'var(--g-900)' }}>{e.text}</div>
-              <div style={{ fontSize: 10, color:'var(--g-500)', marginTop: 2 }}>{e.time}</div>
-            </div>
-          </div>
-        ))}
-      </div>
+      <TabEmpty>Nenhum evento registrado para este cliente ainda.</TabEmpty>
     </div>
   </div>
 );
 
-const OrdersTab = ({ customer }) => {
-  const fakeOrders = [
-    { id: '#22847', date: '22/04/2026', items:'1 pizza calabresa + 2 refri', total:'R$ 89,00', status:'entregue' },
-    { id: '#22651', date: '15/04/2026', items:'1 pizza margherita + borda', total:'R$ 52,00', status:'entregue' },
-    { id: '#22389', date: '08/04/2026', items:'1 pizza portuguesa + suco',  total:'R$ 67,00', status:'entregue' },
-    { id: '#22112', date: '01/04/2026', items:'2 pizzas pequenas',          total:'R$ 78,00', status:'entregue' },
-  ];
-  return (
-    <table className="crm-table">
-      <thead><tr><th>Pedido</th><th>Data</th><th>Itens</th><th>Total</th><th>Status</th></tr></thead>
-      <tbody>
-        {fakeOrders.map(o => (
-          <tr key={o.id}>
-            <td style={{ fontWeight: 700 }}>{o.id}</td>
-            <td>{o.date}</td>
-            <td>{o.items}</td>
-            <td style={{ fontWeight: 700, color:'var(--g-900)' }}>{o.total}</td>
-            <td><span className="badge badge-green">{o.status}</span></td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-};
-
-const ChatsTab = ({ customer }) => (
-  <div style={{ display:'flex', flexDirection:'column', gap: 8 }}>
-    {[
-      { protocol: '#13072', date: 'Hoje, 10:42', last: 'Tá, pode cancelar então. Vocês sempre…', agent: 'deli', dept:'Atendimento' },
-      { protocol: '#13050', date: '20/04, 18:20', last: 'Obrigada! Ficou tudo perfeito 😍',         agent: 'breno', dept:'Atendimento' },
-      { protocol: '#13042', date: '15/04, 14:00', last: 'Quero fazer pedido pra hoje',              agent: 'breno', dept:'Vendas' },
-    ].map(c => (
-      <div key={c.protocol} className="crm-chat-row">
-        <AgentAvatar id={c.agent} size={32}/>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', gap: 8 }}>
-            <span style={{ fontWeight: 700, color:'var(--g-900)' }}>{c.protocol}</span>
-            <span style={{ fontSize: 11, color:'var(--g-500)' }}>{c.date}</span>
-          </div>
-          <div style={{ fontSize: 12, color:'var(--g-600)', marginTop: 4, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.last}</div>
-        </div>
-        <span className="badge badge-gray">{c.dept}</span>
-      </div>
-    ))}
-  </div>
+const OrdersTab = () => (
+  <TabEmpty icon="paper">Nenhum pedido registrado para este cliente.</TabEmpty>
 );
 
-const PaymentsTab = ({ customer }) => (
-  <table className="crm-table">
-    <thead><tr><th>Data</th><th>Método</th><th>Valor</th><th>Status</th></tr></thead>
-    <tbody>
-      {[
-        { d:'22/04', m:'Pix',            v:'R$ 89,00' },
-        { d:'15/04', m:'Cartão crédito', v:'R$ 52,00' },
-        { d:'08/04', m:'Pix',            v:'R$ 67,00' },
-        { d:'01/04', m:'Boleto',         v:'R$ 78,00' },
-      ].map((p, i) => (
-        <tr key={i}>
-          <td>{p.d}</td>
-          <td>{p.m}</td>
-          <td style={{ fontWeight: 700 }}>{p.v}</td>
-          <td><span className="badge badge-green">pago</span></td>
-        </tr>
-      ))}
-    </tbody>
-  </table>
+const ChatsTab = () => (
+  <TabEmpty icon="msg">Nenhuma conversa vinculada a este cliente.</TabEmpty>
 );
 
-const NotesTab = ({ customer }) => (
+const PaymentsTab = () => (
+  <TabEmpty icon="dollar">Nenhum pagamento registrado para este cliente.</TabEmpty>
+);
+
+const NotesTab = () => (
   <div>
     <textarea
       className="input"
       placeholder="Adicione uma nota interna sobre este cliente…"
       style={{ width:'100%', minHeight: 100, resize:'vertical' }}
-      defaultValue={'Cliente sensível a atrasos. Sempre oferecer cortesia ao primeiro sinal de queixa.\n\nGosta de pizza calabresa com borda recheada.'}
     />
-    <div style={{ marginTop: 12, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-      <div style={{ fontSize: 11, color:'var(--g-500)' }}>Última edição: ontem por Wandson</div>
+    <div style={{ marginTop: 12, display:'flex', justifyContent:'flex-end', alignItems:'center' }}>
       <button className="btn-primary" style={{ fontSize: 13 }}>Salvar nota</button>
     </div>
   </div>

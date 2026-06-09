@@ -581,38 +581,6 @@ export const PROTOCOLS = [
   { id: '#13061', client: 'Juliana Campos',    dept: 'Cobrança',    status: 'closed', opened: '05/05 16:00', sla: 'ok',         agent: 'cora',  channel: 'WhatsApp',  unread: 0,  duration: '4h' },
 ];
 
-// CRM — Customers (full base for CRM tab, multi-tenant)
-export const CRM_CUSTOMERS = {
-  'pizza-joao': [
-    { id: 'cu1',  name: 'Carlos Mendes',     avatar: 'CM', phone: '+55 11 98765-4321', email: 'carlos.mendes@email.com', segment: 'VIP',        lifetime: 'R$ 4.820', orders: 47, last: '22/04', nps: 9,    risk: 'low',    tags: ['VIP','frequente'],         channel: 'WhatsApp', city: 'São Paulo' },
-    { id: 'cu2',  name: 'Mariana Souza',     avatar: 'MS', phone: '+55 11 91111-2222', email: 'mariana@email.com',       segment: 'Recorrente', lifetime: 'R$ 1.940', orders: 14, last: '24/04', nps: 10,   risk: 'low',    tags: ['recorrente'],              channel: 'WhatsApp', city: 'São Paulo' },
-    { id: 'cu3',  name: 'Fernanda Oliveira', avatar: 'FO', phone: '+55 11 93333-1100', email: 'fer@email.com',           segment: 'Em risco',   lifetime: 'R$ 980',   orders: 8,  last: '12/04', nps: 6,    risk: 'high',   tags: ['inadimplente'],            channel: 'WhatsApp', city: 'Guarulhos' },
-    { id: 'cu4',  name: 'Bruno Silva',       avatar: 'BS', phone: '+55 11 94444-2200', email: 'bruno@email.com',         segment: 'Novo',       lifetime: 'R$ 89',    orders: 1,  last: '01/05', nps: 8,    risk: 'low',    tags: ['novo'],                    channel: 'iFood',    city: 'São Paulo' },
-    { id: 'cu5',  name: 'Ana Paula Ribeiro', avatar: 'AP', phone: '+55 11 95555-3300', email: 'ana@email.com',           segment: 'Em risco',   lifetime: 'R$ 2.100', orders: 9,  last: '15/03', nps: 4,    risk: 'high',   tags: ['inadimplente','crítico'],  channel: 'WhatsApp', city: 'São Paulo' },
-    { id: 'cu6',  name: 'Ricardo Tavares',   avatar: 'RT', phone: '+55 11 96666-4400', email: 'ricardo@email.com',       segment: 'Recorrente', lifetime: 'R$ 1.420', orders: 12, last: '03/05', nps: 9,    risk: 'low',    tags: ['fidelidade'],              channel: 'WhatsApp', city: 'São Caetano' },
-    { id: 'cu7',  name: 'Juliana Campos',    avatar: 'JC', phone: '+55 11 97777-5500', email: 'juliana@email.com',       segment: 'Recorrente', lifetime: 'R$ 720',   orders: 6,  last: '02/05', nps: 8,    risk: 'low',    tags: ['estudante'],               channel: 'WhatsApp', city: 'São Paulo' },
-    { id: 'cu8',  name: 'Marcelo Duarte',    avatar: 'MD', phone: '+55 11 98888-6600', email: 'marcelo@email.com',       segment: 'Em risco',   lifetime: 'R$ 6.300', orders: 21, last: '02/03', nps: 3,    risk: 'high',   tags: ['VIP','crítico'],           channel: 'WhatsApp', city: 'São Paulo' },
-    { id: 'cu9',  name: 'Patrícia Nunes',    avatar: 'PN', phone: '+55 11 99999-7700', email: 'patricia@email.com',      segment: 'Recorrente', lifetime: 'R$ 1.180', orders: 9,  last: '04/05', nps: 9,    risk: 'low',    tags: ['fidelidade'],              channel: 'WhatsApp', city: 'Diadema' },
-    { id: 'cu10', name: 'Rafael Alves',      avatar: 'RA', phone: '+55 11 91010-1010', email: '—',                       segment: 'Lead',       lifetime: 'R$ 0',     orders: 0,  last: '07/05', nps: null, risk: 'medium', tags: ['lead-frio'],               channel: 'WhatsApp', city: 'São Paulo' },
-    { id: 'cu11', name: 'João Paulo R.',     avatar: 'JP', phone: '+55 11 92020-2020', email: 'jp@email.com',            segment: 'Lead',       lifetime: 'R$ 0',     orders: 0,  last: '07/05', nps: null, risk: 'medium', tags: ['lead'],                    channel: 'iFood',    city: 'Osasco' },
-    { id: 'cu12', name: 'Lucas Fernandes',   avatar: 'LF', phone: '+55 11 93030-3030', email: 'lucas@email.com',         segment: 'Novo',       lifetime: 'R$ 67',    orders: 1,  last: '06/05', nps: 8,    risk: 'low',    tags: ['novo'],                    channel: 'WhatsApp', city: 'São Paulo' },
-  ],
-  'burger': [
-    { id: 'bcu1', name: 'Pedro Costa',   avatar: 'PC', phone: '+55 11 91111-9999', email: 'pedro@email.com',  segment: 'Recorrente', lifetime: 'R$ 820', orders: 9, last: '01/05', nps: 9, risk: 'low',  tags: ['hambúrguer-lover'], channel: 'WhatsApp', city: 'São Paulo' },
-    { id: 'bcu2', name: 'Henrique Lima', avatar: 'HL', phone: '+55 11 92222-9999', email: 'h.lima@email.com', segment: 'Em risco',   lifetime: 'R$ 420', orders: 3, last: '02/05', nps: 6, risk: 'high', tags: ['inadimplente'],     channel: 'WhatsApp', city: 'Santo André' },
-    { id: 'bcu3', name: 'Camila Reis',   avatar: 'CR', phone: '+55 11 93333-9999', email: 'camila@email.com', segment: 'Recorrente', lifetime: 'R$ 540', orders: 5, last: '05/05', nps: 8, risk: 'low',  tags: ['vip'],              channel: 'iFood',    city: 'São Paulo' },
-  ],
-  'acai': [
-    { id: 'acu1', name: 'Bia Ramos', avatar: 'BR', phone: '+55 11 94444-9999', email: 'bia@email.com', segment: 'VIP', lifetime: 'R$ 1.230', orders: 18, last: '07/05', nps: 10, risk: 'low', tags: ['VIP'], channel: 'WhatsApp', city: 'São Paulo' },
-  ],
-  'sushi': [
-    { id: 'scu1', name: 'Lucas Wei', avatar: 'LW', phone: '+55 11 95555-9999', email: 'lucas.wei@email.com', segment: 'Em risco', lifetime: 'R$ 2.100', orders: 6, last: '30/04', nps: 2, risk: 'high', tags: ['avaliação-ruim'], channel: 'WhatsApp', city: 'São Paulo' },
-  ],
-  'tapioca': [
-    { id: 'tcu1', name: 'Dona Zélia', avatar: 'DZ', phone: '+55 11 96666-9999', email: '—', segment: 'Recorrente', lifetime: 'R$ 380', orders: 21, last: '07/05', nps: 10, risk: 'low', tags: ['fiel'], channel: 'WhatsApp', city: 'São Paulo' },
-  ],
-};
-
 // Reports extra — VERA analytics (estrutura estendida para gráficos avançados)
 // Nota: REPORTS_DATA já existe acima com estrutura de KPIs/listas. Esta versão (REPORTS_DATA_EXTRA)
 // contém dados de séries temporais, canais, funil e performance por agente.
