@@ -187,19 +187,19 @@ function EditNameModal({ member, tenantDbId, onClose, onSuccess }) {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 14, padding: 28, width: 380, position: 'relative' }}>
-        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--g-400)', cursor: 'pointer', fontSize: 18 }}>✕</button>
-        <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--g-100)' }}>Editar nome</h3>
-        <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--g-400)' }}>{member.email}</p>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(28,27,26,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: 28, boxShadow: '0 12px 40px rgba(0,0,0,0.18)', width: 380, position: 'relative' }}>
+        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--tx2)', cursor: 'pointer', fontSize: 18 }}>✕</button>
+        <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--tx)' }}>Editar nome</h3>
+        <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--tx2)' }}>{member.email}</p>
         <input
           type="text"
           value={name}
           onChange={e => setName(e.target.value)}
           placeholder="Nome completo"
-          style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #333', borderRadius: 8, color: 'var(--g-100)', fontSize: 14, marginBottom: 16, boxSizing: 'border-box' }}
+          style={{ width: '100%', padding: '10px 12px', background: '#faf9f8', border: '1px solid var(--line)', borderRadius: 8, color: 'var(--tx)', fontSize: 14, marginBottom: 16, boxSizing: 'border-box' }}
         />
-        {error && <div style={{ marginBottom: 12, fontSize: 12, color: '#ef4444', background: '#ef444415', padding: '8px 12px', borderRadius: 6 }}>{error}</div>}
+        {error && <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--red)', background: 'var(--red-soft)', padding: '8px 12px', borderRadius: 6 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button className="btn-ghost" onClick={onClose}>Cancelar</button>
           <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Salvando...' : 'Salvar'}</button>
@@ -229,15 +229,15 @@ function EditRoleModal({ member, tenantDbId, onClose, onSuccess }) {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 14, padding: 28, width: 380, position: 'relative' }}>
-        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--g-400)', cursor: 'pointer', fontSize: 18 }}>✕</button>
-        <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--g-100)' }}>Editar permissão</h3>
-        <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--g-400)' }}>{member.full_name}</p>
-        <select value={role} onChange={e => setRole(e.target.value)} style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #333', borderRadius: 8, color: 'var(--g-100)', fontSize: 14, marginBottom: 16 }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(28,27,26,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: 28, boxShadow: '0 12px 40px rgba(0,0,0,0.18)', width: 380, position: 'relative' }}>
+        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--tx2)', cursor: 'pointer', fontSize: 18 }}>✕</button>
+        <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--tx)' }}>Editar permissão</h3>
+        <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--tx2)' }}>{member.full_name}</p>
+        <select value={role} onChange={e => setRole(e.target.value)} style={{ width: '100%', padding: '10px 12px', background: '#faf9f8', border: '1px solid var(--line)', borderRadius: 8, color: 'var(--tx)', fontSize: 14, marginBottom: 16 }}>
           {roles.map(r => <option key={r} value={r}>{ROLE_LABEL[r] || r}</option>)}
         </select>
-        {error && <div style={{ marginBottom: 12, fontSize: 12, color: '#ef4444', background: '#ef444415', padding: '8px 12px', borderRadius: 6 }}>{error}</div>}
+        {error && <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--red)', background: 'var(--red-soft)', padding: '8px 12px', borderRadius: 6 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button className="btn-ghost" onClick={onClose}>Cancelar</button>
           <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Salvando...' : 'Salvar'}</button>
@@ -264,15 +264,15 @@ function RemoveUserModal({ member, tenantDbId, onClose, onSuccess }) {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 14, padding: 28, width: 380, position: 'relative' }}>
-        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--g-400)', cursor: 'pointer', fontSize: 18 }}>✕</button>
-        <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--g-100)' }}>Remover usuário</h3>
-        <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--g-400)' }}>Tem certeza que deseja remover <strong style={{ color: 'var(--g-200)' }}>{member.full_name}</strong> do tenant? Esta ação não pode ser desfeita.</p>
-        {error && <div style={{ marginBottom: 12, fontSize: 12, color: '#ef4444', background: '#ef444415', padding: '8px 12px', borderRadius: 6 }}>{error}</div>}
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(28,27,26,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: 28, boxShadow: '0 12px 40px rgba(0,0,0,0.18)', width: 380, position: 'relative' }}>
+        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--tx2)', cursor: 'pointer', fontSize: 18 }}>✕</button>
+        <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--tx)' }}>Remover usuário</h3>
+        <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--tx2)' }}>Tem certeza que deseja remover <strong style={{ color: 'var(--tx)' }}>{member.full_name}</strong> do tenant? Esta ação não pode ser desfeita.</p>
+        {error && <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--red)', background: 'var(--red-soft)', padding: '8px 12px', borderRadius: 6 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button className="btn-ghost" onClick={onClose}>Cancelar</button>
-          <button style={{ padding: '8px 16px', background: '#ef4444', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }} onClick={handleRemove} disabled={removing}>{removing ? 'Removendo...' : 'Remover'}</button>
+          <button style={{ padding: '8px 16px', background: 'var(--red)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }} onClick={handleRemove} disabled={removing}>{removing ? 'Removendo...' : 'Remover'}</button>
         </div>
       </div>
     </div>
@@ -304,16 +304,16 @@ function InviteUserModal({ tenantDbId, onClose, onSuccess }) {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 14, padding: 28, width: 400, position: 'relative' }}>
-        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--g-400)', cursor: 'pointer', fontSize: 18 }}>✕</button>
-        <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--g-100)' }}>Convidar usuário</h3>
-        <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--g-400)' }}>O convite será enviado por e-mail.</p>
-        <input type="email" placeholder="email@empresa.com" value={email} onChange={e => setEmail(e.target.value)} style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #333', borderRadius: 8, color: 'var(--g-100)', fontSize: 14, marginBottom: 12, boxSizing: 'border-box' }} />
-        <select value={role} onChange={e => setRole(e.target.value)} style={{ width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #333', borderRadius: 8, color: 'var(--g-100)', fontSize: 14, marginBottom: 16 }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(28,27,26,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: 28, boxShadow: '0 12px 40px rgba(0,0,0,0.18)', width: 400, position: 'relative' }}>
+        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--tx2)', cursor: 'pointer', fontSize: 18 }}>✕</button>
+        <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--tx)' }}>Convidar usuário</h3>
+        <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--tx2)' }}>O convite será enviado por e-mail.</p>
+        <input type="email" placeholder="email@empresa.com" value={email} onChange={e => setEmail(e.target.value)} style={{ width: '100%', padding: '10px 12px', background: '#faf9f8', border: '1px solid var(--line)', borderRadius: 8, color: 'var(--tx)', fontSize: 14, marginBottom: 12, boxSizing: 'border-box' }} />
+        <select value={role} onChange={e => setRole(e.target.value)} style={{ width: '100%', padding: '10px 12px', background: '#faf9f8', border: '1px solid var(--line)', borderRadius: 8, color: 'var(--tx)', fontSize: 14, marginBottom: 16 }}>
           {invitableRoles.map(r => <option key={r} value={r}>{ROLE_LABEL[r] || r}</option>)}
         </select>
-        {error && <div style={{ marginBottom: 12, fontSize: 12, color: '#ef4444', background: '#ef444415', padding: '8px 12px', borderRadius: 6 }}>{error}</div>}
+        {error && <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--red)', background: 'var(--red-soft)', padding: '8px 12px', borderRadius: 6 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button className="btn-ghost" onClick={onClose}>Cancelar</button>
           <button className="btn-primary" onClick={handleInvite} disabled={saving}>{saving ? 'Enviando...' : 'Enviar convite'}</button>
@@ -360,15 +360,15 @@ function ScreenPermissionsModal({ member, tenantDbId, onClose }) {
   }, {});
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 14, padding: 28, width: 520, maxHeight: '80vh', overflow: 'auto', position: 'relative' }}>
-        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--g-400)', cursor: 'pointer', fontSize: 18 }}>✕</button>
-        <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--g-100)' }}>Acesso às telas</h3>
-        <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--g-400)' }}>
-          {member.full_name} · <span style={{ color: 'var(--g-300)' }}>{ROLE_LABEL[member.role] || member.role}</span>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(28,27,26,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: 28, boxShadow: '0 12px 40px rgba(0,0,0,0.18)', width: 520, maxHeight: '80vh', overflow: 'auto', position: 'relative' }}>
+        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--tx2)', cursor: 'pointer', fontSize: 18 }}>✕</button>
+        <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--tx)' }}>Acesso às telas</h3>
+        <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--tx2)' }}>
+          {member.full_name} · <span style={{ color: 'var(--tx2)' }}>{ROLE_LABEL[member.role] || member.role}</span>
         </p>
         {loading ? (
-          <div style={{ color: 'var(--g-400)', fontSize: 13, textAlign: 'center', padding: 40 }}>Carregando...</div>
+          <div style={{ color: 'var(--tx2)', fontSize: 13, textAlign: 'center', padding: 40 }}>Carregando...</div>
         ) : (
           Object.entries(groups).map(([group, screens]) => (
             <div key={group}>
@@ -379,9 +379,9 @@ function ScreenPermissionsModal({ member, tenantDbId, onClose }) {
                 const effective = explicit !== undefined ? explicit : roleDefault;
                 const hasOverride = explicit !== undefined;
                 return (
-                  <div key={screen.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #222' }}>
+                  <div key={screen.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
                     <div>
-                      <div style={{ fontSize: 13, color: effective ? 'var(--g-100)' : 'var(--g-500)' }}>{screen.label}</div>
+                      <div style={{ fontSize: 13, color: effective ? 'var(--tx)' : 'var(--tx2)' }}>{screen.label}</div>
                       <div style={{ fontSize: 11, color: 'var(--g-600)', marginTop: 2 }}>
                         {hasOverride ? (explicit !== roleDefault ? '⚡ override manual' : '✓ explícito') : 'padrão do cargo'}
                       </div>
@@ -391,7 +391,7 @@ function ScreenPermissionsModal({ member, tenantDbId, onClose }) {
                       disabled={saving === screen.id}
                       style={{
                         width: 44, height: 24, borderRadius: 12, flexShrink: 0,
-                        background: effective ? '#22c55e' : '#374151',
+                        background: effective ? 'var(--green)' : '#d1d5db',
                         border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.15s',
                         opacity: saving === screen.id ? 0.6 : 1,
                       }}
@@ -480,27 +480,27 @@ const UsersSettings = ({ tenantDbId }) => {
                     <div style={{ position: 'relative', display: 'inline-block' }}>
                     <button
                       onClick={e => { e.stopPropagation(); setActiveMenu(activeMenu === u.user_id ? null : u.user_id); }}
-                      style={{ padding: '4px 10px', background: 'none', border: '1px solid #444', borderRadius: 6, color: '#ccc', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      style={{ padding: '4px 10px', background: 'none', border: '1px solid var(--line)', borderRadius: 6, color: 'var(--tx2)', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}
                     >
                       Ações ▾
                     </button>
                     {activeMenu === u.user_id && (
-                      <div style={{ position: 'absolute', right: 0, top: '100%', zIndex: 1000, background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, minWidth: 180, boxShadow: '0 8px 24px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
+                      <div style={{ position: 'absolute', right: 0, top: '100%', zIndex: 1000, background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8, minWidth: 180, boxShadow: '0 8px 24px rgba(0,0,0,0.18)', overflow: 'hidden' }}>
                         <button
                           onClick={() => { setEditingNameMember(u); setActiveMenu(null); }}
-                          style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--g-200)', fontSize: 13, textAlign: 'left', cursor: 'pointer' }}
+                          style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--tx)', fontSize: 13, textAlign: 'left', cursor: 'pointer' }}
                         >Editar nome</button>
                         <button
                           onClick={() => { setEditingMember(u); setActiveMenu(null); }}
-                          style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--g-200)', fontSize: 13, textAlign: 'left', cursor: 'pointer' }}
+                          style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--tx)', fontSize: 13, textAlign: 'left', cursor: 'pointer' }}
                         >Editar permissão</button>
                         <button
                           onClick={() => { setScreenPermsMember(u); setActiveMenu(null); }}
-                          style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--g-200)', fontSize: 13, textAlign: 'left', cursor: 'pointer' }}
+                          style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--tx)', fontSize: 13, textAlign: 'left', cursor: 'pointer' }}
                         >Gerenciar acesso às telas</button>
                         <button
                           onClick={() => { setRemovingMember(u); setActiveMenu(null); }}
-                          style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: '#ef4444', fontSize: 13, textAlign: 'left', cursor: 'pointer' }}
+                          style={{ display: 'block', width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--red)', fontSize: 13, textAlign: 'left', cursor: 'pointer' }}
                         >Remover usuário</button>
                       </div>
                     )}
