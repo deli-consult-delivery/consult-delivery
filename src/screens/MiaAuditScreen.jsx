@@ -1,16 +1,23 @@
 /**
  * MIA-04: Audit Screen — logs de privacidade do worker MIA
  *
- * Rota: 'mia-audit'
+ * Rota: 'mia' (Console v2 · LEGADO → wrapper .cv2-legado, fundo claro)
  * Acesso: admin apenas
  *
  * Mostra últimas 100 runs do worker por loja, com latência,
  * tokens, sugestões geradas e erros.
+ *
+ * Visual: tema claro do Console v2 (cv2-*), consistente com as demais
+ * telas reusadas do clássico em fundo claro (#232–235).
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { getMiaAudit } from '../lib/miaApi.js';
+
+const inp = { background: '#faf9f8', border: '1px solid var(--line)', borderRadius: 4, padding: '8px 11px', fontSize: 13, outline: 'none', fontWeight: 500, color: 'var(--tx)', fontFamily: 'inherit', minWidth: 240 };
+const th = { textAlign: 'left', padding: '8px 10px', color: 'var(--tx2)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px', fontSize: 10, borderBottom: '1px solid var(--line)' };
+const td = { padding: '7px 10px', fontSize: 11.5, color: 'var(--tx)', whiteSpace: 'nowrap' };
 
 export default function MiaAuditScreen({ tenantDbId }) {
   const [lojas, setLojas]         = useState([]);
@@ -52,63 +59,37 @@ export default function MiaAuditScreen({ tenantDbId }) {
     });
   }
 
+  const comLat = registros.filter(r => r.latencia_ms);
   const stats = registros.length > 0 ? {
-    total:      registros.length,
-    comErro:    registros.filter(r => r.erro).length,
-    mediaLat:   Math.round(registros.filter(r => r.latencia_ms).reduce((s, r) => s + r.latencia_ms, 0) / registros.filter(r => r.latencia_ms).length) || 0,
-    sugestoes:  registros.reduce((s, r) => s + (r.sugestoes_geradas || 0), 0),
+    total:       registros.length,
+    comErro:     registros.filter(r => r.erro).length,
+    mediaLat:    comLat.length ? Math.round(comLat.reduce((s, r) => s + r.latencia_ms, 0) / comLat.length) : 0,
+    sugestoes:   registros.reduce((s, r) => s + (r.sugestoes_geradas || 0), 0),
     jsonInvalid: registros.filter(r => r.erro === 'json_invalid').length,
   } : null;
 
   return (
-    <div style={{ padding: 24, maxWidth: 1000, color: 'rgba(255,255,255,0.85)' }}>
-      <h1 style={{ margin: '0 0 4px', fontSize: 20, fontWeight: 700, color: 'white' }}>
-        🔍 Audit MIA — Monitor IA
-      </h1>
-      <p style={{ margin: '0 0 20px', fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
-        Logs de privacidade de cada run do worker (últimas 100 chamadas por loja)
-      </p>
+    <div className="cv2-ct">
+      <h1>Audit MIA — Monitor IA</h1>
+      <div className="cv2-rule" />
+      <div className="cv2-sub">Logs de privacidade de cada run do worker (últimas 100 chamadas por loja).</div>
 
       {/* Selector de loja */}
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 20 }}>
-        <select
-          value={lojaId}
-          onChange={e => setLojaId(e.target.value)}
-          style={{
-            background: 'rgba(255,255,255,0.07)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: 6,
-            color: 'white',
-            fontSize: 13,
-            padding: '7px 12px',
-            minWidth: 240,
-          }}
-        >
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 18, flexWrap: 'wrap' }}>
+        <select value={lojaId} onChange={e => setLojaId(e.target.value)} style={inp}>
           <option value="">Selecionar loja…</option>
           {lojas.map(l => (
             <option key={l.id} value={l.id}>{l.nome}</option>
           ))}
         </select>
-        <button
-          onClick={load}
-          disabled={!lojaId || loading}
-          style={{
-            padding: '7px 16px',
-            background: 'rgba(255,255,255,0.07)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: 6,
-            color: 'rgba(255,255,255,0.7)',
-            fontSize: 12,
-            cursor: !lojaId || loading ? 'default' : 'pointer',
-          }}
-        >
+        <button className="cv2-btn sec" onClick={load} disabled={!lojaId || loading}>
           {loading ? 'Carregando…' : '↻ Atualizar'}
         </button>
       </div>
 
       {/* Stats summary */}
       {stats && (
-        <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+        <div className="cv2-kpis">
           {[
             { label: 'Total runs', value: stats.total },
             { label: 'Com erro', value: stats.comErro, warn: stats.comErro > 0 },
@@ -116,85 +97,68 @@ export default function MiaAuditScreen({ tenantDbId }) {
             { label: 'Sugestões geradas', value: stats.sugestoes },
             { label: 'JSON inválido', value: stats.jsonInvalid, warn: stats.jsonInvalid > 0 },
           ].map(s => (
-            <div key={s.label} style={{
-              background: 'rgba(255,255,255,0.04)',
-              border: `1px solid ${s.warn ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.08)'}`,
-              borderRadius: 8,
-              padding: '10px 16px',
-              minWidth: 120,
-            }}>
-              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
-                {s.label}
-              </div>
-              <div style={{ fontSize: 20, fontWeight: 700, color: s.warn ? '#EF4444' : 'white' }}>
-                {s.value}
-              </div>
+            <div key={s.label} className="cv2-kpi">
+              <div className="l">{s.label}</div>
+              <div className="v" style={s.warn ? { color: 'var(--red)' } : undefined}>{s.value}</div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Tabela de registros */}
+      {/* Estados vazios */}
       {lojaId && !loading && registros.length === 0 && (
-        <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>
+        <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)', fontSize: 13 }}>
           Nenhum registro de audit para esta loja.
         </div>
       )}
+      {!lojaId && (
+        <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)', fontSize: 13 }}>
+          Selecione uma loja para ver os logs do worker MIA.
+        </div>
+      )}
 
+      {/* Tabela de registros */}
       {registros.length > 0 && (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-            <thead>
-              <tr>
-                {['Data', 'JID', 'Msgs', 'Modelo', 'Latência', 'Tokens in/out', 'Sugestões', 'Erro'].map(h => (
-                  <th key={h} style={{
-                    textAlign: 'left',
-                    padding: '6px 10px',
-                    color: 'rgba(255,255,255,0.45)',
-                    fontWeight: 600,
-                    textTransform: 'uppercase',
-                    letterSpacing: 0.4,
-                    fontSize: 10,
-                    borderBottom: '1px solid rgba(255,255,255,0.08)',
-                  }}>
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {registros.map(r => (
-                <tr key={r.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                  <td style={{ padding: '7px 10px', color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap' }}>
-                    {formatarData(r.created_at)}
-                  </td>
-                  <td style={{ padding: '7px 10px', fontFamily: 'monospace', color: 'rgba(255,255,255,0.75)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {r.remote_jid || '—'}
-                  </td>
-                  <td style={{ padding: '7px 10px', color: 'white' }}>{r.msg_count}</td>
-                  <td style={{ padding: '7px 10px', color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap' }}>
-                    {r.modelo_usado?.replace(':cloud', '') || '—'}
-                  </td>
-                  <td style={{ padding: '7px 10px', color: r.latencia_ms > 10000 ? '#EF4444' : 'rgba(255,255,255,0.75)', whiteSpace: 'nowrap' }}>
-                    {r.latencia_ms ? `${r.latencia_ms}ms` : '—'}
-                  </td>
-                  <td style={{ padding: '7px 10px', color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap' }}>
-                    {r.tokens_in ? `${r.tokens_in} / ${r.tokens_out || '?'}` : '—'}
-                  </td>
-                  <td style={{ padding: '7px 10px', color: r.sugestoes_geradas > 0 ? '#22C55E' : 'rgba(255,255,255,0.4)' }}>
-                    {r.sugestoes_geradas}
-                  </td>
-                  <td style={{ padding: '7px 10px', color: '#EF4444', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {r.erro ? (
-                      <span title={r.erro}>{r.erro.slice(0, 40)}{r.erro.length > 40 ? '…' : ''}</span>
-                    ) : (
-                      <span style={{ color: '#22C55E' }}>✓</span>
-                    )}
-                  </td>
+        <div className="cv2-card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  {['Data', 'JID', 'Msgs', 'Modelo', 'Latência', 'Tokens in/out', 'Sugestões', 'Erro'].map(h => (
+                    <th key={h} style={th}>{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {registros.map(r => (
+                  <tr key={r.id} style={{ borderBottom: '1px solid var(--line)' }}>
+                    <td style={{ ...td, color: 'var(--tx2)' }}>{formatarData(r.created_at)}</td>
+                    <td style={{ ...td, fontFamily: 'monospace', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {r.remote_jid || '—'}
+                    </td>
+                    <td style={td}>{r.msg_count}</td>
+                    <td style={{ ...td, color: 'var(--tx2)' }}>{r.modelo_usado?.replace(':cloud', '') || '—'}</td>
+                    <td style={{ ...td, color: r.latencia_ms > 10000 ? 'var(--red)' : 'var(--tx)' }}>
+                      {r.latencia_ms ? `${r.latencia_ms}ms` : '—'}
+                    </td>
+                    <td style={{ ...td, color: 'var(--tx2)' }}>
+                      {r.tokens_in ? `${r.tokens_in} / ${r.tokens_out || '?'}` : '—'}
+                    </td>
+                    <td style={{ ...td, color: r.sugestoes_geradas > 0 ? 'var(--green)' : 'var(--tx2)', fontWeight: 700 }}>
+                      {r.sugestoes_geradas}
+                    </td>
+                    <td style={{ ...td, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {r.erro ? (
+                        <span style={{ color: 'var(--red)' }} title={r.erro}>{r.erro.slice(0, 40)}{r.erro.length > 40 ? '…' : ''}</span>
+                      ) : (
+                        <span style={{ color: 'var(--green)' }}>✓</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
