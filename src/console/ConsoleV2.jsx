@@ -19,7 +19,6 @@ import Habilidades from './Habilidades.jsx';
 import Templates from './Templates.jsx';
 import AgenteAnalise from './AgenteAnalise.jsx';
 import Marca from './Marca.jsx';
-import ChatV2 from './ChatV2.jsx';
 import { Gatilhos, Topicos, TarefasAgendadas, Links, Provedores, Integracoes, Sistemas, Arquivos } from './CvNovas.jsx';
 // telas reusadas do console clássico (funcionais — visual convertido nas ondas 2-3)
 import ChatScreen from '../screens/ChatScreen.jsx';
@@ -27,7 +26,8 @@ import DeliScreen from '../screens/DeliScreen.jsx';
 import CrmScreen from '../screens/CRMScreen.jsx';
 import MiaAuditScreen from '../screens/MiaAuditScreen.jsx';
 import InadimplentesScreen from '../screens/InadimplentesScreen.jsx';
-import AutomacoesScreen from '../screens/AutomacoesScreen.jsx';
+import AgentBuilderScreen from '../screens/AgentBuilderScreen.jsx';
+import AgentInboxScreen from '../screens/AgentInboxScreen.jsx';
 import HeartbeatsScreen from '../screens/HeartbeatsScreen.jsx';
 import GoalsScreen from '../screens/GoalsScreen.jsx';
 import MemoriesScreen from '../screens/MemoriesScreen.jsx';
@@ -39,7 +39,10 @@ import './console.css';
 // ============================================================
 // Console v2 — estrutura IDÊNTICA ao protótipo (docs/prototipo/console-v2.html)
 // 5 grupos · ícones do protótipo · topbar fiel (créditos/tenant/sino/avatar).
-// Chat ao Vivo = ChatV2 (visual claro) com fallback para o chat clássico completo.
+// Chat ao Vivo = ChatScreen clássico (superfície imersiva full-screen, 100%
+// das funções/status: mídia, áudio, encaminhar, fixar, favoritar, etiquetas,
+// transferir, bots, presença, SLA…). Reimplementação clara (ChatV2) descontinuada
+// — não alcançava paridade. Decisão 2026-06-09 (prioridade #1 Wandson · produção).
 // ============================================================
 
 const GRUPOS = [
@@ -65,7 +68,8 @@ const GRUPOS = [
     { id: 'analise', ic: 'i-chart', label: 'Análise de Loja' },
     { id: 'cardapio', ic: 'i-menu', label: 'Cardápio' },
     { id: 'multicanal', ic: 'i-layers', label: 'Multicanal' },
-    { id: 'rotinas', ic: 'i-clock', label: 'Rotinas' },
+    { id: 'construtor', ic: 'i-bot', label: 'Construtor de Agentes' },
+    { id: 'inbox', ic: 'i-reply', label: 'Inbox dos Agentes' },
     { id: 'tarefas', ic: 'i-list', label: 'Tarefas agendadas' },
     { id: 'gatilhos', ic: 'i-zap', label: 'Gatilhos' },
     { id: 'heartbeats', ic: 'i-radio', label: 'Heartbeats' },
@@ -184,7 +188,7 @@ function GlobalSearch({ tenantDbId, onNavigate }) {
 }
 
 // telas reusadas do clássico (dark) — renderizadas em área cheia até converter
-const LEGADO = new Set(['deli', 'crm', 'lojas', 'mia', 'cobranca', 'rotinas', 'heartbeats', 'metas', 'memoria', 'conhecimento', 'configsys']);
+const LEGADO = new Set(['deli', 'crm', 'lojas', 'mia', 'cobranca', 'heartbeats', 'metas', 'memoria', 'conhecimento', 'configsys']);
 
 const OK_STATUSES = ['ok', 'completed', 'success'];
 const CREDITOS_MES = 10000; // freemium: 10k créditos/mês, 1 por execução de IA
@@ -533,7 +537,6 @@ function Defesa({ tenantDbId, userId }) {
 export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, onExit }) {
   const [tela, setTela] = useState('visao');
   const [defesaOn, setDefesaOn] = useState(null);
-  const [chatFull, setChatFull] = useState(false);
   const [tenantsList, sel, setSel] = useTenants(userId, { dbId: propDbId, slug: tenantInfo?.id, nome: tenantInfo?.name });
 
   // tenant ativo = selecionado no topo (todas as telas seguem isto)
@@ -552,9 +555,6 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       .then(({ count }) => { if (alive) setDefesaOn((count ?? 0) > 0); });
     return () => { alive = false; };
   }, [tenantDbId]);
-
-  // ao sair do chat, volta o ChatV2 (claro) como padrão
-  useEffect(() => { if (tela !== 'chat') setChatFull(false); }, [tela]);
 
   const temaStyle = brand?.cor ? { '--red': brand.cor, '--red-dark': brand.cor, '--red-soft': brand.cor + '1a' } : undefined;
   const ehChat = tela === 'chat';
@@ -579,7 +579,8 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       case 'analise': return <AnaliseLoja tenantDbId={tenantDbId} userId={userId} />;
       case 'cardapio': return <AgenteAnalise tenantDbId={tenantDbId} userId={userId} agente="cardapio" titulo="Cardápio" descricao="O agente analisa o funil e os itens do cardápio e sugere otimizações de nomes, descrições e preços." />;
       case 'multicanal': return <AgenteAnalise tenantDbId={tenantDbId} userId={userId} agente="multicanal" titulo="Multicanal" descricao="O agente consolida as métricas dos seus canais de delivery num panorama único e aponta onde focar." />;
-      case 'rotinas': return <AutomacoesScreen tenantDbId={tenantDbId} onNavigate={nav} />;
+      case 'construtor': return <AgentBuilderScreen tenantDbId={tenantDbId} onNavigate={nav} />;
+      case 'inbox': return <AgentInboxScreen tenantDbId={tenantDbId} onNavigate={nav} />;
       case 'tarefas': return <TarefasAgendadas tenantDbId={tenantDbId} userId={userId} />;
       case 'gatilhos': return <Gatilhos tenantDbId={tenantDbId} userId={userId} />;
       case 'heartbeats': return <HeartbeatsScreen tenantDbId={tenantDbId} onNavigate={nav} />;
@@ -634,7 +635,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
         </div>
       </aside>
       <div className="cv2-main">
-        {ehChat && chatFull ? (
+        {ehChat ? (
           <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
             <ChatScreen tenant={tenantSlug} tenantDbId={tenantDbId} onNavigate={setTela} deepLinkConvId={null} />
           </div>
@@ -659,9 +660,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
               </span>
               <span className="cv2-avatar">{inicial}</span>
             </div>
-            {ehChat ? (
-              <ChatV2 tenantDbId={tenantDbId} userId={userId} onFull={() => setChatFull(true)} />
-            ) : ehLegado ? (
+            {ehLegado ? (
               <div className="cv2-legado">{render()}</div>
             ) : (
               <div className="cv2-ct">{render()}</div>
