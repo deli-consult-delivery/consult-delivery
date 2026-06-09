@@ -42,17 +42,41 @@ Itens (T5 do tracker): **4 PATs GitHub · DASHBOARD_API_TOKEN · token Telegram 
 - [ ] Só 1 processo? `pgrep -af 'hermes_cli.main gateway'` → mais de 1 = conflito de polling (erro 409).
 
 ## 3. DASHBOARD_API_TOKEN
-- [ ] Gerar valor novo (token aleatório forte): `openssl rand -hex 32`.
-- [ ] Atualizar no **Infisical** e em qualquer `.env` da VPS que o use.
-- [ ] Reiniciar o bridge: `pm2 restart bridge-server`.
-- [ ] Verificar: a chamada protegida por esse token responde 200 (e 401 com o token velho).
+> ⚠️ **Corrigido (verificação na VPS 2026-06-09):** este token **não é do bridge nem do Infisical**. Quem o consome é o **dashboard do EvoNexus** — `/opt/evo-nexus/dashboard/backend/app.py` faz `os.environ.get("DASHBOARD_API_TOKEN")` pra autenticar `Authorization: Bearer` nas rotas internas. Roda como **container Docker Swarm** (`evo-nexus_dashboard`, porta 8080), com env configurado **dentro do próprio EvoNexus** (volume `evonexus_config`), não em arquivo do host nem no stack. `pm2 restart bridge-server` é o serviço **errado** — **nenhum código do consult-delivery depende deste token** (o único hit no bridge, `index.js:199`, é só o rótulo `source:'evonexus'` num callback que ele *recebe*). O motivo de estar no GATE 0 é que o valor **velho vazou em plaintext** em `/root/recovery/config/.env` (§5).
+>
+> 🔎 **Achado de segurança:** `/opt/evo-nexus/.env` está com permissão `666` (world-writable).
+
+**Decisão antes de agir (EvoNexus é POC "não usar em prod" — CLAUDE.md):**
+
+- **🅰 Aposentar (recomendado, mais limpo):** se o dashboard EvoNexus não é mais usado, não rotacione token de serviço que vai morrer — derrube e apague o plaintext:
+  - [ ] `docker service rm evo-nexus_dashboard`
+  - [ ] `rm -rf /root/recovery` (mesmo alvo do §5) → resolve a exposição de vez, sem token novo pra gerenciar.
+- **🅱 Manter e rotacionar de verdade** (só se ainda usa o EvoNexus):
+  - [ ] Gerar valor novo: `openssl rand -hex 32`.
+  - [ ] Trocar **dentro do próprio EvoNexus** (config UI do dashboard / volume `evonexus_config`) — **não** Infisical, **não** bridge.
+  - [ ] Recriar o serviço swarm: `docker service update --force evo-nexus_dashboard`.
+  - [ ] Verificar: chamada ao dashboard com Bearer novo → 200; com o velho → 401.
 
 ## 4. Remover a SSH key `claude-debug`
-> 📍 **Achado (inventário 2026-06-09):** a key `claude-debug` está em **DOIS** arquivos — `/root/.ssh/authorized_keys` **e** `/home/wandson/.ssh/authorized_keys`. Remover das duas.
+> 📍 **Corrigido (verificação na VPS 2026-06-09):** a key `claude-debug` (blob `…GPT+UyL`) aparece **3× em CADA** arquivo (`/root/.ssh/authorized_keys` e `/home/wandson/.ssh/authorized_keys`), não 1×:
+> - **Linhas 1 e 3** = entradas `ssh-ed25519 …UyL claude-debug-…` **ativas** → remover.
+> - **Linha 2** = a chave `claude-debug` foi **colada (sem quebra de linha) no fim da chave `hostinger-managed-key`** → pro SSH ela caiu **dentro do comentário** da hostinger, logo está **inativa**. Mas a linha 2 contém a chave **boa** `hostinger-managed-key`.
+>
+> ⚠️ **NÃO use `grep -v claude-debug` nem `sed '/claude-debug/d'`** — isso apagaria a **linha 2 inteira** e você **perderia a `hostinger-managed-key`**. Filtre pelo **blob exato**, não pelo comentário.
+>
+> ✅ Manter sempre: `wandson-pc`, `wandson@…` (seu login), `claude-code-consult-delivery`, `github-actions*`, `hostinger-managed-key`.
 
-- [ ] Confira onde está: `grep -n claude-debug /root/.ssh/authorized_keys /home/wandson/.ssh/authorized_keys 2>/dev/null`.
-- [ ] Edite **cada** arquivo (`nano <arquivo>`) e **apague a linha** com o comentário `claude-debug` — mantendo as suas keys boas.
-- [ ] Verificar: tente conectar com aquela key antiga → deve ser **recusado**; sua key principal continua funcionando.
+- [ ] Confira o estado: `awk '{print NR": "$1"  =>"$NF}' /root/.ssh/authorized_keys /home/wandson/.ssh/authorized_keys`.
+- [ ] **Backup** (é seu acesso SSH): `cp <arquivo> <arquivo>.bak-$(date +%Y%m%d)` para **os dois**.
+- [ ] Remover **só** as entradas cujo 2º campo é o blob da claude-debug (a linha 2 sobrevive — o 2º campo dela é o blob da hostinger):
+  ```bash
+  BLOB='AAAAC3NzaC1lZDI1NTE5AAAAIFbviweYNwgOLwI4J4QQRK8YdPL15w2qY2R9LGPT+UyL'
+  awk -v b="$BLOB" '$2 != b' /root/.ssh/authorized_keys.bak-$(date +%Y%m%d) > /root/.ssh/authorized_keys
+  awk -v b="$BLOB" '$2 != b' /home/wandson/.ssh/authorized_keys.bak-$(date +%Y%m%d) > /home/wandson/.ssh/authorized_keys
+  ```
+- [ ] Conferir o resultado: `awk '{print NR": "$1"  =>"$NF}' <arquivo>` — não pode sobrar linha 100% claude-debug; suas keys boas continuam.
+- [ ] Verificar **sem risco de lockout**: **mantenha a sessão atual aberta**, abra um 2º terminal e teste login (entra com sua key); a key privada `claude-debug` → **recusada**. Se algo der errado: restaure o `.bak-…`.
+- [ ] *(Opcional, baixa prioridade)* limpar o resíduo **inerte** da linha 2 (a claude-debug dentro do comentário da hostinger) no `nano`, apagando só o trecho ` ssh-ed25519 …UyL claude-debug-…`, sem tocar na chave hostinger.
 
 ## 5. Limpar cópias de segredos na VPS
 > 📍 **Achados (inventário 2026-06-09):**
