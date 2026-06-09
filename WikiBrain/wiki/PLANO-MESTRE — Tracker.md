@@ -43,7 +43,19 @@ A sessão **Cowork** (desktop) parou aqui e passou o bastão para a **sessão Cl
 
 ## 🔴 Onde parou
 
-_Última sessão: 2026-06-09 (VPS — **sessão 21: Chat claro v2 com mídia/áudio/transferir/finalizar**)_
+_Última sessão: 2026-06-09 (VPS — **sessão 22: Chat ao Vivo 100% funcional — reações/citação/ticks/apagar/documento**)_
+
+### Sessão 22 — VPS (Chat ao Vivo 100% funcional — render + ações completas)
+Fechou a lacuna que a sessão 21 deixou ("reações ficam na versão completa"). O `ChatV2.jsx` (console claro) agora tem **paridade total** com o `ChatScreen` clássico, tudo **sem migration**:
+- **Mídia inbound completa:** imagem clicável, sticker, vídeo (`<video controls>`), áudio (`<audio controls>` com data: URL base64) e **documento** (download via Blob — browsers bloqueiam navegação `data:`).
+- **Formatação WhatsApp** no texto (`*negrito*` `_itálico_` `~tachado~` `` `code` `` + links com `var(--red)`).
+- **Ticks de entrega** (`delivery_status`): enviado/entregue/lido (azul `#53BDEB`), erro (`!` vermelho).
+- **Citação/reply:** render do `quoted_content` (formato plataforma + Evolution) + envio com quoted key Evolution.
+- **Reações:** render agregado (chips) + envio (`sendReaction` nova em `evolution.js`) persistindo no `reactions` JSONB (sem tabela nova).
+- **Apagar/revoke:** `deleteWhatsAppMessage` + `deleted_at`; exibe "🚫 mensagem apagada".
+- **Colar imagem** no composer (`onPaste`).
+- **Realtime:** assina `UPDATE` em `messages` além de `INSERT` (reações/ticks/delete ao vivo).
+- Build verde (`vite build` ✓ 6.15s). **PR #243 mergeado (squash, sha `30f65b9`)**. Read/unread badge fica para etapa futura (precisa migration → não aplicada).
 
 ### Sessão 21 — VPS (Chat claro v2 funcional — item 2)
 Executou a Próxima ação #2. O `ChatV2.jsx` deixou de delegar mídia/áudio/transferência à "versão completa" — agora faz tudo no visual claro, reusando `lib/evolution.js` e os padrões do `ChatScreen.jsx`:
@@ -86,8 +98,9 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 ## 👉 Próxima ação (para a sessão da VPS continuar)
 
 1. **5 telas novas funcionais** — ✅ **CONCLUÍDO.** SQL aprovado e aplicado, teste de isolamento RLS (intruso=0) + smoke CRUD passaram, PR #239 mergeado, deploy verde (`index-m6QCbjtk.js`). Gatilhos/Tópicos/Tarefas/Links/Arquivos com CRUD real no visual claro. → próximo foco: item 2.
-2. **Chat claro v2** — ✅ **CONCLUÍDO.** `ChatV2.jsx` ganhou mídia, áudio (PTT), transferir e finalizar reusando `lib/evolution.js` + padrões do `ChatScreen.jsx`. Build verde. (Reações ficam na versão completa.) → próximo foco: item 3.
-3. **Bridge crash-loop** — `pm2 logs bridge-server --err --lines 50`; achar a causa dos 136 restarts e estabilizar.
+2. **Chat ao Vivo 100% funcional** — ✅ **CONCLUÍDO (sessão 22, PR #243).** `ChatV2.jsx` com paridade total: mídia inbound (img/sticker/vídeo/áudio/documento), formatação WhatsApp, ticks de entrega, citação/reply, reações (render+envio), apagar/revoke, colar imagem, realtime UPDATE. Tudo sem migration. Read/unread badge é o único pendente (precisa migration). → próximo foco: item 2b (backlog de telas PARCIAIS).
+2b. **Backlog autônomo — telas PARCIAIS → funcionais** (sem migration-apply/VPS/mensagens-a-cliente): backends de Análise de Loja/Cardápio/Multicanal, processador do Importar Relatórios, upload Storage em Arquivos, expiry/contagem em Links. Wire uma por vez (branch+PR+merge+deploy).
+3. **Bridge crash-loop** (⚠️ VPS — reservado ao Wandson): `pm2 logs bridge-server --err --lines 50`; achar a causa dos 136 restarts e estabilizar.
 4. **Pendências do Wandson (não fazer sem ele):** apagar msg de teste `delete from messages where id='0023dd90-4bf9-4139-8667-ed3e85869772';` · limpar registros de teste (tenant "Cliente Teste Sandbox") · `ASAAS_DEFESA_ENVIRONMENT`=production no 1º cliente pagante.
 5. **GATE 0 (quando o Wandson quiser)** — `docs/infra/gate0-rotacao-credenciais.md`. Depois, agente persistente na VPS: `docs/infra/claude-code-vps-setup.md`.
 6. **Beta real:** ativar 1 loja real · vincular grupo WhatsApp · vigia 1 semana.
@@ -100,7 +113,7 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 |-------|------|--------|-------------|
 | T1 | Plataforma CD | ✅ | Console v2 idêntico ao protótipo, **todas as telas no visual claro** |
 | T2 | EvoNexus-replica | ✅ | FASE 2 onda 2 + GAP-1..8 + agentes |
-| T3 | Visual-First / telas | ✅ | Chat claro v2 com mídia/áudio/transferir/finalizar (item 2) · 5 telas novas com CRUD real (#239) |
+| T3 | Visual-First / telas | ✅ | **Chat ao Vivo 100% funcional** (#243: +reações/citação/ticks/documento/apagar) · 5 telas novas com CRUD real (#239) |
 | T4 | Hermes | 🔄 | aguarda GATE 0 |
 | T5 | Segurança | 🔄 | 270 policies OK · **GATE 0 (rotação) pendente** — checklist #237 |
 | T6 | Agentes IA | ✅ | 6 agentes vivos: Defesa, Vigia, Radar, Estúdio, Análise de Loja, Cardápio, Multicanal |
@@ -111,6 +124,9 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 ---
 
 ## 📋 Log de sessões
+
+### 2026-06-09 (sessão 22 — VPS: Chat ao Vivo 100% funcional)
+- `ChatV2.jsx` ⇒ paridade total com `ChatScreen` clássico, sem migration: mídia inbound (img/sticker/vídeo/áudio/**documento** via Blob), formatação WhatsApp (`formatWA`), ticks de entrega (`Tick`), citação/reply (render `quoted_content` + envio quoted key Evolution), **reações** (render agregado + `sendReaction` persistindo no `reactions` JSONB), apagar/revoke (`deleteWhatsAppMessage`+`deleted_at`), colar imagem (`onPaste`), realtime `UPDATE`. `evolution.js`: +`sendReaction`. Build verde (`vite build` ✓ 6.15s). Branch `wandson/chatv2-100-render-reactions` → **PR #243 mergeado (squash, sha `30f65b9`)**. Próxima ação #2 ✅ (Chat ao Vivo agora 100% funcional, conforme prioridade #1 do Wandson).
 
 ### 2026-06-09 (sessão 21 — VPS: Chat claro v2 com mídia/áudio/transferir/finalizar)
 - `ChatV2.jsx`: mídia (clipe→input oculto→base64→`sendMediaMessage`, imagem inline via `media_url`), áudio PTT (`MediaRecorder` ogg/opus→`sendAudioMessage`), transferir (`update conversations.department_id`), finalizar (`status_v2:'closed'`, enum verificado). Inserts otimistas em `messages` casam com o dedup do webhook. Aviso inline em vez de `alert`. Build verde (`vite build` ✓). Branch `wandson/chatv2-midia-audio-transfer` → PR. Próxima ação #2 ✅.
