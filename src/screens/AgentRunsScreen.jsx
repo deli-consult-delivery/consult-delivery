@@ -27,12 +27,12 @@ const STATUS_OPTIONS = [
 
 function statusBadge(status) {
   const map = {
-    success: { bg: '#0a2e1a', color: '#34d399', label: 'Sucesso' },
-    failed:  { bg: '#2e0a0a', color: '#f87171', label: 'Falhou' },
-    running: { bg: '#1a2e0a', color: '#fbbf24', label: 'Executando' },
-    queued:  { bg: '#1a1a2e', color: '#93c5fd', label: 'Na fila' },
+    success: { bg: 'var(--green-soft)', color: 'var(--green)', label: 'Sucesso' },
+    failed:  { bg: 'var(--red-soft)', color: 'var(--red)', label: 'Falhou' },
+    running: { bg: 'var(--amber-soft)', color: 'var(--amber)', label: 'Executando' },
+    queued:  { bg: '#e6effd', color: '#1d4ed8', label: 'Na fila' },
   };
-  return map[status] || { bg: '#2a2a2a', color: '#aaa', label: status };
+  return map[status] || { bg: 'var(--bg)', color: 'var(--tx2)', label: status };
 }
 
 function fmtCost(val) {
@@ -64,31 +64,31 @@ function fmtDate(iso) {
 function StatCard({ label, value, color }) {
   return (
     <div style={{
-      background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.08)',
+      background: 'var(--panel)', border: '1px solid var(--line)',
       borderRadius: 10, padding: '16px 20px', flex: '1 1 160px',
     }}>
-      <div style={{ fontSize: 11, color: '#777', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 700, color: color || '#fff' }}>{value}</div>
+      <div style={{ fontSize: 11, color: 'var(--tx2)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>{label}</div>
+      <div style={{ fontSize: 24, fontWeight: 700, color: color || 'var(--tx)' }}>{value}</div>
     </div>
   );
 }
 
 // ── JSON expandido ────────────────────────────────────────────────────────────
 function JsonBlock({ data }) {
-  if (data == null) return <span style={{ color: '#555' }}>—</span>;
+  if (data == null) return <span style={{ color: 'var(--tx2)' }}>—</span>;
   try {
     const text = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
     return (
       <pre style={{
-        margin: 0, fontSize: 11, color: '#aaa', background: '#0d0d0d',
+        margin: 0, fontSize: 11, color: 'var(--tx)', background: '#faf9f8',
         borderRadius: 6, padding: 10, overflowX: 'auto', maxHeight: 200,
-        border: '1px solid rgba(255,255,255,0.06)',
+        border: '1px solid var(--line)',
       }}>
         {text}
       </pre>
     );
   } catch {
-    return <span style={{ color: '#aaa', fontSize: 12 }}>{String(data)}</span>;
+    return <span style={{ color: 'var(--tx2)', fontSize: 12 }}>{String(data)}</span>;
   }
 }
 
@@ -150,18 +150,18 @@ export default function AgentRunsScreen({ tenantDbId }) {
   useEffect(() => { setPage(0); }, [filterAgent, filterStatus]);
 
   const s = {
-    screen:  { padding: '24px 20px', color: '#fff', fontFamily: 'inherit' },
+    screen:  { padding: '24px 20px', color: 'var(--tx)', fontFamily: 'inherit' },
     title:   { margin: '0 0 20px', fontSize: 22, fontWeight: 700 },
     stats:   { display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' },
     filters: { display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' },
-    sel:     { background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6,
-               padding: '7px 10px', color: '#fff', fontSize: 13, cursor: 'pointer' },
+    sel:     { background: '#faf9f8', border: '1px solid var(--line)', borderRadius: 6,
+               padding: '7px 10px', color: 'var(--tx)', fontSize: 13, cursor: 'pointer' },
     table:   { width: '100%', borderCollapse: 'collapse' },
-    th:      { textAlign: 'left', padding: '10px 12px', fontSize: 11, color: '#666',
-               textTransform: 'uppercase', letterSpacing: 0.8, borderBottom: '1px solid rgba(255,255,255,0.06)' },
-    td:      { padding: '10px 12px', fontSize: 13, borderBottom: '1px solid rgba(255,255,255,0.04)', verticalAlign: 'top' },
+    th:      { textAlign: 'left', padding: '10px 12px', fontSize: 11, color: 'var(--tx2)',
+               textTransform: 'uppercase', letterSpacing: 0.8, borderBottom: '1px solid var(--line)' },
+    td:      { padding: '10px 12px', fontSize: 13, borderBottom: '1px solid var(--line)', verticalAlign: 'top' },
     pagination: { display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16, alignItems: 'center' },
-    pageBtn: { padding: '6px 14px', borderRadius: 6, background: '#2a2a2a', border: '1px solid rgba(255,255,255,0.1)', color: '#ccc', cursor: 'pointer', fontSize: 13 },
+    pageBtn: { padding: '6px 14px', borderRadius: 6, background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--tx2)', cursor: 'pointer', fontSize: 13 },
   };
 
   return (
@@ -172,9 +172,9 @@ export default function AgentRunsScreen({ tenantDbId }) {
       {stats && (
         <div style={s.stats}>
           <StatCard label="Total de runs"    value={stats.total_runs}                                   />
-          <StatCard label="Taxa de sucesso"  value={`${stats.success_rate}%`}   color="#34d399"         />
-          <StatCard label="Custo total"      value={fmtCost(stats.total_cost_usd)} color="#fbbf24"      />
-          <StatCard label="Runs hoje"        value={stats.runs_today}            color="#93c5fd"         />
+          <StatCard label="Taxa de sucesso"  value={`${stats.success_rate}%`}   color="var(--green)"    />
+          <StatCard label="Custo total"      value={fmtCost(stats.total_cost_usd)} color="var(--amber)" />
+          <StatCard label="Runs hoje"        value={stats.runs_today}            color="#1d4ed8"         />
         </div>
       )}
 
@@ -188,11 +188,11 @@ export default function AgentRunsScreen({ tenantDbId }) {
         </select>
       </div>
 
-      {loading && <p style={{ color: '#777' }}>Carregando...</p>}
-      {error   && <p style={{ color: '#f87171' }}>Erro: {error}</p>}
+      {loading && <p style={{ color: 'var(--tx2)' }}>Carregando...</p>}
+      {error   && <p style={{ color: 'var(--red)' }}>Erro: {error}</p>}
 
       {!loading && !error && runs.length === 0 && (
-        <p style={{ color: '#555', marginTop: 40, textAlign: 'center' }}>Nenhuma execução encontrada.</p>
+        <p style={{ color: 'var(--tx2)', marginTop: 40, textAlign: 'center' }}>Nenhuma execução encontrada.</p>
       )}
 
       {!loading && runs.length > 0 && (
@@ -216,7 +216,7 @@ export default function AgentRunsScreen({ tenantDbId }) {
                     <React.Fragment key={run.id}>
                       <tr
                         onClick={() => setExpanded(prev => ({ ...prev, [run.id]: !isOpen }))}
-                        style={{ cursor: 'pointer', background: isOpen ? 'rgba(255,255,255,0.03)' : 'transparent' }}
+                        style={{ cursor: 'pointer', background: isOpen ? 'rgba(0,0,0,0.03)' : 'transparent' }}
                       >
                         <td style={s.td}>
                           <span style={{ fontWeight: 600 }}>{(run.agent_id || '—').toUpperCase()}</span>
@@ -229,25 +229,25 @@ export default function AgentRunsScreen({ tenantDbId }) {
                             {badge.label}
                           </span>
                         </td>
-                        <td style={{ ...s.td, color: '#aaa' }}>{fmtDuration(run.duration_ms)}</td>
-                        <td style={{ ...s.td, color: '#fbbf24' }}>{fmtCost(run.cost_usd)}</td>
-                        <td style={{ ...s.td, color: '#666', fontSize: 12 }}>{fmtDate(run.created_at)}</td>
+                        <td style={{ ...s.td, color: 'var(--tx2)' }}>{fmtDuration(run.duration_ms)}</td>
+                        <td style={{ ...s.td, color: 'var(--amber)' }}>{fmtCost(run.cost_usd)}</td>
+                        <td style={{ ...s.td, color: 'var(--tx2)', fontSize: 12 }}>{fmtDate(run.created_at)}</td>
                       </tr>
 
                       {isOpen && (
-                        <tr style={{ background: '#0d0d0d' }}>
+                        <tr style={{ background: 'var(--bg)' }}>
                           <td colSpan={5} style={{ padding: '12px 16px' }}>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                               <div>
-                                <div style={{ fontSize: 11, color: '#666', marginBottom: 6, textTransform: 'uppercase' }}>Input</div>
+                                <div style={{ fontSize: 11, color: 'var(--tx2)', marginBottom: 6, textTransform: 'uppercase' }}>Input</div>
                                 <JsonBlock data={run.input} />
                               </div>
                               <div>
-                                <div style={{ fontSize: 11, color: '#666', marginBottom: 6, textTransform: 'uppercase' }}>Output</div>
+                                <div style={{ fontSize: 11, color: 'var(--tx2)', marginBottom: 6, textTransform: 'uppercase' }}>Output</div>
                                 <JsonBlock data={run.output} />
                               </div>
                             </div>
-                            <div style={{ marginTop: 8, fontSize: 11, color: '#555' }}>
+                            <div style={{ marginTop: 8, fontSize: 11, color: 'var(--tx2)' }}>
                               ID: {run.id}
                               {run.completed_at && ` · Concluído: ${fmtDate(run.completed_at)}`}
                             </div>
@@ -263,7 +263,7 @@ export default function AgentRunsScreen({ tenantDbId }) {
 
           {/* Paginação */}
           <div style={s.pagination}>
-            <span style={{ fontSize: 12, color: '#666' }}>Página {page + 1}</span>
+            <span style={{ fontSize: 12, color: 'var(--tx2)' }}>Página {page + 1}</span>
             <button style={s.pageBtn} disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))}>
               ← Anterior
             </button>
