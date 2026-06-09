@@ -43,7 +43,16 @@ A sessão **Cowork** (desktop) parou aqui e passou o bastão para a **sessão Cl
 
 ## 🔴 Onde parou
 
-_Última sessão: 2026-06-09 (Cowork — **sessão 19: Console v2 idêntico ao protótipo + tudo no visual claro**)_
+_Última sessão: 2026-06-09 (VPS — **sessão 20: 5 telas novas funcionais com CRUD**)_
+
+### Sessão 20 — VPS (5 telas novas funcionais — PR #239)
+Pegou o handoff Cowork→VPS e executou a Próxima ação #1. Gatilhos, Tópicos, Tarefas agendadas, Links e Arquivos saíram de mock/estado-vazio para **CRUD real** no visual claro do protótipo:
+- **Migration aditiva** `supabase/migrations/20260609_001_console_v2_telas_novas.sql`: `tenant_gatilhos`, `tenant_topicos`, `tenant_tarefas`, `tenant_links`, `tenant_files` — cada uma com `tenant_id NOT NULL` + RLS por tenant (`is_member_of`) nos 4 verbos. Idempotente/reversível, padrão da 008. **⚠️ NÃO aplicada — SQL aguardando aprovação do Wandson (mandato D5 v2).**
+- **`CvNovas.jsx`**: componente `CrudTela` (load/insert/delete, form inline, estado vazio real, sem dado fake). Provedores/Integrações/Sistemas seguem read-only.
+- **`ConsoleV2.jsx`**: 5 telas passam a receber `tenantDbId`/`userId`.
+- Build verde (`esbuild --bundle` rc=0). PR #239 aberto contra main.
+
+### Sessão 19 — Cowork (reconstrução fiel ao protótipo + chat claro + telas claras)
 
 ### Sessão 19 — Cowork (reconstrução fiel ao protótipo + chat claro + telas claras)
 Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconstruído com fidelidade:
@@ -64,7 +73,7 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 
 ## 👉 Próxima ação (para a sessão da VPS continuar)
 
-1. **5 telas novas funcionais** — Gatilhos, Tópicos, Arquivos, Links compartilhados, Tarefas agendadas. Hoje em `CvNovas.jsx` como estrutura/estado-vazio. Cada uma precisa de **tabela aditiva (`CREATE TABLE IF NOT EXISTS` + RLS por tenant)** + CRUD. **Seguir o método** (`METODO-CONSOLE-V2.md`): protótipo primeiro → portar idêntico. SQL aprovado pelo Wandson antes de aplicar.
+1. **5 telas novas funcionais** — 🔄 PR #239 aberto (CRUD pronto, build verde). **Falta:** Wandson aprovar o SQL de `20260609_001_console_v2_telas_novas.sql` → aplicar a migration (1 arquivo, output bruto, teste de isolamento RLS) → mergear o PR. Até aplicar, as telas degradam para estado vazio.
 2. **Chat claro v2** — adicionar ao `ChatV2.jsx` o que hoje só existe na "versão completa": envio de mídia/áudio, transferir/finalizar, reações. Reusar a lógica do `ChatScreen.jsx`.
 3. **Bridge crash-loop** — `pm2 logs bridge-server --err --lines 50`; achar a causa dos 136 restarts e estabilizar.
 4. **Pendências do Wandson (não fazer sem ele):** apagar msg de teste `delete from messages where id='0023dd90-4bf9-4139-8667-ed3e85869772';` · limpar registros de teste (tenant "Cliente Teste Sandbox") · `ASAAS_DEFESA_ENVIRONMENT`=production no 1º cliente pagante.
@@ -79,7 +88,7 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 |-------|------|--------|-------------|
 | T1 | Plataforma CD | ✅ | Console v2 idêntico ao protótipo, **todas as telas no visual claro** |
 | T2 | EvoNexus-replica | ✅ | FASE 2 onda 2 + GAP-1..8 + agentes |
-| T3 | Visual-First / telas | ✅ | Console v2 fiel ao protótipo + ChatV2 claro + topbar fiel (#228-235) |
+| T3 | Visual-First / telas | 🔄 | 5 telas novas com CRUD — PR #239 (aguarda aprovação do SQL + apply) |
 | T4 | Hermes | 🔄 | aguarda GATE 0 |
 | T5 | Segurança | 🔄 | 270 policies OK · **GATE 0 (rotação) pendente** — checklist #237 |
 | T6 | Agentes IA | ✅ | 6 agentes vivos: Defesa, Vigia, Radar, Estúdio, Análise de Loja, Cardápio, Multicanal |
@@ -90,6 +99,9 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 ---
 
 ## 📋 Log de sessões
+
+### 2026-06-09 (sessão 20 — VPS: 5 telas novas funcionais com CRUD)
+- PR #239: migration aditiva `20260609_001` (5 tabelas `tenant_*` + RLS por tenant nos 4 verbos) + `CrudTela` em `CvNovas.jsx` + wiring em `ConsoleV2.jsx`. Build verde (esbuild rc=0). **SQL aguardando aprovação do Wandson antes de aplicar** (mandato D5 v2).
 
 ### 2026-06-09 (sessão 19 — Cowork: Console v2 fiel ao protótipo + tudo claro)
 - Onda 1 #228 (estrutura+ícones), topbar fiel #229, ChatV2 claro #230, legado→claro #232, fix Cobrança #233, CRM #234 + Metas #235 claras, skill-creator #231, docs VPS #236 + GATE 0 #237. Orquestração: auditoria das sessões, #206 fechado, worker confirmou entregas reais. Bridge crash-loop detectado.
