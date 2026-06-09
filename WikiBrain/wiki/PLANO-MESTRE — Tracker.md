@@ -43,7 +43,15 @@ A sessão **Cowork** (desktop) parou aqui e passou o bastão para a **sessão Cl
 
 ## 🔴 Onde parou
 
-_Última sessão: 2026-06-09 (VPS — **sessão 22: Chat ao Vivo 100% funcional — reações/citação/ticks/apagar/documento**)_
+_Última sessão: 2026-06-09 (VPS — **sessão 23: busca global funcional na topbar do Console v2**)_
+
+### Sessão 23 — VPS (busca global funcional — topbar Console v2)
+Backlog autônomo (item 2b): a busca da topbar do `ConsoleV2.jsx` era um `<input className="search">` **morto** (sem `value`/`onChange`) — só visual. Virou um **command palette** real, sem migration:
+- **Navegação:** busca instantânea, accent-insensitive (`normalize NFD`), sobre todas as telas do menu (`GRUPOS`). Enter abre a 1ª; mostra o grupo como contexto.
+- **Lojas:** `lojas.nome ilike` filtrado por `tenant_id` (debounce 250ms).
+- **Conversas:** `conversations` por `contact_name`/`push_name`/`group_name` — termo **sanitizado** (remove `%,()*`) antes de entrar no `.or()` do PostgREST (anti-corrupção de filtro).
+- Esc fecha · clique-fora fecha (`mousedown` no document) · seleção navega via `setTela`.
+- Colunas reais conferidas antes (anti-padrão P1). Build verde (`vite build` ✓ 5.37s). **PR #246 mergeado (squash, sha `6380eb7`)**.
 
 ### Sessão 22 — VPS (Chat ao Vivo 100% funcional — render + ações completas)
 Fechou a lacuna que a sessão 21 deixou ("reações ficam na versão completa"). O `ChatV2.jsx` (console claro) agora tem **paridade total** com o `ChatScreen` clássico, tudo **sem migration**:
@@ -99,7 +107,7 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 
 1. **5 telas novas funcionais** — ✅ **CONCLUÍDO.** SQL aprovado e aplicado, teste de isolamento RLS (intruso=0) + smoke CRUD passaram, PR #239 mergeado, deploy verde (`index-m6QCbjtk.js`). Gatilhos/Tópicos/Tarefas/Links/Arquivos com CRUD real no visual claro. → próximo foco: item 2.
 2. **Chat ao Vivo 100% funcional** — ✅ **CONCLUÍDO (sessão 22, PR #243).** `ChatV2.jsx` com paridade total: mídia inbound (img/sticker/vídeo/áudio/documento), formatação WhatsApp, ticks de entrega, citação/reply, reações (render+envio), apagar/revoke, colar imagem, realtime UPDATE. Tudo sem migration. Read/unread badge é o único pendente (precisa migration). → próximo foco: item 2b (backlog de telas PARCIAIS).
-2b. **Backlog autônomo — telas PARCIAIS → funcionais** (sem migration-apply/VPS/mensagens-a-cliente): backends de Análise de Loja/Cardápio/Multicanal, processador do Importar Relatórios, upload Storage em Arquivos, expiry/contagem em Links. Wire uma por vez (branch+PR+merge+deploy).
+2b. **Backlog autônomo — telas PARCIAIS → funcionais** (sem migration-apply/VPS/mensagens-a-cliente): ✅ busca global da topbar (sessão 23, PR #246). Restam: backends de Análise de Loja/Cardápio/Multicanal, processador do Importar Relatórios, upload Storage em Arquivos, expiry/contagem em Links. Wire uma por vez (branch+PR+merge+deploy).
 3. **Bridge crash-loop** (⚠️ VPS — reservado ao Wandson): `pm2 logs bridge-server --err --lines 50`; achar a causa dos 136 restarts e estabilizar.
 4. **Pendências do Wandson (não fazer sem ele):** apagar msg de teste `delete from messages where id='0023dd90-4bf9-4139-8667-ed3e85869772';` · limpar registros de teste (tenant "Cliente Teste Sandbox") · `ASAAS_DEFESA_ENVIRONMENT`=production no 1º cliente pagante.
 5. **GATE 0 (quando o Wandson quiser)** — `docs/infra/gate0-rotacao-credenciais.md`. Depois, agente persistente na VPS: `docs/infra/claude-code-vps-setup.md`.
@@ -113,7 +121,7 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 |-------|------|--------|-------------|
 | T1 | Plataforma CD | ✅ | Console v2 idêntico ao protótipo, **todas as telas no visual claro** |
 | T2 | EvoNexus-replica | ✅ | FASE 2 onda 2 + GAP-1..8 + agentes |
-| T3 | Visual-First / telas | ✅ | **Chat ao Vivo 100% funcional** (#243: +reações/citação/ticks/documento/apagar) · 5 telas novas com CRUD real (#239) |
+| T3 | Visual-First / telas | ✅ | **Busca global da topbar funcional** (#246) · Chat ao Vivo 100% funcional (#243) · 5 telas novas com CRUD real (#239) |
 | T4 | Hermes | 🔄 | aguarda GATE 0 |
 | T5 | Segurança | 🔄 | 270 policies OK · **GATE 0 (rotação) pendente** — checklist #237 |
 | T6 | Agentes IA | ✅ | 6 agentes vivos: Defesa, Vigia, Radar, Estúdio, Análise de Loja, Cardápio, Multicanal |
@@ -124,6 +132,9 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 ---
 
 ## 📋 Log de sessões
+
+### 2026-06-09 (sessão 23 — VPS: busca global funcional na topbar)
+- `ConsoleV2.jsx`: input morto da topbar → **command palette** (`GlobalSearch`). Navegação instantânea accent-insensitive sobre `GRUPOS` + lojas (`lojas.nome ilike`, tenant-scoped, debounce 250ms) + conversas (`conversations` `contact_name/push_name/group_name`, termo sanitizado p/ `.or()` PostgREST). Esc/clique-fora fecham; seleção via `setTela`. `console.css`: `.cv2-search-item:hover`. Colunas reais conferidas antes (P1). Build verde (`vite build` ✓ 5.37s). **PR #246 mergeado (squash, sha `6380eb7`)** · deploy verde `index-B_yPsWBh.js`→`index-CCZE5bjF.js`. Item 2b em andamento.
 
 ### 2026-06-09 (sessão 22 — VPS: Chat ao Vivo 100% funcional)
 - `ChatV2.jsx` ⇒ paridade total com `ChatScreen` clássico, sem migration: mídia inbound (img/sticker/vídeo/áudio/**documento** via Blob), formatação WhatsApp (`formatWA`), ticks de entrega (`Tick`), citação/reply (render `quoted_content` + envio quoted key Evolution), **reações** (render agregado + `sendReaction` persistindo no `reactions` JSONB), apagar/revoke (`deleteWhatsAppMessage`+`deleted_at`), colar imagem (`onPaste`), realtime `UPDATE`. `evolution.js`: +`sendReaction`. Build verde (`vite build` ✓ 6.15s). Branch `wandson/chatv2-100-render-reactions` → **PR #243 mergeado (squash, sha `30f65b9`)**. Próxima ação #2 ✅ (Chat ao Vivo agora 100% funcional, conforme prioridade #1 do Wandson).
