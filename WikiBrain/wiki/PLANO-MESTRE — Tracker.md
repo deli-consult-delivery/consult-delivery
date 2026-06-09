@@ -43,7 +43,13 @@ A sessão **Cowork** (desktop) parou aqui e passou o bastão para a **sessão Cl
 
 ## 🔴 Onde parou
 
-_Última sessão: 2026-06-09 (VPS — **sessão 25: Automações 100% no visual claro + decisão ChatScreen**)_
+_Última sessão: 2026-06-09 (VPS — **sessão 26: Arquivos com upload/download real — bucket privado + RLS (PR #261, aguarda ok do SQL)**)_
+
+### Sessão 26 — VPS (Storage em Arquivos — opção 1, peça 1/3)
+Wandson pediu "começa pela opção 1" (migrations dinâmicas). Pela regra "1 arquivo por vez", opção 1 vira 3 migrations; começou pela mais limpa e verificável: **Storage em Arquivos**. A tabela `tenant_files` já existia (#239) mas a tela só tinha upload **fake** (formulário de texto; o cliente digitava `storage_path` à mão, sem upload nem download).
+- **`supabase/migrations/20260609_002_tenant_files_bucket.sql`** — bucket privado `tenant-files` (50 MB) + 4 RLS policies em `storage.objects` escopadas por tenant. Path `<tenant_id>/<uuid>-<arquivo>` → `(storage.foldername(name))[1]`=tenant_id. **Cast-safe:** compara `tenant_members.tenant_id::text` contra o 1º segmento do path; nunca cast `text→uuid` em nome de objeto (objetos de outros buckets não quebram a policy). Aditivo/reversível.
+- **`CvNovas.jsx` `Arquivos()` reescrita** — file picker→`storage.upload`→`insert tenant_files`; download por signed URL temporária (120s); excluir remove storage+linha; rollback do objeto se o insert falhar. `CrudTela` intacto (sem regressão nas outras telas). Build verde (`vite build` ✓ 6.31s).
+- **⚠️ GATE:** o classifier do auto-mode **bloqueou o apply em produção** exigindo o `ok` explícito do Wandson no SQL (regra global "mostrar SQL completo e aguardar ok"). **PR #261 fica ABERTO** até o bucket existir (para o console nunca mostrar botão de upload quebrado). Após o `ok`: aplico → teste de isolamento RLS (membro envia na própria pasta / bloqueado na de outro tenant, output bruto) → merge.
 
 ### Sessão 25 — VPS (visual-claro: família Automações completa + decisão ChatScreen)
 Fechou a varredura **dark→claro** das telas embarcadas no Console v2. As 8 abas do `AutomacoesScreen` (que renderizam embeds dentro do console claro) estavam com vários blocos escuros remanescentes — convertidas uma-PR-por-tela (presentation-only, lógica de fetch/handler **byte-idêntica**):
@@ -123,7 +129,7 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 
 1. **5 telas novas funcionais** — ✅ **CONCLUÍDO.** SQL aprovado e aplicado, teste de isolamento RLS (intruso=0) + smoke CRUD passaram, PR #239 mergeado, deploy verde (`index-m6QCbjtk.js`). Gatilhos/Tópicos/Tarefas/Links/Arquivos com CRUD real no visual claro. → próximo foco: item 2.
 2. **Chat ao Vivo 100% funcional** — ✅ **CONCLUÍDO (sessões 22+24).** `ChatV2.jsx` com paridade total: mídia inbound (img/sticker/vídeo/áudio/documento), formatação WhatsApp, ticks de entrega, citação/reply, reações (render+envio), apagar/revoke, colar imagem, realtime UPDATE (#243) **+ badge de não-lidas (#248, sessão 24 — `unread_count` já existia, sem migration)**. → próximo foco: item 2b (backlog de telas PARCIAIS).
-2b. **Backlog autônomo — telas PARCIAIS → funcionais** (sem migration-apply/VPS/mensagens-a-cliente): ✅ busca global da topbar (sessão 23, PR #246); ✅ badge de não-lidas no chat (sessão 24, PR #248). **Auditado:** backends de Análise de Loja/Cardápio/Multicanal/Radar **já existem** (cron `*/5` drenando filas `pendente`), Importar Relatórios e Análise de Loja **já estão wired** — nenhuma tela do console renderiza mock puro. Restam só os que **exigem** migration/VPS: upload Storage em Arquivos (precisa bucket+RLS), expiry/contagem em Links (precisa endpoint de redirect+VPS) → **bloqueados** até o Wandson liberar.
+2b. **Backlog autônomo — telas PARCIAIS → funcionais** (sem migration-apply/VPS/mensagens-a-cliente): ✅ busca global da topbar (sessão 23, PR #246); ✅ badge de não-lidas no chat (sessão 24, PR #248). **Auditado:** backends de Análise de Loja/Cardápio/Multicanal/Radar **já existem** (cron `*/5` drenando filas `pendente`), Importar Relatórios e Análise de Loja **já estão wired** — nenhuma tela do console renderiza mock puro. Restam só os que **exigem** migration/VPS: upload Storage em Arquivos → **migration pronta + frontend wired em PR #261, aguarda `ok` do SQL** (sessão 26); expiry/contagem em Links (precisa endpoint de redirect+VPS) → ainda **bloqueado**.
 2c. **Visual-claro (dark→claro das telas embarcadas)** — ✅ **CONCLUÍDO (sessão 25).** Família Automações (8 abas) toda no claro; último embed escuro `AgentBuilderScreen` (#259). `ChatScreen.jsx` permanece escuro **de propósito** (superfície imersiva full-screen; o Chat claro é o `ChatV2.jsx`). Nenhuma tela LEGADO embarcada no Console v2 segue escura. Próximo foco autônomo: varrer gaps funcionais residuais sem migration em telas legadas/`CvNovas`.
 3. **Bridge crash-loop** (⚠️ VPS — reservado ao Wandson): `pm2 logs bridge-server --err --lines 50`; achar a causa dos 136 restarts e estabilizar.
 4. **Pendências do Wandson (não fazer sem ele):** apagar msg de teste `delete from messages where id='0023dd90-4bf9-4139-8667-ed3e85869772';` · limpar registros de teste (tenant "Cliente Teste Sandbox") · `ASAAS_DEFESA_ENVIRONMENT`=production no 1º cliente pagante.
@@ -138,7 +144,7 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 |-------|------|--------|-------------|
 | T1 | Plataforma CD | ✅ | Console v2 idêntico ao protótipo, **todas as telas no visual claro** |
 | T2 | EvoNexus-replica | ✅ | FASE 2 onda 2 + GAP-1..8 + agentes |
-| T3 | Visual-First / telas | ✅ | **Família Automações 100% no claro** (#256/#258/#259) · busca global (#246) · Chat ao Vivo 100% funcional (#243) · 5 telas novas com CRUD (#239) |
+| T3 | Visual-First / telas | ✅ | **Arquivos upload/download real** (PR #261, aguarda ok SQL) · Família Automações 100% no claro (#256/#258/#259) · busca global (#246) · Chat ao Vivo 100% funcional (#243) · 5 telas novas com CRUD (#239) |
 | T4 | Hermes | 🔄 | aguarda GATE 0 |
 | T5 | Segurança | 🔄 | 270 policies OK · **GATE 0 (rotação) pendente** — checklist #237 |
 | T6 | Agentes IA | ✅ | 6 agentes vivos: Defesa, Vigia, Radar, Estúdio, Análise de Loja, Cardápio, Multicanal |
