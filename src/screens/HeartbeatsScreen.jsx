@@ -32,6 +32,11 @@ const EXECUTION_MODE_OPTIONS = [
   { value: 'claude_cli', label: 'Claude Code (assinatura do tenant)' },
 ];
 
+// Estilos compartilhados — tema claro do Console v2 (cv2-*)
+const inputStyle  = { display: 'block', width: '100%', marginTop: 4, padding: '8px 12px', background: '#faf9f8', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--tx)', fontSize: 14, boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit' };
+const labelStyle  = { color: 'var(--tx2)', fontSize: 13 };
+const overlayStyle = { position: 'fixed', inset: 0, background: 'rgba(28,27,26,0.45)', zIndex: 999, display: 'flex' };
+
 function fmtDate(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -112,94 +117,94 @@ function HeartbeatModal({ heartbeat, onClose, onSaved, bridgeHeaders }) {
   return (
     <div
       onClick={e => e.target === e.currentTarget && onClose()}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      style={{ ...overlayStyle, alignItems: 'center', justifyContent: 'center' }}
     >
-      <div style={{ maxWidth: 600, width: '95%', maxHeight: '90vh', overflowY: 'auto', background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: 24 }}>
+      <div style={{ maxWidth: 600, width: '95%', maxHeight: '90vh', overflowY: 'auto', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8, padding: 24, boxShadow: '0 12px 40px rgba(0,0,0,0.18)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h2 style={{ margin: 0, fontSize: 18, color: '#fff' }}>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: 'var(--tx)' }}>
             {isEdit ? 'Editar Heartbeat' : 'Novo Heartbeat'}
           </h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#888', fontSize: 20, cursor: 'pointer' }}>×</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--tx2)', fontSize: 20, cursor: 'pointer' }}>×</button>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {/* Nome */}
-          <label style={{ color: '#ccc', fontSize: 13 }}>
+          <label style={labelStyle}>
             Nome *
             <input
               value={form.name}
               onChange={e => set('name', e.target.value)}
               placeholder="Ex: Verificar anomalias VERA"
-              style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 12px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: '#fff', fontSize: 14, boxSizing: 'border-box' }}
+              style={inputStyle}
             />
           </label>
 
           {/* Descrição */}
-          <label style={{ color: '#ccc', fontSize: 13 }}>
+          <label style={labelStyle}>
             Descrição
             <input
               value={form.description}
               onChange={e => set('description', e.target.value)}
               placeholder="Para que serve este heartbeat?"
-              style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 12px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: '#fff', fontSize: 14, boxSizing: 'border-box' }}
+              style={inputStyle}
             />
           </label>
 
           {/* Agente */}
-          <label style={{ color: '#ccc', fontSize: 13 }}>
+          <label style={labelStyle}>
             Agente
             <select
               value={form.agent_slug}
               onChange={e => set('agent_slug', e.target.value)}
-              style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 12px', background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: '#fff', fontSize: 14, boxSizing: 'border-box' }}
+              style={inputStyle}
             >
               {AGENT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </label>
 
           {/* Prompt */}
-          <label style={{ color: '#ccc', fontSize: 13 }}>
+          <label style={labelStyle}>
             Prompt (tarefa do agente) *
             <textarea
               value={form.prompt}
               onChange={e => set('prompt', e.target.value)}
               rows={4}
               placeholder="O que o agente deve fazer quando acordar? Ex: Verificar se há métricas anômalas nas lojas ativas nas últimas 4 horas..."
-              style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 12px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: '#fff', fontSize: 14, resize: 'vertical', boxSizing: 'border-box' }}
+              style={{ ...inputStyle, resize: 'vertical' }}
             />
           </label>
 
           {/* Decision prompt */}
-          <label style={{ color: '#ccc', fontSize: 13 }}>
-            Condição para agir <span style={{ color: '#666', fontWeight: 400 }}>(opcional — se preenchido, agente avalia se deve agir)</span>
+          <label style={labelStyle}>
+            Condição para agir <span style={{ color: 'var(--tx2)', fontWeight: 400 }}>(opcional — se preenchido, agente avalia se deve agir)</span>
             <textarea
               value={form.decision_prompt}
               onChange={e => set('decision_prompt', e.target.value)}
               rows={2}
               placeholder="Ex: Só aja se houver alguma anomalia crítica. Caso contrário, responda apenas SKIP."
-              style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 12px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: '#fff', fontSize: 14, resize: 'vertical', boxSizing: 'border-box' }}
+              style={{ ...inputStyle, resize: 'vertical' }}
             />
           </label>
 
           {/* Intervalo + Modo */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <label style={{ color: '#ccc', fontSize: 13 }}>
+            <label style={labelStyle}>
               Frequência
               <select
                 value={form.interval_seconds}
                 onChange={e => set('interval_seconds', Number(e.target.value))}
-                style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 12px', background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: '#fff', fontSize: 14, boxSizing: 'border-box' }}
+                style={inputStyle}
               >
                 {INTERVAL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </label>
 
-            <label style={{ color: '#ccc', fontSize: 13 }}>
+            <label style={labelStyle}>
               Modo de execução
               <select
                 value={form.execution_mode}
                 onChange={e => set('execution_mode', e.target.value)}
-                style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 12px', background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: '#fff', fontSize: 14, boxSizing: 'border-box' }}
+                style={inputStyle}
               >
                 {EXECUTION_MODE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
@@ -207,21 +212,14 @@ function HeartbeatModal({ heartbeat, onClose, onSaved, bridgeHeaders }) {
           </div>
 
           {error && (
-            <div style={{ color: '#ef4444', fontSize: 13, padding: '8px 12px', background: 'rgba(239,68,68,0.1)', borderRadius: 6 }}>{error}</div>
+            <div style={{ color: 'var(--red)', fontSize: 13, padding: '8px 12px', background: 'var(--red-soft)', borderRadius: 6 }}>{error}</div>
           )}
 
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 6 }}>
-            <button
-              onClick={onClose}
-              style={{ padding: '8px 20px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#ccc', cursor: 'pointer', fontSize: 14 }}
-            >
+            <button onClick={onClose} className="cv2-btn sec">
               Cancelar
             </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              style={{ padding: '8px 24px', background: '#B70C00', border: 'none', borderRadius: 8, color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', fontSize: 14, opacity: saving ? 0.7 : 1 }}
-            >
+            <button onClick={handleSave} disabled={saving} className="cv2-btn" style={{ opacity: saving ? 0.7 : 1 }}>
               {saving ? 'Salvando…' : isEdit ? 'Salvar alterações' : 'Criar heartbeat'}
             </button>
           </div>
@@ -243,32 +241,32 @@ function RunsModal({ heartbeat, onClose, bridgeHeaders }) {
       .catch(() => setLoading(false));
   }, [heartbeat.id]);
 
-  const statusColor = { success: '#22c55e', failed: '#ef4444', skipped: '#6b7280', running: '#f59e0b' };
+  const statusColor = { success: 'var(--green)', failed: 'var(--red)', skipped: 'var(--tx2)', running: 'var(--amber)' };
 
   return (
     <div
       onClick={e => e.target === e.currentTarget && onClose()}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 999, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '10vh' }}
+      style={{ ...overlayStyle, alignItems: 'flex-start', justifyContent: 'center', paddingTop: '10vh' }}
     >
-      <div style={{ width: '90%', maxWidth: 700, maxHeight: '80vh', background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: 24, overflowY: 'auto' }}>
+      <div style={{ width: '90%', maxWidth: 700, maxHeight: '80vh', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8, padding: 24, overflowY: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,0.18)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-          <h3 style={{ margin: 0, color: '#fff', fontSize: 16 }}>Execuções — {heartbeat.name}</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#888', fontSize: 20, cursor: 'pointer' }}>×</button>
+          <h3 style={{ margin: 0, color: 'var(--tx)', fontSize: 16, fontWeight: 800 }}>Execuções — {heartbeat.name}</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--tx2)', fontSize: 20, cursor: 'pointer' }}>×</button>
         </div>
 
         {loading ? (
-          <div style={{ color: '#666', textAlign: 'center', padding: 40 }}>Carregando…</div>
+          <div style={{ color: 'var(--tx2)', textAlign: 'center', padding: 40 }}>Carregando…</div>
         ) : runs.length === 0 ? (
-          <div style={{ color: '#666', textAlign: 'center', padding: 40 }}>Nenhuma execução ainda</div>
+          <div style={{ color: 'var(--tx2)', textAlign: 'center', padding: 40 }}>Nenhuma execução ainda</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {runs.map(run => (
-              <div key={run.id} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '12px 16px', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <div key={run.id} style={{ background: 'var(--bg)', borderRadius: 6, padding: '12px 16px', border: '1px solid var(--line)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <span style={{ color: statusColor[run.status] || '#fff', fontSize: 13, fontWeight: 600, textTransform: 'capitalize' }}>
+                  <span style={{ color: statusColor[run.status] || 'var(--tx)', fontSize: 13, fontWeight: 600, textTransform: 'capitalize' }}>
                     {run.status}
                   </span>
-                  <div style={{ display: 'flex', gap: 16, color: '#666', fontSize: 12 }}>
+                  <div style={{ display: 'flex', gap: 16, color: 'var(--tx2)', fontSize: 12 }}>
                     {run.tokens_used && <span>{run.tokens_used.toLocaleString()} tokens</span>}
                     {run.cost_usd && <span>${Number(run.cost_usd).toFixed(4)}</span>}
                     {run.duration_ms && <span>{(run.duration_ms / 1000).toFixed(1)}s</span>}
@@ -276,14 +274,14 @@ function RunsModal({ heartbeat, onClose, bridgeHeaders }) {
                   </div>
                 </div>
                 {run.action_summary && (
-                  <div style={{ color: '#ccc', fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap', maxHeight: 80, overflow: 'hidden' }}>
+                  <div style={{ color: 'var(--tx)', fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap', maxHeight: 80, overflow: 'hidden' }}>
                     {run.action_summary}
                   </div>
                 )}
                 {run.error_message && (
-                  <div style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{run.error_message}</div>
+                  <div style={{ color: 'var(--red)', fontSize: 12, marginTop: 4 }}>{run.error_message}</div>
                 )}
-                <div style={{ color: '#555', fontSize: 11, marginTop: 4, textTransform: 'uppercase' }}>
+                <div style={{ color: 'var(--tx2)', fontSize: 11, marginTop: 4, textTransform: 'uppercase' }}>
                   {run.trigger_type} · {run.execution_mode || 'api'}
                 </div>
               </div>
@@ -298,35 +296,32 @@ function RunsModal({ heartbeat, onClose, bridgeHeaders }) {
 // ── HeartbeatCard ──────────────────────────────────────────────────────────
 function HeartbeatCard({ hb, onToggle, onTrigger, onEdit, onDelete, onViewRuns, triggering }) {
   const statusDot = hb.enabled
-    ? (hb.last_run_at ? '#22c55e' : '#f59e0b')
-    : '#6b7280';
+    ? (hb.last_run_at ? 'var(--green)' : 'var(--amber)')
+    : '#cbc9c5';
 
   const agentLabel = AGENT_OPTIONS.find(a => a.value === hb.agent_slug)?.label || hb.agent_slug;
 
   return (
-    <div style={{
-      background: 'rgba(255,255,255,0.04)',
-      border: `1px solid ${hb.enabled ? 'rgba(183,12,0,0.3)' : 'rgba(255,255,255,0.08)'}`,
-      borderRadius: 12,
-      padding: '16px 20px',
+    <div className="cv2-card" style={{
+      borderColor: hb.enabled ? 'rgba(183,12,0,0.28)' : 'var(--line)',
       transition: 'border-color 0.2s',
     }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
         {/* Status dot */}
-        <div style={{ width: 10, height: 10, borderRadius: '50%', background: statusDot, marginTop: 5, flexShrink: 0, boxShadow: hb.enabled ? `0 0 8px ${statusDot}` : 'none' }} />
+        <div style={{ width: 10, height: 10, borderRadius: '50%', background: statusDot, marginTop: 5, flexShrink: 0 }} />
 
         {/* Conteúdo */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-            <h3 style={{ margin: 0, fontSize: 15, color: '#fff', fontWeight: 600 }}>{hb.name}</h3>
+            <h3 style={{ margin: 0, fontSize: 15, color: 'var(--tx)', fontWeight: 700 }}>{hb.name}</h3>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
               <button
                 onClick={() => onToggle(hb)}
                 style={{
                   padding: '4px 12px', borderRadius: 20, fontSize: 12, cursor: 'pointer',
-                  background: hb.enabled ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.07)',
-                  border: `1px solid ${hb.enabled ? 'rgba(34,197,94,0.4)' : 'rgba(255,255,255,0.15)'}`,
-                  color: hb.enabled ? '#22c55e' : '#888',
+                  background: hb.enabled ? 'var(--green-soft)' : 'var(--bg)',
+                  border: `1px solid ${hb.enabled ? 'rgba(30,125,67,0.35)' : 'var(--line)'}`,
+                  color: hb.enabled ? 'var(--green)' : 'var(--tx2)',
                 }}
               >
                 {hb.enabled ? 'Ativo' : 'Inativo'}
@@ -335,10 +330,10 @@ function HeartbeatCard({ hb, onToggle, onTrigger, onEdit, onDelete, onViewRuns, 
           </div>
 
           {hb.description && (
-            <p style={{ margin: '4px 0 8px', color: '#888', fontSize: 13, lineHeight: 1.4 }}>{hb.description}</p>
+            <p style={{ margin: '4px 0 8px', color: 'var(--tx2)', fontSize: 13, lineHeight: 1.4 }}>{hb.description}</p>
           )}
 
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', color: '#666', fontSize: 12, marginTop: 6 }}>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', color: 'var(--tx2)', fontSize: 12, marginTop: 6 }}>
             <span>🤖 {agentLabel}</span>
             <span>⏱ {fmtInterval(hb.interval_seconds)}</span>
             <span>📡 {hb.execution_mode === 'claude_cli' ? 'Claude Assinatura' : 'API'}</span>
@@ -348,37 +343,29 @@ function HeartbeatCard({ hb, onToggle, onTrigger, onEdit, onDelete, onViewRuns, 
           </div>
 
           {/* Prompt preview */}
-          <div style={{ marginTop: 8, padding: '6px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 6, color: '#777', fontSize: 12, lineHeight: 1.5 }}>
+          <div style={{ marginTop: 8, padding: '6px 10px', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 6, color: 'var(--tx2)', fontSize: 12, lineHeight: 1.5 }}>
             {hb.prompt.slice(0, 120)}{hb.prompt.length > 120 ? '…' : ''}
           </div>
         </div>
       </div>
 
       {/* Ações */}
-      <div style={{ display: 'flex', gap: 8, marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.06)', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 8, marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--line)', flexWrap: 'wrap' }}>
         <button
           onClick={() => onTrigger(hb)}
           disabled={triggering === hb.id}
-          style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 14px', background: 'rgba(183,12,0,0.15)', border: '1px solid rgba(183,12,0,0.35)', borderRadius: 7, color: '#ff6b6b', cursor: triggering === hb.id ? 'not-allowed' : 'pointer', fontSize: 12, opacity: triggering === hb.id ? 0.6 : 1 }}
+          className="cv2-btn danger"
+          style={{ cursor: triggering === hb.id ? 'not-allowed' : 'pointer', opacity: triggering === hb.id ? 0.6 : 1 }}
         >
           ▶ {triggering === hb.id ? 'Executando…' : 'Executar agora'}
         </button>
-        <button
-          onClick={() => onViewRuns(hb)}
-          style={{ padding: '5px 14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 7, color: '#aaa', cursor: 'pointer', fontSize: 12 }}
-        >
+        <button onClick={() => onViewRuns(hb)} className="cv2-btn sec">
           📋 Histórico
         </button>
-        <button
-          onClick={() => onEdit(hb)}
-          style={{ padding: '5px 14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 7, color: '#aaa', cursor: 'pointer', fontSize: 12 }}
-        >
+        <button onClick={() => onEdit(hb)} className="cv2-btn sec">
           ✏️ Editar
         </button>
-        <button
-          onClick={() => onDelete(hb)}
-          style={{ padding: '5px 14px', background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 7, color: '#ef4444', cursor: 'pointer', fontSize: 12, marginLeft: 'auto' }}
-        >
+        <button onClick={() => onDelete(hb)} className="cv2-btn danger" style={{ marginLeft: 'auto' }}>
           🗑 Remover
         </button>
       </div>
@@ -475,34 +462,32 @@ export default function HeartbeatsScreen({ tenantDbId, onNavigate }) {
   const inactiveCount = heartbeats.length - activeCount;
 
   return (
-    <div style={{ padding: '24px 20px', maxWidth: 900, margin: '0 auto' }}>
+    <div className="cv2-ct" style={{ maxWidth: 900, margin: '0 auto' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 22, color: '#fff', fontWeight: 700 }}>Heartbeats</h1>
-          <p style={{ margin: '4px 0 0', color: '#888', fontSize: 14 }}>
+          <h1>Heartbeats</h1>
+          <div className="cv2-rule" />
+          <div className="cv2-sub">
             Agentes proativos que acordam em intervalos e agem quando necessário
-          </p>
+          </div>
         </div>
-        <button
-          onClick={() => { setEditHb(null); setShowModal(true); }}
-          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', background: '#B70C00', border: 'none', borderRadius: 8, color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 600 }}
-        >
+        <button onClick={() => { setEditHb(null); setShowModal(true); }} className="cv2-btn">
           + Novo Heartbeat
         </button>
       </div>
 
       {/* Stats */}
       {heartbeats.length > 0 && (
-        <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+        <div className="cv2-kpis" style={{ marginBottom: 20 }}>
           {[
-            { label: 'Total',    value: heartbeats.length, color: '#fff' },
-            { label: 'Ativos',   value: activeCount,       color: '#22c55e' },
-            { label: 'Inativos', value: inactiveCount,     color: '#6b7280' },
+            { label: 'Total',    value: heartbeats.length, color: 'var(--tx)' },
+            { label: 'Ativos',   value: activeCount,       color: 'var(--green)' },
+            { label: 'Inativos', value: inactiveCount,     color: 'var(--tx2)' },
           ].map(s => (
-            <div key={s.label} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '10px 18px', minWidth: 80 }}>
-              <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
-              <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>{s.label}</div>
+            <div key={s.label} className="cv2-kpi">
+              <div className="l">{s.label}</div>
+              <div className="v" style={{ color: s.color }}>{s.value}</div>
             </div>
           ))}
         </div>
@@ -512,23 +497,23 @@ export default function HeartbeatsScreen({ tenantDbId, onNavigate }) {
       {trigResult && (
         <div style={{
           marginBottom: 16, padding: '12px 16px',
-          background: trigResult.status === 'success' ? 'rgba(34,197,94,0.08)' : trigResult.status === 'skipped' ? 'rgba(107,114,128,0.1)' : 'rgba(239,68,68,0.08)',
-          border: `1px solid ${trigResult.status === 'success' ? 'rgba(34,197,94,0.3)' : trigResult.status === 'skipped' ? 'rgba(107,114,128,0.3)' : 'rgba(239,68,68,0.3)'}`,
-          borderRadius: 8,
+          background: trigResult.status === 'success' ? 'var(--green-soft)' : trigResult.status === 'skipped' ? '#f0eeec' : 'var(--red-soft)',
+          border: `1px solid ${trigResult.status === 'success' ? 'rgba(30,125,67,0.3)' : trigResult.status === 'skipped' ? 'var(--line)' : 'rgba(183,12,0,0.3)'}`,
+          borderRadius: 6,
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ color: trigResult.status === 'success' ? '#22c55e' : trigResult.status === 'skipped' ? '#9ca3af' : '#ef4444', fontWeight: 600, fontSize: 13 }}>
+            <span style={{ color: trigResult.status === 'success' ? 'var(--green)' : trigResult.status === 'skipped' ? 'var(--tx2)' : 'var(--red)', fontWeight: 600, fontSize: 13 }}>
               {trigResult.status === 'success' ? '✅ Execução concluída' : trigResult.status === 'skipped' ? '⏭ Skipped — condição não atendida' : '❌ Execução falhou'}
             </span>
-            <button onClick={() => setTrigResult(null)} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: 16 }}>×</button>
+            <button onClick={() => setTrigResult(null)} style={{ background: 'none', border: 'none', color: 'var(--tx2)', cursor: 'pointer', fontSize: 16 }}>×</button>
           </div>
           {trigResult.output && (
-            <div style={{ marginTop: 8, color: '#ccc', fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap', maxHeight: 120, overflow: 'hidden' }}>
+            <div style={{ marginTop: 8, color: 'var(--tx)', fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap', maxHeight: 120, overflow: 'hidden' }}>
               {trigResult.output.slice(0, 400)}
             </div>
           )}
           {trigResult.duration_ms && (
-            <div style={{ marginTop: 6, color: '#666', fontSize: 12 }}>
+            <div style={{ marginTop: 6, color: 'var(--tx2)', fontSize: 12 }}>
               {(trigResult.duration_ms / 1000).toFixed(1)}s · modo: {trigResult.mode || 'api'}
             </div>
           )}
@@ -537,16 +522,13 @@ export default function HeartbeatsScreen({ tenantDbId, onNavigate }) {
 
       {/* Lista */}
       {loading ? (
-        <div style={{ color: '#666', textAlign: 'center', padding: 60 }}>Carregando heartbeats…</div>
+        <div style={{ color: 'var(--tx2)', textAlign: 'center', padding: 60 }}>Carregando heartbeats…</div>
       ) : heartbeats.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 20px', color: '#666' }}>
+        <div className="cv2-card" style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--tx2)' }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>💓</div>
-          <div style={{ fontSize: 16, color: '#888', marginBottom: 8 }}>Nenhum heartbeat ainda</div>
+          <div style={{ fontSize: 16, color: 'var(--tx)', marginBottom: 8, fontWeight: 600 }}>Nenhum heartbeat ainda</div>
           <div style={{ fontSize: 13, marginBottom: 24 }}>Crie o primeiro agente proativo da sua plataforma</div>
-          <button
-            onClick={() => { setEditHb(null); setShowModal(true); }}
-            style={{ padding: '10px 24px', background: '#B70C00', border: 'none', borderRadius: 8, color: '#fff', cursor: 'pointer', fontSize: 14 }}
-          >
+          <button onClick={() => { setEditHb(null); setShowModal(true); }} className="cv2-btn">
             Criar primeiro heartbeat
           </button>
         </div>
