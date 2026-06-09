@@ -72,7 +72,7 @@ export default function DocViewer({ lojaId }) {
               lineHeight: 1.5,
               borderLeft: '2px solid rgba(255,255,255,0.15)',
             }}>
-              {f.fact}
+              {f.value?.text ?? f.key}
               {f.category && f.category !== 'manual' && (
                 <span style={{
                   display: 'inline-block',
