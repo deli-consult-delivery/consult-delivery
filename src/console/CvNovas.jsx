@@ -454,14 +454,20 @@ export function Provedores({ tenantDbId }) {
   return <Tela titulo="Provedores de IA" sub="Cada cliente pode usar a própria chave (BYO-key via cofre)."
     cols={['Provider', 'Modelo padrão', 'Chave', 'Status']} rows={rows} nota={NOTA} />;
 }
-export function Integracoes() {
-  return <Tela titulo="Integrações" sub="Conexões do cliente — credenciais no cofre." cols={['Integração', 'Status', 'Usada por']}
-    rows={[
-      ['WhatsApp (Evolution)', '<span class="cv2-bdg ok">conectada</span>', 'BRENO · MIA · Bom Dia'],
-      ['Asaas', '<span class="cv2-bdg ok">conectada</span>', 'CORA · Defesa'],
-      ['iFood (planilhas)', '<span class="cv2-bdg ok">via Importar</span>', 'Radar · Análise'],
-      ['Telegram interno', '<span class="cv2-bdg ok">conectada</span>', 'DELI · alertas'],
-    ]} nota="Leitura — a conexão é feita pela equipe Consult Delivery." />;
+const ST_INT = { conectada: 'ok', pendente: 'mut', desconectada: 'mut' };
+
+export function Integracoes({ tenantDbId }) {
+  const mapRow = useCallback(rec => {
+    const cls = ST_INT[rec.status] || 'mut';
+    return [
+      esc(rec.nome),
+      `<span class="cv2-bdg ${cls}">${esc(rec.status || '—')}</span>`,
+      esc(rec.usada_por || '—'),
+    ];
+  }, []);
+  const rows = useRefRows('tenant_integracoes', tenantDbId, mapRow);
+  return <Tela titulo="Integrações" sub="Conexões do cliente — a integração é feita pela equipe Consult Delivery."
+    cols={['Integração', 'Status', 'Usada por']} rows={rows} nota={NOTA} />;
 }
 export function Sistemas({ tenantDbId }) {
   const mapRow = useCallback(rec => [
