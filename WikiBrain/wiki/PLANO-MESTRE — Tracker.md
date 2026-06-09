@@ -43,7 +43,17 @@ A sessão **Cowork** (desktop) parou aqui e passou o bastão para a **sessão Cl
 
 ## 🔴 Onde parou
 
-_Última sessão: 2026-06-09 (VPS — **sessão 27: auditoria do Console v2 — Chat ao Vivo = ChatScreen clássico, dedup Rotinas/Metas, escala clara nas telas LEGADO (PR #262 mergeado)**)_
+_Última sessão: 2026-06-09 (VPS — **sessão 28: orquestrador + LEVA 1 — 4 PRs reversíveis paralelos mergeados (#265-#268): CRM lê customers real, edição inline no Cv Novas, limpeza Eduardo→Wandson no MAX, padrão Trigger no breno-renotificar**)_
+
+### Sessão 28 — VPS (modo ORQUESTRADOR + LEVA 1: 4 entregas reversíveis em paralelo)
+Wandson redefiniu o modelo: **esta sessão = maestro** (planeja, distribui, revisa, QA, testa, fica livre p/ novos pedidos); a implementação pesada roda em **paralelo** via outros agentes; meta = velocidade + controle central + qualidade. Modelo aprovado por ele (AskUserQuestion): execução = equipe de agentes + lotes que ele comanda; gate de merge = QA automático + ele mergeia o reversível; foco = backlog do Tracker. Rodei o **pipeline de orquestração ponta-a-ponta** na LEVA 1 (backlog reversível/aditivo, sem migration-apply/VPS/mensagem-a-cliente):
+- **4 executores em paralelo** (edit-only, arquivos disjuntos — sem conflito) → **validação central** (`tsc --noEmit` exit 0 + `npm run build` exit 0, output bruto) → **revisão `cd-lens`** (0 critical, 0 high, 2 medium, 2 low) → **2 fixes de qualidade aplicados por mim** → revalidação verde → **4 branches/PRs separados** (técnica de stash p/ split de arquivos disjuntos) → **squash-merge dos 4**.
+- **PR #268** (`da181a8`) — `CRMScreen.jsx`/`data.js`: ClientesView lê `customers` real do Supabase (loading/error/empty), `mapCustomerRow` null-safe; removidos mock `CRM_CUSTOMERS`, banner fabricado "VERA R$6.9k", timeline/edição falsas; KPIs sem fonte real → `—` (meu fix MEDIUM, anti-fabricação).
+- **PR #267** (`e930df4`) — `CvNovas.jsx`: `CrudTela` ganhou **edição inline (UPDATE)** com `.eq('id').eq('tenant_id')`, validação espelhando o insert, classes claras (P9), filler p/ tabelas com colunas read-only.
+- **PR #266** (`045b553`) — `trigger/max/diagnostico.ts`+`escalonar.ts`: 8 refs "Eduardo" (ex-funcionário, saiu jun/2026) → "Wandson", incl. regex de detecção de escalonamento; zero mudança de lógica. Refs fora de escopo sinalizadas (não tocadas).
+- **PR #265** (`5e4584c`) — `trigger/breno/renotificar.ts`: + `OutputSchema` Zod + `logAgentRun` via helper `finish()` no padrão Trigger.dev; `finish` aceita `status` opcional e o retorno `envio_falhou` loga `'failed'` (meu fix MEDIUM). Recursão 5m e destino interno intactos.
+- Limpeza: stash dropado, branches locais deletados, `main` = `da181a8`. **Modelo de orquestração validado na prática.**
+
 
 ### Sessão 27 — VPS (auditoria Console v2: chat de produção, dedup, contraste)
 Wandson pediu (produção iminente): "Chat ao Vivo 100% funcional com TODAS as funções do chat antigo + status", varrer página-por-página, telas escuras/branco-no-branco, e páginas duplicadas (duas "Metas"; "Rotinas" com sub-telas que já existem). Três frentes, **PR #262 mergeado** (squash, sha `76ad03b`):
@@ -136,7 +146,9 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 1. **5 telas novas funcionais** — ✅ **CONCLUÍDO.** SQL aprovado e aplicado, teste de isolamento RLS (intruso=0) + smoke CRUD passaram, PR #239 mergeado, deploy verde (`index-m6QCbjtk.js`). Gatilhos/Tópicos/Tarefas/Links/Arquivos com CRUD real no visual claro. → próximo foco: item 2.
 2. **Chat ao Vivo 100% funcional** — ✅ **CONCLUÍDO (sessão 27, PR #262).** **🔁 Decisão revista:** o Chat ao Vivo do Console v2 **NÃO** usa mais o `ChatV2.jsx` — ele **não tinha paridade** com o clássico (572 vs 5101 linhas); a alegação "100%" das sessões 22/24 estava incorreta. `ConsoleV2.jsx` agora renderiza o **`ChatScreen` clássico imersivo** (todas as funções/status do chat antigo), pronto para produção. `ChatV2.jsx` descontinuado. → próximo foco: item 2b (backlog de telas PARCIAIS).
 2b. **Backlog autônomo — telas PARCIAIS → funcionais** (sem migration-apply/VPS/mensagens-a-cliente): ✅ busca global da topbar (sessão 23, PR #246); ✅ badge de não-lidas no chat (sessão 24, PR #248). **Auditado:** backends de Análise de Loja/Cardápio/Multicanal/Radar **já existem** (cron `*/5` drenando filas `pendente`), Importar Relatórios e Análise de Loja **já estão wired** — nenhuma tela do console renderiza mock puro. Restam só os que **exigem** migration/VPS: upload Storage em Arquivos → **migration pronta + frontend wired em PR #261, aguarda `ok` do SQL** (sessão 26); expiry/contagem em Links (precisa endpoint de redirect+VPS) → ainda **bloqueado**.
-2c. **Visual-claro (dark→claro das telas embarcadas)** — ✅ **CONCLUÍDO (sessão 25 + 27).** Família Automações (8 abas) toda no claro; último embed escuro `AgentBuilderScreen` (#259). `ChatScreen.jsx` permanece escuro **de propósito** (superfície imersiva full-screen estilo WhatsApp — e agora É o Chat ao Vivo oficial do Console v2, sessão 27). Sessão 27 fechou a causa-raiz das "páginas pretas/branco-no-branco": `.cv2` reseta a escala `--g-*` para o light, anulando o `data-theme` salvo (PR #262). Nenhuma tela LEGADO embarcada segue escura por bug. Próximo foco autônomo: varrer gaps funcionais residuais sem migration em telas legadas/`CvNovas`.
+2c. **Visual-claro (dark→claro das telas embarcadas)** — ✅ **CONCLUÍDO (sessão 25 + 27).** Família Automações (8 abas) toda no claro; último embed escuro `AgentBuilderScreen` (#259). `ChatScreen.jsx` permanece escuro **de propósito** (superfície imersiva full-screen estilo WhatsApp — e agora É o Chat ao Vivo oficial do Console v2, sessão 27). Sessão 27 fechou a causa-raiz das "páginas pretas/branco-no-branco": `.cv2` reseta a escala `--g-*` para o light, anulando o `data-theme` salvo (PR #262). Nenhuma tela LEGADO embarcada segue escura por bug.
+2d. **LEVA 1 (backlog reversível) — ✅ CONCLUÍDO (sessão 28).** 4 PRs paralelos mergeados via pipeline de orquestração: CRM lê `customers` real (#268), edição inline no Cv Novas (#267), limpeza Eduardo→Wandson no MAX (#266), padrão Trigger no breno-renotificar (#265). Todos reversíveis, tsc+build verdes, `cd-lens` aprovou. → próximo foco autônomo: varrer gaps funcionais residuais **sem migration** em telas legadas/`CvNovas`.
+2e. **LEVA 2 (precisa `ok` do SQL do Wandson — versionar em PR aberto):** Sistemas externos (`tenant_sistemas`), tabela de notas do CRM, Provedores IA (`tenant_provedores`), upload Storage em Arquivos (PR #261 já pronto, aguarda `ok` do bucket SQL `20260609_002_tenant_files_bucket.sql`). **Bloqueado** até o Wandson aprovar cada SQL.
 3. **Bridge crash-loop** (⚠️ VPS — reservado ao Wandson): `pm2 logs bridge-server --err --lines 50`; achar a causa dos 136 restarts e estabilizar.
 4. **Pendências do Wandson (não fazer sem ele):** apagar msg de teste `delete from messages where id='0023dd90-4bf9-4139-8667-ed3e85869772';` · limpar registros de teste (tenant "Cliente Teste Sandbox") · `ASAAS_DEFESA_ENVIRONMENT`=production no 1º cliente pagante.
 5. **GATE 0 (quando o Wandson quiser)** — `docs/infra/gate0-rotacao-credenciais.md`. Depois, agente persistente na VPS: `docs/infra/claude-code-vps-setup.md`.
@@ -150,7 +162,7 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 |-------|------|--------|-------------|
 | T1 | Plataforma CD | ✅ | Console v2 idêntico ao protótipo, **todas as telas no visual claro** |
 | T2 | EvoNexus-replica | ✅ | FASE 2 onda 2 + GAP-1..8 + agentes |
-| T3 | Visual-First / telas | ✅ | **Chat ao Vivo = ChatScreen clássico (100% funções) + dedup Rotinas/Metas + escala clara nas LEGADO (PR #262)** · Arquivos upload/download real (PR #261, aguarda ok SQL) · Família Automações 100% no claro (#256/#258/#259) · busca global (#246) · 5 telas novas com CRUD (#239) |
+| T3 | Visual-First / telas | ✅ | **LEVA 1: CRM lê customers real (#268) + edição inline Cv Novas (#267) + Eduardo→Wandson MAX (#266) + padrão Trigger breno (#265)** · Chat ao Vivo = ChatScreen clássico (PR #262) · Arquivos upload/download real (PR #261, aguarda ok SQL) · Família Automações 100% no claro (#256/#258/#259) · busca global (#246) · 5 telas novas com CRUD (#239) |
 | T4 | Hermes | 🔄 | aguarda GATE 0 |
 | T5 | Segurança | 🔄 | 270 policies OK · **GATE 0 (rotação) pendente** — checklist #237 |
 | T6 | Agentes IA | ✅ | 6 agentes vivos: Defesa, Vigia, Radar, Estúdio, Análise de Loja, Cardápio, Multicanal |
@@ -161,6 +173,15 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 ---
 
 ## 📋 Log de sessões
+
+### 2026-06-09 (sessão 28 — VPS: modo orquestrador + LEVA 1 reversível)
+- **Modelo redefinido:** esta sessão vira **maestro** (planeja/distribui/revisa/QA/testa, fica livre p/ novos pedidos); implementação pesada em **paralelo**. Aprovado pelo Wandson (AskUserQuestion): equipe de agentes + lotes que ele comanda · gate = QA automático + ele mergeia o reversível · foco = backlog do Tracker.
+- **Pipeline ponta-a-ponta na LEVA 1:** 4 executores paralelos (edit-only, arquivos disjuntos) → validação central (`tsc --noEmit` exit 0 + `npm run build` exit 0) → `cd-lens` (0 critical/0 high/2 medium/2 low) → 2 fixes de qualidade meus → revalidação verde → 4 branches/PRs (split via stash) → squash-merge dos 4.
+- **PR #268** (`da181a8`): `CRMScreen.jsx`/`data.js` — ClientesView lê `customers` real (loading/error/empty, `mapCustomerRow` null-safe); removidos mock `CRM_CUSTOMERS`, banner "VERA R$6.9k", timeline/edição falsas; KPIs sem fonte → `—` (fix MEDIUM).
+- **PR #267** (`e930df4`): `CvNovas.jsx` — `CrudTela` com edição inline (UPDATE) `.eq('id').eq('tenant_id')`, validação espelhando insert, classes claras (P9), filler p/ colunas read-only.
+- **PR #266** (`045b553`): `trigger/max/diagnostico.ts`+`escalonar.ts` — 8 refs "Eduardo"→"Wandson" (incl. regex de escalonamento); zero mudança de lógica.
+- **PR #265** (`5e4584c`): `trigger/breno/renotificar.ts` — `OutputSchema` Zod + `logAgentRun` via `finish()` no padrão Trigger.dev; `envio_falhou` loga `'failed'` (fix MEDIUM). Recursão 5m + destino interno intactos.
+- `main` = `da181a8`. **Modelo de orquestração validado na prática.** LEVA 2 (Sistemas/notas CRM/Provedores/upload Arquivos) aguarda `ok` do SQL do Wandson.
 
 ### 2026-06-09 (sessão 27 — VPS: auditoria Console v2 — chat de produção + dedup + contraste)
 - **PR #262 mergeado** (squash, sha `76ad03b`). 3 frentes da auditoria pedida pelo Wandson (produção iminente):
