@@ -541,6 +541,17 @@ Responda SOMENTE com JSON válido no formato:
         created_by: req.user.id,
       });
       console.log(`[bridge/chat/ai] /tarefa criada id=${tarefa?.id} loja=${lojaId}`);
+      supabaseInsert('agent_runs', {
+        trigger_dev_run_id: `chat-ai-tarefa-${req.user.id}-${Date.now()}`,
+        agent_id: 'chat-ai-tarefa',
+        input: { command, user_id: req.user.id, tenant_id, conversation_id, loja_id: lojaId },
+        output: { tarefa_id: tarefa?.id ?? null },
+        tenant_id: tenant_id || null,
+        triggered_by: req.user.id || null,
+        duration_ms: Date.now() - _chatAiStart,
+        status: 'success',
+        completed_at: new Date().toISOString(),
+      }).catch(e => console.warn('[bridge/chat/ai] /tarefa audit insert falhou:', e.message));
       return res.json({ ok: true, title: 'Tarefa criada', bullets: [`Tarefa criada (${tarefa?.id})`] });
     } catch (err) {
       console.error('[bridge/chat/ai] /tarefa insert erro:', err.message);
@@ -563,6 +574,17 @@ Responda SOMENTE com JSON válido no formato:
       }).catch(e => console.warn('[bridge/chat/ai] /handoff event insert falhou:', e.message));
     }
     console.log(`[bridge/chat/ai] /handoff conv=${conversation_id} → ${agente}`);
+    supabaseInsert('agent_runs', {
+      trigger_dev_run_id: `chat-ai-handoff-${req.user.id}-${Date.now()}`,
+      agent_id: 'chat-ai-handoff',
+      input: { command, user_id: req.user.id, tenant_id, conversation_id, handed_off_to: agente },
+      output: { handed_off_to: agente },
+      tenant_id: tenant_id || null,
+      triggered_by: req.user.id || null,
+      duration_ms: Date.now() - _chatAiStart,
+      status: 'success',
+      completed_at: new Date().toISOString(),
+    }).catch(e => console.warn('[bridge/chat/ai] /handoff audit insert falhou:', e.message));
     return res.json({ ok: true, title: 'Handoff realizado', bullets: [`Transferido pra ${agente}`] });
   }
 
