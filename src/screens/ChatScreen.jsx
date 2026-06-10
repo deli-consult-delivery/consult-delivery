@@ -3613,12 +3613,63 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
 
   // ── AI COMMANDS ───────────────────────────────────────────
   const runCommand = async (cmd) => {
+    // Captura o texto livre do draft ANTES de limpar (usado por /tarefa e /handoff).
+    // Ex.: "/tarefa ligar pro cliente" → freeText = "ligar pro cliente".
+    const rawDraft = (draft || '').trim();
+    const freeText = rawDraft.startsWith(cmd)
+      ? rawDraft.slice(cmd.length).trim()
+      : rawDraft;
+
     setShowSlash(false);
     setDraft('');
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
     const BRIDGE_URL = import.meta.env.VITE_BRIDGE_URL || '';
     const AI_CMDS = ['/resumir', '/proxima', '/traduzir', '/tom', '/cobranca'];
+
+    // ── /tarefa e /handoff: ações internas (não chamam Anthropic) ──────────
+    // Mesmo POST /chat/ai dos demais comandos; o Bridge resolve loja_id pela conversa.
+    if (cmd === '/tarefa' || cmd === '/handoff') {
+      if (!freeText) {
+        setAiAction({
+          type: 'error',
+          title: cmd === '/tarefa' ? 'Criar tarefa' : 'Passar pra humano',
+          body: cmd === '/tarefa'
+            ? ['Descreva a tarefa após o comando. Ex.: /tarefa ligar pro cliente amanhã']
+            : ['Informe o agente/atendente após o comando. Ex.: /handoff João'],
+        });
+        return;
+      }
+      setAiAction({
+        type: 'loading',
+        title: cmd === '/tarefa' ? 'Criando tarefa…' : 'Registrando handoff…',
+        body: ['Processando…'],
+      });
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const jwt = session?.access_token;
+        const r = await fetch(`${BRIDGE_URL}/chat/ai`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
+          body: JSON.stringify({
+            command: cmd,
+            prompt: freeText,
+            messages: activeMsgs.slice(-30),
+            conversation_id: active?.id,
+            tenant_id: active?.tenant_id,
+          }),
+        });
+        const data = await r.json();
+        if (data.ok) {
+          setAiAction({ type: 'cmd', title: data.title, body: data.bullets || [] });
+        } else {
+          setAiAction({ type: 'error', title: 'Erro DELI', body: [data.error || 'Tente novamente.'] });
+        }
+      } catch (err) {
+        setAiAction({ type: 'error', title: 'Erro de conexão', body: [err.message] });
+      }
+      return;
+    }
 
     if (AI_CMDS.includes(cmd)) {
       setAiAction({ type: 'loading', title: 'DELI pensando…', body: ['Analisando a conversa…'] });
@@ -3647,11 +3698,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
       return;
     }
 
-    if (cmd === '/tarefa') {
-      setAiAction({ type: 'cmd', title: 'Criar tarefa', body: ['Use o painel de tarefas ao lado.'] });
-    } else {
-      setAiAction({ type: 'cmd', title: cmd, body: ['Comando executado pela DELI…'] });
-    }
+    setAiAction({ type: 'cmd', title: cmd, body: ['Comando executado pela DELI…'] });
   };
 
   const insertEmoji = (em) => {
