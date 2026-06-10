@@ -40,9 +40,10 @@ import NotificacoesScreen from './screens/NotificacoesScreen.jsx';
 import WhatsappVinculosScreen from './screens/WhatsappVinculosScreen.jsx';
 import MiaAuditScreen from './screens/MiaAuditScreen.jsx';
 import ConsoleV2 from './console/ConsoleV2.jsx';
-import { CONVERSATIONS, INADIMPLENTES, TENANTS } from './data.js';
+import { TENANTS } from './data.js';
 import { supabase } from './lib/supabase.js';
 import { listTenants, countUnreadNotifications, subscribeToNotifications } from './lib/api.js';
+import { useSidebarCounts } from './screens/hooks/useSidebarCounts.js';
 import { registerPushSubscription } from './lib/pushNotifications.js';
 
 const TWEAK_DEFAULTS = {
@@ -70,6 +71,9 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifUnread, setNotifUnread] = useState(0);
   const hasLoadedTenantsOnce = useRef(false);
+
+  // Contadores reais da sidebar (chat = conversas não lidas, cora = cobranças em aberto)
+  const { chat: chatUnread, cora: coraCount } = useSidebarCounts(tenantDbId);
 
   useEffect(() => { localStorage.setItem('cd-route', route); }, [route]);
 
@@ -341,10 +345,7 @@ export default function App() {
     );
   }
 
-  const convs = CONVERSATIONS[tenant] || [];
-  const unread = convs.reduce((s, c) => s + (c.unread || 0), 0);
-  const coraCount = INADIMPLENTES[tenant]?.rows?.length || 0;
-  const counts = { chat: unread, cora: coraCount, notificacoes: notifUnread || undefined };
+  const counts = { chat: chatUnread || undefined, cora: coraCount || undefined, notificacoes: notifUnread || undefined };
 
   return (
     <div className={`app-shell${route === 'chat' ? ' app-shell--notopbar' : ''}`}>
