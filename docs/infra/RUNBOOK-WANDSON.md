@@ -9,11 +9,11 @@
 ## Ordem de execução (não pular)
 
 ```
-GATE 0 (rotação)  →  usuário claudedev na VPS  →  ok no SQL do ceo_agent  →  Claude liga o resto
-   [§1]                    [§2]                        [§3]                      [autônomo]
+GATE 0 (rotação)  →  usuário claudedev na VPS  →  ceo_agent: schema já pronto  →  você liga (2 cmds)
+   [§1] ✅              [§2] ✅                      [§3] ✅ sem SQL                  [§ "2 comandos"]
 ```
 
-Os três primeiros são SEUS. Depois deles, eu (orquestrador) implemento as tools de leitura/escrita, audito e ligo o gateway — sem mais bloqueio.
+GATE 0 e `claudedev` ✅ feitos. O §3 **se dissolveu**: verifiquei o schema real e **não há migration do `ceo_agent` pra aplicar** (detalhe abaixo). Só resta você rodar os **2 comandos** que carregam o `service_role` (seção "Os 2 comandos reais").
 
 ---
 
@@ -63,20 +63,21 @@ Resumo (comandos no doc):
 
 ---
 
-## §3 · `ok` no SQL do papel `ceo_agent` (RBAC do Hermes)
+## §3 · `ceo_agent` — ✅ SEM SQL (schema já estava pronto, verificado 2026-06-10)
 
 **Design completo:** [`docs/infra/admin-mcp-design.md`](admin-mcp-design.md) §2 e §6.
-**O que é:** o Hermes acessa a CD com um papel novo de **leitura ampla + escrita só via draft** (nunca `admin`, nunca aprova o próprio draft).
+**O que é:** o Hermes acessa a CD como **leitura ampla + escrita só via draft** (nunca `admin`, nunca aprova o próprio draft).
 
-**O que eu preciso de você (agora só 1 coisa):**
+1. ✅ **Decisão de escopo (2026-06-09):** `ceo_agent` enxerga **todos os tenants** (visão CEO), marcando quais são seed/teste. Gravado em `admin-mcp-design.md` §2.
 
-1. ✅ **Decisão de escopo — JÁ RESPONDIDA (2026-06-09):** `ceo_agent` enxerga **todos os tenants** (visão CEO), marcando quais são seed/teste. Gravado em `admin-mcp-design.md` §2.
+2. ✅ **SQL: NÃO É PRECISO.** Resolvida a modelagem (**Opção A**: `ceo_agent` não é role de banco — enforcement na camada do MCP, não no RBAC per-tenant). Varri o schema **real** (2026-06-10) e tudo que o copiloto toca já existe e está correto:
+   - `audit_log` — colunas completas; `action` é texto livre; principal vai em `agent_name`.
+   - `agent_drafts` — CHECKs já aceitam `origin='hermes'`, `status='pending'`, `autonomy_level='amarelo'`; todas as colunas do `cd_propor_draft` existem.
+   - `lojas.is_real_business` — já populado (141 real / 1033 seed / 0 nulo) → o sinal seed/teste da visão-CEO funciona de fábrica (a `cd_lojas` lê daqui, **não** de `tenants.metadata`).
+   - tenant plataforma `consult` existe → **`CD_AUDIT_TENANT_ID = 9079bd4d-4df7-4023-90fb-d79c8ba7e900`**.
+   - Opção A ⇒ nada pra `GRANT`/role no banco.
 
-2. **`ok` no SQL** que cria a identidade `ceo_agent` + permissões (read amplo / write só draft).
-   Eu **escrevo e te mostro o SQL** (padrão migration versionada, aditivo, RLS) e **espero seu `ok`** antes de aplicar — igual fizemos na LEVA 3.
-   *Ainda não escrevi este SQL* de propósito: ele depende de uma escolha de modelagem (Opção A vs B em `admin-mcp-design.md` §2.1 — o RBAC é per-tenant, o `ceo_agent` é cross-tenant) que eu resolvo **na sessão de build, depois do GATE 0**. Escrever antes do GATE 0 seria SQL que nem dá pra aplicar.
-
-✅ **Critério de pronto:** GATE 0 feito → eu autoro o SQL (Opção A recomendada) e te mostro → seu `ok` → eu aplico (1 arquivo, output bruto, teste de isolamento RLS) e sigo para as tools.
+✅ **Critério de pronto:** ALCANÇADO. Sem migration a aplicar. Pula direto para os **2 comandos reais** (carregam o `service_role`) — esses são seus.
 
 ---
 
@@ -90,7 +91,10 @@ Sequência do `admin-mcp-design.md` §6, passos 4–7:
 ### Os 2 comandos reais que ligam tudo (você cola o segredo aqui)
 
 > ⚠️ O `--env` carrega o `service_role` em texto → por isso este passo é **seu**, não meu:
-> é o único lugar onde o segredo entra. Rode como `claudedev`, não como root.
+> é o único lugar onde o segredo entra.
+> **Rode como `root`** (não `claudedev`): o CLI `hermes` e o gateway systemd vivem no `root`
+> (`/root/.local/bin/hermes`, `/root/hermes-agent`), e o `claudedev` não enxerga `/root`. O `--args`
+> aponta pro server no checkout do root: `/root/consult-delivery/admin-mcp/src/server.js`.
 
 **1. Registrar o MCP no gateway** (mecanismo real do Hermes — confirmado via `hermes mcp add --help`):
 
@@ -140,9 +144,10 @@ O restante da Onda 04 (épico de 9–13 dias) tem pré-requisitos e passos **res
 
 ## TL;DR — sua fila agora
 
-1. **GATE 0** (§1) — rotacionar credenciais. *Destrava tudo.*
+1. ~~**GATE 0** (§1) — rotacionar credenciais~~ ✅ **feito (2026-06-10).**
 2. **`claudedev`** (§2) — usuário não-root na VPS.
 3. ~~Responder escopo do `ceo_agent`~~ ✅ **já respondido: todos os tenants.**
-4. Quando eu te mostrar o **SQL do `ceo_agent`** (eu autoro pós-GATE 0), dar `ok` (§3.2).
+4. ~~Dar `ok` no SQL do `ceo_agent`~~ ✅ **não há SQL** — schema verificado, nada a aplicar (§3).
+5. **Rodar os 2 comandos reais** (seção "Os 2 comandos reais", como **root**): `hermes mcp add cd-admin …` + `npm run live-smoke`. É só onde o `service_role` entra — o único passo que falta.
 
-Feito o GATE 0 + `claudedev`, T4 (Hermes) destranca e eu sigo sozinho (autoro o SQL, você dá `ok`, eu aplico e ligo as tools).
+Feito isso, T4 (Hermes) está no ar: as 6 tools de leitura respondem e a escrita continua gated por draft+aprovação.
