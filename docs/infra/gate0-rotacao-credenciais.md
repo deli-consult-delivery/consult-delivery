@@ -6,6 +6,15 @@
 
 Itens (T5 do tracker): **4 PATs GitHub · DASHBOARD_API_TOKEN · token Telegram · key claude-debug · limpar cópias na VPS**. Mais um passo de hygiene nos GitHub Actions Secrets.
 
+> ✅ **GATE 0 CONCLUÍDO (2026-06-10).** Execução do Wandson, validada com output bruto:
+> - **Telegram** rotacionado e validado (2026-06-09).
+> - **Tokens GitHub** — aba **Tokens (classic)** = *"No personal access token created"*; **Fine-grained** = só `PLATAFORMA CONSULT DELIVERY` (*never used*). **Nenhum PAT de risco** existe (os 4 nomes do inventário antigo não estavam mais na conta).
+> - **DASHBOARD_API_TOKEN/EvoNexus** aposentado: `docker service rm evo-nexus_dashboard` + `rm -rf /root/recovery` (resolve §3 e §5 de uma vez). Verificado: serviço sumiu, pasta apagada.
+> - **`claude-debug`** → **inerte** (presa no comentário da `hostinger-managed-key`, não autentica). Nenhuma cópia ativa. Ver §4.
+> - **`~/.git-credentials`** já não existe (remote é SSH puro).
+>
+> Resta só **limpeza cosmética opcional** da linha SSH (§4) — sem urgência. Pré-requisito de `claude-code-vps-setup.md` **liberado**.
+
 ---
 
 ## 0. Preparação (5 min)
@@ -57,26 +66,30 @@ Itens (T5 do tracker): **4 PATs GitHub · DASHBOARD_API_TOKEN · token Telegram 
   - [ ] Recriar o serviço swarm: `docker service update --force evo-nexus_dashboard`.
   - [ ] Verificar: chamada ao dashboard com Bearer novo → 200; com o velho → 401.
 
-## 4. Remover a SSH key `claude-debug`
-> 📍 **Corrigido (verificação na VPS 2026-06-09):** a key `claude-debug` (blob `…GPT+UyL`) aparece **3× em CADA** arquivo (`/root/.ssh/authorized_keys` e `/home/wandson/.ssh/authorized_keys`), não 1×:
-> - **Linhas 1 e 3** = entradas `ssh-ed25519 …UyL claude-debug-…` **ativas** → remover.
-> - **Linha 2** = a chave `claude-debug` foi **colada (sem quebra de linha) no fim da chave `hostinger-managed-key`** → pro SSH ela caiu **dentro do comentário** da hostinger, logo está **inativa**. Mas a linha 2 contém a chave **boa** `hostinger-managed-key`.
+## 4. Remover a SSH key `claude-debug` — ✅ JÁ NEUTRALIZADA (re-verificado 2026-06-10)
+> 📍 **CORRIGIDO 2026-06-10 — o inventário de 2026-06-09 estava errado sobre esta key. Estado REAL na VPS:**
+> - A `claude-debug` **não** é a ed25519 do blob `…GPT+UyL`, **não** aparece 3× e **não** tem entrada ativa. Ela é uma **ed25519 com comentário `claude-debug-consultdelivery-20260511`**, e existe **só uma vez por arquivo** — a **linha 1** de `/root/.ssh/authorized_keys` **e** `/home/wandson/.ssh/authorized_keys`.
+> - Nessa linha 1, a `claude-debug` está **colada (sem quebra de linha) no fim da `hostinger-managed-key` (uma `ssh-rsa`)**. Como o SSH lê **1 linha = 1 chave** e trata o resto como comentário, a `claude-debug` caiu **dentro do comentário da `ssh-rsa` da hostinger** → **INERTE: não autentica, ninguém loga com ela.**
+> - **Nenhuma `claude-debug` ativa** em lugar nenhum da VPS (confirmado: `grep` por início-de-linha não acha nenhuma).
 >
-> ⚠️ **NÃO use `grep -v claude-debug` nem `sed '/claude-debug/d'`** — isso apagaria a **linha 2 inteira** e você **perderia a `hostinger-managed-key`**. Filtre pelo **blob exato**, não pelo comentário.
+> ✅ **Conclusão:** o objetivo de segurança do item já está atingido — **a `claude-debug` não dá acesso**. O que sobra é só **cosmético** (separar as duas chaves grudadas na linha 1), **sem urgência**.
+>
+> ⚠️ **NÃO use `grep -v claude-debug` nem `sed '/claude-debug/d'`** — a linha 1 contém a `hostinger-managed-key` **boa**; filtrar pelo comentário apagaria a hostinger. O blob `…GPT+UyL` do doc antigo **não bate com nada** aqui (filtrar por ele não remove nada — falso "feito").
 >
 > ✅ Manter sempre: `wandson-pc`, `wandson@…` (seu login), `claude-code-consult-delivery`, `github-actions*`, `hostinger-managed-key`.
 
-- [ ] Confira o estado: `awk '{print NR": "$1"  =>"$NF}' /root/.ssh/authorized_keys /home/wandson/.ssh/authorized_keys`.
-- [ ] **Backup** (é seu acesso SSH): `cp <arquivo> <arquivo>.bak-$(date +%Y%m%d)` para **os dois**.
-- [ ] Remover **só** as entradas cujo 2º campo é o blob da claude-debug (a linha 2 sobrevive — o 2º campo dela é o blob da hostinger):
-  ```bash
-  BLOB='AAAAC3NzaC1lZDI1NTE5AAAAIFbviweYNwgOLwI4J4QQRK8YdPL15w2qY2R9LGPT+UyL'
-  awk -v b="$BLOB" '$2 != b' /root/.ssh/authorized_keys.bak-$(date +%Y%m%d) > /root/.ssh/authorized_keys
-  awk -v b="$BLOB" '$2 != b' /home/wandson/.ssh/authorized_keys.bak-$(date +%Y%m%d) > /home/wandson/.ssh/authorized_keys
-  ```
-- [ ] Conferir o resultado: `awk '{print NR": "$1"  =>"$NF}' <arquivo>` — não pode sobrar linha 100% claude-debug; suas keys boas continuam.
-- [ ] Verificar **sem risco de lockout**: **mantenha a sessão atual aberta**, abra um 2º terminal e teste login (entra com sua key); a key privada `claude-debug` → **recusada**. Se algo der errado: restaure o `.bak-…`.
-- [ ] *(Opcional, baixa prioridade)* limpar o resíduo **inerte** da linha 2 (a claude-debug dentro do comentário da hostinger) no `nano`, apagando só o trecho ` ssh-ed25519 …UyL claude-debug-…`, sem tocar na chave hostinger.
+**Estado atual (read-only, só pra ver — nada a fazer aqui é urgente):**
+```bash
+# mostra cada chave com tipo + comentário; a linha 1 traz hostinger-RSA + claude-debug grudada (inerte)
+awk '{print NR": "$1"  ...  "$NF}' /root/.ssh/authorized_keys /home/wandson/.ssh/authorized_keys
+# confirma que NÃO há claude-debug ATIVA (início de linha):
+grep -nE '^(ssh-(rsa|ed25519)|ecdsa)' /root/.ssh/authorized_keys /home/wandson/.ssh/authorized_keys | grep -i claude-debug || echo "nenhuma claude-debug ativa ✅"
+```
+
+**Limpeza cosmética (OPCIONAL, baixa prioridade — só quando NÃO houver nada subindo):**
+- [ ] **Backup primeiro** (é seu acesso SSH): `cp <arquivo> <arquivo>.bak-$(date +%Y%m%d)` para **os dois**.
+- [ ] Editar **no `nano`** a linha 1 de cada arquivo: apagar **só** o trecho grudado ` ssh-ed25519 <blob> claude-debug-consultdelivery-20260511` do **fim** da linha, deixando a `ssh-rsa … #hostinger-managed-key` intacta. Não use filtro automático aqui.
+- [ ] Verificar **sem risco de lockout**: **mantenha a sessão atual aberta**, abra um **2º terminal** e teste login. Se algo der errado: restaure o `.bak-…`.
 
 ## 5. Limpar cópias de segredos na VPS
 > 📍 **Achados (inventário 2026-06-09):**
