@@ -17,10 +17,12 @@ Os três primeiros são SEUS. Depois deles, eu (orquestrador) implemento as tool
 
 ---
 
-## §1 · GATE 0 — rotação de credenciais 🔒 (PRIORIDADE)
+## §1 · GATE 0 — rotação de credenciais 🔒 ✅ CONCLUÍDO (2026-06-10)
 
 **Doc completo:** [`docs/infra/gate0-rotacao-credenciais.md`](gate0-rotacao-credenciais.md)
 **Por que primeiro:** nada de Hermes/admin-MCP vai a runtime com credenciais antigas em circulação. Trava tudo.
+
+> ✅ **Feito e validado (2026-06-10):** Telegram rotacionado · GitHub sem PAT de risco (classic vazio, fine-grained só never-used) · EvoNexus aposentado (`docker service rm` + `rm -rf /root/recovery`) · `claude-debug` inerte (presa no comentário da hostinger-key, não autentica) · `~/.git-credentials` inexistente. Resta só limpeza **cosmética** opcional da linha SSH (§4 do doc). **Próximo passo da fila: §2 (`claudedev`).**
 
 Resumo do que fazer (detalhe e comandos no doc):
 1. **4 PATs do GitHub** — revogar e recriar *fine-grained*, escopo mínimo (só o repo `consult-delivery`): `deli-agent-vps`, `Nexus`, `claude-code`, `Claude IA`.
