@@ -36,9 +36,11 @@ Ambas as tasks já tinham retry configurado (5 tentativas, backoff 30s→120s).
 ---
 
 ## TD#37 — /chat/ai sem logging em agent_runs
-**Status:** 🟡 ABERTO
+**Status:** ✅ FECHADO — PR #298 (2026-06-10)
 **Descoberto em:** S1-G00 T1 (2026-05-24)
 **Severidade:** Média — sem observabilidade de uso e custo
+
+> **Fix aplicado (2026-06-10, sessão 31):** o `/chat/ai` já logava em `agent_runs` (`:620-631`), mas os ramos `/tarefa` (`:518`) e `/handoff` (`:552`) davam `return` **antes** desse bloco. Adicionado `supabaseInsert('agent_runs', {...}).catch(...)` não-bloqueante antes de cada `return` (`agent_id: chat-ai-tarefa` / `chat-ai-handoff`, `duration_ms` a partir do `_chatAiStart`). `node --check` OK.
 
 **Sintoma:**
 Endpoint `POST /chat/ai` do Bridge Server chama Anthropic API diretamente sem registrar em `agent_runs`.
@@ -176,9 +178,11 @@ OU documentar que as colunas são decorativas e remover da UI.
 ---
 
 ## TD#45 — BomDia tem 4 schedule tasks (design dual-scheduler não documentado)
-**Status:** 🔵 OBSERVAÇÃO
+**Status:** ✅ FECHADO — PR #298 (2026-06-10)
 **Descoberto em:** S1-G00 T3 (2026-05-24)
 **Severidade:** Baixa — funciona, mas pode causar confusão em manutenção
+
+> **Fix aplicado (2026-06-10, sessão 31):** comentário em `trigger/bom-dia/gerar-imagem.ts` acima de `bomDiaScheduleWeekday/Sabado` explicando que são **cache-warming** (geram a imagem ~5min antes), NÃO duplicata do envio real — o envio é feito pelos schedulers de `trigger/bom-dia/envio-agendado.ts`. Headers de seção renomeados "Agendamento" → "Cache-warming".
 
 **Sintoma:**
 BomDia tem 4 schedule tasks no Trigger.dev:
@@ -224,9 +228,11 @@ Ambas as tasks de envio (`envio-agendado.ts`) já tinham `retry: { maxAttempts: 
 ---
 
 ## TD#48 — BomDia: storage path diz 1920x1080 mas resolução real é 1820x1024
-**Status:** 🟡 ABERTO
+**Status:** ✅ FECHADO — PR #298 (2026-06-10)
 **Descoberto em:** S1-G00 T3 / cd-validator-strict (2026-05-24)
 **Severidade:** Baixa — arquivo funciona, mas metadata do nome é enganoso
+
+> **Fix aplicado (2026-06-10, sessão 31):** `groupStoragePath`/`portraitStoragePath` em `gerar-imagem.ts:763-764` corrigidos para `feed-1820x1024.webp` / `story-1024x1820.webp`, casando com o `size` real em `:363`. `grep` confirmou serem as 2 únicas refs e que nenhum consumer dependia do nome antigo (sem migração de paths legados necessária).
 
 **Sintoma:**
 `trigger/bom-dia/gerar-imagem.ts` linha 363: `size = "1820x1024"` (para Recraft V4.1)
@@ -340,7 +346,7 @@ Agentes operam sem contexto persistente sobre lojas.
 
 ---
 
-*Atualizado em: 2026-05-24 S1-G00 T3, T4, T5 | 2026-05-25 batch TDs P1*
+*Atualizado em: 2026-05-24 S1-G00 T3, T4, T5 | 2026-05-25 batch TDs P1 | 2026-06-10 sessão 31 (TD#37/#45/#48 fechados via PR #298)*
 
 ---
 
