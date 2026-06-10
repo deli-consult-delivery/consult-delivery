@@ -81,10 +81,42 @@ Resumo (comandos no doc):
 ## Depois dos três: o que EU faço (autônomo, sem você)
 
 Sequência do `admin-mcp-design.md` §6, passos 4–7:
-- Implementar tools de **leitura** (`cd_status`, `cd_lojas`, `cd_agent_runs`, `cd_drafts_pendentes`, `cd_inadimplencia`, `cd_audit`) — validando audit em cada uma.
-- Implementar `cd_propor_draft` reusando `drafts_deli` — provando que o Hermes **não** consegue aprovar o próprio draft.
-- Teste de isolamento: Hermes não lê segredo nenhum; não muta tabela cliente-facing direto.
-- Só então **ligar o gateway** root→`claudedev` e habilitar no Hermes.
+- ✅ **FEITO** — tools de **leitura** (`cd_status`, `cd_lojas`, `cd_agent_runs`, `cd_drafts_pendentes`, `cd_inadimplencia`, `cd_audit`) implementadas e auditadas (PR #287).
+- ✅ **FEITO** — `cd_propor_draft` reusa `agent_drafts` (`status=pending`, `origin='hermes'`); o Hermes **não** tem tool de aprovar/enviar — enforcement é estrutural (a mutação não existe no catálogo).
+- ✅ **FEITO** — smoke offline (`npm run smoke` + `npm run test:integration`) e **smoke real** (`npm run live-smoke`) prontos. O live-smoke lê o env em runtime, chama as 6 tools de leitura e imprime output bruto — **fail-closed** sem credencial.
+
+### Os 2 comandos reais que ligam tudo (você cola o segredo aqui)
+
+> ⚠️ O `--env` carrega o `service_role` em texto → por isso este passo é **seu**, não meu:
+> é o único lugar onde o segredo entra. Rode como `claudedev`, não como root.
+
+**1. Registrar o MCP no gateway** (mecanismo real do Hermes — confirmado via `hermes mcp add --help`):
+
+```bash
+hermes mcp add cd-admin \
+  --command node \
+  --args /root/consult-delivery/admin-mcp/src/server.js \
+  --env SUPABASE_URL='https://czyanilrverorwenikqw.supabase.co' \
+        SUPABASE_SERVICE_KEY='<cole o service_role DEDICADO do Infisical>' \
+        CD_AUDIT_TENANT_ID='<tenant_id da plataforma/CD>'
+
+hermes mcp list           # confirma que 'cd-admin' aparece
+hermes mcp test cd-admin  # handshake do gateway com o server
+```
+
+**2. Smoke com a credencial real** (prova que as queries respondem antes de liberar leitura):
+
+```bash
+cd /root/consult-delivery/admin-mcp
+export SUPABASE_URL='https://czyanilrverorwenikqw.supabase.co'
+export SUPABASE_SERVICE_KEY='<o mesmo service_role>'
+export CD_AUDIT_TENANT_ID='<o mesmo tenant_id>'
+npm run live-smoke        # chama as 6 read tools, imprime output bruto
+```
+
+Saída `live-smoke OK` = leitura validada ponta-a-ponta contra o banco real. A escrita (`cd_propor_draft`) continua gated por draft+aprovação no painel.
+
+**Teste de isolamento** (já garantido em código): o Hermes não lê segredo de tabela; a única escrita é draft `pending`; toda chamada (leitura e escrita, sucesso e erro) grava em `audit_log`.
 
 ---
 
