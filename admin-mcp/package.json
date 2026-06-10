@@ -8,7 +8,8 @@
   "scripts": {
     "start": "node src/server.js",
     "smoke": "node test/smoke.js",
-    "test:integration": "node test/integration.js"
+    "test:integration": "node test/integration.js",
+    "live-smoke": "node test/live-smoke.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",

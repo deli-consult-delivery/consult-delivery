@@ -102,8 +102,25 @@ Resumo; passo-a-passo em [`RUNBOOK-WANDSON.md`](../docs/infra/RUNBOOK-WANDSON.md
 1. **GATE 0** — rotação de credenciais (pré-requisito de tudo).
 2. **`claudedev`** — usuário do SO sob o qual o gateway/MCP roda (não-root).
 3. **Token `service_role` dedicado** no Infisical → exporta as env vars acima para o processo.
-4. **Registrar este MCP no Hermes** (gateway), comando `node admin-mcp/src/server.js` (stdio).
-5. **Teste de isolamento + smoke com credencial real** antes de liberar a escrita.
+4. **Registrar este MCP no Hermes** (mecanismo real do gateway, `hermes mcp add`):
+
+   ```bash
+   hermes mcp add cd-admin \
+     --command node \
+     --args /root/consult-delivery/admin-mcp/src/server.js \
+     --env SUPABASE_URL='https://czyanilrverorwenikqw.supabase.co' \
+           SUPABASE_SERVICE_KEY='<service_role dedicado>' \
+           CD_AUDIT_TENANT_ID='<tenant_id da plataforma/CD>'
+   hermes mcp list && hermes mcp test cd-admin
+   ```
+
+5. **Smoke com credencial real + isolamento** antes de liberar a escrita:
+
+   ```bash
+   cd admin-mcp
+   export SUPABASE_URL=... SUPABASE_SERVICE_KEY=... CD_AUDIT_TENANT_ID=...
+   npm run live-smoke   # chama as 6 read tools contra o banco, output bruto
+   ```
 
 Enquanto 1–3 não estiverem feitos, **não ligar**. O código está pronto e testado; o
-runtime é decisão e credencial do Wandson.
+runtime é decisão e credencial do Wandson. Detalhe passo-a-passo: [`RUNBOOK-WANDSON.md`](../docs/infra/RUNBOOK-WANDSON.md).
