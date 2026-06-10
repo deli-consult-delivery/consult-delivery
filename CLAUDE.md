@@ -34,7 +34,7 @@ Ao trabalhar em **qualquer tarefa ligada ao PLANO-MESTRE** (tracks T1–T9, EvoN
 
 **Nunca terminar uma sessão sem atualizar o Tracker.** É o que garante que a próxima sessão sabe exatamente onde retomar.
 
-**Mandato Cowork (D5 v2, 2026-06-06):** sessões Cowork executam direto tudo que conseguirem — incluindo merge de PRs e **aplicar migrations cujo SQL foi aprovado pelo Wandson** (sempre: SQL versionado em git antes · 1 arquivo por vez · validação com output bruto · parar no 1º erro · teste de isolamento quando tocar RLS). **Reservado ao Wandson:** aprovar o SQL antes de aplicar · `DROP`/destrutivo · mensagens a clientes (drafts) · 🛑 CHECKPOINTS / decisões travadas · credenciais e VPS. → detalhe: `PLANO-MESTRE.md` §D5 + Tracker §Mandato Cowork.
+**Mandato Cowork (D5 v3, 2026-06-09 — autonomia total):** sessões executam direto tudo que conseguirem — incluindo merge de PRs e **aplicar migrations de SQL aditivo/reversível sem pedir `ok`** (sempre: SQL versionado em git antes · 1 arquivo por vez · validação com output bruto · parar no 1º erro · teste de isolamento quando tocar RLS). Protocolo antes de aplicar: **checar contexto → verificar se já não foi feito → verificar se precisa → decidir → executar.** **Reservado ao Wandson (só o irreversível/catastrófico):** `DROP`/`DELETE`/`TRUNCATE` em massa / DDL destrutivo sobre dados reais · mensagens a clientes (drafts) · 🛑 CHECKPOINTS / decisões travadas · credenciais, secrets e VPS (GATE 0, `claudedev`). → detalhe: `PLANO-MESTRE.md` §D5 + Tracker §Mandato Cowork + memória `autonomia-total-checar-antes-executar`.
 
 ---
 
@@ -157,7 +157,7 @@ Arquivo: supabase/migrations/YYYYMMDD_NNN_descricao.sql
 ```
 
 - Toda tabela nova: `tenant_id uuid NOT NULL REFERENCES tenants(id)` + RLS policy.
-- **SQL versionado e aprovado pelo Wandson ANTES de aplicar.** Aplicação pelo Cowork é permitida (D5 v2): 1 arquivo por vez · validação com output bruto · parar no 1º erro · teste de isolamento quando tocar RLS.
+- **SQL versionado em git ANTES de aplicar.** SQL aditivo/reversível: aplicar com autonomia (D5 v3), sem pedir `ok` — 1 arquivo por vez · validação com output bruto · parar no 1º erro · teste de isolamento quando tocar RLS. **Só DROP/DELETE-TRUNCATE em massa/DDL destrutivo sobre dados reais exige confirmar com o Wandson.**
 - Padrão P1: não usar `.select('coluna_que_nao_existe')` — erro silenciado, data = null.
 
 ---
@@ -239,7 +239,7 @@ Padrões conhecidos: P1 colunas inexistentes `.select()` | P2 build local ≠ pr
 6. Pular validação entre fases → cada fase tem critério, não há pulo
 7. Agente novo fora de `trigger/` → proibido (OpenClaw/n8n/EvoNexus fora da stack)
 8. Commit direto em main → sempre branch + PR
-9. Migration sem aprovação do SQL pelo Wandson → mostrar SQL, aguardar ok (aplicação: D5 v2)
+9. DDL destrutivo (DROP/DELETE-TRUNCATE em massa) sobre dados reais sem confirmar com o Wandson → SQL aditivo/reversível é autônomo (D5 v3); destrutivo irreversível para e confirma
 10. Confiar no resultado do Claude sem teste manual → 1 teste + log/output real
 
 ---
