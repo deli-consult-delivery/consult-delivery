@@ -96,6 +96,14 @@ Sequência do `admin-mcp-design.md` §6, passos 4–7:
 > (`/root/.local/bin/hermes`, `/root/hermes-agent`), e o `claudedev` não enxerga `/root`. O `--args`
 > aponta pro server no checkout do root: `/root/consult-delivery/admin-mcp/src/server.js`.
 
+**0. Instalar as dependências do `admin-mcp`** (uma vez — sem isso o server não sobe):
+
+```bash
+cd /root/consult-delivery/admin-mcp && npm install
+```
+
+> ⚠️ Se pular isto, o `hermes mcp add` falha com **`Failed to connect: Connection closed`** e o `npm run live-smoke` quebra com **`Cannot find module '@modelcontextprotocol/sdk/...'`** — os dois dependem do mesmo SDK. Aplicado na VPS em 2026-06-10 (92 pacotes, 0 vulnerabilidades).
+
 **1. Registrar o MCP no gateway** (mecanismo real do Hermes — confirmado via `hermes mcp add --help`):
 
 ```bash
@@ -148,6 +156,6 @@ O restante da Onda 04 (épico de 9–13 dias) tem pré-requisitos e passos **res
 2. **`claudedev`** (§2) — usuário não-root na VPS.
 3. ~~Responder escopo do `ceo_agent`~~ ✅ **já respondido: todos os tenants.**
 4. ~~Dar `ok` no SQL do `ceo_agent`~~ ✅ **não há SQL** — schema verificado, nada a aplicar (§3).
-5. **Rodar os 2 comandos reais** (seção "Os 2 comandos reais", como **root**): `hermes mcp add cd-admin …` + `npm run live-smoke`. É só onde o `service_role` entra — o único passo que falta.
+5. **Rodar os comandos reais** (seção "Os 2 comandos reais", como **root**): `cd admin-mcp && npm install` (passo 0, já feito na VPS em 2026-06-10) → `hermes mcp add cd-admin …` + `npm run live-smoke`. É só onde o `service_role` entra — o único passo que falta.
 
 Feito isso, T4 (Hermes) está no ar: as 6 tools de leitura respondem e a escrita continua gated por draft+aprovação.
