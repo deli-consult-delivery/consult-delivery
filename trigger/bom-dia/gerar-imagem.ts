@@ -760,8 +760,8 @@ Retorne: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme":"..
 
   // Paths únicos por run — evita sobrescrita entre gerações no mesmo dia
   const pathId              = runId.slice(-8);
-  const groupStoragePath    = `bom-dia/${dateStr}-${pathId}-feed-1920x1080.webp`;
-  const portraitStoragePath = `bom-dia/${dateStr}-${pathId}-story-1080x1920.webp`;
+  const groupStoragePath    = `bom-dia/${dateStr}-${pathId}-feed-1820x1024.webp`;
+  const portraitStoragePath = `bom-dia/${dateStr}-${pathId}-story-1024x1820.webp`;
 
   // 4. Prompts de texto puro — Recraft respeita size com texto (multimodal quebra)
   // Headline e área de logo são adicionados como sufixo ao prompt gerado pelo Claude
@@ -863,7 +863,14 @@ export const bomDiaGerarImagem = task({
   },
 });
 
-// ─── Agendamento: Segunda–Sexta às 08:55 SP (11:55 UTC) ──────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// CACHE-WARMING (NÃO É DUPLICATA): estes 2 schedulers só GERAM a imagem ~5 min
+// antes do envio real, deixando o arquivo pronto no storage. O ENVIO de fato
+// (pipeline completo Evolution) é feito por outro par de schedulers em
+// `trigger/bom-dia/envio-agendado.ts` (09:00 seg–sex / 08:00 sáb). Não remova
+// estes achando que são redundantes — sem o warming, o envio gera a imagem na
+// hora e estoura o tempo da janela. Ver TD#45.
+// ─── Cache-warming: Segunda–Sexta às 08:55 SP (11:55 UTC) ────────────────────
 
 export const bomDiaScheduleWeekday = schedules.task({
   id:    "bom-dia-schedule-weekday",
@@ -876,7 +883,7 @@ export const bomDiaScheduleWeekday = schedules.task({
   },
 });
 
-// ─── Agendamento: Sábado às 07:55 SP (10:55 UTC) ─────────────────────────────
+// ─── Cache-warming: Sábado às 07:55 SP (10:55 UTC) ───────────────────────────
 
 export const bomDiaScheduleSabado = schedules.task({
   id:    "bom-dia-schedule-sabado",

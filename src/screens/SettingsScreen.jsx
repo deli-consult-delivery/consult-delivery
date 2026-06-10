@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase.js';
 import Icon from '../components/Icon.jsx';
 import UserAvatar from '../components/UserAvatar.jsx';
-import { META_TEMPLATES, DEPARTMENTS } from '../data.js';
 import CustomFieldsManager from './Settings/CustomFieldsManager.jsx';
 
 const SettingsScreen = ({ tenant, tenantDbId, userId, onTenantChange }) => {
