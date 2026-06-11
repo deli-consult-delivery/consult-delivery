@@ -276,7 +276,10 @@ async function notifyBridge(semaforo: Semaforo, motivos: string[], runId: string
 
 export const deliOrchestrator5min = schedules.task({
   id: "deli-orchestrator-5min",
-  cron: "0 0 29 2 1", // PAUSED — spam emergency 2026-05-26 (Feb 29 on Monday = never)
+  // Religado a 30/30 min após a trava anti-spam (dedup_key + cap por trigger, #305).
+  // Cinto de segurança final continua sendo a env DELI_ORCHESTRATOR_DISABLED: enquanto
+  // ela estiver 'true' no Trigger.dev cloud, o run retorna cedo mesmo com o cron ativo.
+  cron: "*/30 * * * *", // a cada 30 min — era "0 0 29 2 1" (PAUSED, spam emergency 2026-05-26)
   retry: { maxAttempts: 2, minTimeoutInMs: 30_000, maxTimeoutInMs: 60_000 },
 
   run: async (_payload, { ctx }) => {
