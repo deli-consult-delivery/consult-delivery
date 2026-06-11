@@ -5,6 +5,10 @@ import { notifyDeli } from "../_shared/notify-deli";
 
 const TENANT_ID = "9079bd4d-4df7-4023-90fb-d79c8ba7e900";
 
+// Trava anti-spam: máximo de pendências criadas por trigger em cada ciclo.
+// Excedentes são truncados e logados (não somem em silêncio).
+const MAX_ITEMS_POR_TRIGGER = 5;
+
 function getBridgeUrl(): string {
   const url = process.env.BRIDGE_URL;
   if (!url) throw new Error("BRIDGE_URL não configurada");
@@ -189,9 +193,29 @@ async function evaluateTrigger(
 async function createPendingApproval(
   sb: ReturnType<typeof getSupabase>,
   trigger: DeliTrigger,
-  result: TriggerResult
+  result: TriggerResult,
+  dedupKey: string
 ): Promise<string | null> {
   try {
+    // Dedup defensivo: já existe pendência "waiting" com esta chave hoje?
+    // O índice único parcial (status='waiting' AND dedup_key IS NOT NULL) garante no banco;
+    // este SELECT evita o round-trip de insert na maioria dos casos. A corrida residual
+    // entre SELECT e INSERT é coberta pelo tratamento de 23505 abaixo.
+    const { data: existing } = await sb
+      .from("deli_pending_approvals")
+      .select("id")
+      .eq("dedup_key", dedupKey)
+      .eq("status", "waiting")
+      .limit(1);
+
+    if (existing?.length) {
+      logger.info("createPendingApproval: dedup hit — pendência já existe", {
+        dedupKey,
+        trigger: trigger.name,
+      });
+      return null;
+    }
+
     const horasExpiry = trigger.autonomy_level === "vermelho" ? 2 : 24;
     const expiresAt = new Date(Date.now() + horasExpiry * 60 * 60 * 1000).toISOString();
 
@@ -207,11 +231,18 @@ async function createPendingApproval(
         reasoning: trigger.descricao,
         status: "waiting",
         expires_at: expiresAt,
+        dedup_key: dedupKey,
       })
       .select("id")
       .single();
 
     if (error) {
+      // 23505 = unique_violation do índice parcial → outra execução criou a pendência
+      // entre o SELECT e o INSERT. É dedup hit legítimo, não erro.
+      if ((error as { code?: string }).code === "23505") {
+        logger.info("createPendingApproval: dedup hit (corrida) — índice único barrou", { dedupKey });
+        return null;
+      }
       logger.warn("createPendingApproval: insert falhou", { error: error.message });
       return null;
     }
@@ -257,6 +288,8 @@ export const deliOrchestrator5min = schedules.task({
 
     const sb = getSupabase();
     const since5min = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    // Janela diária (YYYY-MM-DD em UTC) — componente da dedupKey: no máx. 1 pendência por evento/dia.
+    const janelaDia = new Date().toISOString().slice(0, 10);
     const resultsBySemaforo: Record<AutonomyLevel, string[]> = { verde: [], amarelo: [], vermelho: [] };
 
     // 1. Carregar triggers ativos
@@ -298,20 +331,48 @@ export const deliOrchestrator5min = schedules.task({
           runId: ctx.run.id,
         });
         resultsBySemaforo.verde.push(result.summary);
-      } else if (trigger.autonomy_level === "amarelo") {
-        // AMARELO: cria pendência, notifica sem urgência
-        const approvalId = await createPendingApproval(sb, trigger, result);
-        if (approvalId) {
-          logger.info("deli-orchestrator: pending approval AMARELO criado", { approvalId, trigger: trigger.name });
+      } else if (trigger.autonomy_level === "amarelo" || trigger.autonomy_level === "vermelho") {
+        // AMARELO/VERMELHO: cria 1 pendência por item, com dedup e cap.
+        const nivel = trigger.autonomy_level === "vermelho" ? "VERMELHO" : "AMARELO";
+
+        // Cap por trigger/ciclo: trunca itens excedentes e loga o que ficou de fora.
+        const itensProcessar = result.items.slice(0, MAX_ITEMS_POR_TRIGGER);
+        const truncados = result.items.length - itensProcessar.length;
+        if (truncados > 0) {
+          console.log(
+            `[deli-orchestrator] cap atingido em trigger="${trigger.name}" (${nivel}): ` +
+              `${result.items.length} itens detectados, processando ${itensProcessar.length}, ` +
+              `${truncados} truncado(s) neste ciclo`
+          );
         }
-        resultsBySemaforo.amarelo.push(result.summary);
-      } else if (trigger.autonomy_level === "vermelho") {
-        // VERMELHO: cria pendência urgente
-        const approvalId = await createPendingApproval(sb, trigger, result);
-        if (approvalId) {
-          logger.info("deli-orchestrator: pending approval VERMELHO criado", { approvalId, trigger: trigger.name });
+
+        let criados = 0;
+        for (const item of itensProcessar) {
+          // dedupKey = tenant|trigger.name|itemId|janelaDia → 1 pendência waiting/dia.
+          const dedupKey = `${TENANT_ID}|${trigger.name}|${item.id}|${janelaDia}`;
+          const approvalId = await createPendingApproval(sb, trigger, result, dedupKey);
+          if (approvalId) {
+            criados++;
+            logger.info(`deli-orchestrator: pending approval ${nivel} criado`, {
+              approvalId,
+              trigger: trigger.name,
+              item: item.id,
+            });
+          }
         }
-        resultsBySemaforo.vermelho.push(result.summary);
+        logger.info(`deli-orchestrator: ${nivel} resumo`, {
+          trigger: trigger.name,
+          detectados: result.items.length,
+          processados: itensProcessar.length,
+          criados,
+          dedup_skips: itensProcessar.length - criados,
+        });
+
+        if (trigger.autonomy_level === "vermelho") {
+          resultsBySemaforo.vermelho.push(result.summary);
+        } else {
+          resultsBySemaforo.amarelo.push(result.summary);
+        }
       }
     }
 
