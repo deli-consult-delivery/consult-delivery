@@ -104,19 +104,18 @@ Confirmado via SQL: `tenant_agent_config` tem coluna `agent_id`, não `agent_slu
 ---
 
 ## TD#41 — ChatScreen tem /tarefa e /handoff sem handler no Bridge
-**Status:** 🟡 ABERTO
+**Status:** ✅ RESOLVIDO (2026-06-10, sessão 32, PR #302 `3ddc589`)
 **Descoberto em:** S1-G00 T2 (2026-05-24)
 **Severidade:** Média — UI mostra comandos não funcionais
 
-**Sintoma:**
-`src/screens/ChatScreen.jsx` declara AI_COMMANDS: `/resumir`, `/traduzir`, `/tom`, `/proxima`, `/tarefa`, `/cobranca`, `/handoff`.
-Bridge `POST /chat/ai` trata apenas: `/resumir`, `/proxima`, `/traduzir`, `/tom`, `/cobranca`, `/livre`, `/resposta`.
+**Sintoma (original):**
+`src/screens/ChatScreen.jsx` declara AI_COMMANDS incluindo `/tarefa` e `/handoff`, mas o front nunca os enviava ao Bridge — caíam num stub morto ("use o painel ao lado").
 
-`/tarefa` e `/handoff` estão na UI mas não têm handler no Bridge.
+**Resolução (2 ondas):**
+1. **Backend (TD#37, PR #298):** o Bridge `POST /chat/ai` já ganhou os handlers `/tarefa` (insere em `tarefas_loja`, status `rascunho`) e `/handoff` (insere `conversation_events` `event_type:transferred`), ambos auditados em `agent_runs`. Ver `bridge-server/index.js:518-589`.
+2. **Frontend (TD#41, PR #302):** `ChatScreen.jsx` `runCommand()` agora captura o `freeText` do draft e faz POST autenticado a `/chat/ai` com `{command, prompt, messages.slice(-30), conversation_id, tenant_id}`, renderizando `data.title`+`data.bullets` (ou `data.error`). Stub morto removido.
 
-**Impacto:** Usuário digita `/tarefa` ou `/handoff`, sem feedback de erro claro — provavelmente cai no fallback genérico.
-
-**Fix:** Implementar handlers no Bridge OU remover da lista AI_COMMANDS no ChatScreen.
+**Validação:** contrato Bridge↔front conferido linha-a-linha; colunas confirmadas em prod (sem P1); deploy validado por string no bundle `index-H2PWXSLd.js` (`conversation_id:r,tenant_id`, `bullets||[]`).
 
 ---
 
