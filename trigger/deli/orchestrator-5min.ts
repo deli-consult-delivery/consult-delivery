@@ -51,29 +51,34 @@ async function evaluateTrigger(
     switch (trigger.name) {
       case "cliente_sumiu_7d": {
         const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-        const { data: lojas } = await sb
-          .from("lojas")
-          .select("id, nome")
+        // Unidade de monitoramento = GRUPO de WhatsApp que o Wandson ligou na tela
+        // (whatsapp_groups.monitorar_inatividade = true). NÃO a tabela `lojas`
+        // (agenda inteira) contra `client_timeline` (sinal MORTO: 1 linha) —
+        // essa combinação foi a causa dos falsos "sumiu" do incidente 2026-06-11.
+        const { data: grupos } = await sb
+          .from("whatsapp_groups")
+          .select("id, group_name")
           .eq("tenant_id", TENANT_ID)
-          .eq("status", "ativo")
-          // Só consultorias ativas explicitamente marcadas (não toda a base de contatos).
-          // Causa-raiz do incidente 2026-06-11: sem este filtro, iterava ~1172 contatos.
-          .eq("is_consultoria_ativa", true)
+          .eq("ativo", true)
+          .eq("monitorar_inatividade", true)
           .order("id", { ascending: true });
 
-        if (!lojas?.length) return empty;
+        if (!grupos?.length) return empty;
 
         const sumiram: Array<{ id: string; label: string }> = [];
-        for (const loja of lojas) {
+        for (const grupo of grupos) {
+          // Sinal VIVO: última mensagem real do grupo em whatsapp_messages.ts
           const { data: recentes } = await sb
-            .from("client_timeline")
+            .from("whatsapp_messages")
             .select("id")
-            .eq("loja_id", loja.id)
+            .eq("group_id", grupo.id)
+            .eq("tenant_id", TENANT_ID)
             .gte("ts", since7d)
             .limit(1);
 
           if (!recentes?.length) {
-            sumiram.push({ id: loja.id, label: (loja as { id: string; nome: string }).nome || loja.id });
+            const g = grupo as { id: string; group_name: string };
+            sumiram.push({ id: g.id, label: g.group_name || g.id });
           }
         }
 
@@ -81,7 +86,7 @@ async function evaluateTrigger(
         return {
           fired: true,
           items: sumiram,
-          summary: `${sumiram.length} loja(s) sem atividade há 7+ dias: ${sumiram.map((l) => l.label).join(", ")}`,
+          summary: `${sumiram.length} grupo(s) sem mensagem há 7+ dias: ${sumiram.map((l) => l.label).join(", ")}`,
         };
       }
 
