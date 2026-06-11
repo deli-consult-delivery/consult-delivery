@@ -143,6 +143,25 @@ function TabWhatsApp({ tenant, tenantDbId }) {
     loadGroups();
   }
 
+  async function handleToggleMonitor(g) {
+    const novo = !g.monitorar_inatividade;
+    // update otimista (UI responde na hora)
+    setGroups(prev => prev.map(x => x.id === g.id ? { ...x, monitorar_inatividade: novo } : x));
+    const { error } = await supabase
+      .from('whatsapp_groups')
+      .update({ monitorar_inatividade: novo })
+      .eq('id', g.id);
+    if (error) {
+      // reverte se o banco recusou
+      setGroups(prev => prev.map(x => x.id === g.id ? { ...x, monitorar_inatividade: !novo } : x));
+      showToast('err', 'Erro ao salvar monitoramento: ' + (error.message || error));
+    } else {
+      showToast('ok', novo
+        ? `Monitorando "${g.group_name || 'grupo'}" — aviso se sumir 7 dias`
+        : 'Monitoramento desligado');
+    }
+  }
+
   async function handleSaveGroup(form) {
     if (form.id) {
       const updates = { group_name: form.group_name };
@@ -269,6 +288,7 @@ function TabWhatsApp({ tenant, tenantDbId }) {
               onDelete={() => handleDelete(g)}
               onBroadcast={() => setBroadcastGrp(g)}
               onMembers={() => setMembersGrp(g)}
+              onToggleMonitor={() => handleToggleMonitor(g)}
               instanceName={selInstance}
             />
           ))}
@@ -304,10 +324,11 @@ function TabWhatsApp({ tenant, tenantDbId }) {
 }
 
 /* ─── GroupCard ───────────────────────────────────────── */
-function GroupCard({ group, onEdit, onDelete, onBroadcast, onMembers }) {
+function GroupCard({ group, onEdit, onDelete, onBroadcast, onMembers, onToggleMonitor }) {
   const hasWA   = !!group.evolution_jid;
   const label   = group.group_name || group.evolution_jid || 'Grupo sem nome';
   const initials = label.slice(0, 2).toUpperCase();
+  const monitor = !!group.monitorar_inatividade;
 
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -341,6 +362,40 @@ function GroupCard({ group, onEdit, onDelete, onBroadcast, onMembers }) {
             Grupo local — sem JID WhatsApp
           </div>
         )}
+
+        {/* Monitorar inatividade — chave que o Wandson liga por grupo */}
+        <button
+          role="switch"
+          aria-checked={monitor}
+          onClick={onToggleMonitor}
+          title="Avisa no Telegram interno se o grupo ficar 7 dias sem mensagem"
+          style={{
+            width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+            padding: '8px 10px', marginBottom: 12, cursor: 'pointer',
+            background: monitor ? '#10B98114' : 'var(--g-50, #f9fafb)',
+            border: `1px solid ${monitor ? '#10B981' : 'var(--g-200)'}`,
+            borderRadius: 8, textAlign: 'left',
+          }}
+        >
+          <span style={{
+            width: 34, height: 20, borderRadius: 999, flexShrink: 0, position: 'relative',
+            background: monitor ? '#10B981' : 'var(--g-300)', transition: 'background .15s',
+          }}>
+            <span style={{
+              position: 'absolute', top: 2, left: monitor ? 16 : 2,
+              width: 16, height: 16, borderRadius: '50%', background: '#fff',
+              transition: 'left .15s', boxShadow: '0 1px 2px rgba(0,0,0,.2)',
+            }} />
+          </span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: monitor ? '#0f9d6e' : 'var(--g-700)' }}>
+              {monitor ? 'Monitorando inatividade' : 'Monitorar inatividade'}
+            </span>
+            <span style={{ display: 'block', fontSize: 10.5, color: 'var(--g-400)' }}>
+              {monitor ? 'Avisa no Telegram se sumir 7 dias' : 'Desligado'}
+            </span>
+          </span>
+        </button>
 
         {/* Actions */}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
