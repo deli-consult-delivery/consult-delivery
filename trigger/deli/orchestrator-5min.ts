@@ -55,7 +55,11 @@ async function evaluateTrigger(
           .from("lojas")
           .select("id, nome")
           .eq("tenant_id", TENANT_ID)
-          .eq("status", "ativo");
+          .eq("status", "ativo")
+          // Só consultorias ativas explicitamente marcadas (não toda a base de contatos).
+          // Causa-raiz do incidente 2026-06-11: sem este filtro, iterava ~1172 contatos.
+          .eq("is_consultoria_ativa", true)
+          .order("id", { ascending: true });
 
         if (!lojas?.length) return empty;
 
@@ -111,7 +115,11 @@ async function evaluateTrigger(
           .from("lojas")
           .select("id, nome")
           .eq("tenant_id", TENANT_ID)
-          .eq("status", "ativo");
+          .eq("status", "ativo")
+          // Só consultorias ativas explicitamente marcadas (não toda a base de contatos).
+          // Causa-raiz do incidente 2026-06-11: sem este filtro, iterava ~1172 contatos.
+          .eq("is_consultoria_ativa", true)
+          .order("id", { ascending: true });
 
         if (!lojas?.length) return empty;
 
