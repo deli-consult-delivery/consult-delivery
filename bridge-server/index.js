@@ -1469,6 +1469,13 @@ app.use('/api', require('./routes/agent-builder')({
   SUPABASE_SERVICE_KEY,
 }));
 
+// ── Oracle da CD — chat de construção de agentes (spec #313) ─────────────────
+app.use('/api', require('./routes/oracle')({
+  requireJwt,
+  sbFetch,
+  supabaseInsert,
+}));
+
 // ── Sprint 3B — Memória dos agentes ──────────────────────────────────────────
 app.use('/api', require('./routes/memories')({
   requireJwt,

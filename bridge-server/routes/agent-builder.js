@@ -95,10 +95,12 @@ module.exports = function buildAgentBuilderRouter({ requireJwt, sbFetch, supabas
       if (!name?.trim())         return res.status(400).json({ error: 'name obrigatório' });
       if (!display_name?.trim()) return res.status(400).json({ error: 'display_name obrigatório' });
 
+      // agents NÃO tem coluna display_name: display_name vira o `name` visível
+      // e `role` (NOT NULL) recebe a descrição curta da função.
       const row = await supabaseInsert('agents', {
         id:                randomUUID(),
-        name:              name.trim(),
-        display_name:      display_name.trim(),
+        name:              display_name.trim(),
+        role:              description?.trim() || display_name.trim(),
         description:       description?.trim() || null,
         custom_prompt:     custom_prompt?.trim() || null,
         custom_model:      custom_model || 'claude-haiku-4-5-20251001',
@@ -127,10 +129,14 @@ module.exports = function buildAgentBuilderRouter({ requireJwt, sbFetch, supabas
 
       if (!await assertCustomAgentOwner(req.params.id, tenantId, res)) return;
 
-      const allowed = ['display_name', 'description', 'custom_prompt', 'custom_model', 'custom_max_tokens', 'letter', 'color'];
+      const allowed = ['name', 'role', 'description', 'custom_prompt', 'custom_model', 'custom_max_tokens', 'letter', 'color'];
       const updates = {};
       for (const k of allowed) {
         if (req.body[k] !== undefined) updates[k] = req.body[k];
+      }
+      // compat: frontend antigo manda display_name — mapeia pra name
+      if (req.body.display_name !== undefined && updates.name === undefined) {
+        updates.name = req.body.display_name;
       }
 
       if (Object.keys(updates).length === 0) {
@@ -280,8 +286,8 @@ module.exports = function buildAgentBuilderRouter({ requireJwt, sbFetch, supabas
         tenant_id:   tenantId,
         triggered_by: req.user.id,
         input:       { prompt: prompt.trim() },
-        output:      { text: result.output },
-        tokens_used: result.tokens ?? null,
+        // agent_runs não tem coluna tokens_used — tokens vão dentro do output
+        output:      { text: result.output, tokens: result.tokens ?? null },
         cost_usd:    result.cost ?? null,
         duration_ms,
         status:      'success',
