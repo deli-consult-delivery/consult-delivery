@@ -27,6 +27,7 @@ import CrmScreen from '../screens/CRMScreen.jsx';
 import MiaAuditScreen from '../screens/MiaAuditScreen.jsx';
 import InadimplentesScreen from '../screens/InadimplentesScreen.jsx';
 import AgentBuilderScreen from '../screens/AgentBuilderScreen.jsx';
+import OracleScreen from '../screens/OracleScreen.jsx';
 import AgentInboxScreen from '../screens/AgentInboxScreen.jsx';
 import HeartbeatsScreen from '../screens/HeartbeatsScreen.jsx';
 import GoalsScreen from '../screens/GoalsScreen.jsx';
@@ -69,6 +70,7 @@ const GRUPOS = [
     { id: 'cardapio', ic: 'i-menu', label: 'Cardápio' },
     { id: 'multicanal', ic: 'i-layers', label: 'Multicanal' },
     { id: 'construtor', ic: 'i-bot', label: 'Construtor de Agentes' },
+    { id: 'oracle', ic: 'i-bot', label: 'Oracle (criar agente)' },
     { id: 'inbox', ic: 'i-reply', label: 'Inbox dos Agentes' },
     { id: 'tarefas', ic: 'i-list', label: 'Tarefas agendadas' },
     { id: 'gatilhos', ic: 'i-zap', label: 'Gatilhos' },
@@ -580,6 +582,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       case 'cardapio': return <AgenteAnalise tenantDbId={tenantDbId} userId={userId} agente="cardapio" titulo="Cardápio" descricao="O agente analisa o funil e os itens do cardápio e sugere otimizações de nomes, descrições e preços." />;
       case 'multicanal': return <AgenteAnalise tenantDbId={tenantDbId} userId={userId} agente="multicanal" titulo="Multicanal" descricao="O agente consolida as métricas dos seus canais de delivery num panorama único e aponta onde focar." />;
       case 'construtor': return <AgentBuilderScreen tenantDbId={tenantDbId} onNavigate={nav} />;
+      case 'oracle': return <OracleScreen />;
       case 'inbox': return <AgentInboxScreen tenantDbId={tenantDbId} onNavigate={nav} />;
       case 'tarefas': return <TarefasAgendadas tenantDbId={tenantDbId} userId={userId} />;
       case 'gatilhos': return <Gatilhos tenantDbId={tenantDbId} userId={userId} />;
