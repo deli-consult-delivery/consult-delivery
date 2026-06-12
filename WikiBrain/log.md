@@ -400,3 +400,7 @@ Touched: none
 
 ## [2026-05-24 21:35] session | slim CLAUDE.md 42k→10k
 Touched: none
+
+## 2026-06-12 — sessão 38 (B-03 colateral: bucket contratos public→private)
+- Bucket storage `contratos` (G03, nunca cabeado, 0 objetos, 0 refs em código) estava public=true → aplicado public=false via Storage API; SQL versionado em `supabase/migrations/20260612_003_contratos_bucket_private.sql`.
+- Prova: URL pública sem auth → 400; signed URL → 200; bucket vazio. Deleção descartada (irreversível → Wandson). B-03 100% (#319 + colateral).
