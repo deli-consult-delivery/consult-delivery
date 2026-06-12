@@ -1421,6 +1421,9 @@ app.use('/api', require('./routes/notifications')({
   sbFetch,
 }));
 
+// ── B-08: alerta proativo de saldo OpenRouter (inativo sem OPENROUTER_API_KEY) ─
+require('./jobs/openrouter-saldo')({ sbFetch });
+
 // ── CRM — pipeline de leads ───────────────────────────────────────────────────
 app.use('/api', require('./routes/crm')({ requireJwt, sbFetch, supabaseInsert }));
 
