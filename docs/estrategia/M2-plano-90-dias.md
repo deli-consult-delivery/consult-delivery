@@ -19,11 +19,12 @@ Sem isso, partes do plano rodam capengas. São os P1 da auditoria:
 | # | Fix | Por que destrava | Status (verificado 2026-06-12) |
 |---|-----|------------------|-------------------------------|
 | B-04 | Corrigir model id do Estúdio (`openai/gpt-image-2` inválido) | Religa geração de arte (G6) — parada desde 08/06 | ✅ JÁ FEITO — PR #195 (slug `openai/gpt-5.4-image-2`); run `success` em 08/06 03:54 UTC pós-fix |
-| B-08 | Alerta de saldo OpenRouter | Evita repetir o apagão de créditos de 29/05 que derrubou Encerramento/Estúdio | 🔧 em execução (sessão 2026-06-12) |
+| B-08 | Alerta de saldo OpenRouter | Evita repetir o apagão de créditos de 29/05 que derrubou Encerramento/Estúdio | ✅ FEITO — PR #316 + chave no .env; 1º ciclo real alertou saldo $2.81 < $5 (recarga pendente, Wandson) |
 | B-01 | Religar cron `deli-orchestrator-5min` **com anti-spam** | DELI volta a orquestrar de verdade (hoje o cérebro está em manual) | ✅ JÁ FEITO — PRs #305/#306/#308: cron `*/30` + trava anti-spam; 50 runs `success` nas últimas 36h |
-| B-02 | Apertar policy de `evolution_instances` | Config do WhatsApp não pode ficar exposta a qualquer autenticado | 🔧 em execução (sessão 2026-06-12) |
+| B-02 | Apertar policy de `evolution_instances` | Config do WhatsApp não pode ficar exposta a qualquer autenticado | ✅ FEITO — PR #315, migration `20260612_001`; vazamento provado antes e corrigido depois (isolamento RLS validado) |
+| B-03 | Apertar policies do bucket público `storage.objects` | Anon não enumera mais os arquivos do bucket `public` | ✅ FEITO — PR #319, migration `20260612_002`; anon=0/auth=164, download público intacto |
 
-*(B-03/B-05/B-06/B-07/B-09 seguem no backlog, onda 2 — não bloqueiam rotina.)*
+*(B-05/B-06/B-07/B-09 seguem no backlog, onda 2 — não bloqueiam rotina.)*
 
 ---
 
@@ -113,7 +114,7 @@ A causa típica de churn em consultoria é **valor invisível**. Antídoto: arte
 2. SOFIA com pipeline ativo (fonte de leads + cadência aprovada).
 3. CORA religada em modo propõe-e-aprova (se decidido).
 4. Oracle da CD — **MVP implementado** (spec M3 aprovada): criar agente especialista nos sistemas revendidos como primeiro caso real.
-5. Backlog segurança restante (B-03, B-05, B-06, B-07, B-09).
+5. Backlog segurança restante (B-05, B-06, B-07, B-09 — B-03 ✅ feito em 12/06, PR #319).
 **Critério de saída:** churn do trimestre < churn anterior; 1º agente criado pelo Oracle em uso.
 
 ### 🌊 Onda 3 (dias 61–90) — "Preparar a revenda"
