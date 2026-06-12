@@ -384,10 +384,14 @@ export default function App() {
       <main className="main scroll" key={route + tenant}>
         {/* Rotas públicas (sem RequireRole) */}
         {route === 'dashboard' && <DashboardScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={setRoute} />}
-        {route === 'lojas'        && <LojasScreen tenantDbId={tenantDbId} userId={session?.user?.id} />}
         {route === 'notificacoes' && <NotificacoesScreen tenantDbId={tenantDbId} userId={session?.user?.id} onNavigate={setRoute} />}
 
         {/* admin + atendimento + marketing */}
+        {route === 'lojas' && (
+          <RequireRole roles={['admin', 'atendimento', 'marketing']} screenId="lojas" userId={session?.user?.id}>
+            <LojasScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
+          </RequireRole>
+        )}
         {route === 'chat' && (
           <RequireRole roles={['admin', 'atendimento', 'marketing']} screenId="chat" userId={session?.user?.id}>
             <ChatScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={setRoute} deepLinkConvId={_deepLinkConvId} />

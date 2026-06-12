@@ -376,9 +376,9 @@ A tabela que importa: pra cada processo da CD, como é manual hoje, o que a plat
 - `provedores`, `integracoes`, `sistemas` — menu existe, conteúdo é leitura/vazio (`src/console/CvNovas.jsx:442-481`). Não operar nelas.
 
 ## Backlog de segurança aberto (não bloqueia a rotina)
-- **B-05** — rotas `dashboard`/`lojas`/`notificacoes` do console clássico sem `RequireRole` (`src/App.jsx:385-388`).
-- **B-06, B-07, B-09** — onda 2 da auditoria (detalhe em `docs/auditoria/AUDITORIA-PLATAFORMA-2026-06.md`).
-- Achado colateral 12/06: bucket `contratos` público com 0 objetos → tornar privado (flag aberta).
+_Atualizado em 12/06 após a sessão 39: B-05, B-07 e B-09 foram fechados (PRs #323/#324/#325, advisors = 0 ERROR), e o bucket `contratos` virou privado. Resta:_
+- **B-06** — ativar proteção de senha vazada (HIBP) no dashboard Supabase: Authentication → Passwords. É um toggle, só o Wandson tem acesso — não há SQL/automação pra isso.
+- WARNs residuais mapeados na auditoria (funções SECURITY DEFINER executáveis por anon/authenticated, policies always-true de canais internos) — análise caso a caso, sem urgência.
 
 ## Divergências encontradas escrevendo este manual (corrigir nos docs, não no código)
 1. **Horários do M2 §2.1:** BomDia não é "~7h" — o cron real envia **9h Brasília** (`bom-dia/envio-agendado.ts:326`, 12h UTC). Encerramento não é "~21h" — é **18h Brasília** (`encerramento/envio-agendado.ts:296`, 21h UTC).

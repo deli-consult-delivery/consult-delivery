@@ -1,0 +1,31 @@
+-- ============================================================
+-- B-03 (colateral) — Bucket `contratos`: public=true → public=false
+-- Auditoria: docs/auditoria/AUDITORIA-PLATAFORMA-2026-06.md (achado
+-- colateral do item B-03) | Data: 2026-06-12
+-- Mandato D5 v3 (SQL reversível — autonomia)
+--
+-- Contexto:
+--   - Bucket criado em 20260525_004_contratos_bucket.sql (G03) como
+--     público, para PDFs/HTMLs de contratos digitais.
+--   - Estado em 2026-06-12: 0 objetos; nenhum código do repo usa o
+--     bucket (grep "storage.from" em src/ trigger/ bridge-server/
+--     supabase/functions/ → nenhuma referência a 'contratos'; a feature
+--     G03 usa a TABELA public.contratos, não o storage).
+--   - Contratos são documentos sensíveis: se o upload for cabeado um
+--     dia, public=true os deixaria baixáveis por URL pública sem auth.
+--
+-- O que muda:
+--   - public=false → getPublicUrl() deixa de funcionar para este bucket;
+--     acesso passa a exigir sessão authenticated (via RLS) ou signed URL.
+--
+-- O que NÃO muda:
+--   - Nenhuma policy de storage.objects é tocada (a auditoria só
+--     encontrou policies amplas no bucket `public`, tratadas em
+--     20260612_002).
+--   - Nada quebra: 0 objetos, 0 referências em código.
+--
+-- Rollback:
+--   update storage.buckets set public = true where id = 'contratos';
+-- ============================================================
+
+update storage.buckets set public = false where id = 'contratos';

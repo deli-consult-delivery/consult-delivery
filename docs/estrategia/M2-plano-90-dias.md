@@ -24,7 +24,7 @@ Sem isso, partes do plano rodam capengas. São os P1 da auditoria:
 | B-02 | Apertar policy de `evolution_instances` | Config do WhatsApp não pode ficar exposta a qualquer autenticado | ✅ FEITO — PR #315, migration `20260612_001`; vazamento provado antes e corrigido depois (isolamento RLS validado) |
 | B-03 | Apertar policies do bucket público `storage.objects` | Anon não enumera mais os arquivos do bucket `public` | ✅ FEITO — PR #319, migration `20260612_002`; anon=0/auth=164, download público intacto |
 
-*(B-05/B-06/B-07/B-09 seguem no backlog, onda 2 — não bloqueiam rotina.)*
+*(Onda 2 fechada em 12/06: B-05 ✅ PR #323 · B-07 search_path ✅ PR #324 · B-09 ✅ PR #325 — advisors pós-fix = 0 ERROR. Resta B-06, toggle no dashboard Supabase = ação do Wandson, + revokes SECURITY DEFINER em análise dedicada.)*
 
 ---
 
@@ -114,7 +114,7 @@ A causa típica de churn em consultoria é **valor invisível**. Antídoto: arte
 2. SOFIA com pipeline ativo (fonte de leads + cadência aprovada).
 3. CORA religada em modo propõe-e-aprova (se decidido).
 4. Oracle da CD — **MVP implementado** (spec M3 aprovada): criar agente especialista nos sistemas revendidos como primeiro caso real.
-5. Backlog segurança restante (B-05, B-06, B-07, B-09 — B-03 ✅ feito em 12/06, PR #319).
+5. Backlog segurança restante: ✅ quase todo fechado em 12/06 — B-03 (#319), B-05 (#323), B-07 search_path (#324), B-09 (#325); advisors = 0 ERROR. Resta **B-06** (leaked-password protection — toggle no dashboard, ação Wandson) e os revokes SECURITY DEFINER (análise função a função, sessão dedicada).
 **Critério de saída:** churn do trimestre < churn anterior; 1º agente criado pelo Oracle em uso.
 
 ### 🌊 Onda 3 (dias 61–90) — "Preparar a revenda"
