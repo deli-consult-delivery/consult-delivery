@@ -377,7 +377,7 @@ A tabela que importa: pra cada processo da CD, como é manual hoje, o que a plat
 
 ## Backlog de segurança aberto (não bloqueia a rotina)
 _Atualizado em 12/06 após a sessão 39: B-05, B-07 e B-09 foram fechados (PRs #323/#324/#325, advisors = 0 ERROR), e o bucket `contratos` virou privado. Resta:_
-- **B-06** — ativar proteção de senha vazada (HIBP) no dashboard Supabase: Authentication → Passwords. É um toggle, só o Wandson tem acesso — não há SQL/automação pra isso.
+- **B-06** — ativar proteção de senha vazada (HIBP) no dashboard Supabase: **Authentication → Sign In / Providers → clicar no provider "Email"** → ligar o toggle "Prevent use of leaked passwords" (a UI nova não tem mais o item "Passwords" — as opções de senha moram dentro do provider Email). É um toggle, só o Wandson tem acesso — não há SQL/automação pra isso.
 - WARNs residuais mapeados na auditoria (funções SECURITY DEFINER executáveis por anon/authenticated, policies always-true de canais internos) — análise caso a caso, sem urgência.
 
 ## Divergências encontradas escrevendo este manual (corrigir nos docs, não no código)
