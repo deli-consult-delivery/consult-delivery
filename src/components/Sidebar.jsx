@@ -82,7 +82,7 @@ function SidebarItem({ item, route, setRoute, badge, expanded }) {
   );
 }
 
-export default function Sidebar({ route, setRoute, counts, isOpen, userId }) {
+export default function Sidebar({ route, setRoute, counts, isOpen, userId, onClose }) {
   const [expanded, setExpanded] = useState(() => {
     try { return localStorage.getItem('cd-sidebar-expanded') === 'true'; } catch { return false; }
   });
@@ -131,6 +131,11 @@ export default function Sidebar({ route, setRoute, counts, isOpen, userId }) {
             <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap', overflow: 'hidden' }}>
               Consult Delivery
             </span>
+          )}
+          {isOpen && onClose && (
+            <button onClick={onClose} className="sidebar-mobile-close" title="Fechar menu">
+              <Icon name="x" size={16} />
+            </button>
           )}
         </div>
 
