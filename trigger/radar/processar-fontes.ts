@@ -29,6 +29,14 @@ function parsePeriodo(p: unknown): { ini: string | null; fim: string | null } {
 
 const num = (v: unknown): number => { const n = Number(String(v ?? "").replace(",", ".")); return Number.isFinite(n) ? n : 0; };
 
+// Falha alto: coluna obrigatória ausente vira erro explícito da fonte (status 'erro' +
+// erro_detalhe), em vez de virar índice -1 e gravar 0/dados errados silenciosamente.
+function reqCol(head: string[], pred: (h: string) => boolean, col: string, aba: string): number {
+  const i = head.findIndex(pred);
+  if (i < 0) throw new Error(`coluna "${col}" não encontrada na aba "${aba}"`);
+  return i;
+}
+
 interface Metrica { metrica: string; valor?: number; valor_texto?: string; metadata?: Record<string, unknown> }
 
 function detectarEExtrair(wb: XLSX.WorkBook): { tipo: string; periodo: { ini: string | null; fim: string | null }; metricas: Metrica[]; resumo: Record<string, unknown> } {
@@ -41,8 +49,8 @@ function detectarEExtrair(wb: XLSX.WorkBook): { tipo: string; periodo: { ini: st
     const rows = sheetRows(wb, "Vendas");
     const head = (rows[0] ?? []).map(String);
     const iPed = head.findIndex(h => h.startsWith("Total de vendas"));
-    const iVal = head.findIndex(h => h.startsWith("Valor total de vendas"));
     if (iPed > -1) {
+      const iVal = reqCol(head, h => h.startsWith("Valor total de vendas"), "Valor total de vendas", "Vendas");
       periodo = parsePeriodo(rows[1]?.[0]);
       let pedidos = 0, valor = 0;
       for (const r of rows.slice(1)) { pedidos += num(r[iPed]); valor += num(r[iVal]); }
@@ -60,11 +68,12 @@ function detectarEExtrair(wb: XLSX.WorkBook): { tipo: string; periodo: { ini: st
 
   // ---- CANCELAMENTOS ----
   if (abas.some(a => a.toLowerCase().includes("cancelamento"))) {
-    const rows = sheetRows(wb, abas.find(a => a.toLowerCase().includes("cancelamento"))!);
+    const abaCanc = abas.find(a => a.toLowerCase().includes("cancelamento"))!;
+    const rows = sheetRows(wb, abaCanc);
     const head = (rows[0] ?? []).map(String);
     const iMotivo = head.findIndex(h => h.startsWith("Motivo"));
-    const iData = head.findIndex(h => h.startsWith("Data e hora"));
     if (iMotivo > -1) {
+      const iData = reqCol(head, h => h.startsWith("Data e hora"), "Data e hora", abaCanc);
       const dados = rows.slice(1).filter(r => r[iData]);
       const porMotivo: Record<string, number> = {};
       for (const r of dados) { const m = String(r[iMotivo] ?? "sem motivo"); porMotivo[m] = (porMotivo[m] ?? 0) + 1; }
@@ -79,9 +88,10 @@ function detectarEExtrair(wb: XLSX.WorkBook): { tipo: string; periodo: { ini: st
 
   // ---- NEGOCIAÇÕES ----
   if (abas.some(a => a.toLowerCase().includes("negocia"))) {
-    const rows = sheetRows(wb, abas.find(a => a.toLowerCase().includes("negocia"))!);
+    const abaNeg = abas.find(a => a.toLowerCase().includes("negocia"))!;
+    const rows = sheetRows(wb, abaNeg);
     const head = (rows[0] ?? []).map(String);
-    const iVal = head.findIndex(h => h.startsWith("Valor total do cancelament"));
+    const iVal = reqCol(head, h => h.startsWith("Valor total do cancelament"), "Valor total do cancelamento", abaNeg);
     const dados = rows.slice(1).filter(r => r[5]);
     let perda = 0;
     for (const r of dados) perda += num(r[iVal]);
@@ -96,8 +106,9 @@ function detectarEExtrair(wb: XLSX.WorkBook): { tipo: string; periodo: { ini: st
     const head = (funil[0] ?? []).map(String);
     const d = funil[1] ?? [];
     periodo = parsePeriodo(d[0]);
-    const ix = (n: string) => head.findIndex(h => h === n);
-    const visitas = num(d[ix("Visitas")]), concluidos = num(d[ix("Concluídos")]);
+    const iVis = reqCol(head, h => h === "Visitas", "Visitas", "Funil Loja");
+    const iConc = reqCol(head, h => h === "Concluídos", "Concluídos", "Funil Loja");
+    const visitas = num(d[iVis]), concluidos = num(d[iConc]);
     out.push({ metrica: "funil_visitas", valor: visitas });
     out.push({ metrica: "funil_concluidos", valor: concluidos });
     out.push({ metrica: "funil_conversao_pct", valor: visitas ? Math.round((concluidos / visitas) * 1000) / 10 : 0 });
@@ -116,11 +127,11 @@ function detectarEExtrair(wb: XLSX.WorkBook): { tipo: string; periodo: { ini: st
     const head = (primeira[0] ?? []).map(String);
     if (head.includes("SERVIÇO LOGÍSTICO")) {
       const dados = primeira.slice(1).filter(r => r[3]);
-      const iData = head.indexOf("DATA E HORA DO PEDIDO");
+      const iData = reqCol(head, h => h === "DATA E HORA DO PEDIDO", "DATA E HORA DO PEDIDO", abas[0]);
       const datas = dados.map(r => String(r[iData]).slice(0, 10)).sort();
       periodo = { ini: datas[0] ?? null, fim: datas[datas.length - 1] ?? null };
       const porTurno: Record<string, number> = {};
-      const iTurno = head.indexOf("TURNO");
+      const iTurno = reqCol(head, h => h === "TURNO", "TURNO", abas[0]);
       for (const r of dados) { const t = String(r[iTurno] ?? "?"); porTurno[t] = (porTurno[t] ?? 0) + 1; }
       out.push({ metrica: "logistica_pedidos", valor: dados.length, metadata: { por_turno: porTurno } });
       return { tipo: "logistica", periodo, metricas: out, resumo: { pedidos: dados.length } };
@@ -129,7 +140,7 @@ function detectarEExtrair(wb: XLSX.WorkBook): { tipo: string; periodo: { ini: st
     if (head.includes("competencia") && head.includes("tipo_lancamento")) {
       const dados = primeira.slice(1).filter(r => r[0]);
       const iTipo = head.indexOf("tipo_lancamento");
-      const iVal = head.indexOf("valor");
+      const iVal = reqCol(head, h => h === "valor", "valor", abas[0]);
       const porTipo: Record<string, number> = {};
       for (const r of dados) { const t = String(r[iTipo] ?? "?"); porTipo[t] = Math.round(((porTipo[t] ?? 0) + num(r[iVal])) * 100) / 100; }
       out.push({ metrica: "conciliacao_lancamentos", valor: dados.length, metadata: { por_tipo: porTipo } });
@@ -137,7 +148,11 @@ function detectarEExtrair(wb: XLSX.WorkBook): { tipo: string; periodo: { ini: st
       out.push({ metrica: "conciliacao_taxas", valor: Math.round((((porTipo["Retenção"] ?? 0) + (porTipo["Cobrança"] ?? 0))) * 100) / 100 });
       out.push({ metrica: "conciliacao_subsidios", valor: porTipo["Subsídio"] ?? 0 });
       const comp = String(dados[0]?.[0] ?? "");
-      if (/^\d{4}-\d{2}$/.test(comp)) periodo = { ini: `${comp}-01`, fim: `${comp}-28` };
+      if (/^\d{4}-\d{2}$/.test(comp)) {
+        const [ano, mes] = comp.split("-").map(Number);
+        const ultimoDia = new Date(Date.UTC(ano, mes, 0)).getUTCDate(); // dia 0 do mês seguinte = último dia deste mês
+        periodo = { ini: `${comp}-01`, fim: `${comp}-${String(ultimoDia).padStart(2, "0")}` };
+      }
       return { tipo: "conciliacao", periodo, metricas: out, resumo: { por_tipo: porTipo } };
     }
   }
@@ -184,7 +199,8 @@ function detectarEExtrair(wb: XLSX.WorkBook): { tipo: string; periodo: { ini: st
 
       const rNivel = linha("Nível Super");
       const nivelTxt = rNivel ? String(rNivel[2] ?? "").trim() : null;
-      const nivelNum = nivelTxt ? num((String(nivelTxt).match(/\d+/) ?? [])[0]) : null;
+      const nivelMatch = nivelTxt ? String(nivelTxt).match(/\d+/) : null;
+      const nivelNum = nivelMatch ? num(nivelMatch[0]) : null; // sem dígito → null (não 0)
       const projecao = rNivel ? String(rNivel[3] ?? "").trim() : null;
 
       const rPeriodo = linha("Período:");
