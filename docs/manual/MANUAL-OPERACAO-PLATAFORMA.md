@@ -376,9 +376,8 @@ A tabela que importa: pra cada processo da CD, como é manual hoje, o que a plat
 - `provedores`, `integracoes`, `sistemas` — menu existe, conteúdo é leitura/vazio (`src/console/CvNovas.jsx:442-481`). Não operar nelas.
 
 ## Backlog de segurança aberto (não bloqueia a rotina)
-_Atualizado em 12/06 após a sessão 39: B-05, B-07 e B-09 foram fechados (PRs #323/#324/#325, advisors = 0 ERROR), e o bucket `contratos` virou privado. Resta:_
-- **B-06** — ativar proteção de senha vazada (HIBP) no dashboard Supabase: **Authentication → Sign In / Providers → clicar no provider "Email"** → ligar o toggle "Prevent use of leaked passwords" (a UI nova não tem mais o item "Passwords" — as opções de senha moram dentro do provider Email). É um toggle, só o Wandson tem acesso — não há SQL/automação pra isso.
-- WARNs residuais mapeados na auditoria (funções SECURITY DEFINER executáveis por anon/authenticated, policies always-true de canais internos) — análise caso a caso, sem urgência.
+_Atualizado em 12/06: todos os itens B da auditoria estão fechados — B-05/B-07/B-09 (PRs #323/#324/#325), bucket `contratos` privado e **B-06 ✅ fechado pelo Wandson em 12/06** (toggle "Prevent use of leaked passwords" ligado em **Authentication → Sign In / Providers → provider "Email"**; prova: o advisor `auth_leaked_password_protection` sumiu do `get_advisors`, 0 ERROR). Resta:_
+- WARNs residuais mapeados na auditoria (funções SECURITY DEFINER executáveis por anon/authenticated, policies always-true de canais internos, listagem do bucket `public` por authenticated — sequela aceita do B-03) — análise caso a caso, sem urgência.
 
 ## Divergências encontradas escrevendo este manual (corrigir nos docs, não no código)
 1. **Horários do M2 §2.1:** BomDia não é "~7h" — o cron real envia **9h Brasília** (`bom-dia/envio-agendado.ts:326`, 12h UTC). Encerramento não é "~21h" — é **18h Brasília** (`encerramento/envio-agendado.ts:296`, 21h UTC).
