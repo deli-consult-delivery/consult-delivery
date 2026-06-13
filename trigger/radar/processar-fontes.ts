@@ -142,6 +142,77 @@ function detectarEExtrair(wb: XLSX.WorkBook): { tipo: string; periodo: { ini: st
     }
   }
 
+  // ---- QUALIDADE DA OPERAÇÃO (Super Restaurantes) ----
+  // Layout largo: cabeçalho com "Nome da loja:" + seção "Qualidade da Operação";
+  // 1 linha por indicador, colunas = dias (header "Indicador","Meta","dd/mm"...).
+  // Agrega o período: somas para contagens; razões ponderadas pelos volumes reais
+  // para percentuais/médias (evita média-de-médias enviesada por dias sem volume).
+  {
+    const abaOp = abas.find(a => {
+      const rs = sheetRows(wb, a);
+      const tem = (label: string) => rs.some(r => String(r?.[0] ?? "").trim() === label);
+      return tem("Nome da loja:") && tem("Qualidade da Operação");
+    });
+    if (abaOp) {
+      const rows = sheetRows(wb, abaOp);
+      const linha = (label: string): Linha | null => rows.find(r => String(r?.[0] ?? "").trim() === label) ?? null;
+      const iHeader = rows.findIndex(r => String(r?.[0] ?? "").trim() === "Indicador" && String(r?.[1] ?? "").trim() === "Meta");
+      const headerRow = rows[iHeader] ?? [];
+      const diaCols: number[] = [];
+      for (let c = 2; c < headerRow.length; c++) {
+        if (/^\d{2}\/\d{2}$/.test(String(headerRow[c] ?? "").trim())) diaCols.push(c);
+      }
+      const serie = (label: string): number[] => { const r = linha(label); return r ? diaCols.map(c => num(r[c])) : []; };
+      const soma = (label: string) => serie(label).reduce((a, b) => a + b, 0);
+      const r2 = (n: number) => Math.round(n * 100) / 100;
+      const mediaPond = (label: string, pesos: number[]): number | null => {
+        const s = serie(label); let acc = 0, den = 0;
+        for (let i = 0; i < s.length; i++) { const p = pesos[i] ?? 0; acc += s[i] * p; den += p; }
+        return den > 0 ? acc / den : null;
+      };
+      const mediaSimples = (label: string): number | null => {
+        const s = serie(label); return s.length ? s.reduce((a, b) => a + b, 0) / s.length : null;
+      };
+
+      const pedidos = serie("Pedidos totais");
+      const somaPedidos = pedidos.reduce((a, b) => a + b, 0);
+      const atrasadosSerie = serie("Pedidos atrasados em mais que 5 min");
+      const atrasados = atrasadosSerie.reduce((a, b) => a + b, 0);
+      const canceladosImpacto = soma("Pedidos cancelados com impacto no Super");
+      const avalSerie = serie("Quantidade de avaliações");
+      const avalQtd = avalSerie.reduce((a, b) => a + b, 0);
+
+      const rNivel = linha("Nível Super");
+      const nivelTxt = rNivel ? String(rNivel[2] ?? "").trim() : null;
+      const nivelNum = nivelTxt ? num((String(nivelTxt).match(/\d+/) ?? [])[0]) : null;
+      const projecao = rNivel ? String(rNivel[3] ?? "").trim() : null;
+
+      const rPeriodo = linha("Período:");
+      const periodoLabel = rPeriodo ? String(rPeriodo[1] ?? "").trim() : null;
+
+      const avalMedia = mediaPond("Média das avaliações", avalSerie);       // pondera pela qtd de avaliações do dia
+      const preparoMedio = mediaPond("Tempo médio de preparo (min)", pedidos); // pondera pelo nº de pedidos do dia
+      const atrasoMedio = mediaPond("Tempo médio de atraso (min)", atrasadosSerie);
+      const onlinePct = mediaSimples("Tempo online real vs planejado (%)");  // fração 0-1 → vira 0-100
+
+      const meta = { dias: diaCols.length, periodo_label: periodoLabel };
+      if (nivelTxt) out.push({ metrica: "operacao_nivel_super", valor: nivelNum ?? undefined, valor_texto: nivelTxt, metadata: { ...meta, projecao } });
+      out.push({ metrica: "operacao_pedidos_totais", valor: somaPedidos, metadata: meta });
+      out.push({ metrica: "operacao_valor_cancelado", valor: r2(soma("Valor total do cancelamento com entrega (R$)")), metadata: meta });
+      out.push({ metrica: "operacao_atrasados_5min", valor: atrasados, metadata: meta });
+      out.push({ metrica: "operacao_atrasados_5min_pct", valor: somaPedidos > 0 ? r2((atrasados / somaPedidos) * 100) : 0, metadata: meta });
+      out.push({ metrica: "operacao_cancelamento_super_pct", valor: somaPedidos > 0 ? r2((canceladosImpacto / somaPedidos) * 100) : 0, metadata: meta });
+      out.push({ metrica: "operacao_chamados", valor: soma("Pedidos com chamados"), metadata: meta });
+      out.push({ metrica: "operacao_avaliacoes_qtd", valor: avalQtd, metadata: meta });
+      if (avalMedia != null) out.push({ metrica: "operacao_avaliacao_media", valor: r2(avalMedia), metadata: meta });
+      if (preparoMedio != null) out.push({ metrica: "operacao_tempo_preparo_medio", valor: r2(preparoMedio), metadata: meta });
+      if (atrasoMedio != null) out.push({ metrica: "operacao_tempo_atraso_medio", valor: r2(atrasoMedio), metadata: meta });
+      if (onlinePct != null) out.push({ metrica: "operacao_tempo_online_pct", valor: r2(onlinePct * 100), metadata: meta });
+
+      return { tipo: "operacao", periodo, metricas: out, resumo: { dias: diaCols.length, periodo_label: periodoLabel, nivel: nivelTxt } };
+    }
+  }
+
   // ---- SUPER / layout livre — registra abas e segue ----
   return { tipo: "desconhecido", periodo, metricas: [], resumo: { abas } };
 }
@@ -212,6 +283,9 @@ export const radarProcessarFontes = schedules.task({
             periodo_fim: periodo.fim,
             metadata: m.metadata ?? null,
           }));
+          // idempotência: reprocessar/reenviar a mesma fonte não duplica métricas
+          const { error: delErr } = await sb.from("radar_metricas").delete().eq("fonte_id", f.id);
+          if (delErr) throw new Error(`limpa metricas anteriores: ${delErr.message}`);
           const { error: insErr } = await sb.from("radar_metricas").insert(linhas);
           if (insErr) throw new Error(`insert metricas: ${insErr.message}`);
         }
