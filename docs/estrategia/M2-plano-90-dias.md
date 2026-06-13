@@ -113,7 +113,7 @@ A causa típica de churn em consultoria é **valor invisível**. Antídoto: arte
 1. Resumo semanal pra **todos os clientes Performance/Enterprise**.
 2. SOFIA com pipeline ativo (fonte de leads + cadência aprovada).
 3. CORA religada em modo propõe-e-aprova (se decidido).
-4. Oracle da CD — **MVP implementado** (spec M3 aprovada): criar agente especialista nos sistemas revendidos como primeiro caso real.
+4. ✅ Oracle da CD — **MVP IMPLEMENTADO e EM PRODUÇÃO** (PR #329, `b1e2b0f`, 12/06): chat de construção de agentes (Oracle propõe draft → admin aprova → agente nasce em `agents`/`tenant_agents`). Falta só o E2E autenticado do Wandson no console pra criar o 1º agente real.
 5. Backlog segurança restante: ✅ quase todo fechado em 12/06 — B-03 (#319), B-05 (#323), B-07 search_path (#324), B-09 (#325); advisors = 0 ERROR. Resta **B-06** (leaked-password protection — toggle no dashboard, ação Wandson) e os revokes SECURITY DEFINER (análise função a função, sessão dedicada).
 **Critério de saída:** churn do trimestre < churn anterior; 1º agente criado pelo Oracle em uso.
 
