@@ -610,6 +610,29 @@ input, textarea { font-family: inherit; }
 .side-hide-btn:hover { color: rgba(255,255,255,0.6); background: rgba(255,255,255,0.06); }
 .sidebar.expanded .side-hide-btn { justify-content: flex-end; padding: 6px 12px; }
 
+/* Botão fechar drawer mobile — oculto em desktop/tablet */
+.sidebar-mobile-close {
+  display: none;
+}
+@media (max-width: 768px) {
+  .sidebar-mobile-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: auto;
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    background: rgba(255,255,255,0.08);
+    border: none;
+    border-radius: 6px;
+    color: rgba(255,255,255,0.7);
+    cursor: pointer;
+    transition: background 150ms, color 150ms;
+  }
+  .sidebar-mobile-close:hover { background: rgba(255,255,255,0.15); color: #fff; }
+}
+
 /* Botão flutuante para reabrir sidebar quando oculta */
 .side-reveal-btn {
   position: fixed;

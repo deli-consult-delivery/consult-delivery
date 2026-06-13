@@ -368,6 +368,7 @@ export default function App() {
         counts={counts}
         isOpen={sidebarOpen}
         userId={session?.user?.id}
+        onClose={() => setSidebarOpen(false)}
       />
       <Topbar
         route={route}
