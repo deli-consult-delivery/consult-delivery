@@ -40,14 +40,14 @@ const DashboardScreen = ({ tenant, tenantDbId, onNavigate }) => {
     : 'R$ 0';
 
   return (
-    <div className="route-enter dash-root" style={{ padding: '28px 32px 56px', maxWidth: 1480, margin: '0 auto' }}>
+    <div className="route-enter dash-root dash-container" style={{ maxWidth: 1480, margin: '0 auto' }}>
       {/* ═══════════════ HERO ═══════════════ */}
       <div className="dash-hero">
         <div className="dash-hero-glow"/>
         <div className="dash-hero-grid"/>
         <div style={{ position: 'relative', zIndex: 1 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 24, flexWrap: 'wrap' }}>
-            <div style={{ flex: '1 1 480px', minWidth: 0 }}>
+            <div style={{ flex: '1 1 min(480px, 100%)', minWidth: 0 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.55)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>
                 {dateStr} · <span style={{ color: '#34D399' }}>● online</span>
               </div>

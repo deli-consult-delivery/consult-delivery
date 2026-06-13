@@ -141,7 +141,8 @@ export default function LojasListView({ tenantDbId, userId, go }) {
         </div>
       ) : (
         <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 12, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <table style={{ width: '100%', minWidth: 540, borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #2a2a2a' }}>
                 <th style={thStyle}>Logo</th>
@@ -195,6 +196,7 @@ export default function LojasListView({ tenantDbId, userId, go }) {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

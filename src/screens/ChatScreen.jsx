@@ -704,7 +704,7 @@ function DeptModal({ mode, dept, tenantDbId, onSave, onClose }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
-      <div style={{ background: '#1F1F1F', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, width: 380, padding: 24 }} onClick={e => e.stopPropagation()}>
+      <div style={{ background: '#1F1F1F', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, width: 'min(380px, 95vw)', padding: 24 }} onClick={e => e.stopPropagation()}>
         <div style={{ color: 'white', fontWeight: 700, fontSize: 16, marginBottom: 20 }}>
           {mode === 'create' ? 'Novo departamento' : 'Editar departamento'}
         </div>
@@ -1086,7 +1086,7 @@ function AiSidePanel({ onClose, onRunCmd, convName, msgs }) {
 
   return (
     <div style={{
-      position: 'absolute', top: 0, right: 0, bottom: 0, width: 340,
+      position: 'absolute', top: 0, right: 0, bottom: 0, width: 'min(340px, 95vw)',
       background: '#141414', borderLeft: '1px solid rgba(255,255,255,0.08)',
       display: 'flex', flexDirection: 'column', zIndex: 40,
       animation: 'slideInRight .2s ease',
@@ -1242,7 +1242,7 @@ function ForwardModal({ msg, convs, currentConvId, onClose, onForward }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
-      <div style={{ background: '#1F1F1F', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, width: 380, maxHeight: 560, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+      <div style={{ background: '#1F1F1F', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, width: 'min(380px, 95vw)', maxHeight: 560, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
         <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ color: 'white', fontWeight: 700, fontSize: 14 }}>Encaminhar mensagem</span>
@@ -3836,10 +3836,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
   return (
     <>
     <div
-      className={`route-enter livechat${mobilePane === 'chat' ? ' lc-mobile-chat' : ' lc-mobile-list'}`}
+      className={`route-enter livechat chat-shell-grid${mobilePane === 'chat' ? ' lc-mobile-chat' : ' lc-mobile-list'}`}
       style={{
         display: 'grid',
-        gridTemplateColumns: 'minmax(320px, 360px) minmax(0, 1fr) var(--insp-col, 336px)',
         '--insp-col': showInspector ? '336px' : '16px',
         gridTemplateRows: '36px 1fr',
         gridTemplateAreas: '"header header header" "list chat inspector"',
