@@ -164,7 +164,7 @@ function GlobalSearch({ tenantDbId, onNavigate }) {
   function go(tela) { onNavigate(tela); setOpen(false); setQ(''); }
 
   return (
-    <div ref={boxRef} style={{ flex: 1, maxWidth: 420, position: 'relative' }}>
+    <div ref={boxRef} className="cv2-gsearch" style={{ flex: 1, maxWidth: 420, position: 'relative' }}>
       <input className="search" style={{ width: '100%', maxWidth: 'none' }}
         placeholder="Buscar telas, lojas, conversas…"
         value={q}
@@ -539,6 +539,7 @@ function Defesa({ tenantDbId, userId }) {
 export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, onExit }) {
   const [tela, setTela] = useState('visao');
   const [defesaOn, setDefesaOn] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [tenantsList, sel, setSel] = useTenants(userId, { dbId: propDbId, slug: tenantInfo?.id, nome: tenantInfo?.name });
 
   // tenant ativo = selecionado no topo (todas as telas seguem isto)
@@ -557,6 +558,14 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       .then(({ count }) => { if (alive) setDefesaOn((count ?? 0) > 0); });
     return () => { alive = false; };
   }, [tenantDbId]);
+
+  // mobile: ESC fecha a sidebar-drawer
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const onKey = e => { if (e.key === 'Escape') setSidebarOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [sidebarOpen]);
 
   const temaStyle = brand?.cor ? { '--red': brand.cor, '--red-dark': brand.cor, '--red-soft': brand.cor + '1a' } : undefined;
   const ehChat = tela === 'chat';
@@ -615,19 +624,23 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
   return (
     <div className="cv2" style={temaStyle}>
       <CvSprite />
-      <aside className="cv2-sb">
+      {sidebarOpen && <div className="cv2-overlay" onClick={() => setSidebarOpen(false)} />}
+      <aside className={`cv2-sb${sidebarOpen ? ' open' : ''}`}>
         <div className="cv2-brand">
           <img src={brand?.logo || '/assets/rocket-logo.png'} alt="" style={{ width: 22, height: 22, objectFit: 'contain' }} />
           <div>
             <span className="anton" style={{ fontSize: 13, lineHeight: 1.05, display: 'block' }}>{tenantNome}</span>
             <small>CONSOLE · BETA</small>
           </div>
+          <button className="cv2-sb-close" onClick={() => setSidebarOpen(false)} aria-label="Fechar menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
         </div>
         {GRUPOS.map((g, i) => (
           <div key={i}>
             <div className="cv2-grp">{g.label}</div>
             {g.items.map(it => (
-              <div key={it.id} className={`cv2-item${tela === it.id ? ' on' : ''}`} onClick={() => setTela(it.id)}>
+              <div key={it.id} className={`cv2-item${tela === it.id ? ' on' : ''}`} onClick={() => { setTela(it.id); setSidebarOpen(false); }}>
                 <Ico name={it.ic} />{it.label}
               </div>
             ))}
@@ -639,12 +652,23 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       </aside>
       <div className="cv2-main">
         {ehChat ? (
-          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-            <ChatScreen tenant={tenantSlug} tenantDbId={tenantDbId} onNavigate={setTela} deepLinkConvId={null} />
-          </div>
+          <>
+            <div className="cv2-tb-chat-mobile">
+              <button className="cv2-ham" onClick={() => setSidebarOpen(true)} aria-label="Abrir menu">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
+              </button>
+              <span className="crumb">Console › <b>{LABELS[tela] || tela}</b></span>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <ChatScreen tenant={tenantSlug} tenantDbId={tenantDbId} onNavigate={setTela} deepLinkConvId={null} />
+            </div>
+          </>
         ) : (
           <>
             <div className="cv2-tb">
+              <button className="cv2-ham" onClick={() => setSidebarOpen(true)} aria-label="Abrir menu">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
+              </button>
               <span className="crumb">Console › <b>{LABELS[tela] || tela}</b></span>
               <GlobalSearch tenantDbId={tenantDbId} onNavigate={setTela} />
               <span className="cv2-pill" title={`Plano freemium · ${CREDITOS_MES.toLocaleString('pt-BR')} créditos/mês · 1 por execução de IA · ${runs ?? 0} usados`}>
