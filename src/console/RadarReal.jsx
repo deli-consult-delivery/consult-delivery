@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { lerMetricas } from '../lib/radar-metricas.js';
+import { lerSeries, agregar } from '../lib/radar-series.js';
 
 // ============================================================
 // Console v2 — PR12b: Radar REAL (Dashboard iFood loja-por-loja)
@@ -70,11 +71,107 @@ function Kpi({ l, v, d, neg, mut }) {
   );
 }
 
+// ---- Fase 5: série diária de verdade (radar_series) ----
+// As 6 métricas que o parser persiste com grão diário (Operação é o único
+// relatório do iFood com coluna-por-dia). Os nomes ESPELHAM os de processar-fontes.ts
+// (pushSerie). `neg` = pior quando sobe (pinta vermelho); `tipo` define o formato.
+const SERIE_METRICAS = [
+  { key: 'operacao_pedidos_totais', label: 'Pedidos', tipo: 'num', neg: false },
+  { key: 'operacao_atrasados_5min', label: 'Atrasos >5min', tipo: 'num', neg: true },
+  { key: 'operacao_cancelamentos_super_qtd', label: 'Cancelam. Super', tipo: 'num', neg: true },
+  { key: 'operacao_avaliacoes_qtd', label: 'Avaliações', tipo: 'num', neg: false },
+  { key: 'operacao_chamados', label: 'Chamados', tipo: 'num', neg: true },
+  { key: 'operacao_valor_cancelado', label: 'R$ cancelado', tipo: 'brl', neg: true },
+];
+
+const GRAOS = [
+  { key: 'dia', label: 'Dia' },
+  { key: 'semana', label: 'Semana' },
+  { key: 'mes', label: 'Mês' },
+];
+
+// número compacto p/ o rótulo em cima da barra (1.2k, 340)
+const fmtCurto = n => {
+  const v = Number(n) || 0;
+  if (Math.abs(v) >= 1000) return `${(v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}k`;
+  return v.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+};
+
+// chave do bucket (de agregar) → rótulo curto do eixo X
+const rotuloChave = (chave, grao) => {
+  const p = String(chave).split('-');
+  if (grao === 'mes') return `${p[1]}/${p[0].slice(2)}`;   // 'YYYY-MM'    → 'MM/AA'
+  return `${p[2]}/${p[1]}`;                                // 'YYYY-MM-DD' → 'DD/MM'
+};
+
+// Gráfico de barras CSS da série diária (Fase 5). Recebe TODAS as linhas das 6
+// métricas de Operação já lidas; filtra pela métrica escolhida e agrega no grão
+// escolhido (dia/semana/mês) via radar-series.js. Sem dependência externa — o
+// guard `serie.length > 0` no chamador garante que "Vendas continua sem série".
+function SerieDiaria({ serie }) {
+  const [metricaSel, setMetricaSel] = useState(SERIE_METRICAS[0].key);
+  const [grao, setGrao] = useState('dia');
+
+  const meta = SERIE_METRICAS.find(s => s.key === metricaSel) || SERIE_METRICAS[0];
+  const dados = agregar(serie.filter(r => r.metrica === metricaSel), grao);
+  const max = dados.reduce((mx, d) => Math.max(mx, d.valor), 0);
+  const total = dados.reduce((s, d) => s + d.valor, 0);
+  const fmtV = meta.tipo === 'brl' ? fmtBRL : fmtNum;
+  const cor = meta.neg ? 'var(--red)' : 'var(--green)';
+  const step = Math.max(1, Math.ceil(dados.length / 12)); // afina rótulos do eixo X
+  const mostraValor = dados.length > 0 && dados.length <= 14;
+  const gap = dados.length > 40 ? 1 : 3;
+
+  return (
+    <div className="cv2-card">
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <h3 style={{ margin: 0 }}>Evolução diária — operação</h3>
+        <span style={{ fontSize: 12, color: 'var(--tx2)' }}>Total no período: <b style={{ color: 'var(--ink)' }}>{fmtV(total)}</b></span>
+      </div>
+      <div style={{ fontSize: 11.5, color: 'var(--tx2)', margin: '4px 0 12px', lineHeight: 1.6 }}>
+        Série dia-a-dia extraída do relatório de Operação — o único do iFood com grão diário. Semana e mês somam os dias.
+      </div>
+
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
+        {SERIE_METRICAS.map(s => (
+          <button key={s.key} type="button" className={`cv2-btn${metricaSel === s.key ? '' : ' sec'}`} style={{ padding: '5px 10px', fontSize: 12 }} onClick={() => setMetricaSel(s.key)}>{s.label}</button>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 14 }}>
+        {GRAOS.map(g => (
+          <button key={g.key} type="button" className={`cv2-btn${grao === g.key ? '' : ' sec'}`} style={{ padding: '5px 10px', fontSize: 12 }} onClick={() => setGrao(g.key)}>{g.label}</button>
+        ))}
+      </div>
+
+      {dados.length === 0 ? (
+        <div style={{ fontSize: 13, color: 'var(--tx2)' }}>Sem série para esta métrica no período selecionado.</div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap, height: 170 }}>
+            {dados.map(d => (
+              <div key={d.chave} title={`${rotuloChave(d.chave, grao)}: ${fmtV(d.valor)}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '100%', minWidth: 0 }}>
+                {mostraValor && <span style={{ fontSize: 9.5, color: 'var(--tx2)', marginBottom: 2, whiteSpace: 'nowrap' }}>{d.valor ? fmtCurto(d.valor) : ''}</span>}
+                <div style={{ width: '100%', height: `${max > 0 ? Math.max((d.valor / max) * 100, d.valor > 0 ? 2 : 0) : 0}%`, background: cor, borderRadius: '3px 3px 0 0', minHeight: d.valor > 0 ? 2 : 0 }} />
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap, marginTop: 5 }}>
+            {dados.map((d, i) => (
+              <div key={d.chave} style={{ flex: 1, textAlign: 'center', fontSize: 9.5, color: 'var(--tx2)', whiteSpace: 'nowrap', overflow: 'hidden' }}>{i % step === 0 ? rotuloChave(d.chave, grao) : ''}</div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function RadarReal({ tenantNome, tenantDbId }) {
   const [lojas, setLojas] = useState(null);  // [{id, nome}] — lojas com relatório processado no Radar
   const [lojaId, setLojaId] = useState('');  // loja selecionada (uuid ou SEM_LOJA)
   const [m, setM] = useState(null);          // mapa metrica -> {valor, valor_texto, metadata, periodo}
   const [casos, setCasos] = useState({ total: 0, atraso: 0, defendidoCentavos: 0 });
+  const [serie, setSerie] = useState([]);    // linhas de radar_series (Fase 5) — série diária de Operação
   const [erro, setErro] = useState(null);
   const [janela, setJanela] = useState('tudo');   // janela temporal: tudo|dia|semana|mes|custom
   const [customIni, setCustomIni] = useState('');  // 'YYYY-MM-DD' (date input)
@@ -112,7 +209,7 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
     try {
       const periodo = calcPeriodo(janela, customIni, customFim);
       const porLoja = q => (lojaId === SEM_LOJA ? q.is('loja_id', null) : q.eq('loja_id', lojaId));
-      const [mapa, { data: casosRows, error: e3 }] = await Promise.all([
+      const [mapa, { data: casosRows, error: e3 }, serieRows] = await Promise.all([
         lerMetricas(supabase, {
           tenantId: tenantDbId,
           lojaId: lojaId === SEM_LOJA ? null : lojaId,
@@ -122,9 +219,19 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
         porLoja(supabase.from('defesa_casos')
           .select('motivo, status, resultado_valor_centavos')
           .eq('tenant_id', tenantDbId)).limit(500),
+        // Série diária (Fase 5). Resiliente: uma falha aqui esconde só o gráfico,
+        // não derruba o resto do dashboard. periodo recorta a janela; o grão
+        // (dia/semana/mês) é re-agregado no cliente pelo próprio gráfico.
+        lerSeries(supabase, {
+          tenantId: tenantDbId,
+          lojaId: lojaId === SEM_LOJA ? null : lojaId,
+          metrica: SERIE_METRICAS.map(s => s.key),
+          periodo,
+        }).catch(() => []),
       ]);
       if (e3) throw e3;
       setM(mapa);
+      setSerie(serieRows ?? []);
       const cs = casosRows ?? [];
       const atraso = cs.filter(c => /atras/i.test(c.motivo || '')).length;
       const defendido = cs.filter(c => c.status === 'ganho').reduce((s, c) => s + (Number(c.resultado_valor_centavos) || 0), 0);
@@ -322,6 +429,7 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
             <Kpi l="Avaliação média" v={opAval != null ? opAval.toLocaleString('pt-BR') : '—'} d={opAvalQtd != null ? `${fmtNum(opAvalQtd)} avaliações` : ''} mut />
             <Kpi l="Cancelam. Super" v={opCancSuper != null ? `${opCancSuper}%` : '—'} d="meta ≤1%" neg={opCancSuper != null && opCancSuper > 1} />
           </div>
+          {serie.length > 0 && <SerieDiaria serie={serie} />}
         </>
       )}
 
