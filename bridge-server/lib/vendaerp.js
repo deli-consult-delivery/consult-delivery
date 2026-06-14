@@ -91,11 +91,12 @@ async function erpFetch(path, options = {}, tenantId) {
     response = await fetch(url, {
       ...options,
       headers,
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(15_000),
     });
   } catch (err) {
-    // timeout / rede — trata como 5xx p/ o retry tentar de novo
-    throw new VendaErpApiError(`VendaERP indisponível: ${err.message}`, 503, null);
+    // timeout / rede — status 0 (NÃO retentável: shouldRetry só aceita 429/5xx).
+    // ERP fora do ar falha rápido (1 tentativa) em vez de 3×15s ≈ 45s pendurado.
+    throw new VendaErpApiError(`VendaERP indisponível: ${err.message}`, 0, null);
   }
 
   let body;

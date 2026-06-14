@@ -25,8 +25,11 @@ module.exports = function ({ requireJwtOrInternal, erp }) {
     };
   }
 
-  // tenant_id opcional via query (Fase 3); na Fase 1 o client cai no env.
-  const tid = (req) => req.query.tenant_id || undefined;
+  // Fase 1 = 1 credencial no env do Bridge. O tenant_id da query é IGNORADO de
+  // propósito: aceitá-lo agora seria uma superfície cross-tenant sem checagem de
+  // membership. Fase 3 (multi-tenant) reintroduz isto via assertTenantMember(req)
+  // — só então a credencial passa a ser resolvida por tenant em vendaerp_instances.
+  const tid = () => undefined;
 
   // ── Status — chamada barata p/ validar credencial ───────────────────────────
   router.get('/vendaerp/status', requireJwtOrInternal, handle(async (req) => {
@@ -46,14 +49,14 @@ module.exports = function ({ requireJwtOrInternal, erp }) {
     if (codigo || cliente || situacao) {
       return erp.pesquisarContratos({ codigo, cliente, situacao }, tid(req));
     }
-    return erp.listContratos({ pageSize: num(pageSize, 20), skip: num(skip, 0) }, tid(req));
+    return erp.listContratos({ pageSize: num(pageSize, 20, 1), skip: num(skip, 0) }, tid(req));
   }));
 
   // ── Financeiro — lançamentos e boletos ──────────────────────────────────────
   router.get('/vendaerp/lancamentos', requireJwtOrInternal, handle((req) => {
     const { codigo, pageSize, skip } = req.query;
     if (codigo) return erp.getLancamento({ codigo }, tid(req));
-    return erp.listLancamentos({ pageSize: num(pageSize, 20), skip: num(skip, 0) }, tid(req));
+    return erp.listLancamentos({ pageSize: num(pageSize, 20, 1), skip: num(skip, 0) }, tid(req));
   }));
   router.get('/vendaerp/boletos', requireJwtOrInternal, handle((req) => {
     const { codigo, cliente } = req.query;
@@ -88,7 +91,7 @@ module.exports = function ({ requireJwtOrInternal, erp }) {
   return router;
 };
 
-function num(v, def) {
+function num(v, def, min = 0) {
   const n = parseInt(v, 10);
-  return Number.isFinite(n) ? n : def;
+  return Number.isFinite(n) ? Math.max(min, n) : def;
 }
