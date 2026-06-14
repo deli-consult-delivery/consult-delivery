@@ -23,7 +23,16 @@ export async function lerMetricas(sb, {
   select = SELECT_PADRAO,
   limit = 400,
 } = {}) {
-  let q = sb.from('radar_metricas').select(select).eq('tenant_id', tenantId);
+  // O filtro client-side de loja (modo legado `incluirSemLoja`) lê m.loja_id;
+  // sem a coluna no select, m.loja_id é undefined em toda linha e `!m.loja_id`
+  // deixaria tudo passar — vazamento silencioso entre lojas (anti-padrão P1).
+  // Garante a coluna quando esse filtro for rodar. No-op nos call-sites atuais.
+  const selectEfetivo =
+    incluirSemLoja && lojaId && !/\bloja_id\b/.test(select)
+      ? `${select}, loja_id`
+      : select;
+
+  let q = sb.from('radar_metricas').select(selectEfetivo).eq('tenant_id', tenantId);
 
   if (!incluirSemLoja) {
     if (lojaId === null) q = q.is('loja_id', null);
