@@ -182,6 +182,11 @@ Resumo de categorias: **CORE** dashboard/agentes/oracle→DELI/skills/atividade/
 - [x] BomDia · Encerramento · chat ao vivo
 - [ ] 🔄 DELI (orquestrador) · [ ] CORA — confirmar · [ ] Analista iFood / loja-gpt — confirmar
 
+**Épico "Dashboard iFood — extração máxima das planilhas"** (multi-PR, plano `/root/.claude/plans/dynamic-swimming-zebra.md`; 7 fases, cada uma 1 PR deployável sozinho). Objetivo do Wandson: extrair o máximo das planilhas do iFood pra um dashboard mais completo (consultor decide + automação + lançar demandas + acompanhamento) + filtro diário/semanal/mensal/custom. Restrição honesta (anti-padrão P1): iFood entrega Vendas/Cardápio/Conciliação agregados — diário real só em Operação/Cancelamentos/Logística.
+- [x] **FASE 0 — fundação temporal** ✅ (sessão 45): Migration A `20260615_001_radar_temporal.sql` (colunas `granularidade`+`data_ref` em `radar_metricas` + índice de dedup temporal + backfill; aditiva/idempotente/reversível, APLICADA) + parser `processar-fontes.ts` preenche o grão no insert (deploy Trigger.dev `20260614.12`); verificado E2E (2 fontes de meses diferentes → 2 `data_ref` distintos, backfill 100%).
+- [ ] FASE 1 — refactor do dedup → helper único `lerMetricas` (comportamento-neutro, CAMINHO CRÍTICO) · [ ] FASE 2 — enriquecer parser · [ ] FASE 3 — cruzamentos no dashboard · [ ] FASE 4 — filtro temporal UI · [ ] FASE 5 — série diária `radar_series` · [ ] FASE 6 — demandas rascunho→aprovação em `tarefas_loja`
+  - **Pré-requisitos da FASE 5 (achados da revisão LOCAL da Fase 0, deferidos):** ao migrar o dedup p/ `data_ref desc`, (1) alinhar timezone do `data_ref` — o parser grava `new Date().toISOString()` (UTC) e o backfill usou `created_at::date` (DB Supabase é UTC por default → batem hoje, mas confirmar antes de ordenar por `data_ref`); (2) documentar/validar que `loja_id is null` forma grupo de dedup próprio no índice `radar_metricas_dedup_idx` (métricas tenant-wide não deduplicam contra métricas por-loja).
+
 **MIA:** spec completa (`docs/mia/MIA-PLANO-COMPLETO.md`) · ⏳ implementação
 **Planejados:** LARA (spec feita) · SOFIA (ICP definido) · BRENO off-hours · MAX · VERA
 
@@ -211,6 +216,7 @@ Resumo de categorias: **CORE** dashboard/agentes/oracle→DELI/skills/atividade/
 
 ### Histórico de atualizações
 
+- 2026-06-14 (v2.7) — **Épico "Dashboard iFood — extração máxima" iniciado · FASE 0 (fundação temporal) entregue** (T6, sessão 45). Migration A `20260615_001_radar_temporal.sql` (colunas `granularidade`/`data_ref` + índice de dedup temporal, aditiva/reversível, APLICADA) + parser preenche o grão no insert (deploy Trigger.dev `20260614.12`); verificado E2E (2 meses → 2 `data_ref` distintos). Plano de 7 fases em `/root/.claude/plans/dynamic-swimming-zebra.md`; próxima = Fase 1 (helper único de dedup, comportamento-neutro).
 - 2026-06-08 (v2.6) — **D6 gravada nas Decisões Travadas** (aprovada 2026-06-07 + **reaberta pelo Wandson 2026-06-07** pós-F1; detalhe no Tracker). Fecha pendência da sessão 11.
 - 2026-06-06 (v2.5) — **FASE 2 onda 1 APLICADA** (SQL aprovado #161 → aplicada via D5 v2; validações + teste de isolamento). **D5 v2:** Wandson liberou merge + aplicação de migrations aprovadas pelo Cowork. Checklist mestre detalhado movido para os docs da FASE 0/1 (histórico git ≤ v2.4).
 - 2026-06-06 (v2.4) — equipe = 1 pessoa; DELI = COO travado; CHECKPOINT 1 go.
