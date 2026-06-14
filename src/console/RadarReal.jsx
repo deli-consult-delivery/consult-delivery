@@ -16,6 +16,50 @@ const fmtNum = n => Number(n || 0).toLocaleString('pt-BR');
 
 const SEM_LOJA = '__none__'; // fonte sem loja vinculada (loja_id null)
 
+// ---- Fase 4: filtro temporal universal (data_ref) ----
+// data_ref é o fim do período de cada relatório. Os relatórios do iFood
+// (Vendas/Cardápio/Conciliação) vêm já agregados por período — não há grão
+// diário a recuperar neles (anti-padrão P1: não fabricar dado). O filtro
+// recorta QUAL snapshot mostrar pela data de referência. Série diária de
+// verdade (Operação/Cancelamentos) é a Fase 5.
+const JANELAS = [
+  { key: 'tudo', label: 'Tudo' },
+  { key: 'dia', label: 'Dia' },
+  { key: 'semana', label: 'Semana' },
+  { key: 'mes', label: 'Mês' },
+  { key: 'custom', label: 'Personalizado' },
+];
+
+const ymd = d => {
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const da = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mo}-${da}`;
+};
+
+// Converte a janela escolhida em {inicio, fim} (strings 'YYYY-MM-DD') p/ o helper.
+// 'tudo' (e 'custom' sem datas) → undefined = comportamento legado (snapshot mais recente).
+function calcPeriodo(janela, ini, fim) {
+  const desde = n => { const d = new Date(); d.setDate(d.getDate() - n); return ymd(d); };
+  const hoje = ymd(new Date());
+  switch (janela) {
+    case 'dia': return { inicio: hoje, fim: hoje };
+    case 'semana': return { inicio: desde(6), fim: hoje };
+    case 'mes': return { inicio: desde(29), fim: hoje };
+    case 'custom':
+      if (!ini && !fim) return undefined;
+      return { inicio: ini || undefined, fim: fim || undefined };
+    default: return undefined; // 'tudo'
+  }
+}
+
+const fmtData = s => {
+  if (!s) return '';
+  const [y, mo, d] = String(s).slice(0, 10).split('-');
+  return `${d}/${mo}/${y}`;
+};
+
+const dateInputStyle = { padding: '6px 9px', border: '1px solid var(--line)', borderRadius: 4, fontFamily: 'inherit', fontSize: 12.5, background: '#fff', color: 'var(--ink)' };
+
 function Kpi({ l, v, d, neg, mut }) {
   return (
     <div className="cv2-kpi">
@@ -32,6 +76,9 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
   const [m, setM] = useState(null);          // mapa metrica -> {valor, valor_texto, metadata, periodo}
   const [casos, setCasos] = useState({ total: 0, atraso: 0, defendidoCentavos: 0 });
   const [erro, setErro] = useState(null);
+  const [janela, setJanela] = useState('tudo');   // janela temporal: tudo|dia|semana|mes|custom
+  const [customIni, setCustomIni] = useState('');  // 'YYYY-MM-DD' (date input)
+  const [customFim, setCustomFim] = useState('');
 
   // 1) Lojas que TÊM relatório processado no Radar (a dimensão real de análise).
   //    Não filtra por is_consultoria_ativa: o vínculo aqui é "tem fonte no Radar",
@@ -63,12 +110,14 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
   const carregar = useCallback(async () => {
     if (!tenantDbId || !lojaId) return;
     try {
+      const periodo = calcPeriodo(janela, customIni, customFim);
       const porLoja = q => (lojaId === SEM_LOJA ? q.is('loja_id', null) : q.eq('loja_id', lojaId));
       const [mapa, { data: casosRows, error: e3 }] = await Promise.all([
         lerMetricas(supabase, {
           tenantId: tenantDbId,
           lojaId: lojaId === SEM_LOJA ? null : lojaId,
-          select: 'metrica, valor, valor_texto, metadata, periodo_inicio, periodo_fim, created_at',
+          periodo,
+          select: 'metrica, valor, valor_texto, metadata, periodo_inicio, periodo_fim, data_ref, created_at',
         }),
         porLoja(supabase.from('defesa_casos')
           .select('motivo, status, resultado_valor_centavos')
@@ -83,7 +132,7 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
     } catch (err) {
       setErro(err?.message || 'erro ao carregar');
     }
-  }, [tenantDbId, lojaId]);
+  }, [tenantDbId, lojaId, janela, customIni, customFim]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -110,6 +159,13 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
   }
 
   const lojaNome = lojas.find(l => l.id === lojaId)?.nome ?? tenantNome;
+
+  // Estado do filtro temporal (Fase 4)
+  const periodoAtivo = janela !== 'tudo' && !(janela === 'custom' && !customIni && !customFim);
+  const semMetricas = m != null && Object.keys(m).length === 0;
+  const dataRefMax = m
+    ? Object.values(m).map(r => r.data_ref).filter(Boolean).sort().pop() || null
+    : null;
 
   const taxas = val('conciliacao_taxas');
   const entrada = val('conciliacao_entrada') ?? val('vendas_valor_total');
@@ -181,21 +237,59 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
       <h1>Dashboard iFood <span className="cv2-mock" style={{ background: 'var(--green-soft)', color: 'var(--green)' }}>DADOS REAIS</span></h1>
       <div className="cv2-rule" />
 
-      <div className="cv2-card" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
-        <label htmlFor="radar-loja" style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px', color: 'var(--tx2)' }}>Loja</label>
-        <select
-          id="radar-loja"
-          value={lojaId}
-          onChange={e => setLojaId(e.target.value)}
-          style={{ padding: '8px 11px', border: '1px solid var(--line)', borderRadius: 4, fontFamily: 'inherit', fontSize: 13, background: '#fff', minWidth: 240 }}
-        >
-          {lojas.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
-        </select>
-        <span style={{ fontSize: 12, color: 'var(--tx2)' }}>
-          {lojas.length} {lojas.length === 1 ? 'loja com relatórios' : 'lojas com relatórios'} — analisando uma por vez
-        </span>
+      <div className="cv2-card" style={{ marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <label htmlFor="radar-loja" style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px', color: 'var(--tx2)' }}>Loja</label>
+          <select
+            id="radar-loja"
+            value={lojaId}
+            onChange={e => setLojaId(e.target.value)}
+            style={{ padding: '8px 11px', border: '1px solid var(--line)', borderRadius: 4, fontFamily: 'inherit', fontSize: 13, background: '#fff', minWidth: 240 }}
+          >
+            {lojas.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
+          </select>
+          <span style={{ fontSize: 12, color: 'var(--tx2)' }}>
+            {lojas.length} {lojas.length === 1 ? 'loja com relatórios' : 'lojas com relatórios'} — analisando uma por vez
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.4px', color: 'var(--tx2)' }}>Período</span>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {JANELAS.map(j => (
+              <button
+                key={j.key}
+                type="button"
+                className={`cv2-btn${janela === j.key ? '' : ' sec'}`}
+                style={{ padding: '6px 11px' }}
+                onClick={() => setJanela(j.key)}
+              >{j.label}</button>
+            ))}
+          </div>
+          {janela === 'custom' && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input type="date" value={customIni} max={customFim || undefined} onChange={e => setCustomIni(e.target.value)} style={dateInputStyle} aria-label="Data inicial" />
+              <span style={{ fontSize: 12, color: 'var(--tx2)' }}>até</span>
+              <input type="date" value={customFim} min={customIni || undefined} onChange={e => setCustomFim(e.target.value)} style={dateInputStyle} aria-label="Data final" />
+            </span>
+          )}
+          {periodoAtivo && (
+            <span style={{ fontSize: 11.5, color: 'var(--tx2)', flexBasis: '100%', lineHeight: 1.6 }}>
+              O iFood entrega estes relatórios agregados por período — o filtro recorta pela data de referência (fim do período de cada relatório){dataRefMax ? `; mostrando dados até ${fmtData(dataRefMax)}` : ''}. A série diária de verdade (Operação, Cancelamentos) chega na próxima fase.
+            </span>
+          )}
+        </div>
       </div>
 
+      {periodoAtivo && semMetricas ? (
+        <div className="cv2-card" style={{ maxWidth: 620 }}>
+          <h3 style={{ margin: '0 0 8px' }}>Nenhum relatório do iFood nesta janela de período</h3>
+          <div style={{ fontSize: 13, color: 'var(--tx2)', lineHeight: 1.7 }}>
+            {lojaNome} não tem relatórios do iFood com data de referência dentro do período selecionado. Os relatórios do iFood são datados pelo fim do período de cada arquivo — amplie a janela de tempo ou volte para <strong>Tudo</strong> para ver o último diagnóstico disponível desta loja.
+          </div>
+        </div>
+      ) : (
+      <>
       <div className="cv2-sub">Diagnóstico de {lojaNome} a partir dos relatórios importados do iFood.{erro ? ` · erro: ${erro}` : ''}</div>
       <div className="cv2-kpis">
         <Kpi l="Faturamento (entrada)" v={entrada != null ? fmtBRL(entrada) : '—'} d={pedidos != null ? `${fmtNum(pedidos)} pedidos` : ''} />
@@ -246,6 +340,8 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
         </table>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }
