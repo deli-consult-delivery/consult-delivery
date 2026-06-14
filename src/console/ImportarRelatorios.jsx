@@ -82,7 +82,7 @@ export default function ImportarRelatorios({ tenantDbId, userId }) {
 
   return (
     <div>
-      <h1>Importar relatórios <span className="cv2-mock" style={{ background: 'var(--green-soft)', color: 'var(--green)' }}>FONTE DO RADAR</span></h1>
+      <h1>Importar relatórios <span className="cv2-mock" style={{ background: 'var(--green-soft)', color: 'var(--green)' }}>FONTE DO DASHBOARD</span></h1>
       <div className="cv2-rule" />
       <div className="cv2-sub">Baixe os relatórios no Portal do Parceiro iFood (aba Relatórios) e solte aqui — vendas, cancelamentos, negociações, cardápio, logística e conciliação. Prints de telas também valem (a IA lê a imagem).{erro ? ` · erro: ${erro}` : ''}</div>
 
