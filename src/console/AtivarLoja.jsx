@@ -195,7 +195,7 @@ export default function AtivarLoja({ tenantDbId }) {
                   <tr key={l.id}>
                     <td><b>{l.nome}</b></td>
                     <td>{l.cidade || '—'}</td>
-                    <td>{md.qualificada_defesa === true ? <span className="cv2-bdg ok">qualificada</span> : md.qualificada_defesa === false ? <span className="cv2-bdg warn">radar</span> : <span className="cv2-bdg mut">—</span>}</td>
+                    <td>{md.qualificada_defesa === true ? <span className="cv2-bdg ok">qualificada</span> : md.qualificada_defesa === false ? <span className="cv2-bdg warn">gratuito</span> : <span className="cv2-bdg mut">—</span>}</td>
                     <td>{grupo ? grupo.group_name : <span style={{ color: 'var(--tx2)' }}>sem grupo</span>}</td>
                   </tr>
                 );
