@@ -296,6 +296,7 @@ export default function Avaliacoes({ tenantDbId, userId }) {
 
   // Carrega config + avaliações da loja selecionada.
   const carregarLoja = useCallback(async () => {
+    setEntradas([{ ...ROW_VAZIA }]); // trocar de loja zera as avaliações coladas (não vazam p/ outra loja)
     if (!lojaId) { setConfig(null); setAvals(null); return; }
     setErro(null);
     try {
@@ -329,12 +330,14 @@ export default function Avaliacoes({ tenantDbId, userId }) {
   async function setLogisticaLoja(id, tipo) {
     setGBusy(b => ({ ...b, [id]: true })); setErro(null); setAviso(null);
     try {
-      await setLojaLogistica({ tenantId: tenantDbId, lojaId: id, logistica_tipo: tipo });
+      const saved = await setLojaLogistica({ tenantId: tenantDbId, lojaId: id, logistica_tipo: tipo });
       setGestao(gs => (gs ?? []).map(l => (l.id === id ? { ...l, logistica_tipo: tipo } : l)));
-      // se for a loja aberta no detalhe, mantém o card em sincronia
+      // se for a loja aberta no detalhe, mantém o card em sincronia. Quando a loja
+      // ainda não tinha config (config=null), adota a linha recém-criada no banco —
+      // senão o "Gerar respostas" continua bloqueado mesmo com a logística salva.
       if (id === lojaId) {
         setCfgForm(f => ({ ...f, logistica_tipo: tipo }));
-        setConfig(c => (c ? { ...c, logistica_tipo: tipo } : c));
+        setConfig(c => (c ? { ...c, logistica_tipo: tipo } : saved));
       }
       setAviso('Logística atualizada.');
     } catch (e) { setErro(e.message); }
