@@ -184,6 +184,7 @@ Resumo de categorias: **CORE** dashboard/agentes/oracle→DELI/skills/atividade/
 
 **MIA:** spec completa (`docs/mia/MIA-PLANO-COMPLETO.md`) · ⏳ implementação
 **Planejados:** LARA (spec feita) · SOFIA (ICP definido) · BRENO off-hours · MAX · VERA
+- [x] ✅ **Agente `avaliacoes` (sessão 45, 2026-06-14, PR a abrir)** — responde avaliações do iFood das lojas de consultoria. Aba Console v2 "Avaliações" (`src/console/Avaliacoes.jsx`) + 3 endpoints Bridge (`routes/avaliacoes.js`: `gerar`/`enviar-grupo`/`sugerir-tom`, claude-runner `claude-sonnet-4-6`) + migration `20260614_001_avaliacoes.sql` (`avaliacoes`/`avaliacoes_loja_config`, **aplicada + RLS validada**) + registro em `agents`/`tenant_agents`. Sem API do iFood (consultor cola/copia manual). Regra de logística (iFood logística não responde entrega) · resposta ≤300 chars + insights de consultoria · envio ao grupo de WhatsApp 1 a 1 (Evolution). Sem deploy Trigger.dev (geração no Bridge). **Fora de escopo (v2):** cadência agendada ter/sex, parser de WhatsApp de entrada, leitura/postagem automática no iFood.
 
 ---
 
