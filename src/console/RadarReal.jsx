@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
+import { lerMetricas } from '../lib/radar-metricas.js';
 
 // ============================================================
 // Console v2 — PR12b: Radar REAL (Dashboard iFood loja-por-loja)
@@ -63,18 +64,17 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
     if (!tenantDbId || !lojaId) return;
     try {
       const porLoja = q => (lojaId === SEM_LOJA ? q.is('loja_id', null) : q.eq('loja_id', lojaId));
-      const [{ data: mets, error: e1 }, { data: casosRows, error: e3 }] = await Promise.all([
-        porLoja(supabase.from('radar_metricas')
-          .select('metrica, valor, valor_texto, metadata, periodo_inicio, periodo_fim, created_at')
-          .eq('tenant_id', tenantDbId)).order('created_at', { ascending: false }).limit(400),
+      const [mapa, { data: casosRows, error: e3 }] = await Promise.all([
+        lerMetricas(supabase, {
+          tenantId: tenantDbId,
+          lojaId: lojaId === SEM_LOJA ? null : lojaId,
+          select: 'metrica, valor, valor_texto, metadata, periodo_inicio, periodo_fim, created_at',
+        }),
         porLoja(supabase.from('defesa_casos')
           .select('motivo, status, resultado_valor_centavos')
           .eq('tenant_id', tenantDbId)).limit(500),
       ]);
-      if (e1 || e3) throw (e1 || e3);
-      // última ocorrência de cada métrica (rows já vêm desc por created_at)
-      const mapa = {};
-      for (const r of mets ?? []) { if (!mapa[r.metrica]) mapa[r.metrica] = r; }
+      if (e3) throw e3;
       setM(mapa);
       const cs = casosRows ?? [];
       const atraso = cs.filter(c => /atras/i.test(c.motivo || '')).length;

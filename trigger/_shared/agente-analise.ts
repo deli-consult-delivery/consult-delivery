@@ -3,6 +3,7 @@ import { getAnthropic } from "./claude";
 import { getSupabase } from "./supabase";
 import { logAgentRun } from "./audit";
 import { notifyDeli } from "./notify-deli";
+import { lerMetricas } from "./radar-metricas";
 
 // =====================================================
 // Helper compartilhado dos agentes de análise (Cardápio, Multicanal).
@@ -30,12 +31,7 @@ export async function processarFila(opts: {
   for (const a of fila) {
     const t0 = Date.now();
     try {
-      const { data: mets } = await sb.from("radar_metricas")
-        .select("metrica, valor, valor_texto, created_at, loja_id")
-        .eq("tenant_id", a.tenant_id).order("created_at", { ascending: false }).limit(400);
-      const filtradas = a.loja_id ? (mets ?? []).filter(m => !m.loja_id || m.loja_id === a.loja_id) : (mets ?? []);
-      const mapa: Record<string, any> = {};
-      for (const r of filtradas) { if (!mapa[r.metrica]) mapa[r.metrica] = r; }
+      const mapa = await lerMetricas(sb, { tenantId: a.tenant_id, lojaId: a.loja_id ?? undefined, incluirSemLoja: true });
       const entradas = Object.entries(mapa).filter(([k]) => !opts.metricasFiltro || opts.metricasFiltro(k));
       const fatos = entradas.map(([k, v]) => `${k}: ${v.valor ?? v.valor_texto ?? ""}`).join("\n");
       if (!fatos) {

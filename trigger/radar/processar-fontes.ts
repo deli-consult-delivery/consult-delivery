@@ -288,6 +288,11 @@ export const radarProcessarFontes = schedules.task({
         }
 
         if (metricas.length) {
+          // grão temporal (Fase 0): conciliação é mensal (1 competência por arquivo);
+          // os demais relatórios e prints chegam agregados por período. A série diária
+          // de verdade (Operação/Cancelamentos/Logística) vai p/ radar_series (Fase 5).
+          const granularidade = tipo === "conciliacao" ? "mes" : "periodo";
+          const dataRef = periodo.fim ?? new Date().toISOString().slice(0, 10); // coalesce(periodo.fim, hoje≈created_at)
           const linhas = metricas.map(m => ({
             tenant_id: f.tenant_id,
             loja_id: f.loja_id ?? null,
@@ -297,6 +302,8 @@ export const radarProcessarFontes = schedules.task({
             valor_texto: m.valor_texto ?? null,
             periodo_inicio: periodo.ini,
             periodo_fim: periodo.fim,
+            granularidade,
+            data_ref: dataRef,
             metadata: m.metadata ?? null,
           }));
           // idempotência: reprocessar/reenviar a mesma fonte não duplica métricas

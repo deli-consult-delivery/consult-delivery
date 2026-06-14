@@ -5,6 +5,7 @@ import { getAnthropic } from "../_shared/claude";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 import { notifyDeli } from "../_shared/notify-deli";
+import { lerMetricas } from "../_shared/radar-metricas";
 
 // =====================================================
 // AGENTE ANÁLISE DE LOJA — processa a fila (PR plataforma completa)
@@ -38,12 +39,7 @@ export const analiseLojaProcessar = schedules.task({
       const t0 = Date.now();
       try {
         // métricas mais recentes do tenant (e da loja, se houver loja_id)
-        let q = sb.from("radar_metricas").select("metrica, valor, valor_texto, created_at, loja_id")
-          .eq("tenant_id", a.tenant_id).order("created_at", { ascending: false }).limit(400);
-        const { data: mets } = await q;
-        const filtradas = a.loja_id ? (mets ?? []).filter(m => !m.loja_id || m.loja_id === a.loja_id) : (mets ?? []);
-        const mapa: Record<string, any> = {};
-        for (const r of filtradas) { if (!mapa[r.metrica]) mapa[r.metrica] = r; }
+        const mapa = await lerMetricas(sb, { tenantId: a.tenant_id, lojaId: a.loja_id ?? undefined, incluirSemLoja: true });
 
         let loja_nome = "a loja";
         if (a.loja_id) {
