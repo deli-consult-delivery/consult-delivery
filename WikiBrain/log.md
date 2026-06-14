@@ -405,6 +405,14 @@ Touched: none
 - Bucket storage `contratos` (G03, nunca cabeado, 0 objetos, 0 refs em código) estava public=true → aplicado public=false via Storage API; SQL versionado em `supabase/migrations/20260612_003_contratos_bucket_private.sql`.
 - Prova: URL pública sem auth → 400; signed URL → 200; bucket vazio. Deleção descartada (irreversível → Wandson). B-03 100% (#319 + colateral).
 
+## 2026-06-14 — sessão: integração VendaERP (Fase 1, MVP read-only)
+- Plano aprovado pelo Wandson. VendaERP (cw.vendaerp.com.br) ↔ Console v2 ↔ Hermes. Bridge = ponto único de contato com o ERP (credencial só no env do Bridge; Console via JWT, Hermes via x-internal-token, ambos em /api/vendaerp/*).
+- Código (todos verificados — smoke offline 5/5, node --check 3/3): `bridge-server/lib/vendaerp.js` (15 exports), `bridge-server/routes/vendaerp.js` + registro em index.js:1525, `src/console/VendaErpPainel.jsx` + wiring ConsoleV2.jsx, `vendaerp-mcp/` (6 tools de leitura: erp_status/contratos/financeiro/estoque/fiscal/crm; writeTools=[] como enforcement estrutural da Fase 1).
+- Migration `20260614_002_vendaerp.sql` APLICADA (output bruto): tabela `vendaerp_instances` (RLS ativa, policy SELECT `is_member_of(tenant_id)`, 3 índices) + 2 linhas em `tenant_integracoes` (1/tenant). Teste de isolamento RLS: role=anon vê 0 de 2 linhas semeadas → OK; linhas de teste removidas (tabela fica vazia, Fase 1 usa env).
+- Build frontend OK: `vite build` ✓ 222 módulos, 6.01s, sem erro; VendaErpPainel.jsx no bundle.
+- GATE 0 reservado ao Wandson: secrets VENDAERP_* no Infisical/Bridge + pm2 restart; `hermes mcp add vendaerp ...` + systemctl restart hermes-gateway; npm run live-smoke.
+- Fase 2 (escrita c/ confirmação no Telegram) e Fase 3 (multi-tenant, token cifrado) ficam para depois.
+
 ## 2026-06-14 — sessão 47 (Avaliações iFood: aba Console v2 + agente IA p/ responder avaliações) [T6]
 - **Dor:** lojas em consultoria recebem avaliações no iFood sem resposta sistemática; avaliação que expira sem resposta é publicada como está. Responder bem = recupera cliente, sinaliza atividade ao iFood (selo Super Restaurante) e gera material de consultoria.
 - **Restrição confirmada:** **não existe API do iFood** — info extraída manual do portal e **colada** no dashboard; resposta gerada **copiada de volta** manual. Sistema não lê nem posta no iFood.

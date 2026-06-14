@@ -1527,6 +1527,13 @@ app.use('/api', require('./routes/mia-vinculos')({
   SUPABASE_SERVICE_KEY,
 }));
 
+// VendaERP — leitura (Console via JWT, Hermes via x-internal-token).
+// Ponto único de contato com o ERP; credencial (3 headers) só no env do Bridge.
+app.use('/api', require('./routes/vendaerp')({
+  requireJwtOrInternal,
+  erp: require('./lib/vendaerp'),
+}));
+
 // ════════════════════════════════════════════════════════════════════════════
 // BRENO Off-Hours — smoke routes
 // ════════════════════════════════════════════════════════════════════════════
