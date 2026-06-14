@@ -22,9 +22,27 @@ function sheetRows(wb: XLSX.WorkBook, nome: string): Linha[] {
 }
 
 function parsePeriodo(p: unknown): { ini: string | null; fim: string | null } {
-  const m = String(p ?? "").match(/(\d{2})\/(\d{2})\/(\d{4})\s*-\s*(\d{2})\/(\d{2})\/(\d{4})/);
-  if (!m) return { ini: null, fim: null };
-  return { ini: `${m[3]}-${m[2]}-${m[1]}`, fim: `${m[6]}-${m[5]}-${m[4]}` };
+  const s = String(p ?? "");
+  // 1) Formato estrito (Vendas/Cardápio): DD/MM/YYYY - DD/MM/YYYY. Mantido idêntico —
+  //    casa primeiro e retorna, sem nunca cair no fallback abaixo (zero regressão).
+  const m = s.match(/(\d{2})\/(\d{2})\/(\d{4})\s*-\s*(\d{2})\/(\d{2})\/(\d{4})/);
+  if (m) return { ini: `${m[3]}-${m[2]}-${m[1]}`, fim: `${m[6]}-${m[5]}-${m[4]}` };
+  // 2) Formato curto (Operação: "Diário (09/05 a 07/06)"): DD/MM[/YYYY] <sep> DD/MM[/YYYY],
+  //    separador "a"/"à"/"até"/"-"/"–"/"—", ano possivelmente ausente. Ano ausente é
+  //    INFERIDO da data de processamento (o relatório é processado logo após o upload,
+  //    então o período é recente): o fim é o DD/MM mais recente <= hoje; o início recua
+  //    1 ano só se cruzar a virada de ano. Nunca fabrica dado — só DD/MM presentes na fonte.
+  const f = s.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?\s*(?:a|à|até|-|–|—)\s*(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?/i);
+  if (!f) return { ini: null, fim: null };
+  const hojeISO = new Date().toISOString().slice(0, 10);
+  const iso = (ano: number, mm: string, dd: string) => `${ano}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+  const refAno = Number(hojeISO.slice(0, 4));
+  let anoFim = f[6] ? Number(f[6]) : refAno;
+  if (!f[6] && iso(anoFim, f[5], f[4]) > hojeISO) anoFim -= 1; // fim no futuro → era ano passado
+  const fim = iso(anoFim, f[5], f[4]);
+  let anoIni = f[3] ? Number(f[3]) : anoFim;
+  if (!f[3] && iso(anoIni, f[2], f[1]) > fim) anoIni -= 1; // início depois do fim → virada de ano
+  return { ini: iso(anoIni, f[2], f[1]), fim };
 }
 
 const num = (v: unknown): number => { const n = Number(String(v ?? "").replace(",", ".")); return Number.isFinite(n) ? n : 0; };
@@ -219,9 +237,10 @@ function detectarEExtrair(wb: XLSX.WorkBook): { tipo: string; periodo: { ini: st
 
       const rPeriodo = linha("Período:");
       const periodoLabel = rPeriodo ? String(rPeriodo[1] ?? "").trim() : null;
-      // Fase 0 — ancora data_ref no período REAL do relatório, não na data de
-      // processamento. parsePeriodo é estrito (DD/MM/YYYY - DD/MM/YYYY): formato
-      // diferente → no-op (cai no fallback created_at de hoje), nunca fabrica data.
+      // Ancora data_ref no período REAL do relatório, não na data de processamento.
+      // O label da Operação vem como "Diário (DD/MM a DD/MM)" (sem ano) — parsePeriodo
+      // casa esse formato curto (ramo 2) e infere o ano; só se nem assim parsear é que
+      // cai no fallback created_at de hoje. Nunca fabrica data.
       if (periodoLabel) { const p = parsePeriodo(periodoLabel); if (p.fim) periodo = p; }
 
       const avalMedia = mediaPond("Média das avaliações", avalSerie);       // pondera pela qtd de avaliações do dia
