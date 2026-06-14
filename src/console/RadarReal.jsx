@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { lerMetricas } from '../lib/radar-metricas.js';
 import { lerSeries, agregar } from '../lib/radar-series.js';
+import { listTarefasIA, aprovarTarefa, rejeitarTarefa } from '../lib/api.js';
 
 // ============================================================
 // Console v2 — PR12b: Radar REAL (Dashboard iFood loja-por-loja)
@@ -16,6 +17,20 @@ const fmtBRL = n => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', 
 const fmtNum = n => Number(n || 0).toLocaleString('pt-BR');
 
 const SEM_LOJA = '__none__'; // fonte sem loja vinculada (loja_id null)
+
+// ---- Fase 6: Ações recomendadas (rascunhos de tarefa) ----
+// Espelham os CHECK de tarefas_loja (status/prioridade). cls → badge cv2-bdg.
+const STATUS_LABEL = {
+  rascunho: 'Rascunho', aguardando_envio: 'Aguardando envio', aguardando_aprovacao: 'Aguardando aprovação',
+  aprovada: 'Aprovada', rejeitada: 'Rejeitada', em_execucao: 'Em execução',
+  aguardando_validacao: 'Aguardando validação', concluida: 'Concluída', cancelada: 'Cancelada',
+};
+const STATUS_CLS = {
+  rascunho: 'mut', aguardando_envio: 'warn', aguardando_aprovacao: 'warn',
+  aprovada: 'ok', rejeitada: 'err', em_execucao: 'ok',
+  aguardando_validacao: 'warn', concluida: 'ok', cancelada: 'mut',
+};
+const PRIO_LABEL = { quick_win: 'Quick win', estrutural: 'Estrutural', material_cliente: 'Material' };
 
 // ---- Fase 4: filtro temporal universal (data_ref) ----
 // data_ref é o fim do período de cada relatório. Os relatórios do iFood
@@ -176,6 +191,8 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
   const [janela, setJanela] = useState('tudo');   // janela temporal: tudo|dia|semana|mes|custom
   const [customIni, setCustomIni] = useState('');  // 'YYYY-MM-DD' (date input)
   const [customFim, setCustomFim] = useState('');
+  const [tarefas, setTarefas] = useState([]);      // Fase 6: tarefas IA (rascunhos + acompanhamento) da loja
+  const [acao, setAcao] = useState(null);          // id da tarefa em processamento (aprovar/rejeitar)
 
   // 1) Lojas que TÊM relatório processado no Radar (a dimensão real de análise).
   //    Não filtra por is_consultoria_ativa: o vínculo aqui é "tem fonte no Radar",
@@ -242,6 +259,29 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
   }, [tenantDbId, lojaId, janela, customIni, customFim]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  // 3) Fase 6 — Ações recomendadas (tarefas geradas pela IA para esta loja).
+  //    Resiliente: falha aqui esvazia a lista, não derruba o dashboard.
+  const carregarTarefas = useCallback(async () => {
+    if (!lojaId || lojaId === SEM_LOJA) { setTarefas([]); return; }
+    try { setTarefas(await listTarefasIA(lojaId)); }
+    catch { setTarefas([]); }
+  }, [lojaId]);
+
+  useEffect(() => { carregarTarefas(); }, [carregarTarefas]);
+
+  const onAprovar = async (id) => {
+    setAcao(id);
+    try { await aprovarTarefa(id); await carregarTarefas(); }
+    catch (e) { setErro(e?.message || 'erro ao aprovar'); }
+    finally { setAcao(null); }
+  };
+  const onRejeitar = async (id) => {
+    setAcao(id);
+    try { await rejeitarTarefa(id); await carregarTarefas(); }
+    catch (e) { setErro(e?.message || 'erro ao rejeitar'); }
+    finally { setAcao(null); }
+  };
 
   const val = k => (m && m[k] ? Number(m[k].valor) : null);
   const txt = k => (m && m[k] ? m[k].valor_texto : null);
@@ -338,6 +378,10 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
   if (opOnline != null && opOnline < 90) sinais.push({ sinal: `Loja online ${opOnline}% do planejado (meta 90%)`, impacto: 'disponibilidade', cls: 'warn', acao: 'reduzir pausas/fechamentos no pico' });
   if (opCancSuper != null && opCancSuper > 1) sinais.push({ sinal: `Cancelamentos com impacto no Super: ${opCancSuper}%`, impacto: 'nível Super', cls: 'err', acao: 'meta ≤1% — atacar a causa dos cancelamentos' });
   if (opChamados != null && opChamados > 0) sinais.push({ sinal: `${fmtNum(opChamados)} chamados abertos no suporte iFood`, impacto: 'suporte', cls: 'mut', acao: 'acompanhar a resolução dos chamados' });
+
+  // Fase 6 — separa rascunhos (aguardam aprovação) do que já está em acompanhamento.
+  const rascunhos = tarefas.filter(t => t.status === 'rascunho');
+  const acompanhamento = tarefas.filter(t => t.status !== 'rascunho');
 
   return (
     <div>
@@ -448,6 +492,47 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
         </table>
         </div>
       </div>
+
+      {tarefas.length > 0 && (
+        <div className="cv2-card">
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+            <h3 style={{ margin: 0 }}>Ações recomendadas</h3>
+            <span style={{ fontSize: 12, color: 'var(--tx2)' }}>{rascunhos.length > 0 ? `${rascunhos.length} aguardando sua aprovação` : 'nenhum rascunho pendente'}</span>
+          </div>
+          <div style={{ fontSize: 11.5, color: 'var(--tx2)', margin: '4px 0 12px', lineHeight: 1.6 }}>O diagnóstico semanal gera estes rascunhos a partir dos sinais reais da loja. Nada vira tarefa sem a sua aprovação.</div>
+          {rascunhos.map(t => (
+            <div key={t.id} style={{ border: '1px solid var(--line)', borderRadius: 6, padding: '12px 14px', marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                <span className={`cv2-bdg ${STATUS_CLS[t.status] || 'mut'}`}>{STATUS_LABEL[t.status] || t.status}</span>
+                <span className="cv2-bdg mut">{PRIO_LABEL[t.prioridade] || t.prioridade}</span>
+                <b style={{ fontSize: 13.5 }}>{t.titulo}</b>
+              </div>
+              {t.situacao && <div style={{ fontSize: 12.5, color: 'var(--tx2)', lineHeight: 1.6, marginBottom: 4 }}>{t.situacao}</div>}
+              {t.o_que_sera_feito && <div style={{ fontSize: 12.5, lineHeight: 1.6, marginBottom: 4 }}><b>O que será feito:</b> {t.o_que_sera_feito}</div>}
+              {t.por_que_importa && <div style={{ fontSize: 11.5, color: 'var(--tx2)', lineHeight: 1.6, marginBottom: 10 }}>{t.por_que_importa}</div>}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" className="cv2-btn" style={{ padding: '6px 14px' }} disabled={acao === t.id} onClick={() => onAprovar(t.id)}>{acao === t.id ? '…' : 'Aprovar'}</button>
+                <button type="button" className="cv2-btn sec" style={{ padding: '6px 14px' }} disabled={acao === t.id} onClick={() => onRejeitar(t.id)}>Rejeitar</button>
+              </div>
+            </div>
+          ))}
+          {acompanhamento.length > 0 && (
+            <>
+              <div className="cv2-sub" style={{ marginTop: rascunhos.length ? 14 : 0 }}>Acompanhamento</div>
+              <div className="cv2-tbl-wrap">
+                <table>
+                  <thead><tr><th>Tarefa</th><th>Prioridade</th><th>Status</th></tr></thead>
+                  <tbody>
+                    {acompanhamento.map(t => (
+                      <tr key={t.id}><td>{t.titulo}</td><td>{PRIO_LABEL[t.prioridade] || t.prioridade}</td><td><span className={`cv2-bdg ${STATUS_CLS[t.status] || 'mut'}`}>{STATUS_LABEL[t.status] || t.status}</span></td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      )}
       </>
       )}
     </div>
