@@ -763,3 +763,47 @@ export function subscribeToNotifications(tenantId, userId, onInsert, suffix = ''
     .subscribe();
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Dashboard iFood — Ações recomendadas (rascunhos de tarefa gerados pelo
+// diagnóstico semanal). RLS por loja_id → lojas.tenant_id; só tarefas criadas
+// pela IA (criado_por_ia=true). Aprovar/rejeitar move o status (Fase 6).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function listTarefasIA(lojaId) {
+  if (!lojaId) return [];
+  const { data, error } = await supabase
+    .from('tarefas_loja')
+    .select('id, bloco, titulo, situacao, o_que_sera_feito, por_que_importa, prioridade, status, metadata, created_at, aprovada_em')
+    .eq('loja_id', lojaId)
+    .eq('criado_por_ia', true)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function aprovarTarefa(id) {
+  // .eq('status','rascunho'): só transiciona o que ainda é rascunho (UI stale não
+  // regride tarefa já avançada). .select() + checagem de linhas: RLS bloqueando
+  // devolve sucesso com 0 linhas — sem isso a falha seria silenciosa. updated_at
+  // fica a cargo do trigger tarefas_loja_updated_at.
+  const { data, error } = await supabase
+    .from('tarefas_loja')
+    .update({ status: 'aprovada', aprovada_em: new Date().toISOString() })
+    .eq('id', id)
+    .eq('status', 'rascunho')
+    .select('id');
+  if (error) throw error;
+  if (!data?.length) throw new Error('Tarefa não encontrada ou já processada');
+}
+
+export async function rejeitarTarefa(id) {
+  const { data, error } = await supabase
+    .from('tarefas_loja')
+    .update({ status: 'rejeitada' })
+    .eq('id', id)
+    .eq('status', 'rascunho')
+    .select('id');
+  if (error) throw error;
+  if (!data?.length) throw new Error('Tarefa não encontrada ou já processada');
+}
+
