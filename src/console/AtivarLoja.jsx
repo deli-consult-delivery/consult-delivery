@@ -87,7 +87,7 @@ export default function AtivarLoja({ tenantDbId }) {
         const { error: e2 } = await supabase.from('whatsapp_groups').update({ loja_id: loja.id }).eq('id', grupoId);
         if (e2) throw e2;
       }
-      setMsg(`Loja "${loja.nome}" ativada${grupoId ? ' e grupo vinculado' : ''}. ${qualificada ? 'Perfil qualificado para a Defesa.' : 'Volume abaixo do perfil — comece pelo Radar gratuito.'}`);
+      setMsg(`Loja "${loja.nome}" ativada${grupoId ? ' e grupo vinculado' : ''}. ${qualificada ? 'Perfil qualificado para a Defesa.' : 'Volume abaixo do perfil — comece pelo plano gratuito.'}`);
       setNome(''); setCidade(''); setPedidosMes(''); setCancelMes(''); setGrupoId('');
       await carregar();
     } catch (err) {
@@ -154,7 +154,7 @@ export default function AtivarLoja({ tenantDbId }) {
             <div style={{ marginTop: 12 }}>
               {qualificada
                 ? <span className="cv2-bdg ok">PERFIL QUALIFICADO · a Defesa se paga com o volume desta loja</span>
-                : <span className="cv2-bdg warn">ABAIXO DO PERFIL · recomendado começar pelo Radar gratuito</span>}
+                : <span className="cv2-bdg warn">ABAIXO DO PERFIL · recomendado começar pelo plano gratuito</span>}
             </div>
           )}
           <label style={labelStyle}>2 · Grupo de WhatsApp da loja</label>

@@ -59,7 +59,7 @@ const GRUPOS = [
     { id: 'aprovacoes', ic: 'i-check', label: 'Aprovações' },
     { id: 'cobranca', ic: 'i-cash', label: 'Cobrança' },
     { id: 'defesa', ic: 'i-shield', label: 'Defesa Comercial' },
-    { id: 'radar', ic: 'i-radio', label: 'Radar (grátis)' },
+    { id: 'radar', ic: 'i-radio', label: 'Dashboard iFood' },
     { id: 'ativar', ic: 'i-plug', label: 'Ativar loja' },
   ]},
   { label: 'Agentes IA', items: [
@@ -388,7 +388,7 @@ function PaywallDefesa() {
           A Defesa Comercial vigia os cancelamentos e avaliações da sua loja 24h por dia, prepara a contestação com a melhor chance de vitória e espera o seu OK — pelo painel ou respondendo “@defesa ok” no WhatsApp. O painel mostra, mês a mês, quanto dinheiro foi defendido.
         </div>
         <div style={{ margin: '14px 0 6px', fontSize: 22, fontWeight: 800 }}>R$ 147<span style={{ fontSize: 13, fontWeight: 600, color: 'var(--tx2)' }}> /loja/mês · sem taxa de ativação</span></div>
-        <div style={{ fontSize: 12.5, color: 'var(--tx2)', marginBottom: 14 }}>O Radar gratuito continua disponível no menu ao lado — ele mostra quanto está vazando.</div>
+        <div style={{ fontSize: 12.5, color: 'var(--tx2)', marginBottom: 14 }}>O Dashboard iFood continua disponível no menu ao lado — ele mostra quanto está vazando.</div>
         <button className="cv2-btn" onClick={() => { window.location.href = 'mailto:wandson@consultdelivery.com.br?subject=Quero ativar a Defesa Comercial'; }}>Quero ativar a Defesa</button>
         <div style={{ fontSize: 11.5, color: 'var(--tx2)', marginTop: 10 }}>Assinatura automática em breve — por enquanto a ativação é feita pela equipe Consult Delivery em até 1 dia útil.</div>
       </div>
