@@ -427,7 +427,7 @@ Touched: none
 - **Entregue + em produção:** **PR #344 squash-mergeado em main (`8624c7d`)** (migration + Bridge + frontend + `ea0429c` toggle sidebar desktop carona + docs), branch remota deletada. **QA Pages PASSOU:** `qa-run.sh --no-build` 3/3 + bundle servido `/assets/index-jDyM1iaN.js` com as 7 strings exclusivas da feature (`avaliacoes/gerar`, `enviar-grupo`, `sugerir-tom`, `insights_consultoria`, `nao_responder`, `Sugerir tom com IA`, `prazo_label`) → feature LIVE. **GATE 0 p/ uso real (único pendente, SÓ Wandson):** preencher `avaliacoes_loja_config` (logística + tom) das lojas em consultoria.
 - **Fora de escopo (v2):** cadência agendada ter/sex (Trigger.dev), parser de WhatsApp de entrada, leitura/postagem automática no iFood.
 
-## 2026-06-14 — sessão 50 (GATE 0 destravado por UI: painel "Gerenciar lojas da consultoria") [T6]
+## 2026-06-14 — sessão 51 (GATE 0 destravado por UI: painel "Gerenciar lojas da consultoria") [T6]
 - **Pedido do Wandson (3 prints de lista com checkbox):** "Somente essas lojas aqui do print têm consultoria ativa conosco. As outras não têm mais consultoria ativa. Crie a opção de eu selecioná-la qual a loja tem, entregada por entrega própria ou entrega do iFood? fica melhor." → dois intentos: (a) só ~16 lojas têm consultoria ativa; (b) **ele mesmo** seleciona, por loja e em massa, logística (entrega própria × logística iFood) **numa tela**, não por número no chat ("fica melhor" = a UI é melhor que o chat).
 - **Interpretação travada (não relitigar):** não é Claude reconciliar uma lista de 16 nomes contra a `lojas`. É um painel self-service onde o Wandson marca (conjunto ativo + logística por loja) sem chat.
 - **Entregue (2 arquivos, sem migration nova):**
