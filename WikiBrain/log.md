@@ -404,3 +404,17 @@ Touched: none
 ## 2026-06-12 — sessão 38 (B-03 colateral: bucket contratos public→private)
 - Bucket storage `contratos` (G03, nunca cabeado, 0 objetos, 0 refs em código) estava public=true → aplicado public=false via Storage API; SQL versionado em `supabase/migrations/20260612_003_contratos_bucket_private.sql`.
 - Prova: URL pública sem auth → 400; signed URL → 200; bucket vazio. Deleção descartada (irreversível → Wandson). B-03 100% (#319 + colateral).
+
+## 2026-06-14 — sessão 45 (Avaliações iFood: aba Console v2 + agente IA p/ responder avaliações) [T6]
+- **Dor:** lojas em consultoria recebem avaliações no iFood sem resposta sistemática; avaliação que expira sem resposta é publicada como está. Responder bem = recupera cliente, sinaliza atividade ao iFood (selo Super Restaurante) e gera material de consultoria.
+- **Restrição confirmada:** **não existe API do iFood** — info extraída manual do portal e **colada** no dashboard; resposta gerada **copiada de volta** manual. Sistema não lê nem posta no iFood.
+- **3 decisões (AskUserQuestion nesta sessão):** (1) MVP = "Dashboard + envio ao grupo" (cadência agendada ter/sex fora do MVP); (2) aprovação do cliente = "Consultor marca no dashboard" (sem parser de WhatsApp de entrada); (3) tom da loja = "Híbrido: IA sugere, você edita".
+- **Regra de logística (decisiva):** loja em `ifood_logistica` → NÃO responde avaliação de `entrega`, responde só `loja`; loja `entrega_propria` → responde ambas. Aplicada por avaliação no Bridge (`status='nao_responder'`, não chama IA).
+- **Conteúdo:** só avaliações com comentário · nota<5 = reconsiderar endereçando a queixa · nota=5 = agradecer + convidar a continuar comprando · humano, ≤300 chars, poucos emojis, tom da loja, às vezes nome do cliente · + bloco de insights de consultoria (orientações operacionais + dicas p/ selo Super).
+- **Entregue (3 commits na branch `wandson/avaliacoes-ifood`):**
+  - `13ce395` migration `supabase/migrations/20260614_001_avaliacoes.sql` — tabelas `avaliacoes` + `avaliacoes_loja_config` + registro do agente em `agents`/`tenant_agents`. **Aplicada + RLS validada (teste de isolamento 2 tenants).**
+  - `1c73d35` Bridge `bridge-server/routes/avaliacoes.js` — 3 endpoints (`gerar`/`enviar-grupo`/`sugerir-tom`), claude-runner (`claude-sonnet-4-6`), Zod (`_schemas/avaliacoes.js`), montado no `index.js`. Sem deploy Trigger.dev (geração no Bridge). Testes escritos/passados/limpos.
+  - `a4d4c61` Frontend — aba Console v2 "Avaliações" (`src/console/Avaliacoes.jsx`), registro no `ConsoleV2.jsx` (nav "Operação" após radar, `ic:'i-chart'`, fora de LEGADO), helpers em `api.js`, wrappers Bridge em `miaApi.js`.
+- **4 fixes de review (Workflow /code-review LOCAL adversarial):** A (ALTA — perda de dados: card remontava em `key={id-updated_at}` e descartava edição não salva → passar `texto` sujo via `onStatus`/`onAjuste` e persistir `resposta_final`) · B (banner stale) · C (falha de IA mostrada como dica verde → bloco vermelho) · D (skip 'sem detalhe' → mostra motivo). `npm run build` ✓.
+- **Próxima ação:** abrir PR único (migration + Bridge + frontend + `ea0429c` toggle sidebar desktop carona + docs) → merge → QA pós-deploy (string no bundle). **GATE 0 p/ uso real:** preencher `avaliacoes_loja_config` (logística + tom) das lojas em consultoria.
+- **Fora de escopo (v2):** cadência agendada ter/sex (Trigger.dev), parser de WhatsApp de entrada, leitura/postagem automática no iFood.

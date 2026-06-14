@@ -1350,6 +1350,13 @@ app.use('/api', require('./routes/analises')({
   TRIGGER_SECRET_KEY,
 }));
 
+// ── Avaliações iFood — agente IA p/ responder avaliações (multi-loja) ─────────
+app.use('/api', require('./routes/avaliacoes')({
+  requireJwt,
+  sbFetch,
+  assertLojaAccess,
+}));
+
 // ── G03 — Contratos Digitais ─────────────────────────────────────────────────
 app.use('/api', require('./routes/contratos')({
   requireJwt,
