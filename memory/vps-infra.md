@@ -56,14 +56,15 @@ Fix: `git fetch origin && git reset --hard origin/main`.
 | OpenClaw | Porta 18789 (Docker) | **Legacy/EvoNexus POC — não tocar** |
 | vendaerp-mcp | `/root/consult-delivery/vendaerp-mcp/src/server.js` | MCP do Hermes p/ o VendaERP (stdio). Registrado no gateway do Hermes, não no PM2. Só leitura (Fase 1). |
 
-## VendaERP — integração (Fase 1)
+## VendaERP — integração (Fase 1) — ✅ GATE 0 FEITO E VERIFICADO LIVE (2026-06-14, sessão 52)
 
 - **Credencial do ERP (3 headers `Authorization-Token`/`User`/`App`)** vive SÓ no env do Bridge:
   Infisical → `VENDAERP_BASE_URL`, `VENDAERP_TOKEN`, `VENDAERP_USER`, `VENDAERP_APP`.
-  Após adicionar: `pm2 restart bridge-server`.
+  Após adicionar: `pm2 restart bridge-server --update-env`.
 - **Bridge é o ponto único** — Console (JWT) e Hermes (`vendaerp-mcp` via x-internal-token) chamam
   `/api/vendaerp/*`; ninguém fala com o ERP direto.
-- **Subir o MCP no Hermes (GATE 0):**
+- **MCP no Hermes registrado e ativo** (gateway reiniciado): `hermes mcp list` mostra `vendaerp`
+  enabled 6/6 tools; `hermes mcp test` Connected ~200ms.
   ```bash
   hermes mcp add vendaerp --command node \
     --args /root/consult-delivery/vendaerp-mcp/src/server.js \
@@ -73,4 +74,14 @@ Fix: `git fetch origin && git reset --hard origin/main`.
   hermes mcp list && hermes mcp test vendaerp
   systemctl restart hermes-gateway
   ```
-- Smoke real: `cd vendaerp-mcp && npm i && npm run live-smoke` (precisa dos secrets no env).
+- ⚠️ **De-para de env:** o config do `vendaerp-mcp` pede `SUPABASE_SERVICE_KEY`, mas a chave no
+  `.env` do Bridge é `SUPABASE_SERVICE_ROLE_KEY` — mapear na hora do `add`/`live-smoke`.
+- Smoke real: `cd vendaerp-mcp && npm i && npm run live-smoke` (precisa dos secrets no env) —
+  ✅ passou contra o ERP real via Bridge; 6 linhas em `audit_log` (`action=mcp:erp_*`,
+  `agent_name=ceo_agent`, sucesso = `metadata->>'ok'`=true; a tabela NÃO tem coluna `status`).
+- Bug `empresa:null` (a API responde PascalCase) corrigido (#354, squash `048310a`) → live
+  `{"conectado":true,"total_empresas":1,"empresa":"Consult  Delivery"}`.
+- ⚠️ **Pendências manuais do Wandson (não-bloqueantes):**
+  (a) teste E2E no Telegram em **sessão NOVA** do @DeliConsultBot ("qual o status do VendaERP?" → `erp_status`);
+  (b) **ROTACIONAR o `VENDAERP_TOKEN`** (vazou em texto plano no chat): gerar chave nova no token
+  "Hermes", trocar no `.env` do Bridge, `pm2 restart bridge-server`, revogar a antiga. Nunca ecoar o token bruto.

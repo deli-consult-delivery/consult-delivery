@@ -438,6 +438,16 @@ Touched: none
 - **Prova:** `npm run build` ✓ (223 módulos, 5.60s, só warnings pré-existentes). Branch `wandson/avaliacoes-config-lojas` (fresca de origin/main; **nunca reusar** `wandson/avaliacoes-ifood`, já squash-merged — caso #155).
 - **Próxima ação:** Fase 3 (cadência agendada ter/sex via Trigger.dev) — ainda fora de escopo do MVP.
 
+## 2026-06-14 — sessão 52 (VendaERP: GATE 0 executado e verificado LIVE) [T4 · T6]
+- **GATE 0 (reservado ao Wandson) concluído e provado ponta-a-ponta.** A integração VendaERP (Fase 1 read-only, código já em prod via #398) passou de "código pronto" para "operando contra o ERP real".
+- **Bridge:** secrets `VENDAERP_BASE_URL/TOKEN/USER/APP` no `.env` (Infisical) + `pm2 restart bridge-server --update-env`. `curl /api/vendaerp/status` (x-internal-token) → empresa real.
+- **Hermes:** `hermes mcp add vendaerp ...` (de-para `SUPABASE_SERVICE_KEY`←`SUPABASE_SERVICE_ROLE_KEY`), `hermes mcp list` 6/6 enabled, `hermes mcp test` Connected ~200ms, `systemctl restart hermes-gateway`.
+- **Prova live:** `npm run live-smoke` OK contra o ERP via Bridge + 6 linhas em `audit_log` (`action=mcp:erp_*`, `agent_name=ceo_agent`, sucesso = `metadata->>'ok'`=true — a tabela NÃO tem coluna `status`).
+- **Bug `empresa:null` (a API responde PascalCase) corrigido:** status lê `NomeFantasia`/`RazaoSocial` primeiro — **PR #354 squash `048310a`**, deployado no Bridge → live `{"conectado":true,"total_empresas":1,"empresa":"Consult  Delivery"}` (o espaço duplo vem do próprio ERP).
+- **MCP `vendaerp`** = 2º MCP do gateway do Hermes (não está no PM2; roda stdio via `vendaerp-mcp/src/server.js`). Registrado em `memory/vps-infra.md`.
+- **Pendências manuais do Wandson (não-bloqueantes):** (a) teste E2E no Telegram em **sessão NOVA** do @DeliConsultBot ("qual o status do VendaERP?" → `erp_status`); (b) **ROTACIONAR o `VENDAERP_TOKEN`** (vazou em texto plano no chat) — chave nova no token "Hermes", trocar no `.env`, `pm2 restart`, revogar a antiga.
+- **Doc/memória:** Tracker (onde parou / próxima ação item 15 / status T4+T6 / log sessão 52), memórias nativas `vendaerp-api-reference` + `vendaerp-integracao-desenho` + `MEMORY.md` + `vps-infra.md` atualizados. Branch `wandson/tracker-vendaerp-gate0`.
+
 ## 2026-06-14 — sessão 53 (2 fixes CRÍTICOS do épico Avaliações, achados no /code-review LOCAL) [T6]
 - **Origem:** `/code-review` LOCAL adversarial (xhigh) sobre os 2 commits do épico Avaliações já EM PRODUÇÃO (#344 `8624c7d` + painel de lojas #352 `47ebeaa`) levantou 10 itens; 2 eram CRÍTICOS de correção. Wandson aprovou ("Sim faça isso") corrigir #1 e #2 num fix pequeno com build + QA pós-deploy.
 - **Branch:** `wandson/avaliacoes-fix-troca-loja`, FRESCA de `origin/main` `1a70f99` — NÃO reusei `wandson/avaliacoes-ifood` nem `wandson/avaliacoes-config-lojas` (ambas squash-merged → caso #155, conflito fantasma).
