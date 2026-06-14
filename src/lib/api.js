@@ -470,6 +470,82 @@ export function subscribeToDrafts(tenantId, callback) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Avaliações iFood — config por loja + avaliações geradas (Console v2)
+// Leituras/atualizações diretas via RLS (espelha o padrão de agent_drafts).
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Lojas em consultoria ativa — alimenta o seletor de loja da aba Avaliações.
+// (memória: filtrar por is_consultoria_ativa, nunca status='ativo'.)
+export async function listLojasConsultoria(tenantId) {
+  const { data, error } = await supabase
+    .from('lojas')
+    .select('id, nome, super_restaurante')
+    .eq('tenant_id', tenantId)
+    .eq('is_consultoria_ativa', true)
+    .order('nome');
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function getAvaliacoesConfig(lojaId) {
+  const { data, error } = await supabase
+    .from('avaliacoes_loja_config')
+    .select('id, loja_id, logistica_tipo, tom, tom_sugerido_ia, updated_at')
+    .eq('loja_id', lojaId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+// Upsert por loja_id (constraint UNIQUE garante 1 config por loja).
+export async function saveAvaliacoesConfig({ tenantId, lojaId, logistica_tipo, tom }) {
+  const { data, error } = await supabase
+    .from('avaliacoes_loja_config')
+    .upsert(
+      {
+        tenant_id: tenantId,
+        loja_id: lojaId,
+        logistica_tipo,
+        tom: tom ?? null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'loja_id' }
+    )
+    .select('id, loja_id, logistica_tipo, tom, tom_sugerido_ia, updated_at')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function listAvaliacoes(tenantId, lojaId) {
+  let q = supabase
+    .from('avaliacoes')
+    .select(`
+      id, loja_id, nota, comentario, nome_cliente, tipo, prazo_label,
+      resposta_sugerida, resposta_final, insights_consultoria, status,
+      draft_id, ajuste_pedido, run_id, created_at, updated_at
+    `)
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(100);
+  if (lojaId) q = q.eq('loja_id', lojaId);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function updateAvaliacaoStatus(id, updates) {
+  const { data, error } = await supabase
+    .from('avaliacoes')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select('id, status, resposta_final, ajuste_pedido, draft_id, updated_at')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Audit Log — histórico de ações dos agentes (Etapa 15)
 // ─────────────────────────────────────────────────────────────────────────────
 

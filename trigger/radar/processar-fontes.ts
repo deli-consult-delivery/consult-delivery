@@ -80,6 +80,10 @@ function detectarEExtrair(wb: XLSX.WorkBook): { tipo: string; periodo: { ini: st
       const datas = dados.map(r => String(r[iData]).slice(0, 10)).sort();
       periodo = { ini: datas[0] ?? null, fim: datas[datas.length - 1] ?? null };
       out.push({ metrica: "cancelamentos_qtd", valor: dados.length, metadata: { por_motivo: porMotivo } });
+      // contestáveis pela Defesa: mesmo critério já usado no dashboard (RadarReal) e no diagnóstico semanal — motivo por atraso
+      const motivosContestaveis = Object.entries(porMotivo).filter(([mtv]) => /atras/i.test(mtv));
+      const contestaveis = motivosContestaveis.reduce((s, [, n]) => s + n, 0);
+      out.push({ metrica: "cancelamentos_contestaveis_qtd", valor: contestaveis, metadata: { criterio: "motivo contém 'atraso'", motivos: Object.fromEntries(motivosContestaveis) } });
       const top = Object.entries(porMotivo).sort((a, b) => b[1] - a[1])[0];
       if (top) out.push({ metrica: "cancelamentos_motivo_top", valor: top[1], valor_texto: top[0] });
       return { tipo: "cancelamentos", periodo, metricas: out, resumo: { qtd: dados.length, por_motivo: porMotivo } };
@@ -117,6 +121,8 @@ function detectarEExtrair(wb: XLSX.WorkBook): { tipo: string; periodo: { ini: st
       const top = itens.reduce((a, b) => (num(b[10]) > num(a[10]) ? b : a));
       out.push({ metrica: "cardapio_item_top_valor", valor: Math.round(num(top[10]) * 100) / 100, valor_texto: String(top[3]) });
       out.push({ metrica: "cardapio_itens_qtd", valor: itens.length });
+      // itens sem giro no período (faturamento 0 na col 10) — peso morto no cardápio
+      out.push({ metrica: "cardapio_itens_sem_giro", valor: itens.filter(r => num(r[10]) === 0).length });
     }
     return { tipo: "cardapio", periodo, metricas: out, resumo: { visitas, concluidos } };
   }
@@ -131,9 +137,14 @@ function detectarEExtrair(wb: XLSX.WorkBook): { tipo: string; periodo: { ini: st
       const datas = dados.map(r => String(r[iData]).slice(0, 10)).sort();
       periodo = { ini: datas[0] ?? null, fim: datas[datas.length - 1] ?? null };
       const porTurno: Record<string, number> = {};
+      const porServico: Record<string, number> = {};
       const iTurno = reqCol(head, h => h === "TURNO", "TURNO", abas[0]);
-      for (const r of dados) { const t = String(r[iTurno] ?? "?"); porTurno[t] = (porTurno[t] ?? 0) + 1; }
-      out.push({ metrica: "logistica_pedidos", valor: dados.length, metadata: { por_turno: porTurno } });
+      const iServ = reqCol(head, h => h === "SERVIÇO LOGÍSTICO", "SERVIÇO LOGÍSTICO", abas[0]);
+      for (const r of dados) {
+        const t = String(r[iTurno] ?? "?"); porTurno[t] = (porTurno[t] ?? 0) + 1;
+        const s = String(r[iServ] ?? "?"); porServico[s] = (porServico[s] ?? 0) + 1; // iFood vs entrega própria
+      }
+      out.push({ metrica: "logistica_pedidos", valor: dados.length, metadata: { por_turno: porTurno, por_servico: porServico } });
       return { tipo: "logistica", periodo, metricas: out, resumo: { pedidos: dados.length } };
     }
     // ---- CONCILIAÇÃO ----
@@ -142,11 +153,14 @@ function detectarEExtrair(wb: XLSX.WorkBook): { tipo: string; periodo: { ini: st
       const iTipo = head.indexOf("tipo_lancamento");
       const iVal = reqCol(head, h => h === "valor", "valor", abas[0]);
       const porTipo: Record<string, number> = {};
-      for (const r of dados) { const t = String(r[iTipo] ?? "?"); porTipo[t] = Math.round(((porTipo[t] ?? 0) + num(r[iVal])) * 100) / 100; }
+      let liquidoTotal = 0; // repasse líquido = soma de TODOS os lançamentos do extrato (cada valor já vem com sinal)
+      for (const r of dados) { const t = String(r[iTipo] ?? "?"); const v = num(r[iVal]); porTipo[t] = Math.round(((porTipo[t] ?? 0) + v) * 100) / 100; liquidoTotal += v; }
       out.push({ metrica: "conciliacao_lancamentos", valor: dados.length, metadata: { por_tipo: porTipo } });
       out.push({ metrica: "conciliacao_entrada", valor: porTipo["Entrada Financeira"] ?? 0 });
       out.push({ metrica: "conciliacao_taxas", valor: Math.round((((porTipo["Retenção"] ?? 0) + (porTipo["Cobrança"] ?? 0))) * 100) / 100 });
       out.push({ metrica: "conciliacao_subsidios", valor: porTipo["Subsídio"] ?? 0 });
+      // o que de fato cai na conta no período: entrada − taxas + subsídios ± estornos/antecipações/ajustes (todos já somados com sinal acima)
+      out.push({ metrica: "conciliacao_repasse_liquido", valor: Math.round(liquidoTotal * 100) / 100 });
       const comp = String(dados[0]?.[0] ?? "");
       if (/^\d{4}-\d{2}$/.test(comp)) {
         const [ano, mes] = comp.split("-").map(Number);
@@ -205,6 +219,10 @@ function detectarEExtrair(wb: XLSX.WorkBook): { tipo: string; periodo: { ini: st
 
       const rPeriodo = linha("Período:");
       const periodoLabel = rPeriodo ? String(rPeriodo[1] ?? "").trim() : null;
+      // Fase 0 — ancora data_ref no período REAL do relatório, não na data de
+      // processamento. parsePeriodo é estrito (DD/MM/YYYY - DD/MM/YYYY): formato
+      // diferente → no-op (cai no fallback created_at de hoje), nunca fabrica data.
+      if (periodoLabel) { const p = parsePeriodo(periodoLabel); if (p.fim) periodo = p; }
 
       const avalMedia = mediaPond("Média das avaliações", avalSerie);       // pondera pela qtd de avaliações do dia
       const preparoMedio = mediaPond("Tempo médio de preparo (min)", pedidos); // pondera pelo nº de pedidos do dia
@@ -218,12 +236,35 @@ function detectarEExtrair(wb: XLSX.WorkBook): { tipo: string; periodo: { ini: st
       out.push({ metrica: "operacao_atrasados_5min", valor: atrasados, metadata: meta });
       out.push({ metrica: "operacao_atrasados_5min_pct", valor: somaPedidos > 0 ? r2((atrasados / somaPedidos) * 100) : 0, metadata: meta });
       out.push({ metrica: "operacao_cancelamento_super_pct", valor: somaPedidos > 0 ? r2((canceladosImpacto / somaPedidos) * 100) : 0, metadata: meta });
+      out.push({ metrica: "operacao_cancelamentos_super_qtd", valor: canceladosImpacto, metadata: meta }); // absoluto (antes só o % chegava ao dashboard)
       out.push({ metrica: "operacao_chamados", valor: soma("Pedidos com chamados"), metadata: meta });
       out.push({ metrica: "operacao_avaliacoes_qtd", valor: avalQtd, metadata: meta });
       if (avalMedia != null) out.push({ metrica: "operacao_avaliacao_media", valor: r2(avalMedia), metadata: meta });
       if (preparoMedio != null) out.push({ metrica: "operacao_tempo_preparo_medio", valor: r2(preparoMedio), metadata: meta });
       if (atrasoMedio != null) out.push({ metrica: "operacao_tempo_atraso_medio", valor: r2(atrasoMedio), metadata: meta });
       if (onlinePct != null) out.push({ metrica: "operacao_tempo_online_pct", valor: r2(onlinePct * 100), metadata: meta });
+
+      // metas reais da planilha (coluna "Meta", índice 1) — substituem as metas hardcoded no dashboard.
+      // Só captura indicadores que têm meta preenchida; célula vazia é ignorada (sem fabricar alvo).
+      const metasIndicadores: Record<string, string> = {};
+      for (const lb of [
+        "Nível Super",
+        "Pedidos atrasados em mais que 5 min",
+        "Pedidos cancelados com impacto no Super",
+        "Média das avaliações",
+        "Tempo médio de preparo (min)",
+        "Tempo online real vs planejado (%)",
+      ]) {
+        const rl = linha(lb);
+        const v = rl ? String(rl[1] ?? "").trim() : "";
+        if (v) metasIndicadores[lb] = v;
+      }
+      if (Object.keys(metasIndicadores).length) {
+        // valor_texto resume as metas p/ consumidores que montam fatos a partir de
+        // valor/valor_texto (evita "operacao_metas: " vazio no contexto do LLM).
+        const metasTexto = Object.entries(metasIndicadores).map(([k, v]) => `${k}: ${v}`).join(" · ");
+        out.push({ metrica: "operacao_metas", valor_texto: metasTexto, metadata: { ...meta, metas: metasIndicadores } });
+      }
 
       return { tipo: "operacao", periodo, metricas: out, resumo: { dias: diaCols.length, periodo_label: periodoLabel, nivel: nivelTxt } };
     }
