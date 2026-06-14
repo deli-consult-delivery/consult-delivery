@@ -136,14 +136,45 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
   const opPedidos = val('operacao_pedidos_totais');
   const temOperacao = opNivel != null || opPedidos != null;
 
+  // ---- Fase 3: cruzamentos calculados no cliente (cada KPI some se faltar a fonte, nunca zera) ----
+  const repasseLiquido = val('conciliacao_repasse_liquido')
+    ?? (entrada != null && taxas != null ? entrada - Math.abs(taxas) - Math.abs(subsidios ?? 0) : null);
+  const cargaPct = (entrada && taxas != null)
+    ? Math.round(((Math.abs(taxas) + Math.abs(subsidios || 0)) / Math.abs(entrada)) * 100)
+    : null;
+  const pedidosBase = pedidos ?? opPedidos ?? val('logistica_pedidos');
+  const cancPct = (cancQtd != null && pedidosBase)
+    ? Math.round((cancQtd / pedidosBase) * 1000) / 10
+    : null;
+  const cancContest = val('cancelamentos_contestaveis_qtd');
+  const valorCancelado = val('operacao_valor_cancelado');
+  const concluidos = val('funil_concluidos');
+  const visitasNaoConv = (visitas != null && concluidos != null && concluidos <= visitas) ? visitas - concluidos : null;
+  const PISO_SUPER = 4.5;
+  const gapSuper = opAval != null ? Math.round((opAval - PISO_SUPER) * 100) / 100 : null;
+  const negQtd = val('negociacoes_qtd');
+  const negPerda = val('negociacoes_perda_parcial');
+  const opChamados = val('operacao_chamados');
+
+  const cruzamentos = [
+    repasseLiquido != null && { l: 'Receita líquida', v: fmtBRL(repasseLiquido), d: 'o que sobra após taxas e promoções', mut: true },
+    cargaPct != null && { l: 'Carga total iFood', v: `${cargaPct}%`, d: 'taxas + promoções sobre o faturamento', neg: cargaPct > 40 },
+    cancPct != null && { l: 'Taxa de cancelamento', v: `${cancPct.toLocaleString('pt-BR')}%`, d: `${fmtNum(cancQtd)} de ${fmtNum(pedidosBase)} pedidos`, neg: cancPct > 2 },
+    valorCancelado != null && { l: 'R$ perdido em cancelam.', v: fmtBRL(valorCancelado), d: 'valor dos pedidos cancelados', neg: valorCancelado > 0 },
+    visitasNaoConv != null && { l: 'Visitas não convertidas', v: fmtNum(visitasNaoConv), d: visitas ? `${Math.round((visitasNaoConv / visitas) * 100)}% das visitas` : 'não viraram pedido', neg: conv != null && conv < 25 },
+    gapSuper != null && { l: 'Avaliação vs piso Super', v: opAval.toLocaleString('pt-BR'), d: gapSuper >= 0 ? `+${gapSuper.toLocaleString('pt-BR')} acima do piso 4,5` : `${gapSuper.toLocaleString('pt-BR')} abaixo do piso 4,5`, neg: gapSuper < 0 },
+    negQtd != null && { l: 'Negociações', v: fmtNum(negQtd), d: negPerda != null ? `perda parcial ${fmtBRL(negPerda)}` : 'no período', mut: true },
+  ].filter(Boolean);
+
   const sinais = [];
   if (taxas != null) sinais.push({ sinal: `Taxas e comissões do iFood no período`, impacto: fmtBRL(Math.abs(taxas)), cls: 'err', acao: pctTaxas != null ? `${pctTaxas}% do faturamento — revisar plano e logística` : 'revisar plano e logística' });
-  if (cancQtd != null && cancQtd > 0) sinais.push({ sinal: `${fmtNum(cancQtd)} cancelamentos — motivo top: ${cancMotivo || 'n/d'}`, impacto: /atras/i.test(cancMotivo || '') ? 'contestável' : 'analisar', cls: /atras/i.test(cancMotivo || '') ? 'warn' : 'mut', acao: 'a Defesa prepara a contestação' });
+  if (cancQtd != null && cancQtd > 0) sinais.push({ sinal: `${fmtNum(cancQtd)} cancelamentos — motivo top: ${cancMotivo || 'n/d'}${cancContest != null ? ` · ${fmtNum(cancContest)} contestáveis` : ''}`, impacto: /atras/i.test(cancMotivo || '') ? 'contestável' : 'analisar', cls: /atras/i.test(cancMotivo || '') ? 'warn' : 'mut', acao: valorCancelado != null ? `${fmtBRL(valorCancelado)} em jogo — a Defesa contesta` : 'a Defesa prepara a contestação' });
   if (conv != null) sinais.push({ sinal: `Conversão do cardápio: ${conv}% (${fmtNum(visitas)} visitas)`, impacto: conv < 25 ? 'baixa' : 'ok', cls: conv < 25 ? 'warn' : 'ok', acao: conv < 25 ? 'fotos/descrições e ofertas no cardápio' : 'manter' });
   if (subsidios != null && Math.abs(subsidios) > 0) sinais.push({ sinal: 'Promoções custeadas pela loja', impacto: fmtBRL(Math.abs(subsidios)), cls: 'warn', acao: 'avaliar retorno das ofertas' });
   if (opAtrasoPct != null && opAtrasoPct > 5) sinais.push({ sinal: `${opAtrasoPct}% dos pedidos atrasaram +5 min`, impacto: 'pontualidade', cls: 'warn', acao: 'revisar tempo de preparo e horário de aceite' });
   if (opOnline != null && opOnline < 90) sinais.push({ sinal: `Loja online ${opOnline}% do planejado (meta 90%)`, impacto: 'disponibilidade', cls: 'warn', acao: 'reduzir pausas/fechamentos no pico' });
   if (opCancSuper != null && opCancSuper > 1) sinais.push({ sinal: `Cancelamentos com impacto no Super: ${opCancSuper}%`, impacto: 'nível Super', cls: 'err', acao: 'meta ≤1% — atacar a causa dos cancelamentos' });
+  if (opChamados != null && opChamados > 0) sinais.push({ sinal: `${fmtNum(opChamados)} chamados abertos no suporte iFood`, impacto: 'suporte', cls: 'mut', acao: 'acompanhar a resolução dos chamados' });
 
   return (
     <div>
@@ -174,6 +205,15 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
         <Kpi l="Cancelamentos" v={cancQtd != null ? fmtNum(cancQtd) : '—'} d={cancMotivo ? `top: ${cancMotivo}` : ''} neg={cancQtd > 0} />
         <Kpi l="R$ defendido (Defesa)" v={fmtBRL(casos.defendidoCentavos / 100)} d={`${casos.total} casos · ${casos.atraso} por atraso`} mut />
       </div>
+
+      {cruzamentos.length > 0 && (
+        <>
+          <div className="cv2-sub" style={{ marginTop: 18 }}>Saúde financeira &amp; cruzamentos — calculados a partir dos relatórios desta loja</div>
+          <div className="cv2-kpis">
+            {cruzamentos.map((k) => <Kpi key={k.l} l={k.l} v={k.v} d={k.d} neg={k.neg} mut={k.mut} />)}
+          </div>
+        </>
+      )}
 
       {temOperacao && (
         <>
