@@ -11,6 +11,7 @@ import Execucoes from './Execucoes.jsx';
 import AprovacoesUnificadas from './AprovacoesUnificadas.jsx';
 import ImportarRelatorios from './ImportarRelatorios.jsx';
 import RadarReal from './RadarReal.jsx';
+import Avaliacoes from './Avaliacoes.jsx';
 import AnaliseLoja from './AnaliseLoja.jsx';
 import AgenteConfig from './AgenteConfig.jsx';
 import AuditLog from './AuditLog.jsx';
@@ -60,6 +61,7 @@ const GRUPOS = [
     { id: 'cobranca', ic: 'i-cash', label: 'Cobrança' },
     { id: 'defesa', ic: 'i-shield', label: 'Defesa Comercial' },
     { id: 'radar', ic: 'i-radio', label: 'Dashboard iFood' },
+    { id: 'avaliacoes', ic: 'i-chart', label: 'Avaliações' },
     { id: 'ativar', ic: 'i-plug', label: 'Ativar loja' },
   ]},
   { label: 'Agentes IA', items: [
@@ -599,6 +601,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       case 'cobranca': return <InadimplentesScreen tenantDbId={tenantDbId} userId={userId} />;
       case 'defesa': return defesaOn === false ? <PaywallDefesa /> : <Defesa tenantDbId={tenantDbId} userId={userId} />;
       case 'radar': return <RadarReal tenantNome={tenantNome} tenantDbId={tenantDbId} />;
+      case 'avaliacoes': return <Avaliacoes tenantDbId={tenantDbId} userId={userId} />;
       case 'ativar': return <AtivarLoja tenantDbId={tenantDbId} />;
       case 'catalogo': return <PainelAgentes tenantDbId={tenantDbId} />;
       case 'estudio': return <Estudio tenantDbId={tenantDbId} userId={userId} />;

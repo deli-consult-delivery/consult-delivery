@@ -93,3 +93,27 @@ export const deleteFact = (factId) =>
 
 export const getMiaAudit = (lojaId, limit = 50) =>
   apiFetch(`/lojas/${lojaId}/mia-audit?limit=${limit}`);
+
+// ── Avaliações iFood (aba Avaliações) ──────────────────────────────────────────
+// Geração de IA roda no Bridge (claude-runner), não no Trigger.dev.
+
+// body: { avaliacoes: [{ nota, comentario, nome_cliente?, tipo, prazo_label? }] }
+export const gerarRespostasAvaliacoes = (lojaId, body) =>
+  apiFetch(`/lojas/${lojaId}/avaliacoes/gerar`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+// body: { avaliacaoIds: [uuid], intervalo_ms? } — envio 1 a 1 ao grupo, com intervalo anti-spam.
+export const enviarAvaliacoesGrupo = (lojaId, body) =>
+  apiFetch(`/lojas/${lojaId}/avaliacoes/enviar-grupo`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+// body: { exemplos?: [string] } — IA sugere o tom da loja; consultor edita e salva.
+export const sugerirTomLoja = (lojaId, body = {}) =>
+  apiFetch(`/lojas/${lojaId}/avaliacoes/sugerir-tom`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
