@@ -266,6 +266,7 @@ export default function Avaliacoes({ tenantDbId, userId }) {
   const [config, setConfig] = useState(null);          // linha do banco (ou null)
   const [cfgForm, setCfgForm] = useState({ logistica_tipo: '', tom: '' });
   const [avals, setAvals] = useState(null);
+  const [carregandoLoja, setCarregandoLoja] = useState(false); // troca de loja em voo
   const [entradas, setEntradas] = useState([{ ...ROW_VAZIA }]);
 
   const [salvandoCfg, setSalvandoCfg] = useState(false);
@@ -302,10 +303,20 @@ export default function Avaliacoes({ tenantDbId, userId }) {
   // avaliações coladas (não vazam p/ outra loja) e descarta — via ignore-flag —
   // qualquer carga em voo da loja anterior: sem isso, uma loja lenta (A) que
   // resolve depois sobrescreve config/avals da loja recém-selecionada (B).
+  // Também limpa config/avals/cfgForm ANTES do await ao entrar numa loja nova:
+  // o header (loja, ~l.283) e o seletor trocam de forma síncrona p/ B, mas o
+  // fetch leva algumas centenas de ms — sem essa limpeza, KPIs, cards e o painel
+  // de Configuração (radios/tom) seguem mostrando os dados de A sob o header de
+  // B (flash cosmético). carregandoLoja segura o aviso "Salve a logística" e
+  // pinta um estado de carregamento no lugar dos dados obsoletos.
   useEffect(() => {
     let ignore = false;
     setEntradas([{ ...ROW_VAZIA }]);
-    if (!lojaId) { setConfig(null); setAvals(null); return; }
+    if (!lojaId) { setConfig(null); setAvals(null); setCarregandoLoja(false); return; }
+    setConfig(null);
+    setAvals(null);
+    setCfgForm({ logistica_tipo: '', tom: '' });
+    setCarregandoLoja(true);
     setErro(null);
     (async () => {
       try {
@@ -319,6 +330,8 @@ export default function Avaliacoes({ tenantDbId, userId }) {
         setAvals(lista);
       } catch (e) {
         if (!ignore) setErro(e.message);
+      } finally {
+        if (!ignore) setCarregandoLoja(false);
       }
     })();
     return () => { ignore = true; };
@@ -586,7 +599,9 @@ export default function Avaliacoes({ tenantDbId, userId }) {
                 {salvandoCfg ? 'Salvando…' : 'Salvar configuração'}
               </button>
             </div>
-            {!config && <div style={{ fontSize: 12, color: 'var(--red)', marginTop: 8 }}>Salve a logística antes de gerar respostas.</div>}
+            {carregandoLoja
+              ? <div style={{ fontSize: 12, color: 'var(--tx2)', marginTop: 8 }}>Carregando configuração…</div>
+              : (!config && <div style={{ fontSize: 12, color: 'var(--red)', marginTop: 8 }}>Salve a logística antes de gerar respostas.</div>)}
           </div>
 
           {/* Entrada de avaliações */}
