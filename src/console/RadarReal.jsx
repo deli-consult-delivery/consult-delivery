@@ -272,13 +272,13 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
 
   const onAprovar = async (id) => {
     setAcao(id);
-    try { await aprovarTarefa(id); await carregarTarefas(); }
+    try { await aprovarTarefa(id, lojaId); await carregarTarefas(); }
     catch (e) { setErro(e?.message || 'erro ao aprovar'); }
     finally { setAcao(null); }
   };
   const onRejeitar = async (id) => {
     setAcao(id);
-    try { await rejeitarTarefa(id); await carregarTarefas(); }
+    try { await rejeitarTarefa(id, lojaId); await carregarTarefas(); }
     catch (e) { setErro(e?.message || 'erro ao rejeitar'); }
     finally { setAcao(null); }
   };
