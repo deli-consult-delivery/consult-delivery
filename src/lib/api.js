@@ -781,26 +781,33 @@ export async function listTarefasIA(lojaId) {
   return data ?? [];
 }
 
-export async function aprovarTarefa(id) {
+export async function aprovarTarefa(id, lojaId) {
   // .eq('status','rascunho'): só transiciona o que ainda é rascunho (UI stale não
   // regride tarefa já avançada). .select() + checagem de linhas: RLS bloqueando
   // devolve sucesso com 0 linhas — sem isso a falha seria silenciosa. updated_at
   // fica a cargo do trigger tarefas_loja_updated_at.
+  // .eq('loja_id', lojaId) + .eq('criado_por_ia', true): defense-in-depth — a RLS
+  // já barra cross-tenant, mas escopar à loja em tela impede que um id de outra
+  // loja do mesmo tenant (ou UI stale) transicione a tarefa errada.
   const { data, error } = await supabase
     .from('tarefas_loja')
     .update({ status: 'aprovada', aprovada_em: new Date().toISOString() })
     .eq('id', id)
+    .eq('loja_id', lojaId)
+    .eq('criado_por_ia', true)
     .eq('status', 'rascunho')
     .select('id');
   if (error) throw error;
   if (!data?.length) throw new Error('Tarefa não encontrada ou já processada');
 }
 
-export async function rejeitarTarefa(id) {
+export async function rejeitarTarefa(id, lojaId) {
   const { data, error } = await supabase
     .from('tarefas_loja')
     .update({ status: 'rejeitada' })
     .eq('id', id)
+    .eq('loja_id', lojaId)
+    .eq('criado_por_ia', true)
     .eq('status', 'rascunho')
     .select('id');
   if (error) throw error;
