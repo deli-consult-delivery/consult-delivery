@@ -20,6 +20,7 @@ import Templates from './Templates.jsx';
 import AgenteAnalise from './AgenteAnalise.jsx';
 import Marca from './Marca.jsx';
 import { Gatilhos, Topicos, TarefasAgendadas, Links, Provedores, Integracoes, Sistemas, Arquivos } from './CvNovas.jsx';
+import VendaErpPainel from './VendaErpPainel.jsx';
 // telas reusadas do console clássico (funcionais — visual convertido nas ondas 2-3)
 import ChatScreen from '../screens/ChatScreen.jsx';
 import DeliScreen from '../screens/DeliScreen.jsx';
@@ -95,6 +96,7 @@ const GRUPOS = [
     { id: 'marca', ic: 'i-droplet', label: 'Marca' },
     { id: 'provedores', ic: 'i-cpu', label: 'Provedores de IA' },
     { id: 'integracoes', ic: 'i-plug', label: 'Integrações' },
+    { id: 'vendaerp', ic: 'i-box', label: 'VendaERP' },
     { id: 'sistemas', ic: 'i-box', label: 'Sistemas externos' },
     { id: 'acesso', ic: 'i-key', label: 'Acesso por usuário' },
     { id: 'auditoria', ic: 'i-scroll', label: 'Auditoria' },
@@ -628,6 +630,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       case 'marca': return <Marca tenantDbId={tenantDbId} onChanged={recarregarBrand} />;
       case 'provedores': return <Provedores tenantDbId={tenantDbId} />;
       case 'integracoes': return <Integracoes tenantDbId={tenantDbId} />;
+      case 'vendaerp': return <VendaErpPainel />;
       case 'sistemas': return <Sistemas tenantDbId={tenantDbId} />;
       case 'acesso': return <AcessoUsuarios tenantDbId={tenantDbId} />;
       case 'auditoria': return <AuditLog tenantDbId={tenantDbId} />;

@@ -1,0 +1,20 @@
+{
+  "name": "cd-vendaerp-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "MCP do Hermes para o VendaERP — SÓ LEITURA na Fase 1. Não fala direto com o ERP: chama o Bridge (/api/vendaerp/*) com x-internal-token. Nenhuma credencial do ERP vive aqui. Toda chamada é auditada em audit_log. Escrita (com confirmação no Telegram) é Fase 2.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "smoke": "node test/smoke.js",
+    "live-smoke": "node test/live-smoke.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "zod": "^3.23.8"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

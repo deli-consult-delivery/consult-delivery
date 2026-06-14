@@ -1,0 +1,94 @@
+// bridge-server/routes/vendaerp.js
+// Endpoints de LEITURA do VendaERP. Ponto único de contato com o ERP:
+//   Console v2 (JWT do usuário) e Hermes (x-internal-token) chamam aqui;
+//   o Bridge injeta a credencial (3 headers) via lib/vendaerp.js.
+//
+// Auth: requireJwtOrInternal — aceita JWT do Console OU x-internal-token do Hermes.
+// Fase 1 = só GET. Escrita é Fase 2 (gated + confirmação no Telegram).
+'use strict';
+
+module.exports = function ({ requireJwtOrInternal, erp }) {
+  const router = require('express').Router();
+
+  // Wrapper: executa um método de leitura do ERP e devolve JSON padronizado.
+  // Erros viram { ok:false, status, error } sem derrubar o Bridge.
+  function handle(fn) {
+    return async (req, res) => {
+      try {
+        const data = await fn(req);
+        res.json({ ok: true, data });
+      } catch (err) {
+        const status = err && typeof err.status === 'number' && err.status >= 400 ? err.status : 502;
+        console.error(`[vendaerp] ${req.path} erro ${err.status ?? '?'}: ${err.message}`);
+        res.status(status).json({ ok: false, status: err.status ?? null, error: err.message });
+      }
+    };
+  }
+
+  // tenant_id opcional via query (Fase 3); na Fase 1 o client cai no env.
+  const tid = (req) => req.query.tenant_id || undefined;
+
+  // ── Status — chamada barata p/ validar credencial ───────────────────────────
+  router.get('/vendaerp/status', requireJwtOrInternal, handle(async (req) => {
+    const empresas = await erp.getEmpresas(tid(req));
+    const lista = Array.isArray(empresas) ? empresas : (empresas?.empresas ?? empresas?.data ?? []);
+    const primeira = Array.isArray(lista) ? lista[0] : null;
+    return {
+      conectado: true,
+      total_empresas: Array.isArray(lista) ? lista.length : null,
+      empresa: primeira?.nome ?? primeira?.razaoSocial ?? primeira?.fantasia ?? null,
+    };
+  }));
+
+  // ── Contratos ───────────────────────────────────────────────────────────────
+  router.get('/vendaerp/contratos', requireJwtOrInternal, handle((req) => {
+    const { codigo, cliente, situacao, pageSize, skip } = req.query;
+    if (codigo || cliente || situacao) {
+      return erp.pesquisarContratos({ codigo, cliente, situacao }, tid(req));
+    }
+    return erp.listContratos({ pageSize: num(pageSize, 20), skip: num(skip, 0) }, tid(req));
+  }));
+
+  // ── Financeiro — lançamentos e boletos ──────────────────────────────────────
+  router.get('/vendaerp/lancamentos', requireJwtOrInternal, handle((req) => {
+    const { codigo, pageSize, skip } = req.query;
+    if (codigo) return erp.getLancamento({ codigo }, tid(req));
+    return erp.listLancamentos({ pageSize: num(pageSize, 20), skip: num(skip, 0) }, tid(req));
+  }));
+  router.get('/vendaerp/boletos', requireJwtOrInternal, handle((req) => {
+    const { codigo, cliente } = req.query;
+    return erp.pesquisarBoletos({ codigo, cliente }, tid(req));
+  }));
+
+  // ── Estoque ─────────────────────────────────────────────────────────────────
+  router.get('/vendaerp/estoque', requireJwtOrInternal, handle((req) =>
+    erp.getEstoque({ deposito: req.query.deposito }, tid(req))
+  ));
+  router.get('/vendaerp/depositos', requireJwtOrInternal, handle((req) =>
+    erp.getDepositos(tid(req))
+  ));
+
+  // ── Fiscal — NFE ────────────────────────────────────────────────────────────
+  router.get('/vendaerp/fiscal', requireJwtOrInternal, handle((req) => {
+    const { codigoNfe, dataInicial, dataFinal } = req.query;
+    if (codigoNfe) return erp.consultarNfe({ codigoNfe }, tid(req));
+    return erp.consultarNfePeriodo({ dataInicial, dataFinal }, tid(req));
+  }));
+
+  // ── CRM — oportunidades ─────────────────────────────────────────────────────
+  router.get('/vendaerp/oportunidades', requireJwtOrInternal, handle((req) => {
+    const { codigo, empresa, cliente } = req.query;
+    return erp.pesquisarOportunidades({ codigo, empresa, cliente }, tid(req));
+  }));
+
+  // ── Auxiliares ──────────────────────────────────────────────────────────────
+  router.get('/vendaerp/empresas', requireJwtOrInternal, handle((req) => erp.getEmpresas(tid(req))));
+  router.get('/vendaerp/formas-pagamento', requireJwtOrInternal, handle((req) => erp.getFormasPagamento(tid(req))));
+
+  return router;
+};
+
+function num(v, def) {
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) ? n : def;
+}
