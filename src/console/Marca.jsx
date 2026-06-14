@@ -47,7 +47,7 @@ export default function Marca({ tenantDbId, onChanged }) {
       <div className="cv2-rule" />
       <div className="cv2-sub">Personalize a identidade deste workspace — a cor e o logo aparecem em todo o console para este cliente.{erro ? ` · erro: ${erro}` : ''}</div>
       {msg && <div className="cv2-card" style={{ borderLeft: '3px solid var(--green)', color: 'var(--green)', fontWeight: 600 }}>{msg}</div>}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px,1fr) minmax(220px,1fr)', gap: 14, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, alignItems: 'start' }}>
         <div className="cv2-card">
           <h3>{t?.name || 'Workspace'}</h3>
           <label style={labelStyle}>Cor da marca</label>

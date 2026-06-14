@@ -147,3 +147,19 @@
 @media (max-width:420px){
   .cv2-kpis{grid-template-columns:1fr}
 }
+
+/* ===================================================================
+   CONTEÚDO — grids e tabelas que estouravam a largura no mobile (PR2)
+   =================================================================== */
+
+/* tabela larga rola DENTRO do wrapper, não na página inteira.
+   .cv2 table tem width:100% → sem wrapper a tabela espreme e transborda
+   o .cv2-ct; com overflow-x aqui o scroll fica isolado (momentum no iOS). */
+.cv2-tbl-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+/* grid de 3 colunas do Estúdio: vira 1 coluna no tablet/celular.
+   precisa ser classe (não inline) porque @media não sobrescreve style inline. */
+.cv2-grid-estudio{display:grid;grid-template-columns:minmax(250px,290px) minmax(330px,1fr) minmax(220px,280px);gap:14px;align-items:start}
+@media (max-width:1023px){
+  .cv2-grid-estudio{grid-template-columns:1fr}
+}

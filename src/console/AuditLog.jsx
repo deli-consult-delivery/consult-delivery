@@ -35,6 +35,7 @@ export default function AuditLog({ tenantDbId }) {
       </div>
       {rows && rows.length > 0 ? (
         <div className="cv2-card">
+          <div className="cv2-tbl-wrap">
           <table>
             <thead><tr><th>Quando</th><th>Ação</th><th>Recurso</th><th>Agente/Usuário</th><th>IP</th></tr></thead>
             <tbody>
@@ -49,6 +50,7 @@ export default function AuditLog({ tenantDbId }) {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       ) : <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>{rows ? 'Nenhum registro.' : 'Carregando…'}</div>}
     </div>

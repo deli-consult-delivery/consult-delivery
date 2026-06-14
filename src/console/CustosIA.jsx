@@ -167,6 +167,7 @@ export default function CustosIA({ tenantDbId }) {
             Nenhuma execucao com custo no periodo.
           </div>
         ) : (
+          <div className="cv2-tbl-wrap">
           <table>
             <thead>
               <tr>
@@ -207,6 +208,7 @@ export default function CustosIA({ tenantDbId }) {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
@@ -217,6 +219,7 @@ export default function CustosIA({ tenantDbId }) {
             Nenhum dado de custo no periodo.
           </div>
         ) : (
+          <div className="cv2-tbl-wrap">
           <table>
             <thead>
               <tr>
@@ -240,6 +243,7 @@ export default function CustosIA({ tenantDbId }) {
               })}
             </tbody>
           </table>
+          </div>
         )}
         <div style={{ fontSize: 11.5, color: 'var(--tx2)', marginTop: 8 }}>
           PICO = dia com custo &gt; {PICO_MULT}x a media diaria do periodo.
