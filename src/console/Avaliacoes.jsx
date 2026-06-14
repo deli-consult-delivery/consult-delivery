@@ -1,8 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   listLojasConsultoria,
+  listLojasConfigAvaliacoes,
   getAvaliacoesConfig,
   saveAvaliacoesConfig,
+  setLojaLogistica,
+  setLojaConsultoriaAtiva,
   listAvaliacoes,
   updateAvaliacaoStatus,
 } from '../lib/api.js';
@@ -208,6 +211,49 @@ function CardAvaliacao({ item, agindo, onSalvar, onEnviar, onStatus, onAjuste })
   );
 }
 
+// ── Linha do painel de gestão (logística em massa + consultoria ativa) ──────
+function LinhaGestao({ loja, busy, duplicada, onLogistica, onToggleAtiva }) {
+  const inativa = loja.is_consultoria_ativa === false;
+  const tipo = loja.logistica_tipo;
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+      padding: '8px 4px', borderBottom: '1px solid var(--line)',
+      opacity: inativa ? 0.5 : 1,
+    }}>
+      <div style={{ flex: 1, minWidth: 160, fontSize: 13, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <span style={{ textDecoration: inativa ? 'line-through' : 'none' }}>{loja.nome}</span>
+        {duplicada && <span className="cv2-bdg warn" style={{ fontSize: 10 }}>duplicada</span>}
+        {loja.super_restaurante && <span className="cv2-bdg ok" style={{ fontSize: 10 }}>Super</span>}
+        {!tipo && !inativa && <span className="cv2-bdg mut" style={{ fontSize: 10 }}>sem logística</span>}
+        {busy && <span style={{ fontSize: 11, color: 'var(--tx2)' }}>salvando…</span>}
+      </div>
+      <div style={{ display: 'flex', gap: 4 }}>
+        <button
+          className={`cv2-btn ${tipo === 'entrega_propria' ? '' : 'sec'}`}
+          style={{ fontSize: 11, padding: '4px 9px' }}
+          disabled={busy || inativa}
+          title="Responde avaliações de loja e de entrega (motoboy próprio)"
+          onClick={() => onLogistica(loja.id, 'entrega_propria')}
+        >Entrega própria</button>
+        <button
+          className={`cv2-btn ${tipo === 'ifood_logistica' ? '' : 'sec'}`}
+          style={{ fontSize: 11, padding: '4px 9px' }}
+          disabled={busy || inativa}
+          title="Não responde avaliações de entrega (logística do iFood)"
+          onClick={() => onLogistica(loja.id, 'ifood_logistica')}
+        >Logística iFood</button>
+      </div>
+      <button
+        className={`cv2-btn ${inativa ? 'sec' : 'danger'}`}
+        style={{ fontSize: 11, padding: '4px 9px', minWidth: 96 }}
+        disabled={busy}
+        onClick={() => onToggleAtiva(loja)}
+      >{inativa ? 'Reativar' : 'Sem consultoria'}</button>
+    </div>
+  );
+}
+
 export default function Avaliacoes({ tenantDbId, userId }) {
   void userId; // ações usam RLS pelo usuário logado (Supabase auth)
 
@@ -225,7 +271,22 @@ export default function Avaliacoes({ tenantDbId, userId }) {
   const [erro, setErro] = useState(null);
   const [aviso, setAviso] = useState(null);
 
+  // Painel de gestão em massa (logística por loja + consultoria ativa)
+  const [gerir, setGerir] = useState(false);
+  const [gestao, setGestao] = useState(null);
+  const [gBusy, setGBusy] = useState({});
+
   const loja = (lojas ?? []).find(l => l.id === lojaId) || null;
+
+  // Nomes que aparecem em mais de uma loja (pares duplicados a sinalizar).
+  const dupNomes = useMemo(() => {
+    const cont = {};
+    (gestao ?? []).forEach(l => {
+      const k = (l.nome || '').trim().toLowerCase();
+      cont[k] = (cont[k] || 0) + 1;
+    });
+    return new Set(Object.keys(cont).filter(k => cont[k] > 1));
+  }, [gestao]);
 
   // Lista de lojas em consultoria (alimenta o seletor).
   useEffect(() => {
@@ -256,6 +317,44 @@ export default function Avaliacoes({ tenantDbId, userId }) {
     try { setAvals(await listAvaliacoes(tenantDbId, lojaId)); } catch (e) { setErro(e.message); }
   }
 
+  // ── Painel de gestão: carrega só quando aberto (lazy) ─────────────────────
+  const carregarGestao = useCallback(async () => {
+    if (!tenantDbId) return;
+    try { setGestao(await listLojasConfigAvaliacoes(tenantDbId)); }
+    catch (e) { setErro(e.message); }
+  }, [tenantDbId]);
+
+  useEffect(() => { if (gerir && gestao == null) carregarGestao(); }, [gerir, gestao, carregarGestao]);
+
+  async function setLogisticaLoja(id, tipo) {
+    setGBusy(b => ({ ...b, [id]: true })); setErro(null); setAviso(null);
+    try {
+      await setLojaLogistica({ tenantId: tenantDbId, lojaId: id, logistica_tipo: tipo });
+      setGestao(gs => (gs ?? []).map(l => (l.id === id ? { ...l, logistica_tipo: tipo } : l)));
+      // se for a loja aberta no detalhe, mantém o card em sincronia
+      if (id === lojaId) {
+        setCfgForm(f => ({ ...f, logistica_tipo: tipo }));
+        setConfig(c => (c ? { ...c, logistica_tipo: tipo } : c));
+      }
+      setAviso('Logística atualizada.');
+    } catch (e) { setErro(e.message); }
+    setGBusy(b => ({ ...b, [id]: false }));
+  }
+
+  async function toggleConsultoria(lojaItem) {
+    const nova = !lojaItem.is_consultoria_ativa;
+    setGBusy(b => ({ ...b, [lojaItem.id]: true })); setErro(null); setAviso(null);
+    try {
+      await setLojaConsultoriaAtiva(lojaItem.id, nova);
+      setGestao(gs => (gs ?? []).map(l => (l.id === lojaItem.id ? { ...l, is_consultoria_ativa: nova } : l)));
+      // reflete a poda no seletor principal
+      listLojasConsultoria(tenantDbId).then(setLojas).catch(() => {});
+      if (!nova && lojaItem.id === lojaId) { setLojaId(''); setConfig(null); setAvals(null); }
+      setAviso(nova ? 'Loja reativada na consultoria.' : 'Loja marcada sem consultoria ativa.');
+    } catch (e) { setErro(e.message); }
+    setGBusy(b => ({ ...b, [lojaItem.id]: false }));
+  }
+
   async function salvarConfig() {
     if (!cfgForm.logistica_tipo) { setErro('Selecione a logística da loja.'); return; }
     setSalvandoCfg(true); setErro(null);
@@ -265,6 +364,7 @@ export default function Avaliacoes({ tenantDbId, userId }) {
         logistica_tipo: cfgForm.logistica_tipo, tom: cfgForm.tom,
       });
       setConfig(saved);
+      setGestao(gs => (gs ? gs.map(l => (l.id === lojaId ? { ...l, logistica_tipo: saved.logistica_tipo, tom: saved.tom } : l)) : gs));
       setAviso('Configuração salva.');
     } catch (e) { setErro(e.message); }
     setSalvandoCfg(false);
@@ -370,6 +470,54 @@ export default function Avaliacoes({ tenantDbId, userId }) {
         Gere respostas humanizadas (≤300 caracteres, no tom da loja) às avaliações do iFood, com insights de consultoria — colagem manual, sem API do iFood.
         {erro ? <span style={{ color: 'var(--red)' }}> · erro: {erro}</span> : ''}
         {aviso ? <span style={{ color: 'var(--green)' }}> · {aviso}</span> : ''}
+      </div>
+
+      {/* Gestão das lojas: logística em massa + consultoria ativa */}
+      <div className="cv2-card">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <div>
+            <h3 style={{ margin: 0 }}>Gerenciar lojas da consultoria</h3>
+            <div style={{ fontSize: 12, color: 'var(--tx2)', marginTop: 3 }}>
+              Marque a logística de cada loja (entrega própria ou logística do iFood) e remova as que não têm mais consultoria ativa.
+            </div>
+          </div>
+          <button className="cv2-btn sec" style={{ fontSize: 12 }} onClick={() => setGerir(v => !v)}>
+            {gerir ? 'Fechar' : 'Abrir'}
+          </button>
+        </div>
+
+        {gerir && (
+          <div style={{ marginTop: 12 }}>
+            {gestao == null && <div style={{ fontSize: 13, color: 'var(--tx2)' }}>Carregando lojas…</div>}
+            {gestao && gestao.length === 0 && (
+              <div style={{ fontSize: 13, color: 'var(--tx2)' }}>Nenhuma loja em consultoria ativa.</div>
+            )}
+            {gestao && gestao.length > 0 && (
+              <>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 11.5, color: 'var(--tx2)', marginBottom: 8 }}>
+                  <span><b>{gestao.filter(l => l.is_consultoria_ativa !== false).length}</b> ativas</span>
+                  <span>· <b>{gestao.filter(l => l.is_consultoria_ativa !== false && !l.logistica_tipo).length}</b> sem logística definida</span>
+                  {dupNomes.size > 0 && <span>· <b>{dupNomes.size}</b> nome(s) duplicado(s)</span>}
+                </div>
+                <div>
+                  {gestao.map(l => (
+                    <LinhaGestao
+                      key={l.id}
+                      loja={l}
+                      busy={!!gBusy[l.id]}
+                      duplicada={dupNomes.has((l.nome || '').trim().toLowerCase())}
+                      onLogistica={setLogisticaLoja}
+                      onToggleAtiva={toggleConsultoria}
+                    />
+                  ))}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--tx2)', marginTop: 8 }}>
+                  As mudanças são salvas na hora. Lojas marcadas “sem consultoria” somem da lista ao recarregar a página (reversível enquanto visíveis). Pares <b>duplicados</b> ficam sinalizados — remova um deles se for repetição.
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Seletor de loja */}

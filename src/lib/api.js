@@ -517,6 +517,60 @@ export async function saveAvaliacoesConfig({ tenantId, lojaId, logistica_tipo, t
   return data;
 }
 
+// Lojas em consultoria + a logística já configurada de cada uma — alimenta o
+// painel de gestão em massa (definir logística por loja + marcar/remover
+// consultoria ativa). 2 queries simples + merge por loja_id (sem embed/RLS join).
+export async function listLojasConfigAvaliacoes(tenantId) {
+  const [lojasRes, cfgRes] = await Promise.all([
+    supabase
+      .from('lojas')
+      .select('id, nome, super_restaurante, is_consultoria_ativa')
+      .eq('tenant_id', tenantId)
+      .eq('is_consultoria_ativa', true)
+      .order('nome'),
+    supabase
+      .from('avaliacoes_loja_config')
+      .select('loja_id, logistica_tipo, tom')
+      .eq('tenant_id', tenantId),
+  ]);
+  if (lojasRes.error) throw lojasRes.error;
+  if (cfgRes.error) throw cfgRes.error;
+  const byLoja = new Map((cfgRes.data ?? []).map(c => [c.loja_id, c]));
+  return (lojasRes.data ?? []).map(l => ({
+    ...l,
+    logistica_tipo: byLoja.get(l.id)?.logistica_tipo ?? null,
+    tom: byLoja.get(l.id)?.tom ?? null,
+  }));
+}
+
+// Atualiza SÓ a logística da loja (não toca o tom já salvo). Upsert por loja_id:
+// no UPDATE o supabase só seta as colunas presentes no objeto → tom preservado.
+export async function setLojaLogistica({ tenantId, lojaId, logistica_tipo }) {
+  const { data, error } = await supabase
+    .from('avaliacoes_loja_config')
+    .upsert(
+      { tenant_id: tenantId, loja_id: lojaId, logistica_tipo, updated_at: new Date().toISOString() },
+      { onConflict: 'loja_id' }
+    )
+    .select('loja_id, logistica_tipo')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// Marca/desmarca a consultoria ativa de uma loja (reversível). O Wandson usa
+// isto p/ podar a lista — loja sem consultoria sai dos filtros que usam o flag.
+export async function setLojaConsultoriaAtiva(lojaId, ativa) {
+  const { data, error } = await supabase
+    .from('lojas')
+    .update({ is_consultoria_ativa: ativa })
+    .eq('id', lojaId)
+    .select('id, is_consultoria_ativa')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 export async function listAvaliacoes(tenantId, lojaId) {
   let q = supabase
     .from('avaliacoes')
