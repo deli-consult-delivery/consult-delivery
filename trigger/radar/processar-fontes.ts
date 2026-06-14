@@ -219,6 +219,10 @@ function detectarEExtrair(wb: XLSX.WorkBook): { tipo: string; periodo: { ini: st
 
       const rPeriodo = linha("Período:");
       const periodoLabel = rPeriodo ? String(rPeriodo[1] ?? "").trim() : null;
+      // Fase 0 — ancora data_ref no período REAL do relatório, não na data de
+      // processamento. parsePeriodo é estrito (DD/MM/YYYY - DD/MM/YYYY): formato
+      // diferente → no-op (cai no fallback created_at de hoje), nunca fabrica data.
+      if (periodoLabel) { const p = parsePeriodo(periodoLabel); if (p.fim) periodo = p; }
 
       const avalMedia = mediaPond("Média das avaliações", avalSerie);       // pondera pela qtd de avaliações do dia
       const preparoMedio = mediaPond("Tempo médio de preparo (min)", pedidos); // pondera pelo nº de pedidos do dia
@@ -255,7 +259,12 @@ function detectarEExtrair(wb: XLSX.WorkBook): { tipo: string; periodo: { ini: st
         const v = rl ? String(rl[1] ?? "").trim() : "";
         if (v) metasIndicadores[lb] = v;
       }
-      if (Object.keys(metasIndicadores).length) out.push({ metrica: "operacao_metas", metadata: { ...meta, metas: metasIndicadores } });
+      if (Object.keys(metasIndicadores).length) {
+        // valor_texto resume as metas p/ consumidores que montam fatos a partir de
+        // valor/valor_texto (evita "operacao_metas: " vazio no contexto do LLM).
+        const metasTexto = Object.entries(metasIndicadores).map(([k, v]) => `${k}: ${v}`).join(" · ");
+        out.push({ metrica: "operacao_metas", valor_texto: metasTexto, metadata: { ...meta, metas: metasIndicadores } });
+      }
 
       return { tipo: "operacao", periodo, metricas: out, resumo: { dias: diaCols.length, periodo_label: periodoLabel, nivel: nivelTxt } };
     }
