@@ -133,14 +133,14 @@ export default function AtivarLoja({ tenantDbId }) {
 
       {msg && <div className="cv2-card" style={{ borderLeft: '3px solid var(--green)', color: 'var(--green)', fontWeight: 600 }}>{msg}</div>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 1fr) minmax(280px, 1fr)', gap: 14, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14, alignItems: 'start' }}>
         <div className="cv2-card">
           <h3>1 · Dados da loja</h3>
           <label style={labelStyle}>Nome da loja</label>
           <input style={inputStyle} value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex.: Uraka Burger — Centro" />
           <label style={labelStyle}>Cidade (opcional)</label>
           <input style={inputStyle} value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Ex.: Salvador/BA" />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
             <div>
               <label style={labelStyle}>Pedidos por mês</label>
               <input style={inputStyle} type="number" min="0" value={pedidosMes} onChange={e => setPedidosMes(e.target.value)} placeholder="Ex.: 450" />
@@ -184,6 +184,7 @@ export default function AtivarLoja({ tenantDbId }) {
       <div className="cv2-rule" />
       {lojas && lojas.length > 0 && (
         <div className="cv2-card">
+          <div className="cv2-tbl-wrap">
           <table>
             <thead><tr><th>Loja</th><th>Cidade</th><th>Perfil</th><th>Grupo vinculado</th></tr></thead>
             <tbody>
@@ -201,6 +202,7 @@ export default function AtivarLoja({ tenantDbId }) {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
       {lojas && !lojas.length && <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>Nenhuma loja cadastrada ainda.</div>}
@@ -209,7 +211,7 @@ export default function AtivarLoja({ tenantDbId }) {
       <div className="cv2-rule" />
       <div className="cv2-sub">Quem pode aprovar/descartar casos respondendo <b>@defesa ok</b> no WhatsApp. Lista vazia = qualquer participante do grupo (modo aberto, com rastro). Com 1+ aprovadores ativos, comandos de outros números são ignorados e geram alerta.</div>
       <div className="cv2-card">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 10, alignItems: 'end' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, alignItems: 'end' }}>
           <div>
             <label style={labelStyle}>Nome</label>
             <input style={inputStyle} value={aprNome} onChange={e => setAprNome(e.target.value)} placeholder="Ex.: Wandson" />
@@ -221,6 +223,7 @@ export default function AtivarLoja({ tenantDbId }) {
           <button className="cv2-btn" disabled={aprSalvando} onClick={addAprovador}>{aprSalvando ? 'Salvando…' : 'Adicionar'}</button>
         </div>
         {aprovadores.length > 0 && (
+          <div className="cv2-tbl-wrap">
           <table style={{ marginTop: 14 }}>
             <thead><tr><th>Nome</th><th>WhatsApp</th><th>Status</th><th></th></tr></thead>
             <tbody>
@@ -237,6 +240,7 @@ export default function AtivarLoja({ tenantDbId }) {
               ))}
             </tbody>
           </table>
+          </div>
         )}
         {!aprovadores.length && <div style={{ marginTop: 12, color: 'var(--tx2)', fontSize: 13 }}>Nenhum aprovador cadastrado — modo aberto (qualquer participante aprova, com rastro de quem foi).</div>}
       </div>

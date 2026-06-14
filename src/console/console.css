@@ -99,3 +99,67 @@
 .cv2-chat .kv span:first-child{color:var(--tx2)}
 .cv2-chat .kv b{font-weight:700;color:var(--ink)}
 .cv2-chat .empty{color:var(--tx2);font-size:13px;padding:34px;text-align:center;font-weight:500}
+
+/* ===================================================================
+   RESPONSIVO — Console v2 (iPhone, iPad, Android)
+   Sidebar vira drawer ≤1023px · safe-area do notch · chat empilha.
+   index.html tem viewport-fit=cover → env(safe-area-inset-*) funciona.
+   =================================================================== */
+
+/* helpers só-mobile — escondidos no desktop, revelados pelos @media abaixo */
+.cv2-ham,.cv2-sb-close,.cv2-overlay,.cv2-tb-chat-mobile{display:none}
+.cv2-ham,.cv2-sb-close{appearance:none;background:none;border:none;padding:6px;margin:0;cursor:pointer;color:var(--ink);border-radius:4px;align-items:center;justify-content:center;flex:none}
+.cv2-ham:hover,.cv2-sb-close:hover{background:#f0eeec}
+@keyframes cv2fade{from{opacity:0}to{opacity:1}}
+
+/* ≤1023px: iPad retrato, Android e iPhone — a sidebar vira drawer deslizante */
+@media (max-width:1023px){
+  .cv2-sb{position:fixed;top:0;left:0;height:100dvh;z-index:600;transform:translateX(-100%);transition:transform .22s ease;box-shadow:2px 0 18px rgba(0,0,0,.18);padding-left:env(safe-area-inset-left)}
+  .cv2-sb.open{transform:translateX(0)}
+  .cv2-overlay{display:block;position:fixed;inset:0;z-index:599;background:rgba(0,0,0,.45);animation:cv2fade .15s ease}
+  .cv2-ham{display:inline-flex}
+  .cv2-sb-close{display:inline-flex;margin-left:auto}
+  .cv2-tb{padding:10px 14px;gap:8px}
+  .cv2-tb .crumb{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cv2-ct{padding:16px 14px;padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+  /* barra fina só-mobile com o hambúrguer no Chat (que não tem topbar próprio) */
+  .cv2-tb-chat-mobile{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .cv2-tb-chat-mobile .crumb{color:var(--tx2);font-size:12.5px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cv2-tb-chat-mobile .crumb b{color:var(--ink);font-weight:700}
+  /* chat usável no toque: lista de conversas em cima, conversa embaixo, painel-info oculto */
+  .cv2-chat{flex-direction:column}
+  .cv2-chat .col1{width:100%;min-width:0;max-height:42vh;border-right:none;border-bottom:1px solid var(--line)}
+  .cv2-chat .col2{min-height:0}
+  .cv2-chat .col3{display:none}
+  .cv2-chat .conv .pv{max-width:60vw}
+  .cv2-chat .msg{max-width:82%}
+  .cv2-chat .composer{padding-bottom:calc(11px + env(safe-area-inset-bottom))}
+}
+
+/* ≤560px: telefone — desafoga o topbar (busca global e pills saem; crumb + avatar ficam) */
+@media (max-width:560px){
+  .cv2-gsearch{display:none}
+  .cv2-tb .cv2-pill{display:none}
+  .cv2-tb select{max-width:128px}
+}
+
+/* ≤420px: telefone estreito — KPIs em coluna única */
+@media (max-width:420px){
+  .cv2-kpis{grid-template-columns:1fr}
+}
+
+/* ===================================================================
+   CONTEÚDO — grids e tabelas que estouravam a largura no mobile (PR2)
+   =================================================================== */
+
+/* tabela larga rola DENTRO do wrapper, não na página inteira.
+   .cv2 table tem width:100% → sem wrapper a tabela espreme e transborda
+   o .cv2-ct; com overflow-x aqui o scroll fica isolado (momentum no iOS). */
+.cv2-tbl-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+/* grid de 3 colunas do Estúdio: vira 1 coluna no tablet/celular.
+   precisa ser classe (não inline) porque @media não sobrescreve style inline. */
+.cv2-grid-estudio{display:grid;grid-template-columns:minmax(250px,290px) minmax(330px,1fr) minmax(220px,280px);gap:14px;align-items:start}
+@media (max-width:1023px){
+  .cv2-grid-estudio{grid-template-columns:1fr}
+}

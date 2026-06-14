@@ -21,6 +21,7 @@ function Tela({ titulo, sub, kpis, cols, rows, acao, nota }) {
           <b style={{ fontSize: 13 }}>{titulo}</b>
           {acao && <button className="cv2-btn sec" disabled title="Disponível na próxima atualização">{acao}</button>}
         </div>
+        <div className="cv2-tbl-wrap">
         <table className="cv2-tbl">
           <thead><tr>{cols.map((c, i) => <th key={i}>{c}</th>)}</tr></thead>
           <tbody>
@@ -31,6 +32,7 @@ function Tela({ titulo, sub, kpis, cols, rows, acao, nota }) {
             )}
           </tbody>
         </table>
+        </div>
       </div>
       {nota && <div className="cv2-sub" style={{ marginTop: 10, fontSize: 11.5 }}>{nota}</div>}
     </div>
@@ -173,6 +175,7 @@ function CrudTela({ titulo, sub, table, tenantDbId, userId, cols, fields, toRow,
           </div>
         )}
 
+        <div className="cv2-tbl-wrap">
         <table className="cv2-tbl">
           <thead><tr>{allCols.map((c, i) => <th key={i}>{c}</th>)}</tr></thead>
           <tbody>
@@ -214,6 +217,7 @@ function CrudTela({ titulo, sub, table, tenantDbId, userId, cols, fields, toRow,
             )}
           </tbody>
         </table>
+        </div>
       </div>
       {nota && <div className="cv2-sub" style={{ marginTop: 10, fontSize: 11.5 }}>{nota}</div>}
     </div>
@@ -380,6 +384,7 @@ export function Arquivos({ tenantDbId, userId }) {
 
         {err && <div style={{ color: 'var(--red)', fontSize: 12, padding: '10px 16px', fontWeight: 600, borderBottom: '1px solid var(--line)' }}>{err}</div>}
 
+        <div className="cv2-tbl-wrap">
         <table className="cv2-tbl">
           <thead><tr><th>Arquivo</th><th>Pasta</th><th>Tamanho</th><th>Modificado</th><th></th></tr></thead>
           <tbody>
@@ -404,6 +409,7 @@ export function Arquivos({ tenantDbId, userId }) {
             )}
           </tbody>
         </table>
+        </div>
       </div>
       <div className="cv2-sub" style={{ marginTop: 10, fontSize: 11.5 }}>
         Arquivos privados, isolados por cliente. O link de download é temporário (expira em 2 minutos).
