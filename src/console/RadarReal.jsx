@@ -100,9 +100,9 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
         <h1>Dashboard iFood <span className="cv2-mock">SEM DADOS AINDA</span></h1>
         <div className="cv2-rule" />
         <div className="cv2-card" style={{ maxWidth: 620 }}>
-          <h3>O Radar precisa dos seus relatórios do iFood</h3>
+          <h3>O Dashboard precisa dos seus relatórios do iFood</h3>
           <div style={{ fontSize: 13, color: 'var(--tx2)', lineHeight: 1.9 }}>
-            Baixe os relatórios no Portal do Parceiro (Vendas, Cancelamentos, Cardápio, Conciliação…) e envie em <b>Dados › Importar relatórios</b>. Em minutos o Radar monta o diagnóstico desta loja — quanto entra, quanto o iFood retém e onde está vazando dinheiro.
+            Baixe os relatórios no Portal do Parceiro (Vendas, Cancelamentos, Cardápio, Conciliação…) e envie em <b>Dados › Importar relatórios</b>. Em minutos o Dashboard monta o diagnóstico desta loja — quanto entra, quanto o iFood retém e onde está vazando dinheiro.
           </div>
         </div>
       </div>
@@ -192,7 +192,7 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
       )}
 
       <div className="cv2-card">
-        <h3>O que o Radar viu</h3>
+        <h3>O que o Dashboard viu</h3>
         <table>
           <thead><tr><th>Sinal</th><th>Impacto</th><th>Ação sugerida</th></tr></thead>
           <tbody>

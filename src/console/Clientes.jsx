@@ -77,7 +77,7 @@ export default function Clientes({ userId }) {
         const json = await res.json().catch(() => ({}));
         convite = res.ok ? `convite enviado para ${email.trim()}` : `falha no convite: ${json.error || res.status} (reenvie depois)`;
       }
-      setMsg(`Workspace "${t.name}" criado no plano Radar grátis — ${convite}.`);
+      setMsg(`Workspace "${t.name}" criado no plano gratuito — ${convite}.`);
       setNome(''); setSlug(''); setEmail('');
       await carregar();
     } catch (err) {
@@ -146,7 +146,7 @@ export default function Clientes({ userId }) {
     <div>
       <h1>Clientes da plataforma <span className="cv2-mock" style={{ background: 'var(--green-soft)', color: 'var(--green)' }}>ADMIN</span></h1>
       <div className="cv2-rule" />
-      <div className="cv2-sub">Cada cliente é um workspace isolado. Plano inicial: Radar grátis — a Defesa liga sozinha quando o pagamento da assinatura (R$ 147/loja/mês) confirma.{erro ? ` · erro: ${erro}` : ''}</div>
+      <div className="cv2-sub">Cada cliente é um workspace isolado. Plano inicial: gratuito — a Defesa liga sozinha quando o pagamento da assinatura (R$ 147/loja/mês) confirma.{erro ? ` · erro: ${erro}` : ''}</div>
 
       {msg && <div className="cv2-card" style={{ borderLeft: '3px solid var(--green)', color: 'var(--green)', fontWeight: 600 }}>{msg}</div>}
 
@@ -176,7 +176,7 @@ export default function Clientes({ userId }) {
                 return (
                   <tr key={t.id}>
                     <td><b>{t.name}</b><div style={{ color: 'var(--tx2)', fontSize: 11 }}>{t.slug}</div></td>
-                    <td>{defesaMap[t.id] ? <span className="cv2-bdg ok">Defesa ativa</span> : <span className="cv2-bdg mut">Radar grátis</span>}</td>
+                    <td>{defesaMap[t.id] ? <span className="cv2-bdg ok">Defesa ativa</span> : <span className="cv2-bdg mut">Gratuito</span>}</td>
                     <td>
                       {badgeAssinatura(a) || <span style={{ color: 'var(--tx2)', fontSize: 12 }}>sem assinatura</span>}
                       {aberto && (
@@ -206,7 +206,7 @@ export default function Clientes({ userId }) {
               })}
             </tbody>
           </table>
-          <div style={{ fontSize: 11.5, color: 'var(--tx2)', marginTop: 10 }}>Fluxo automático: pagamento confirmado liga a Defesa · 2 cobranças vencidas desligam (volta ao Radar). O toggle manual é o override.</div>
+          <div style={{ fontSize: 11.5, color: 'var(--tx2)', marginTop: 10 }}>Fluxo automático: pagamento confirmado liga a Defesa · 2 cobranças vencidas desligam (volta ao plano gratuito). O toggle manual é o override.</div>
         </div>
       )}
       {tenants && !tenants.length && <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>Nenhum workspace visível.</div>}
