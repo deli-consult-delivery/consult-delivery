@@ -5,6 +5,7 @@ import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 import { notify } from "../_shared/notify";
 import { notifyDeli } from "../_shared/notify-deli";
+import { lerMetricas } from "../_shared/radar-metricas";
 
 // =====================================================
 // RADAR — diagnóstico semanal automático (PR12c)
@@ -43,14 +44,7 @@ export const radarDiagnosticoSemanal = schedules.task({
     for (const tenantId of tenants) {
       try {
         // última ocorrência de cada métrica
-        const { data: mets } = await sb
-          .from("radar_metricas")
-          .select("metrica, valor, valor_texto, created_at")
-          .eq("tenant_id", tenantId)
-          .order("created_at", { ascending: false })
-          .limit(400);
-        const map: Record<string, any> = {};
-        for (const r of mets ?? []) { if (!map[r.metrica]) map[r.metrica] = r; }
+        const map = await lerMetricas(sb, { tenantId, select: "metrica, valor, valor_texto, created_at" });
         if (!Object.keys(map).length) continue;
 
         const { data: casos } = await sb
