@@ -106,26 +106,35 @@
    index.html tem viewport-fit=cover → env(safe-area-inset-*) funciona.
    =================================================================== */
 
-/* helpers só-mobile — escondidos no desktop, revelados pelos @media abaixo */
-.cv2-ham,.cv2-sb-close,.cv2-overlay,.cv2-tb-chat-mobile{display:none}
+/* hambúrguer SEMPRE visível: no mobile abre o drawer · no desktop recolhe/expande a sidebar fixa */
+.cv2-ham{display:inline-flex}
+/* X e overlay são só do drawer-mobile (revelados no @media ≤1023px abaixo) */
+.cv2-sb-close,.cv2-overlay{display:none}
 .cv2-ham,.cv2-sb-close{appearance:none;background:none;border:none;padding:6px;margin:0;cursor:pointer;color:var(--ink);border-radius:4px;align-items:center;justify-content:center;flex:none}
 .cv2-ham:hover,.cv2-sb-close:hover{background:#f0eeec}
 @keyframes cv2fade{from{opacity:0}to{opacity:1}}
+
+/* DESKTOP (≥1024px): sidebar recolhível. Escondê-la faz o .cv2-main (flex:1) refluir
+   sozinho para a largura toda — sem overlay (o objetivo é GANHAR espaço, não cobrir). */
+@media (min-width:1024px){.cv2.cv2-sb-collapsed .cv2-sb{display:none}}
+
+/* barra fina do Chat (que não tem topbar próprio) — SEMPRE presente, para o hambúrguer
+   de recolher/expandir ficar acessível também no desktop quando se está no Chat. */
+.cv2-tb-chat{display:flex;align-items:center;gap:10px;padding:10px 22px;border-bottom:1px solid var(--line);background:var(--panel)}
+.cv2-tb-chat .crumb{color:var(--tx2);font-size:12.5px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cv2-tb-chat .crumb b{color:var(--ink);font-weight:700}
 
 /* ≤1023px: iPad retrato, Android e iPhone — a sidebar vira drawer deslizante */
 @media (max-width:1023px){
   .cv2-sb{position:fixed;top:0;left:0;height:100dvh;z-index:600;transform:translateX(-100%);transition:transform .22s ease;box-shadow:2px 0 18px rgba(0,0,0,.18);padding-left:env(safe-area-inset-left)}
   .cv2-sb.open{transform:translateX(0)}
   .cv2-overlay{display:block;position:fixed;inset:0;z-index:599;background:rgba(0,0,0,.45);animation:cv2fade .15s ease}
-  .cv2-ham{display:inline-flex}
   .cv2-sb-close{display:inline-flex;margin-left:auto}
   .cv2-tb{padding:10px 14px;gap:8px}
   .cv2-tb .crumb{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .cv2-ct{padding:16px 14px;padding-bottom:calc(16px + env(safe-area-inset-bottom))}
-  /* barra fina só-mobile com o hambúrguer no Chat (que não tem topbar próprio) */
-  .cv2-tb-chat-mobile{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
-  .cv2-tb-chat-mobile .crumb{color:var(--tx2);font-size:12.5px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .cv2-tb-chat-mobile .crumb b{color:var(--ink);font-weight:700}
+  /* no mobile a barra do Chat aperta o padding (o resto do estilo vem da regra-base) */
+  .cv2-tb-chat{padding:10px 14px}
   /* chat usável no toque: lista de conversas em cima, conversa embaixo, painel-info oculto */
   .cv2-chat{flex-direction:column}
   .cv2-chat .col1{width:100%;min-width:0;max-height:42vh;border-right:none;border-bottom:1px solid var(--line)}
