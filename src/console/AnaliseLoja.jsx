@@ -74,12 +74,14 @@ export default function AnaliseLoja({ tenantDbId, userId }) {
             <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.7 }}>
               <div style={{ color: 'var(--tx2)' }}>{a.diagnostico.resumo}</div>
               {Array.isArray(a.diagnostico.prioridades) && (
+                <div className="cv2-tbl-wrap">
                 <table style={{ marginTop: 12 }}>
                   <thead><tr><th>Prioridade</th><th>Por quê</th><th>Ação</th></tr></thead>
                   <tbody>{a.diagnostico.prioridades.map((p, i) => (
                     <tr key={i}><td><b>{p.titulo}</b></td><td style={{ color: 'var(--tx2)' }}>{p.porque}</td><td>{p.acao}</td></tr>
                   ))}</tbody>
                 </table>
+                </div>
               )}
               {Array.isArray(a.diagnostico.plano) && a.diagnostico.plano.length > 0 && (
                 <div style={{ marginTop: 10 }}><b>Plano:</b><ol style={{ margin: '6px 0 0 18px', color: 'var(--tx2)' }}>{a.diagnostico.plano.map((p, i) => <li key={i}>{p}</li>)}</ol></div>

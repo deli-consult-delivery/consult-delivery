@@ -193,6 +193,7 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
 
       <div className="cv2-card">
         <h3>O que o Radar viu</h3>
+        <div className="cv2-tbl-wrap">
         <table>
           <thead><tr><th>Sinal</th><th>Impacto</th><th>Ação sugerida</th></tr></thead>
           <tbody>
@@ -203,6 +204,7 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
             {!sinais.length && <tr><td colSpan={3} style={{ textAlign: 'center', color: 'var(--tx2)' }}>Esta loja ainda não tem métricas — importe os relatórios dela em Dados › Importar relatórios.</td></tr>}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

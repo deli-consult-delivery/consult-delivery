@@ -155,7 +155,7 @@ export default function Estudio({ tenantDbId, userId }) {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(250px, 290px) minmax(330px, 1fr) minmax(220px, 280px)', gap: 14, alignItems: 'start' }}>
+      <div className="cv2-grid-estudio">
 
         {/* ============ COLUNA 1 · BRIEF ============ */}
         <div className="cv2-card">
@@ -262,7 +262,7 @@ export default function Estudio({ tenantDbId, userId }) {
         <div className="cv2-card">
           <h3>Biblioteca <span style={{ fontWeight: 500, color: 'var(--tx2)' }}>{criacoes ? `${criacoes.length} criações` : ''}</span></h3>
           <input style={inputStyle} value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar criações..." />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8, marginTop: 12 }}>
             {biblio.map(c => (
               <div key={c.id} onClick={() => setSelId(c.id)} style={{ cursor: 'pointer', border: `1px solid ${sel && sel.id === c.id ? 'var(--red)' : 'var(--line)'}`, borderRadius: 4, overflow: 'hidden', background: '#fff' }}>
                 {c.imagem_url

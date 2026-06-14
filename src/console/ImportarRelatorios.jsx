@@ -105,6 +105,7 @@ export default function ImportarRelatorios({ tenantDbId, userId }) {
       <div className="cv2-rule" />
       {fontes && fontes.length > 0 && (
         <div className="cv2-card">
+          <div className="cv2-tbl-wrap">
           <table>
             <thead><tr><th>Arquivo</th><th>Tipo</th><th>Período</th><th>Status</th></tr></thead>
             <tbody>
@@ -118,6 +119,7 @@ export default function ImportarRelatorios({ tenantDbId, userId }) {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
       {fontes && !fontes.length && <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>Nenhum arquivo enviado ainda.</div>}
@@ -126,6 +128,7 @@ export default function ImportarRelatorios({ tenantDbId, userId }) {
       <div className="cv2-rule" />
       {metricas.length > 0 ? (
         <div className="cv2-card">
+          <div className="cv2-tbl-wrap">
           <table>
             <thead><tr><th>Métrica</th><th>Valor</th><th>Período</th></tr></thead>
             <tbody>
@@ -138,6 +141,7 @@ export default function ImportarRelatorios({ tenantDbId, userId }) {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       ) : <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>As métricas aparecem aqui depois do processamento.</div>}
     </div>

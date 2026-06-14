@@ -66,6 +66,7 @@ export default function AcessoUsuarios({ tenantDbId }) {
       </div>
       {agentes.length > 0 && (
         <div className="cv2-card">
+          <div className="cv2-tbl-wrap">
           <table>
             <thead><tr><th>Agente</th><th>Invocar</th><th>Histórico</th><th>Aprovar drafts</th></tr></thead>
             <tbody>
@@ -80,6 +81,7 @@ export default function AcessoUsuarios({ tenantDbId }) {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

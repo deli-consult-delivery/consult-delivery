@@ -167,6 +167,7 @@ export default function Clientes({ userId }) {
       <div className="cv2-rule" />
       {tenants && (
         <div className="cv2-card">
+          <div className="cv2-tbl-wrap">
           <table>
             <thead><tr><th>Cliente</th><th>Plano</th><th>Assinatura</th><th>Ações</th></tr></thead>
             <tbody>
@@ -206,6 +207,7 @@ export default function Clientes({ userId }) {
               })}
             </tbody>
           </table>
+          </div>
           <div style={{ fontSize: 11.5, color: 'var(--tx2)', marginTop: 10 }}>Fluxo automático: pagamento confirmado liga a Defesa · 2 cobranças vencidas desligam (volta ao Radar). O toggle manual é o override.</div>
         </div>
       )}

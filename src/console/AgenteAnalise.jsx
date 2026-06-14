@@ -69,12 +69,14 @@ export default function AgenteAnalise({ tenantDbId, userId, agente, titulo, desc
             <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.7 }}>
               <div style={{ color: 'var(--tx2)' }}>{r.resultado.resumo}</div>
               {Array.isArray(r.resultado.itens) && r.resultado.itens.length > 0 && (
+                <div className="cv2-tbl-wrap">
                 <table style={{ marginTop: 12 }}>
                   <thead><tr><th>Item</th><th>Detalhe</th><th>Ação</th></tr></thead>
                   <tbody>{r.resultado.itens.map((it, i) => (
                     <tr key={i}><td><b>{it.titulo}</b></td><td style={{ color: 'var(--tx2)' }}>{it.detalhe}</td><td>{it.acao}</td></tr>
                   ))}</tbody>
                 </table>
+                </div>
               )}
               {r.resultado.destaque && <div style={{ marginTop: 10, padding: '8px 11px', background: 'var(--red-soft)', color: 'var(--red)', borderRadius: 4, fontWeight: 600, fontSize: 12.5 }}>Prioridade: {r.resultado.destaque}</div>}
             </div>
