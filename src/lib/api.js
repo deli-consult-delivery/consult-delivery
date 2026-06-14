@@ -545,6 +545,8 @@ export async function listLojasConfigAvaliacoes(tenantId) {
 
 // Atualiza SÓ a logística da loja (não toca o tom já salvo). Upsert por loja_id:
 // no UPDATE o supabase só seta as colunas presentes no objeto → tom preservado.
+// Retorna a linha de config completa (mesmo shape de getAvaliacoesConfig) para
+// que o chamador possa adotá-la quando a loja ainda não tinha config em memória.
 export async function setLojaLogistica({ tenantId, lojaId, logistica_tipo }) {
   const { data, error } = await supabase
     .from('avaliacoes_loja_config')
@@ -552,7 +554,7 @@ export async function setLojaLogistica({ tenantId, lojaId, logistica_tipo }) {
       { tenant_id: tenantId, loja_id: lojaId, logistica_tipo, updated_at: new Date().toISOString() },
       { onConflict: 'loja_id' }
     )
-    .select('loja_id, logistica_tipo')
+    .select('id, loja_id, logistica_tipo, tom, tom_sugerido_ia, updated_at')
     .single();
   if (error) throw error;
   return data;
