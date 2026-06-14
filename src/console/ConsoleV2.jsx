@@ -540,6 +540,9 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
   const [tela, setTela] = useState('visao');
   const [defesaOn, setDefesaOn] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem('cv2_sb_collapsed') === '1'; } catch { return false; }
+  });
   const [tenantsList, sel, setSel] = useTenants(userId, { dbId: propDbId, slug: tenantInfo?.id, nome: tenantInfo?.name });
 
   // tenant ativo = selecionado no topo (todas as telas seguem isto)
@@ -566,6 +569,19 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [sidebarOpen]);
+
+  // hambúrguer: no mobile (≤1023px) abre/fecha o drawer; no desktop recolhe/expande a sidebar fixa (persiste)
+  const toggleMenu = useCallback(() => {
+    if (window.matchMedia('(max-width:1023px)').matches) {
+      setSidebarOpen(o => !o);
+    } else {
+      setSidebarCollapsed(c => {
+        const next = !c;
+        try { localStorage.setItem('cv2_sb_collapsed', next ? '1' : '0'); } catch { /* localStorage indisponível */ }
+        return next;
+      });
+    }
+  }, []);
 
   const temaStyle = brand?.cor ? { '--red': brand.cor, '--red-dark': brand.cor, '--red-soft': brand.cor + '1a' } : undefined;
   const ehChat = tela === 'chat';
@@ -622,7 +638,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
   const inicial = (tenantNome || 'CD').replace(/[^A-Za-zÀ-ú]/g, '').slice(0, 2).toUpperCase() || 'CD';
 
   return (
-    <div className="cv2" style={temaStyle}>
+    <div className={`cv2${sidebarCollapsed ? ' cv2-sb-collapsed' : ''}`} style={temaStyle}>
       <CvSprite />
       {sidebarOpen && <div className="cv2-overlay" onClick={() => setSidebarOpen(false)} />}
       <aside className={`cv2-sb${sidebarOpen ? ' open' : ''}`}>
@@ -653,8 +669,8 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       <div className="cv2-main">
         {ehChat ? (
           <>
-            <div className="cv2-tb-chat-mobile">
-              <button className="cv2-ham" onClick={() => setSidebarOpen(true)} aria-label="Abrir menu">
+            <div className="cv2-tb-chat">
+              <button className="cv2-ham" onClick={toggleMenu} title="Abrir ou recolher o menu" aria-label="Abrir ou recolher o menu">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
               </button>
               <span className="crumb">Console › <b>{LABELS[tela] || tela}</b></span>
@@ -666,7 +682,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
         ) : (
           <>
             <div className="cv2-tb">
-              <button className="cv2-ham" onClick={() => setSidebarOpen(true)} aria-label="Abrir menu">
+              <button className="cv2-ham" onClick={toggleMenu} title="Abrir ou recolher o menu" aria-label="Abrir ou recolher o menu">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
               </button>
               <span className="crumb">Console › <b>{LABELS[tela] || tela}</b></span>
