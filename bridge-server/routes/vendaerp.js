@@ -39,7 +39,9 @@ module.exports = function ({ requireJwtOrInternal, erp }) {
     return {
       conectado: true,
       total_empresas: Array.isArray(lista) ? lista.length : null,
-      empresa: primeira?.nome ?? primeira?.razaoSocial ?? primeira?.fantasia ?? null,
+      empresa:
+        primeira?.NomeFantasia ?? primeira?.RazaoSocial ?? primeira?.Empresa ??
+        primeira?.nome ?? primeira?.razaoSocial ?? primeira?.fantasia ?? null,
     };
   }));
 
