@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   listLojasConsultoria,
   listLojasConfigAvaliacoes,
@@ -259,6 +259,10 @@ export default function Avaliacoes({ tenantDbId, userId }) {
 
   const [lojas, setLojas] = useState(null);
   const [lojaId, setLojaId] = useState('');
+  // Espelho da loja selecionada p/ ler "seleção atual" dentro de callbacks
+  // assíncronos (sem closure velha) — usado por setLogisticaLoja ao resolver.
+  const lojaIdRef = useRef(lojaId);
+  useEffect(() => { lojaIdRef.current = lojaId; }, [lojaId]);
   const [config, setConfig] = useState(null);          // linha do banco (ou null)
   const [cfgForm, setCfgForm] = useState({ logistica_tipo: '', tom: '' });
   const [avals, setAvals] = useState(null);
@@ -294,25 +298,31 @@ export default function Avaliacoes({ tenantDbId, userId }) {
     listLojasConsultoria(tenantDbId).then(setLojas).catch(e => setErro(e.message));
   }, [tenantDbId]);
 
-  // Carrega config + avaliações da loja selecionada.
-  const carregarLoja = useCallback(async () => {
-    setEntradas([{ ...ROW_VAZIA }]); // trocar de loja zera as avaliações coladas (não vazam p/ outra loja)
+  // Carrega config + avaliações da loja selecionada. Trocar de loja zera as
+  // avaliações coladas (não vazam p/ outra loja) e descarta — via ignore-flag —
+  // qualquer carga em voo da loja anterior: sem isso, uma loja lenta (A) que
+  // resolve depois sobrescreve config/avals da loja recém-selecionada (B).
+  useEffect(() => {
+    let ignore = false;
+    setEntradas([{ ...ROW_VAZIA }]);
     if (!lojaId) { setConfig(null); setAvals(null); return; }
     setErro(null);
-    try {
-      const [cfg, lista] = await Promise.all([
-        getAvaliacoesConfig(lojaId),
-        listAvaliacoes(tenantDbId, lojaId),
-      ]);
-      setConfig(cfg);
-      setCfgForm({ logistica_tipo: cfg?.logistica_tipo || '', tom: cfg?.tom || '' });
-      setAvals(lista);
-    } catch (e) {
-      setErro(e.message);
-    }
+    (async () => {
+      try {
+        const [cfg, lista] = await Promise.all([
+          getAvaliacoesConfig(lojaId),
+          listAvaliacoes(tenantDbId, lojaId),
+        ]);
+        if (ignore) return;                       // loja mudou enquanto carregava → descarta
+        setConfig(cfg);
+        setCfgForm({ logistica_tipo: cfg?.logistica_tipo || '', tom: cfg?.tom || '' });
+        setAvals(lista);
+      } catch (e) {
+        if (!ignore) setErro(e.message);
+      }
+    })();
+    return () => { ignore = true; };
   }, [lojaId, tenantDbId]);
-
-  useEffect(() => { carregarLoja(); }, [carregarLoja]);
 
   async function recarregarAvals() {
     try { setAvals(await listAvaliacoes(tenantDbId, lojaId)); } catch (e) { setErro(e.message); }
@@ -332,10 +342,12 @@ export default function Avaliacoes({ tenantDbId, userId }) {
     try {
       const saved = await setLojaLogistica({ tenantId: tenantDbId, lojaId: id, logistica_tipo: tipo });
       setGestao(gs => (gs ?? []).map(l => (l.id === id ? { ...l, logistica_tipo: tipo } : l)));
-      // se for a loja aberta no detalhe, mantém o card em sincronia. Quando a loja
-      // ainda não tinha config (config=null), adota a linha recém-criada no banco —
-      // senão o "Gerar respostas" continua bloqueado mesmo com a logística salva.
-      if (id === lojaId) {
+      // se for a loja aberta no detalhe AGORA, mantém o card em sincronia. Compara
+      // contra a seleção atual (lojaIdRef), não a closure do clique: trocar de loja
+      // durante o await não pode injetar a config da loja antiga no card da nova.
+      // Quando a loja ainda não tinha config (config=null), adota a linha recém-criada
+      // no banco — senão o "Gerar respostas" continua bloqueado mesmo com a logística salva.
+      if (id === lojaIdRef.current) {
         setCfgForm(f => ({ ...f, logistica_tipo: tipo }));
         setConfig(c => (c ? { ...c, logistica_tipo: tipo } : saved));
       }
