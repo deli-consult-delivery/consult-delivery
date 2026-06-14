@@ -399,11 +399,14 @@ export default function Avaliacoes({ tenantDbId, userId }) {
   }
 
   async function pedirTom() {
+    const reqLojaId = lojaId;
     setSugerindoTom(true); setErro(null);
     try {
       const exemplos = entradas.map(r => r.comentario.trim()).filter(Boolean).slice(0, 20);
-      const { tom_sugerido } = await sugerirTomLoja(lojaId, exemplos.length ? { exemplos } : {});
-      if (tom_sugerido) setCfgForm(f => ({ ...f, tom: tom_sugerido }));
+      const { tom_sugerido } = await sugerirTomLoja(reqLojaId, exemplos.length ? { exemplos } : {});
+      // só injeta o tom se ainda estamos na mesma loja (lojaIdRef): trocar de loja
+      // durante o await não pode escrever o tom sugerido da loja antiga no form da nova.
+      if (tom_sugerido && reqLojaId === lojaIdRef.current) setCfgForm(f => ({ ...f, tom: tom_sugerido }));
     } catch (e) { setErro(e.message); }
     setSugerindoTom(false);
   }
