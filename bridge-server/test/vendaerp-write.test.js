@@ -62,6 +62,16 @@ const realFetch = global.fetch;
   check('emitirNfe põe CodigoVenda na query string', () => assert.match(String(lastUrl), /CodigoVenda=4321/));
   check('emitirNfe NÃO manda CodigoVenda no body', () => assert.ok(!lastOpts || lastOpts.body == null));
 
+  // Defesa em profundidade: emitirNfe sem CodigoVenda falha fechada SEM tocar o ERP.
+  calls = 0;
+  try {
+    await erp.emitirNfe({});
+    check('emitirNfe sem CodigoVenda deveria lançar', () => assert.fail('não lançou'));
+  } catch (e) {
+    check('emitirNfe sem CodigoVenda lança VendaErpApiError', () => assert.strictEqual(e.name, 'VendaErpApiError'));
+    check('emitirNfe sem CodigoVenda NÃO toca o ERP (0 chamadas)', () => assert.strictEqual(calls, 0));
+  }
+
   global.fetch = realFetch;
   if (failures > 0) { process.stdout.write(`\n${failures} falha(s).\n`); process.exit(1); }
   process.stdout.write('\nTodas as asserções passaram.\n');

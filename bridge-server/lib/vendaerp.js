@@ -234,6 +234,11 @@ async function gerarBoleto(payload, tenantId) {
 // ⚠️ Diferente dos demais: CodigoVenda vai na QUERY string, sem corpo.
 async function emitirNfe(payload, tenantId) {
   const codigoVenda = payload?.CodigoVenda ?? payload?.codigoVenda;
+  // Defesa em profundidade: a rota Bridge aceita body cru; sem CodigoVenda a
+  // emissão fiscal iria sem alvo. Falha fechada antes de tocar o ERP.
+  if (codigoVenda === undefined || codigoVenda === null || codigoVenda === '') {
+    throw new VendaErpApiError('CodigoVenda obrigatório para emitir NFE', 0, null);
+  }
   return erpFetch(`/Fiscal/EmitirNFE${qs({ CodigoVenda: codigoVenda })}`, {
     method: 'POST',
   }, tenantId).then(tolerant);
