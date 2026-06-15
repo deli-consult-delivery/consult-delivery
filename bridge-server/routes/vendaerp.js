@@ -86,6 +86,11 @@ module.exports = function ({ requireJwtOrInternal, erp }) {
     return erp.pesquisarOportunidades({ codigo, empresa, cliente }, tid(req));
   }));
 
+  // ── CRM — criar oportunidade (Fase 2, escrita) ──────────────────────────────
+  router.post('/vendaerp/oportunidade', requireJwtOrInternal, handle((req) =>
+    erp.criarOportunidade(req.body, tid(req))
+  ));
+
   // ── Auxiliares ──────────────────────────────────────────────────────────────
   router.get('/vendaerp/empresas', requireJwtOrInternal, handle((req) => erp.getEmpresas(tid(req))));
   router.get('/vendaerp/formas-pagamento', requireJwtOrInternal, handle((req) => erp.getFormasPagamento(tid(req))));

@@ -1,9 +1,10 @@
 // smoke.js — validação sem Bridge, sem banco e sem transporte (molde admin-mcp).
 //
-// Prova que: (1) o registry tem as tools de leitura esperadas; (2) NÃO há nenhuma
-// tool de escrita/mutação (Fase 1 é só leitura — enforcement estrutural); (3) cada
-// tool tem contrato completo; (4) o McpServer registra todas (zod inputShapes
-// válidos, API do SDK correta) com um erp/auditor stub.
+// Prova que: (1) o registry tem as tools de leitura esperadas; (2) as tools de
+// escrita são EXATAMENTE o par propor/confirmar da Fase 2 (nenhuma mutação direta
+// — escrita só via padrão propor→confirmar); (3) cada tool tem contrato completo;
+// (4) o McpServer registra todas (zod inputShapes válidos, API do SDK correta)
+// com um erp/auditor stub.
 //
 // Roda offline: `npm run smoke`. Sai !=0 se qualquer asserção falhar.
 'use strict';
@@ -19,6 +20,11 @@ const EXPECTED_READ = [
   'erp_estoque',
   'erp_fiscal',
   'erp_crm',
+];
+
+const EXPECTED_WRITE = [
+  'erp_propor_oportunidade',
+  'erp_confirmar',
 ];
 
 let failures = 0;
@@ -38,15 +44,15 @@ check('read tools = esperadas', () => {
   assert.deepStrictEqual(readTools.map((t) => t.name).sort(), [...EXPECTED_READ].sort());
 });
 
-check('Fase 1 = nenhuma tool de escrita', () => {
-  assert.deepStrictEqual(writeTools.map((t) => t.name), []);
+check('Fase 2 = write tools = par propor/confirmar', () => {
+  assert.deepStrictEqual(writeTools.map((t) => t.name), EXPECTED_WRITE);
 });
 
-check('nenhuma tool de criar/emitir/aprovar/executar (enforcement Fase 1)', () => {
-  const proibidas = allTools
+check('readTools não têm mutação direta (escrita só via propor→confirmar)', () => {
+  const proibidas = readTools
     .map((t) => t.name)
     .filter((n) => /criar|emitir|aprovar|executar|enviar|send|create|approve|delete|update|baixar/i.test(n));
-  assert.deepStrictEqual(proibidas, [], `tools proibidas presentes: ${proibidas.join(', ')}`);
+  assert.deepStrictEqual(proibidas, [], `tools de leitura com nome de mutação: ${proibidas.join(', ')}`);
 });
 
 check('cada tool tem contrato completo', () => {
