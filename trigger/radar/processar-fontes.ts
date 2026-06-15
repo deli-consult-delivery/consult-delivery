@@ -56,8 +56,32 @@ function reqCol(head: string[], pred: (h: string) => boolean, col: string, aba: 
 }
 
 interface Metrica { metrica: string; valor?: number; valor_texto?: string; metadata?: Record<string, unknown> }
+interface SeriePonto { metrica: string; dia: string; valor: number }
 
-function detectarEExtrair(wb: XLSX.WorkBook): { tipo: string; periodo: { ini: string | null; fim: string | null }; metricas: Metrica[]; resumo: Record<string, unknown> } {
+// Mapeia cada coluna-dia "dd/mm" (header da Operação) para data ISO YYYY-MM-DD,
+// ancorando no período REAL do relatório [ini, fim]. Para cada "dd/mm" escolhe o
+// ANO (entre o de ini e o de fim) cujo ISO cai DENTRO do intervalo — robusto à
+// ORDEM das colunas e à virada de ano (dez→jan), sem depender de monotonia.
+// Coluna fora do intervalo → null: não persiste (anti-padrão P1, não adivinha o dia).
+// Sem período datável (ini OU fim ausente) → tudo null (sem âncora confiável).
+function diasDaSerie(headersDia: string[], periodo: { ini: string | null; fim: string | null }): (string | null)[] {
+  const { ini, fim } = periodo;
+  if (!ini || !fim) return headersDia.map(() => null);
+  const anoIni = Number(ini.slice(0, 4));
+  const anoFim = Number(fim.slice(0, 4));
+  return headersDia.map(h => {
+    const m = String(h ?? "").trim().match(/^(\d{2})\/(\d{2})$/);
+    if (!m) return null;
+    const [, dd, mm] = m;
+    for (let ano = anoIni; ano <= anoFim; ano++) {
+      const iso = `${ano}-${mm}-${dd}`;
+      if (iso >= ini && iso <= fim) return iso; // ancora dentro do período do relatório
+    }
+    return null; // nenhum ano cai no intervalo → não persiste (não adivinha)
+  });
+}
+
+function detectarEExtrair(wb: XLSX.WorkBook): { tipo: string; periodo: { ini: string | null; fim: string | null }; metricas: Metrica[]; series?: SeriePonto[]; resumo: Record<string, unknown> } {
   const abas = wb.SheetNames;
   const out: Metrica[] = [];
   let periodo: { ini: string | null; fim: string | null } = { ini: null, fim: null };
@@ -285,7 +309,33 @@ function detectarEExtrair(wb: XLSX.WorkBook): { tipo: string; periodo: { ini: st
         out.push({ metrica: "operacao_metas", valor_texto: metasTexto, metadata: { ...meta, metas: metasIndicadores } });
       }
 
-      return { tipo: "operacao", periodo, metricas: out, resumo: { dias: diaCols.length, periodo_label: periodoLabel, nivel: nivelTxt } };
+      // ---- série diária de verdade (Fase 5) ----
+      // serie(label) já calcula o vetor por-dia alinhado a diaCols; aqui persistimos
+      // esse grão em radar_series (1 linha/métrica/dia). Os nomes ESPELHAM os agregados
+      // de radar_metricas → a soma da série bate com o agregado (semanal/mensal client-side).
+      // Só Operação tem grão; só com período datável (anti-P1: não inventa o dia).
+      const series: SeriePonto[] = [];
+      if (periodo.ini && periodo.fim && diaCols.length) {
+        const diasISO = diasDaSerie(diaCols.map(c => String(headerRow[c] ?? "").trim()), periodo);
+        // Valor cru por dia (sem r2): a soma client-side da série reproduz EXATAMENTE
+        // soma(...) e o fmtBRL no front exibe igual ao r2(soma) do KPI agregado — sem
+        // drift de centavos por acumular arredondamentos. As 5 contagens são inteiras.
+        const pushSerie = (metrica: string, valores: number[]) => {
+          for (let i = 0; i < valores.length; i++) {
+            const dia = diasISO[i];
+            if (!dia) continue; // sem data confiável p/ essa coluna → não persiste
+            series.push({ metrica, dia, valor: valores[i] });
+          }
+        };
+        pushSerie("operacao_pedidos_totais", pedidos);
+        pushSerie("operacao_atrasados_5min", atrasadosSerie);
+        pushSerie("operacao_cancelamentos_super_qtd", serie("Pedidos cancelados com impacto no Super"));
+        pushSerie("operacao_avaliacoes_qtd", avalSerie);
+        pushSerie("operacao_chamados", serie("Pedidos com chamados"));
+        pushSerie("operacao_valor_cancelado", serie("Valor total do cancelamento com entrega (R$)"));
+      }
+
+      return { tipo: "operacao", periodo, metricas: out, series, resumo: { dias: diaCols.length, periodo_label: periodoLabel, nivel: nivelTxt } };
     }
   }
 
@@ -334,13 +384,14 @@ export const radarProcessarFontes = schedules.task({
         let tipo = "print";
         let periodo: { ini: string | null; fim: string | null } = { ini: null, fim: null };
         let metricas: Metrica[] = [];
+        let series: SeriePonto[] = [];
         let resumo: Record<string, unknown> = {};
         let custoUsd: number | null = null;
 
         if (f.origem === "planilha") {
           const wb = XLSX.read(buf, { type: "array" });
           const r = detectarEExtrair(wb);
-          tipo = r.tipo; periodo = r.periodo; metricas = r.metricas; resumo = r.resumo;
+          tipo = r.tipo; periodo = r.periodo; metricas = r.metricas; series = r.series ?? []; resumo = r.resumo;
         } else {
           const mime = f.arquivo_nome?.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
           const r = await extrairDePrint(buf, mime);
@@ -371,6 +422,23 @@ export const radarProcessarFontes = schedules.task({
           if (delErr) throw new Error(`limpa metricas anteriores: ${delErr.message}`);
           const { error: insErr } = await sb.from("radar_metricas").insert(linhas);
           if (insErr) throw new Error(`insert metricas: ${insErr.message}`);
+        }
+
+        // série diária de verdade (Fase 5) — espelha a idempotência de radar_metricas.
+        // DELETE incondicional: se um reprocesso deixar de ter série, o resíduo some.
+        const { error: delSErr } = await sb.from("radar_series").delete().eq("fonte_id", f.id);
+        if (delSErr) throw new Error(`limpa série anterior: ${delSErr.message}`);
+        if (series.length) {
+          const linhasSerie = series.map(s => ({
+            tenant_id: f.tenant_id,
+            loja_id: f.loja_id ?? null,
+            fonte_id: f.id,
+            metrica: s.metrica,
+            dia: s.dia,
+            valor: s.valor,
+          }));
+          const { error: insSErr } = await sb.from("radar_series").insert(linhasSerie);
+          if (insSErr) throw new Error(`insert série: ${insSErr.message}`);
         }
 
         await sb.from("radar_fontes").update({
