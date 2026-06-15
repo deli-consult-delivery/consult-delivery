@@ -199,6 +199,59 @@ async function getFormasPagamento(tenantId) {
   return withRetry(() => erpFetch('/FormasPagamento/GetTodasFormasPagamento', {}, tenantId)).then(tolerant);
 }
 
+// ---------------------------------------------------------------------------
+// Métodos de ESCRITA (POST) — Fase 2.
+// ⚠️ SEM withRetry: POST não-idempotente. Retry em 5xx/timeout duplicaria
+// registro no ERP. Falha fechada → a tool erp_confirmar marca a proposta failed.
+// Caminhos/corpos confirmados no swagger (Task 1).
+// ---------------------------------------------------------------------------
+
+// CRM — criar oportunidade. Caminho verificado: POST /api/request/Oportunidades/Cadastrar.
+async function criarOportunidade(payload, tenantId) {
+  return erpFetch('/Oportunidades/Cadastrar', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, tenantId).then(tolerant);
+}
+
+// Financeiro — criar lançamento. Caminho verificado: POST /api/request/Lancamentos/Criar.
+async function criarLancamento(payload, tenantId) {
+  return erpFetch('/Lancamentos/Criar', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, tenantId).then(tolerant);
+}
+
+// Financeiro — gerar boleto/cobrança. Caminho verificado: POST /api/request/Lancamentos/GerarCobrancaIntegracao.
+async function gerarBoleto(payload, tenantId) {
+  return erpFetch('/Lancamentos/GerarCobrancaIntegracao', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, tenantId).then(tolerant);
+}
+
+// Fiscal — emitir NFE. Caminho verificado: POST /api/request/Fiscal/EmitirNFE.
+// ⚠️ Diferente dos demais: CodigoVenda vai na QUERY string, sem corpo.
+async function emitirNfe(payload, tenantId) {
+  const codigoVenda = payload?.CodigoVenda ?? payload?.codigoVenda;
+  // Defesa em profundidade: a rota Bridge aceita body cru; sem CodigoVenda a
+  // emissão fiscal iria sem alvo. Falha fechada antes de tocar o ERP.
+  if (codigoVenda === undefined || codigoVenda === null || codigoVenda === '') {
+    throw new VendaErpApiError('CodigoVenda obrigatório para emitir NFE', 0, null);
+  }
+  return erpFetch(`/Fiscal/EmitirNFE${qs({ CodigoVenda: codigoVenda })}`, {
+    method: 'POST',
+  }, tenantId).then(tolerant);
+}
+
+// Estoque — ajuste/movimentação. Caminho verificado: POST /api/request/ProdutosEstoque/Salvar.
+async function ajustarEstoque(payload, tenantId) {
+  return erpFetch('/ProdutosEstoque/Salvar', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, tenantId).then(tolerant);
+}
+
 module.exports = {
   VendaErpApiError,
   getVendaErpConfig,
@@ -212,14 +265,19 @@ module.exports = {
   listLancamentos,
   getLancamento,
   pesquisarBoletos,
+  criarLancamento,
+  gerarBoleto,
   // estoque
   getEstoque,
   getDepositos,
+  ajustarEstoque,
   // fiscal
   consultarNfePeriodo,
   consultarNfe,
+  emitirNfe,
   // crm
   pesquisarOportunidades,
+  criarOportunidade,
   // pagamentos
   getFormasPagamento,
 };

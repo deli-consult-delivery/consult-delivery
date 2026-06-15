@@ -21,11 +21,13 @@ const { makeErpBridge } = require('./vendaerp-bridge');
 const { makeSupabase } = require('./supabase');
 const { makeAuditor } = require('./audit');
 const { allTools } = require('./registry');
+const { makeProposals } = require('./proposals');
 
 /** Constrói o McpServer com todas as tools registradas (testável sem transporte). */
-function buildServer({ cfg, erp, auditor }) {
+function buildServer({ cfg, erp, auditor, sb }) {
   const server = new McpServer({ name: 'cd-vendaerp-mcp', version: '0.1.0' });
-  const ctx = { erp, cfg };
+  const proposals = sb ? makeProposals({ sb, cfg }) : null;
+  const ctx = { erp, cfg, sb, proposals };
 
   for (const tool of allTools) {
     server.registerTool(
@@ -60,12 +62,12 @@ async function main() {
   const erp = makeErpBridge({ bridgeUrl: cfg.bridgeUrl, internalToken: cfg.internalToken, timeoutMs: cfg.timeoutMs });
   const sb = makeSupabase(cfg);
   const auditor = makeAuditor({ sbInsert: sb.sbInsert, auditTenantId: cfg.auditTenantId, principal: cfg.principal });
-  const server = buildServer({ cfg, erp, auditor });
+  const server = buildServer({ cfg, erp, auditor, sb });
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
   process.stderr.write(
-    `[cd-vendaerp-mcp] online (stdio) — ${allTools.length} tools (leitura), bridge=${cfg.bridgeUrl}\n`
+    `[cd-vendaerp-mcp] online (stdio) — ${allTools.length} tools (leitura+escrita), bridge=${cfg.bridgeUrl}\n`
   );
 }
 

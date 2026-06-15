@@ -57,9 +57,38 @@ function makeErpBridge({ bridgeUrl, internalToken, timeoutMs = 25000 }) {
     return json && Object.prototype.hasOwnProperty.call(json, 'data') ? json.data : json;
   }
 
+  /** POST genérico em /api/vendaerp/<path>; devolve o `data` do envelope {ok,data}. */
+  async function post(path, body) {
+    const url = `${base}/api/vendaerp${path}`;
+    let res;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'x-internal-token': internalToken,
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        body: JSON.stringify(body ?? {}),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (e) {
+      throw new BridgeError(`Bridge inacessível em POST ${path}: ${e.message}`, 503);
+    }
+    const json = await res.json().catch(() => null);
+    if (!res.ok || (json && json.ok === false)) {
+      const msg = (json && (json.error || json.message)) || `Bridge retornou ${res.status}`;
+      const status = (json && json.status) || res.status;
+      throw new BridgeError(msg, status);
+    }
+    return json && Object.prototype.hasOwnProperty.call(json, 'data') ? json.data : json;
+  }
+
   return {
     // ── Saúde / credencial ────────────────────────────────────────────────────
     status: () => get('/status'),
+    // ── Escrita genérica (Fase 2) — endpoint vem da proposta ───────────────────
+    post,
     // ── Contratos ───────────────────────────────────────────────────────────────
     contratos: (params) => get('/contratos', params),
     // ── Financeiro ───────────────────────────────────────────────────────────────

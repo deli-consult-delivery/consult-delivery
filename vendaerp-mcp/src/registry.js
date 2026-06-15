@@ -14,7 +14,14 @@ const readTools = [
   require('./tools/erp_crm'),
 ];
 
-const writeTools = []; // Fase 2
+const writeTools = [
+  require('./tools/erp_propor_oportunidade'),
+  require('./tools/erp_propor_lancamento'),
+  require('./tools/erp_propor_boleto'),
+  require('./tools/erp_propor_nfe'),
+  require('./tools/erp_propor_estoque'),
+  require('./tools/erp_confirmar'),
+];
 
 const allTools = [...readTools, ...writeTools];
 
