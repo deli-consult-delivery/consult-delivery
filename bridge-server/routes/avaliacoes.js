@@ -15,7 +15,7 @@
  */
 
 const express = require('express');
-const { runViaAPI } = require('../services/claude-runner');
+const { runViaOllama } = require('../services/claude-runner');
 const {
   GerarAvaliacoesSchema,
   EnviarGrupoSchema,
@@ -178,10 +178,10 @@ module.exports = function buildAvaliacoesRouter({ requireJwt, sbFetch, assertLoj
         let resposta = '';
         let insights = '';
         try {
-          const result = await runViaAPI(buildUserPrompt(item), {
-            model:      'claude-sonnet-4-6',
-            max_tokens: 700,
+          const result = await runViaOllama(buildUserPrompt(item), {
             system:     systemPrompt,
+            format:     'json',
+            max_tokens: 700,
           });
           const parsed = parseIaJson(result.output);
           resposta = clamp300(parsed.resposta || result.output || '');
@@ -405,7 +405,7 @@ module.exports = function buildAvaliacoesRouter({ requireJwt, sbFetch, assertLoj
         'Descreva o tom (ex.: caloroso e regional, direto e objetivo, jovem e descontraído). Responda só com a descrição do tom, sem aspas nem rótulos.',
       ].filter(Boolean).join('\n');
 
-      const result = await runViaAPI(prompt, { model: 'claude-sonnet-4-6', max_tokens: 200 });
+      const result = await runViaOllama(prompt, { max_tokens: 200 });
       const tomSugerido = (result.output || '').trim();
 
       // Persiste em tom_sugerido_ia se já existir config (não cria linha sem logistica_tipo NOT NULL).
