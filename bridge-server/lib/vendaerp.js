@@ -214,6 +214,39 @@ async function criarOportunidade(payload, tenantId) {
   }, tenantId).then(tolerant);
 }
 
+// Financeiro — criar lançamento. Caminho verificado: POST /api/request/Lancamentos/Criar.
+async function criarLancamento(payload, tenantId) {
+  return erpFetch('/Lancamentos/Criar', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, tenantId).then(tolerant);
+}
+
+// Financeiro — gerar boleto/cobrança. Caminho verificado: POST /api/request/Lancamentos/GerarCobrancaIntegracao.
+async function gerarBoleto(payload, tenantId) {
+  return erpFetch('/Lancamentos/GerarCobrancaIntegracao', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, tenantId).then(tolerant);
+}
+
+// Fiscal — emitir NFE. Caminho verificado: POST /api/request/Fiscal/EmitirNFE.
+// ⚠️ Diferente dos demais: CodigoVenda vai na QUERY string, sem corpo.
+async function emitirNfe(payload, tenantId) {
+  const codigoVenda = payload?.CodigoVenda ?? payload?.codigoVenda;
+  return erpFetch(`/Fiscal/EmitirNFE${qs({ CodigoVenda: codigoVenda })}`, {
+    method: 'POST',
+  }, tenantId).then(tolerant);
+}
+
+// Estoque — ajuste/movimentação. Caminho verificado: POST /api/request/ProdutosEstoque/Salvar.
+async function ajustarEstoque(payload, tenantId) {
+  return erpFetch('/ProdutosEstoque/Salvar', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, tenantId).then(tolerant);
+}
+
 module.exports = {
   VendaErpApiError,
   getVendaErpConfig,
@@ -227,12 +260,16 @@ module.exports = {
   listLancamentos,
   getLancamento,
   pesquisarBoletos,
+  criarLancamento,
+  gerarBoleto,
   // estoque
   getEstoque,
   getDepositos,
+  ajustarEstoque,
   // fiscal
   consultarNfePeriodo,
   consultarNfe,
+  emitirNfe,
   // crm
   pesquisarOportunidades,
   criarOportunidade,

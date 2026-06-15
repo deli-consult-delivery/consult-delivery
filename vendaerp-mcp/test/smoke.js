@@ -24,6 +24,10 @@ const EXPECTED_READ = [
 
 const EXPECTED_WRITE = [
   'erp_propor_oportunidade',
+  'erp_propor_lancamento',
+  'erp_propor_boleto',
+  'erp_propor_nfe',
+  'erp_propor_estoque',
   'erp_confirmar',
 ];
 

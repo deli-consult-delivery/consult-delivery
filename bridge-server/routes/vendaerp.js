@@ -91,6 +91,27 @@ module.exports = function ({ requireJwtOrInternal, erp }) {
     erp.criarOportunidade(req.body, tid(req))
   ));
 
+  // ── Financeiro — criar lançamento (Fase 2, escrita) ─────────────────────────
+  router.post('/vendaerp/lancamento', requireJwtOrInternal, handle((req) =>
+    erp.criarLancamento(req.body, tid(req))
+  ));
+
+  // ── Financeiro — gerar boleto/cobrança (Fase 2, escrita) ────────────────────
+  router.post('/vendaerp/boleto', requireJwtOrInternal, handle((req) =>
+    erp.gerarBoleto(req.body, tid(req))
+  ));
+
+  // ── Fiscal — emitir NFE (Fase 2, escrita) ───────────────────────────────────
+  // Recebe o payload normal; a lib traduz CodigoVenda p/ query param do ERP.
+  router.post('/vendaerp/nfe', requireJwtOrInternal, handle((req) =>
+    erp.emitirNfe(req.body, tid(req))
+  ));
+
+  // ── Estoque — ajuste (Fase 2, escrita) ──────────────────────────────────────
+  router.post('/vendaerp/estoque-ajuste', requireJwtOrInternal, handle((req) =>
+    erp.ajustarEstoque(req.body, tid(req))
+  ));
+
   // ── Auxiliares ──────────────────────────────────────────────────────────────
   router.get('/vendaerp/empresas', requireJwtOrInternal, handle((req) => erp.getEmpresas(tid(req))));
   router.get('/vendaerp/formas-pagamento', requireJwtOrInternal, handle((req) => erp.getFormasPagamento(tid(req))));
