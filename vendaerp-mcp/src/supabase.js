@@ -1,9 +1,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// supabase.js — só o INSERT em audit_log via PostgREST (molde admin-mcp).
+// supabase.js — acesso PostgREST via service key (molde admin-mcp).
 //
-// Este MCP NÃO lê dados de negócio do Supabase — quem lê é o Bridge (do ERP).
-// Aqui o Supabase serve apenas p/ a trilha de auditoria. A service key bypassa
-// RLS; por isso ela só é usada para escrever audit_log, nada mais.
+// Este MCP NÃO lê dados de negócio do ERP no Supabase — quem fala com o ERP é o
+// Bridge. Aqui a service key (que bypassa RLS) é usada para dois fins internos:
+//   • a trilha de auditoria (INSERT em audit_log);
+//   • o estado das propostas de escrita da Fase 2 (vendaerp_proposals, via
+//     sbSelectOne/sbUpdate — ciclo propor→confirmar em proposals.js).
+// Nada além disso.
 // ─────────────────────────────────────────────────────────────────────────────
 
 'use strict';

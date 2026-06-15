@@ -88,6 +88,54 @@ const cfg = { auditTenantId: 'tenant-cd', principal: 'ceo_agent' };
     check('claim é uso único (2ª vez => null)', () => assert.strictEqual(again, null));
   }
 
+  // markExecuted só transiciona o vencedor do claim (status=confirmed)
+  {
+    const sb = fakeSb({ id: 'p1', status: 'confirmed', endpoint: '/x', payload: {} });
+    const p = makeProposals({ sb, cfg });
+    const r = await p.markExecuted('p1', { Codigo: 1 });
+    check('markExecuted transiciona quando confirmed', () => {
+      assert.ok(r, 'devolveu a linha');
+      assert.strictEqual(r.status, 'executed');
+    });
+  }
+  {
+    const sb = fakeSb({ id: 'p1', status: 'pending', endpoint: '/x', payload: {} });
+    const p = makeProposals({ sb, cfg });
+    const r = await p.markExecuted('p1', { Codigo: 1 });
+    check('markExecuted NÃO sobrescreve pending (=> null)', () => assert.strictEqual(r, null));
+  }
+  {
+    const sb = fakeSb({ id: 'p1', status: 'executed', endpoint: '/x', payload: {} });
+    const p = makeProposals({ sb, cfg });
+    const r = await p.markExecuted('p1', { Codigo: 2 });
+    check('markExecuted NÃO sobrescreve já executed (=> null)', () => assert.strictEqual(r, null));
+  }
+
+  // markFailed só transiciona o vencedor do claim (status=confirmed)
+  {
+    const sb = fakeSb({ id: 'p1', status: 'confirmed', endpoint: '/x', payload: {} });
+    const p = makeProposals({ sb, cfg });
+    const r = await p.markFailed('p1', 'ERP 500');
+    check('markFailed transiciona quando confirmed', () => {
+      assert.ok(r, 'devolveu a linha');
+      assert.strictEqual(r.status, 'failed');
+    });
+  }
+  {
+    const sb = fakeSb({ id: 'p1', status: 'pending', endpoint: '/x', payload: {} });
+    const p = makeProposals({ sb, cfg });
+    const r = await p.markFailed('p1', 'ERP 500');
+    check('markFailed NÃO sobrescreve pending (=> null)', () => assert.strictEqual(r, null));
+  }
+
+  // markExpired só transiciona pending (mantém o filtro existente)
+  {
+    const sb = fakeSb({ id: 'p1', status: 'confirmed', endpoint: '/x', payload: {} });
+    const p = makeProposals({ sb, cfg });
+    const r = await p.markExpired('p1');
+    check('markExpired NÃO sobrescreve confirmed (=> null)', () => assert.strictEqual(r, null));
+  }
+
   if (failures > 0) { process.stdout.write(`\n${failures} falha(s).\n`); process.exit(1); }
   process.stdout.write('\nTodas as asserções passaram.\n');
 })();

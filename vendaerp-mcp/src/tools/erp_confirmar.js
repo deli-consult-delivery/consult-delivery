@@ -16,42 +16,54 @@ module.exports = {
   inputShape: {
     proposal_id: z.string().min(1).describe('proposal_id devolvido pela tool erp_propor_* correspondente'),
   },
-  async handler(args, { erp, proposals }) {
+  async handler(args, { erp, cfg, proposals }) {
     const id = args.proposal_id;
+    // Auditoria de ESCRITA: vincula a chamada ao tenant da plataforma (mesmo nos
+    // early-returns) p/ não perder o rastro de tenant em audit_log.
+    const tenantIds = [cfg.auditTenantId];
     const { state, row } = await proposals.classify(id);
 
     if (state === 'not_found') {
-      return { summary: 'Não encontrei essa proposta (proposal_id inválido).', tenantIds: [],
+      return { summary: 'Não encontrei essa proposta (proposal_id inválido).', tenantIds,
         data: { ok: false, motivo: 'not_found' } };
     }
     if (state === 'already') {
       return { summary: `Essa proposta já foi processada (status: ${row.status}). Não executei de novo.`,
-        tenantIds: [], data: { ok: false, motivo: 'already', status: row.status } };
+        tenantIds, data: { ok: false, motivo: 'already', status: row.status } };
     }
     if (state === 'expired') {
-      await proposals.markExpired(id);
+      const marked = await proposals.markExpired(id);
+      if (!marked) {
+        process.stderr.write(`[erp_confirmar] anomalia: markExpired não afetou linhas para proposal=${id}\n`);
+      }
       return { summary: 'Essa proposta expirou (TTL 10 min). Proponha a operação de novo.',
-        tenantIds: [], data: { ok: false, motivo: 'expired' } };
+        tenantIds, data: { ok: false, motivo: 'expired' } };
     }
 
     // pending: tenta ganhar a corrida (uso único atômico).
     const claimed = await proposals.claim(id);
     if (!claimed) {
       return { summary: 'Essa proposta já está sendo processada ou já foi usada. Não executei de novo.',
-        tenantIds: [], data: { ok: false, motivo: 'claim_perdido' } };
+        tenantIds, data: { ok: false, motivo: 'claim_perdido' } };
     }
 
     // executa no Bridge (que injeta a credencial e fala com o ERP).
     try {
       const resultado = await erp.post(claimed.endpoint, claimed.payload);
-      await proposals.markExecuted(id, resultado);
+      const marked = await proposals.markExecuted(id, resultado);
+      if (!marked) {
+        process.stderr.write(`[erp_confirmar] anomalia: markExecuted não afetou linhas para proposal=${id}\n`);
+      }
       return { summary: `✅ Confirmado e gravado no ERP: ${claimed.resumo}`,
-        tenantIds: [], data: { ok: true, proposal_id: id, resultado } };
+        tenantIds, data: { ok: true, proposal_id: id, resultado } };
     } catch (e) {
-      await proposals.markFailed(id, e.message);
+      const marked = await proposals.markFailed(id, e.message);
+      if (!marked) {
+        process.stderr.write(`[erp_confirmar] anomalia: markFailed não afetou linhas para proposal=${id}\n`);
+      }
       return {
         summary: `Não consegui confirmar a gravação (${e.message}). Verifique no ERP antes de tentar de novo.`,
-        tenantIds: [], data: { ok: false, motivo: 'erp_falhou', erro: e.message },
+        tenantIds, data: { ok: false, motivo: 'erp_falhou', erro: e.message },
       };
     }
   },

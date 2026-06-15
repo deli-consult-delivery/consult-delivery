@@ -51,8 +51,11 @@ function makeProposals({ sb, cfg }) {
     );
   }
 
+  // Só o vencedor do claim (status='confirmed') transiciona para executed/failed.
+  // Filtro condicional espelha o claim(): PATCH só afeta a linha se ainda confirmed,
+  // evitando sobrescrever um estado mudado por corrida (devolve null se 0 linhas).
   async function markExecuted(proposalId, resultado) {
-    return sb.sbUpdate('vendaerp_proposals', { id: proposalId }, {
+    return sb.sbUpdate('vendaerp_proposals', { id: proposalId, status: 'confirmed' }, {
       status: 'executed',
       executed_at: new Date().toISOString(),
       resultado,
@@ -60,7 +63,7 @@ function makeProposals({ sb, cfg }) {
   }
 
   async function markFailed(proposalId, erro) {
-    return sb.sbUpdate('vendaerp_proposals', { id: proposalId }, { status: 'failed', erro });
+    return sb.sbUpdate('vendaerp_proposals', { id: proposalId, status: 'confirmed' }, { status: 'failed', erro });
   }
 
   async function markExpired(proposalId) {

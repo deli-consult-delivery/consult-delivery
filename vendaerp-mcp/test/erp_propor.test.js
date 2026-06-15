@@ -18,12 +18,15 @@ function fakeProposals() {
   };
 }
 
+const cfg = { auditTenantId: 'tenant-cd', principal: 'ceo_agent' };
+
 (async () => {
   const proposals = fakeProposals();
   const erp = { post: async () => { throw new Error('PROPOR NÃO EXECUTA'); } };
-  const res = await tool.handler({ titulo: 'Lead Padaria', cliente: 'Padaria X' }, { erp, proposals });
+  const res = await tool.handler({ titulo: 'Lead Padaria', cliente: 'Padaria X' }, { erp, cfg, proposals });
 
   check('devolve proposal_id', () => assert.strictEqual(res.data.proposal_id, 'p-1'));
+  check('tenantIds vincula a chamada ao tenant da auditoria', () => assert.deepStrictEqual(res.tenantIds, ['tenant-cd']));
   check('NÃO executa (não chama erp.post)', () => assert.ok(res.data.proposal_id));
   check('grava tipo oportunidade + endpoint /oportunidade', () => {
     assert.strictEqual(proposals.created.tipo, 'oportunidade');

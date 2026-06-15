@@ -21,7 +21,7 @@ module.exports = {
     empresa: z.string().optional().describe('Empresa'),
     valor: z.number().optional().describe('Valor estimado'),
   },
-  async handler(args, { proposals }) {
+  async handler(args, { cfg, proposals }) {
     const resumo = `Criar oportunidade "${args.titulo}"` +
       (args.cliente ? ` para ${args.cliente}` : '') +
       (args.valor != null ? ` (R$ ${args.valor})` : '');
@@ -35,7 +35,7 @@ module.exports = {
 
     return {
       summary: `Proposta criada (pendente de confirmação): ${resumo}`,
-      tenantIds: [],
+      tenantIds: [cfg.auditTenantId],
       data: { proposal_id: out.proposal_id, resumo: out.resumo, expires_at: out.expires_at },
     };
   },
