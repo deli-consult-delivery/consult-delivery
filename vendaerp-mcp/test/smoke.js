@@ -52,6 +52,12 @@ check('Fase 2 = write tools = par propor/confirmar', () => {
   assert.deepStrictEqual(writeTools.map((t) => t.name), EXPECTED_WRITE);
 });
 
+check('só erp_confirmar executa; propor nunca executa', () => {
+  // toda tool de proposta tem "propor" no nome; a única executora é erp_confirmar.
+  const executoras = writeTools.map((t) => t.name).filter((n) => !/^erp_propor_/.test(n));
+  assert.deepStrictEqual(executoras, ['erp_confirmar']);
+});
+
 check('readTools não têm mutação direta (escrita só via propor→confirmar)', () => {
   const proibidas = readTools
     .map((t) => t.name)
@@ -70,10 +76,12 @@ check('cada tool tem contrato completo', () => {
 });
 
 check('McpServer registra todas as tools (SDK API + zod válidos)', () => {
-  const cfg = { bridgeUrl: 'http://127.0.0.1:3001', principal: 'ceo_agent' };
+  const cfg = { bridgeUrl: 'http://127.0.0.1:3001', principal: 'ceo_agent', auditTenantId: 't' };
   const erp = new Proxy({}, { get: () => async () => ({}) }); // qualquer método → {}
   const auditor = { record: async () => {} };
-  const server = buildServer({ cfg, erp, auditor });
+  // buildServer agora monta `proposals` a partir de `sb` (Fase 2): stub mínimo.
+  const sb = { sbInsert: async () => ({ id: 'p' }), sbSelectOne: async () => null, sbUpdate: async () => null };
+  const server = buildServer({ cfg, erp, auditor, sb });
   assert.ok(server, 'buildServer retornou um servidor');
 });
 
