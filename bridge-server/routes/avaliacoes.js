@@ -33,20 +33,46 @@ function clamp300(text) {
   return (lastSpace > 60 ? cut.slice(0, lastSpace) : cut).trim();
 }
 
+// Desescapa um valor de string JSON cru (de regex), tolerante a truncamento.
+function unescapeJsonStr(v) {
+  // Remove uma barra invertida pendente no fim (escape cortado por truncamento).
+  const trimmed = v.replace(/\\+$/, (m) => (m.length % 2 ? m.slice(0, -1) : m));
+  try {
+    return JSON.parse(`"${trimmed}"`);
+  } catch {
+    return trimmed.replace(/\\(["\\/])/g, '$1').trim();
+  }
+}
+
 // Extrai { resposta, insights } de uma saída de IA tolerante a cercas/markdown.
+// Em caso de JSON truncado (cap de num_predict), salva os campos via regex em vez
+// de devolver o blob cru como resposta ao cliente. Não-JSON vira resposta texto puro.
 function parseIaJson(raw) {
   if (!raw) return {};
   let s = String(raw).trim();
+  if (!s) return {};
   const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fence) s = fence[1].trim();
   const start = s.indexOf('{');
   const end = s.lastIndexOf('}');
-  if (start >= 0 && end > start) s = s.slice(start, end + 1);
-  try {
-    return JSON.parse(s);
-  } catch {
-    return { resposta: String(raw).trim() };
+  if (start >= 0 && end > start) {
+    try {
+      return JSON.parse(s.slice(start, end + 1));
+    } catch {
+      /* JSON malformado/truncado → cai pro salvamento abaixo */
+    }
   }
+  if (start >= 0) {
+    // Parece JSON mas não parseou: salva "resposta"/"insights" (aspas final opcional).
+    const salv = {};
+    const r = s.match(/"resposta"\s*:\s*"((?:\\.|[^"\\])*)"?/);
+    if (r && r[1]) salv.resposta = unescapeJsonStr(r[1]);
+    const i = s.match(/"insights"\s*:\s*"((?:\\.|[^"\\])*)"?/);
+    if (i && i[1]) salv.insights = unescapeJsonStr(i[1]);
+    return salv; // pode ser {} se nada salvável — o chamador trata vazio
+  }
+  // Não parece JSON → trata o texto puro como resposta.
+  return { resposta: s };
 }
 
 function validate(schema, data, res) {
@@ -184,7 +210,8 @@ module.exports = function buildAvaliacoesRouter({ requireJwt, sbFetch, assertLoj
             max_tokens: 700,
           });
           const parsed = parseIaJson(result.output);
-          resposta = clamp300(parsed.resposta || result.output || '');
+          resposta = clamp300((parsed.resposta || '').trim());
+          if (!resposta) throw new Error('modelo retornou resposta vazia ou inválida');
           insights = (parsed.insights || '').trim() || null;
         } catch (iaErr) {
           console.error('[avaliacoes/gerar] IA falhou:', iaErr.message);
@@ -412,7 +439,7 @@ module.exports = function buildAvaliacoesRouter({ requireJwt, sbFetch, assertLoj
       const cfgRows = await sbFetch(
         `avaliacoes_loja_config?loja_id=eq.${encodeURIComponent(lojaId)}&select=id&limit=1`,
       );
-      if (cfgRows?.[0]?.id) {
+      if (tomSugerido && cfgRows?.[0]?.id) {
         await sbFetch(`avaliacoes_loja_config?id=eq.${encodeURIComponent(cfgRows[0].id)}`, {
           method: 'PATCH',
           body: { tom_sugerido_ia: tomSugerido, updated_at: new Date().toISOString() },

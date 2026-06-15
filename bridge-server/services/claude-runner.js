@@ -84,7 +84,8 @@ async function runViaAPI(prompt, options = {}) {
 }
 
 const OLLAMA_BASE = (process.env.OLLAMA_BASE_URL || 'http://localhost:11434').replace(/\/$/, '');
-const OLLAMA_DEFAULT_MODEL = process.env.OLLAMA_MODEL || 'kimi-k2.6';
+// Fallback alinhado ao do Breno/MIA (routes/mia.js) — em produção ambos leem OLLAMA_MODEL do .env.
+const OLLAMA_DEFAULT_MODEL = process.env.OLLAMA_MODEL || 'kimi-k2.6:cloud';
 const OLLAMA_API_KEY = process.env.OLLAMA_API_KEY || '';
 const OLLAMA_DEFAULT_TIMEOUT = 60_000;
 
@@ -112,8 +113,9 @@ async function runViaOllama(prompt, options = {}) {
   const model   = options.model || OLLAMA_DEFAULT_MODEL;
   const timeout = options.timeout_ms || OLLAMA_DEFAULT_TIMEOUT;
 
+  let timedOut = false;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeout);
 
   const messages = [];
   if (options.system) messages.push({ role: 'system', content: options.system });
@@ -154,6 +156,9 @@ async function runViaOllama(prompt, options = {}) {
     const tokens = (data.prompt_eval_count || 0) + (data.eval_count || 0);
 
     return { output, mode: 'ollama', tokens };
+  } catch (err) {
+    if (timedOut) throw new Error(`Ollama timeout após ${timeout}ms`);
+    throw err;
   } finally {
     clearTimeout(timer);
   }
