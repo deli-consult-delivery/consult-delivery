@@ -199,6 +199,21 @@ async function getFormasPagamento(tenantId) {
   return withRetry(() => erpFetch('/FormasPagamento/GetTodasFormasPagamento', {}, tenantId)).then(tolerant);
 }
 
+// ---------------------------------------------------------------------------
+// Métodos de ESCRITA (POST) — Fase 2.
+// ⚠️ SEM withRetry: POST não-idempotente. Retry em 5xx/timeout duplicaria
+// registro no ERP. Falha fechada → a tool erp_confirmar marca a proposta failed.
+// Caminhos/corpos confirmados no swagger (Task 1).
+// ---------------------------------------------------------------------------
+
+// CRM — criar oportunidade. Caminho verificado: POST /api/request/Oportunidades/Cadastrar.
+async function criarOportunidade(payload, tenantId) {
+  return erpFetch('/Oportunidades/Cadastrar', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, tenantId).then(tolerant);
+}
+
 module.exports = {
   VendaErpApiError,
   getVendaErpConfig,
@@ -220,6 +235,7 @@ module.exports = {
   consultarNfe,
   // crm
   pesquisarOportunidades,
+  criarOportunidade,
   // pagamentos
   getFormasPagamento,
 };
