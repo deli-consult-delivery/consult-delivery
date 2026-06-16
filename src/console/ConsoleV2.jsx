@@ -383,6 +383,8 @@ function VisaoGeral({ tenantNome, tenantDbId, onNav }) {
   );
 }
 
+const BRIDGE_DEFESA = import.meta.env.VITE_BRIDGE_URL || 'https://bridge.consultdelivery.com.br';
+
 function PaywallDefesa() {
   return (
     <div>
@@ -433,6 +435,12 @@ function Defesa({ tenantDbId, userId }) {
   const [valorGanho, setValorGanho] = useState('');
   const [agindo, setAgindo] = useState(null);
 
+  const [lojas, setLojas] = useState([]);
+  const [form, setForm] = useState({ lojaId: '', pedidoRef: '', valor: '', tipoLogistica: 'ifood', historico: '' });
+  const [gerando, setGerando] = useState(false);
+  const [novoCaso, setNovoCaso] = useState(null);
+  const [formErro, setFormErro] = useState(null);
+
   const carregar = useCallback(async () => {
     if (!tenantDbId) return;
     const cols = 'id, tipo, canal, pedido_ref, valor_centavos, motivo, analise, draft_resposta, status, created_at';
@@ -446,6 +454,51 @@ function Defesa({ tenantDbId, userId }) {
   }, [tenantDbId]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  useEffect(() => {
+    if (!tenantDbId) return;
+    supabase.from('lojas').select('id, nome, cidade')
+      .eq('tenant_id', tenantDbId).eq('is_consultoria_ativa', true)
+      .order('nome').limit(200)
+      .then(({ data }) => setLojas(data ?? []));
+  }, [tenantDbId]);
+
+  async function gerarDefesa() {
+    setFormErro(null);
+    const valorNum = Number(String(form.valor).replace(/\./g, '').replace(',', '.'));
+    const valorCentavos = Math.round(valorNum * 100);
+    if (!form.lojaId || !form.pedidoRef || !valorCentavos || form.historico.length < 10) {
+      setFormErro('Preencha todos os campos obrigatórios (mínimo 10 caracteres no histórico).'); return;
+    }
+    setGerando(true); setNovoCaso(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${BRIDGE_DEFESA}/api/defesa/gerar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ loja_id: form.lojaId, pedido_ref: form.pedidoRef, valor_centavos: valorCentavos, tipo_logistica: form.tipoLogistica, historico_ocorrido: form.historico }),
+      });
+      const json = await res.json();
+      if (!json.ok) { setFormErro(json.error || 'Erro ao acionar agente'); setGerando(false); return; }
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts++;
+        const { data } = await supabase.from('defesa_casos')
+          .select('*').eq('tenant_id', tenantDbId).eq('status', 'aguardando_ok')
+          .order('created_at', { ascending: false }).limit(1);
+        if (data?.[0]) {
+          clearInterval(poll);
+          setNovoCaso(data[0]);
+          setGerando(false);
+          setForm({ lojaId: '', pedidoRef: '', valor: '', tipoLogistica: 'ifood', historico: '' });
+          carregar();
+        }
+        if (attempts > 20) { clearInterval(poll); setGerando(false); setFormErro('Tempo esgotado. Recarregue a página.'); }
+      }, 3000);
+    } catch (e) {
+      setFormErro(e.message); setGerando(false);
+    }
+  }
 
   async function atualizar(caso, patch) {
     setAgindo(caso.id);
@@ -474,8 +527,75 @@ function Defesa({ tenantDbId, userId }) {
     if (ok) setEditando(null);
   }
 
+  const inputSt = { width: '100%', padding: '8px 10px', border: '1px solid var(--line)', borderRadius: 4, fontFamily: 'inherit', fontSize: 13, background: 'var(--bg)', boxSizing: 'border-box' };
+  const labelSt = { fontSize: 12, color: 'var(--tx2)', marginBottom: 4 };
+
   return (
     <div>
+      <h1>Gerar Nova Contestação</h1>
+      <div className="cv2-rule" />
+      <div className="cv2-sub" style={{ marginBottom: 14 }}>Informe os dados do pedido cancelado — o agente analisa a política do iFood e gera o texto de contestação para você revisar.</div>
+      <div className="cv2-card" style={{ display: 'grid', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div>
+            <div style={labelSt}>Loja *</div>
+            <select value={form.lojaId} onChange={e => setForm(f => ({ ...f, lojaId: e.target.value }))} style={inputSt}>
+              <option value="">Selecionar loja...</option>
+              {lojas.map(l => <option key={l.id} value={l.id}>{l.nome}{l.cidade ? ` — ${l.cidade}` : ''}</option>)}
+            </select>
+          </div>
+          <div>
+            <div style={labelSt}>Pedido nº *</div>
+            <input value={form.pedidoRef} onChange={e => setForm(f => ({ ...f, pedidoRef: e.target.value }))} placeholder="ex: 9151" style={inputSt} />
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div>
+            <div style={labelSt}>Valor do pedido (R$) *</div>
+            <input value={form.valor} onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} placeholder="ex: 44,90" style={inputSt} />
+          </div>
+          <div>
+            <div style={labelSt}>Logística *</div>
+            <div style={{ display: 'flex', gap: 18, marginTop: 10 }}>
+              {[['ifood', 'iFood (parceira)'], ['propria', 'Própria (motoboy)']].map(([v, lbl]) => (
+                <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+                  <input type="radio" name="defesa-logistica" value={v} checked={form.tipoLogistica === v} onChange={() => setForm(f => ({ ...f, tipoLogistica: v }))} />
+                  {lbl}
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div>
+          <div style={labelSt}>O que aconteceu? Descreva o histórico completo *</div>
+          <textarea value={form.historico} onChange={e => setForm(f => ({ ...f, historico: e.target.value }))} rows={5} maxLength={2000}
+            placeholder="Ex: Cliente solicitou cancelamento após o pedido ser entregue pelo nosso motoboy. Produto saiu completo e temos foto da entrega. Cliente alega que não recebeu..."
+            style={{ ...inputSt, resize: 'vertical' }} />
+          <div style={{ fontSize: 11, color: 'var(--tx2)', marginTop: 2 }}>{form.historico.length}/2000 — mínimo 10 caracteres</div>
+        </div>
+        {formErro && <div style={{ color: 'var(--red)', fontSize: 12 }}>{formErro}</div>}
+        <div><button className="cv2-btn" disabled={gerando} onClick={gerarDefesa}>{gerando ? 'Analisando política e gerando defesa…' : 'Gerar Defesa'}</button></div>
+      </div>
+
+      {novoCaso && (
+        <div className="cv2-card" style={{ borderLeft: '3px solid var(--green)', marginTop: 8 }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>Defesa gerada — Pedido #{novoCaso.pedido_ref}</div>
+          {novoCaso.analise?.chance_vitoria && (
+            <span className={`cv2-bdg ${novoCaso.analise.chance_vitoria === 'alta' ? 'ok' : novoCaso.analise.chance_vitoria === 'media' ? 'warn' : 'mut'}`}>
+              chance {novoCaso.analise.chance_vitoria}
+            </span>
+          )}
+          {novoCaso.analise?.motivo_elegibilidade && <div style={{ fontSize: 12.5, color: 'var(--tx2)', marginTop: 8 }}>{novoCaso.analise.motivo_elegibilidade}</div>}
+          {(novoCaso.analise?.argumentos_principais ?? []).length > 0 && (
+            <ul style={{ margin: '8px 0 4px', paddingLeft: 20, fontSize: 12.5 }}>
+              {novoCaso.analise.argumentos_principais.map((a, i) => <li key={i}>{a}</li>)}
+            </ul>
+          )}
+          <div style={{ fontSize: 11, color: 'var(--tx2)' }}>O texto aparece na fila abaixo — revise e dê o OK.</div>
+        </div>
+      )}
+
+      <div style={{ marginTop: 28 }} />
       <h1>Defesa Comercial <span className="cv2-mock" style={{ background: 'var(--green-soft)', color: 'var(--green)' }}>FILA REAL</span></h1>
       <div className="cv2-rule" />
       <div className="cv2-sub">Casos preparados pelo agente — revise e dê o OK (aqui ou respondendo “@defesa ok” na conversa do caso).{erro ? ` · erro: ${erro}` : ''}</div>

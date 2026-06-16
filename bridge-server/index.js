@@ -1357,6 +1357,13 @@ app.use('/api', require('./routes/avaliacoes')({
   assertLojaAccess,
 }));
 
+// ── Defesa — Contestação de pedidos (agente BRENO) ──────────────────────────
+app.use('/api', require('./routes/defesa')({
+  requireJwt,
+  sbFetch,
+  TRIGGER_SECRET_KEY,
+}));
+
 // ── G03 — Contratos Digitais ─────────────────────────────────────────────────
 app.use('/api', require('./routes/contratos')({
   requireJwt,
