@@ -1840,6 +1840,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
   const [showSlash, setShowSlash]            = useState(false);
   const [showMention, setShowMention]        = useState(false);
   const [showQR, setShowQR]                  = useState(false);
+  const [qrConfirm, setQrConfirm]            = useState(null); // { qr, publicUrl, mimeType }
   const [showEmoji, setShowEmoji]            = useState(false);
   const [aiAction, setAiAction]              = useState(null);
   const [resolved, setResolved]              = useState({});
@@ -2530,7 +2531,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
     if (!tenantDbId) return;
     const { data, error } = await supabase
       .from('quick_replies')
-      .select('id, title, shortcut, content, media_type, media_url')
+      .select('id, title, shortcut, content, media_type, media_url, file_path, group_name')
       .eq('tenant_id', tenantDbId)
       .order('title');
     if (error) { console.warn('[QR] loadQuickReplies:', error.message); return; }
@@ -3747,12 +3748,38 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
 
   const insertQR = (qr) => {
     setShowQR(false);
-    const texto = qr.content || qr.text || '';
-    if (qr.media_type && qr.media_type !== 'text' && qr.media_url) {
-      // Mídia: insere URL + legenda no draft para o atendente revisar antes de enviar
-      setDraft((texto ? texto + '\n' : '') + qr.media_url);
-    } else {
-      setDraft(texto);
+    if (qr.file_path) {
+      const { data } = supabase.storage.from('public').getPublicUrl(qr.file_path);
+      const mimeType = qr.media_type === 'audio'
+        ? (qr.file_path.endsWith('.ogg') ? 'audio/ogg' : 'audio/webm')
+        : 'image/jpeg';
+      setQrConfirm({ qr, publicUrl: data.publicUrl, mimeType });
+      return;
+    }
+    setDraft(qr.content || qr.text || '');
+  };
+
+  const enviarQrMidia = async ({ qr, publicUrl, mimeType }) => {
+    setQrConfirm(null);
+    const instance = selectedInstance;
+    const chatId   = active?.whatsapp_chat_id;
+    if (!instance || !chatId) return;
+    try {
+      const resp = await fetch(publicUrl);
+      const blob = await resp.blob();
+      const base64 = await new Promise(res => {
+        const reader = new FileReader();
+        reader.onloadend = () => res(reader.result.split(',')[1]);
+        reader.readAsDataURL(blob);
+      });
+      if (qr.media_type === 'audio') {
+        await sendAudioMessage(instance, chatId, base64);
+      } else {
+        const fileName = qr.file_path.split('/').pop();
+        await sendMediaMessage(instance, chatId, base64, 'image', mimeType, qr.content || '', fileName);
+      }
+    } catch (err) {
+      console.error('[QR] enviarQrMidia:', err);
     }
   };
 
@@ -4676,6 +4703,36 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
                     ))}
                   </div>
                 )}
+                {/* Modal confirmação de mídia QR */}
+                {qrConfirm && (
+                  <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    onClick={() => setQrConfirm(null)}>
+                    <div style={{ background: '#fff', borderRadius: 10, padding: 24, maxWidth: 420, width: '92%', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}
+                      onClick={e => e.stopPropagation()}>
+                      <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12 }}>{qrConfirm.qr.title}</div>
+                      {qrConfirm.qr.media_type === 'image' && (
+                        <img src={qrConfirm.publicUrl} alt="" style={{ maxWidth: '100%', maxHeight: 220, borderRadius: 6, marginBottom: 12, display: 'block' }} />
+                      )}
+                      {qrConfirm.qr.media_type === 'audio' && (
+                        <audio controls src={qrConfirm.publicUrl} style={{ width: '100%', marginBottom: 12 }} />
+                      )}
+                      {qrConfirm.qr.content && (
+                        <div style={{ fontSize: 13, color: '#555', marginBottom: 16, whiteSpace: 'pre-wrap' }}>{qrConfirm.qr.content}</div>
+                      )}
+                      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                        <button
+                          style={{ padding: '7px 16px', borderRadius: 5, border: '1px solid var(--line)', background: '#f5f5f5', cursor: 'pointer', fontSize: 13 }}
+                          onClick={() => setQrConfirm(null)}
+                        >Cancelar</button>
+                        <button
+                          style={{ padding: '7px 18px', borderRadius: 5, border: 'none', background: 'var(--red)', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+                          onClick={() => enviarQrMidia(qrConfirm)}
+                        >Enviar</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {showQR && (
                   <div className="lc-popover lc-qr">
                     <div className="lc-pop-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

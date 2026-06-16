@@ -2,15 +2,14 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase.js';
 
 // ============================================================
-// Console v2 — Respostas Rápidas
-// CRUD completo: texto com formatação WhatsApp + mídia (imagem/áudio/vídeo)
+// Console v2 — Respostas Rápidas v3
+// Upload real de imagem/áudio, gravação de voz, grupo e visibilidade
 // ============================================================
 
 const TIPOS = [
-  { id: 'text',       label: 'Texto'     },
-  { id: 'image',      label: 'Imagem'    },
-  { id: 'audio',      label: 'Áudio'     },
-  { id: 'video_link', label: 'Link de vídeo' },
+  { id: 'text',  label: 'Texto'  },
+  { id: 'image', label: 'Imagem' },
+  { id: 'audio', label: 'Áudio'  },
 ];
 
 const TIPO_BADGE = {
@@ -32,23 +31,17 @@ const inputStyle = {
   borderRadius: 4, fontFamily: 'inherit', fontSize: 13, background: '#fff',
 };
 
-// Insere marcador WhatsApp ao redor do texto selecionado no textarea
 function wrapSelection(ref, marker) {
   const el = ref.current;
   if (!el) return;
   const start = el.selectionStart;
   const end   = el.selectionEnd;
   const val   = el.value;
-  const selected = val.slice(start, end);
-  const before    = val.slice(0, start);
-  const after     = val.slice(end);
-  const novo = before + marker + selected + marker + after;
-  // Atualiza via setter React (dispara onChange)
-  const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
-  nativeInputValueSetter.call(el, novo);
+  const novo  = val.slice(0, start) + marker + val.slice(start, end) + marker + val.slice(end);
+  const nativeSet = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+  nativeSet.call(el, novo);
   el.dispatchEvent(new Event('input', { bubbles: true }));
-  // Reposiciona o cursor depois do marcador de fechamento
-  const novoEnd = start + marker.length + selected.length + marker.length;
+  const novoEnd = start + marker.length + (end - start) + marker.length;
   el.setSelectionRange(novoEnd, novoEnd);
   el.focus();
 }
@@ -79,27 +72,123 @@ function FormatToolbar({ textareaRef }) {
 
 // ── Formulário (criação ou edição) ────────────────────────────
 function FormQR({ tenantDbId, userId, initial, onSaved, onCancel }) {
-  const [titulo,   setTitulo]   = useState(initial?.title     ?? '');
-  const [atalho,   setAtalho]   = useState(initial?.shortcut  ?? '');
-  const [tipo,     setTipo]     = useState(initial?.media_type ?? 'text');
-  const [conteudo, setConteudo] = useState(initial?.content   ?? '');
-  const [mediaUrl, setMediaUrl] = useState(initial?.media_url ?? '');
-  const [salvando, setSalvando] = useState(false);
-  const [erro,     setErro]     = useState(null);
+  const [titulo,       setTitulo]       = useState(initial?.title            ?? '');
+  const [atalho,       setAtalho]       = useState(initial?.shortcut         ?? '');
+  const [tipo,         setTipo]         = useState(initial?.media_type       ?? 'text');
+  const [conteudo,     setConteudo]     = useState(initial?.content          ?? '');
+  const [grupo,        setGrupo]        = useState(initial?.group_name       ?? '');
+  const [filePath,     setFilePath]     = useState(initial?.file_path        ?? null);
+  const [filePreview,  setFilePreview]  = useState(null);
+  const [uploading,    setUploading]    = useState(false);
+  const [recording,    setRecording]    = useState(false);
+  const [recSeconds,   setRecSeconds]   = useState(0);
+  const [mediaRec,     setMediaRec]     = useState(null);
+  const [visDeptIds,   setVisDeptIds]   = useState(initial?.visible_dept_ids ?? []);
+  const [visUserIds,   setVisUserIds]   = useState(initial?.visible_user_ids ?? []);
+  const [depts,        setDepts]        = useState([]);
+  const [agents,       setAgents]       = useState([]);
+  const [salvando,     setSalvando]     = useState(false);
+  const [erro,         setErro]         = useState(null);
   const textareaRef = useRef(null);
+  const fileInputRef = useRef(null);
+
+  // Se editando, carrega preview da imagem/áudio já salvo
+  useEffect(() => {
+    if (initial?.file_path) {
+      const { data } = supabase.storage.from('public').getPublicUrl(initial.file_path);
+      setFilePreview(data?.publicUrl ?? null);
+    }
+  }, [initial?.file_path]);
+
+  useEffect(() => {
+    if (!tenantDbId) return;
+    supabase.from('departments').select('id, name')
+      .eq('tenant_id', tenantDbId).eq('is_active', true).order('name')
+      .then(({ data }) => setDepts(data ?? []));
+    supabase.rpc('get_tenant_members', { p_tenant_id: tenantDbId })
+      .then(({ data }) => setAgents(data ?? []));
+  }, [tenantDbId]);
+
+  // Limpa recursos de gravação ao desmontar
+  useEffect(() => () => {
+    if (mediaRec?.stream) mediaRec.stream.getTracks().forEach(t => t.stop());
+  }, [mediaRec]);
+
+  async function handleFileChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setErro(null);
+    setFilePreview(URL.createObjectURL(file));
+    setUploading(true);
+    const ext = file.name.split('.').pop() || 'jpg';
+    const path = `quick-replies/${tenantDbId}/${crypto.randomUUID()}.${ext}`;
+    const { error } = await supabase.storage.from('public').upload(path, file, { upsert: false });
+    setUploading(false);
+    if (error) { setErro('Erro ao enviar imagem: ' + error.message); setFilePreview(null); return; }
+    setFilePath(path);
+  }
+
+  function removerArquivo() {
+    setFilePath(null);
+    setFilePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  async function iniciarGravacao() {
+    setErro(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const chunks = [];
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
+      const recorder = new MediaRecorder(stream, { mimeType });
+      recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(chunks, { type: mimeType });
+        setFilePreview(URL.createObjectURL(blob));
+        setUploading(true);
+        const ext = mimeType.includes('webm') ? 'webm' : 'ogg';
+        const path = `quick-replies/${tenantDbId}/${crypto.randomUUID()}.${ext}`;
+        const { error } = await supabase.storage.from('public').upload(path, blob, { contentType: mimeType, upsert: false });
+        setUploading(false);
+        if (error) { setErro('Erro ao salvar áudio: ' + error.message); setFilePreview(null); return; }
+        setFilePath(path);
+      };
+      const timer = setInterval(() => setRecSeconds(s => s + 1), 1000);
+      recorder.start();
+      recorder._timer = timer;
+      setMediaRec({ recorder, stream });
+      setRecording(true);
+      setRecSeconds(0);
+    } catch (err) {
+      setErro('Microfone não disponível: ' + err.message);
+    }
+  }
+
+  function pararGravacao() {
+    if (mediaRec?.recorder) {
+      clearInterval(mediaRec.recorder._timer);
+      mediaRec.recorder.stop();
+    }
+    setRecording(false);
+  }
 
   async function salvar() {
     setErro(null);
     if (!titulo.trim()) { setErro('Informe o título.'); return; }
-    if (tipo !== 'text' && !mediaUrl.trim()) { setErro('Informe a URL da mídia.'); return; }
+    if (tipo !== 'text' && !filePath) { setErro('Selecione ou grave o arquivo de mídia.'); return; }
     const payload = {
-      tenant_id:  tenantDbId,
-      title:      titulo.trim(),
-      shortcut:   atalho.trim() || null,
-      content:    conteudo,
-      media_type: tipo,
-      media_url:  mediaUrl.trim() || null,
-      created_by: userId ?? null,
+      tenant_id:        tenantDbId,
+      title:            titulo.trim(),
+      shortcut:         atalho.trim() || null,
+      content:          conteudo,
+      media_type:       tipo,
+      media_url:        null,
+      file_path:        filePath ?? null,
+      group_name:       grupo.trim() || null,
+      visible_user_ids: visUserIds.length > 0 ? visUserIds : null,
+      visible_dept_ids: visDeptIds.length > 0 ? visDeptIds : null,
+      created_by:       userId ?? null,
     };
     setSalvando(true);
     let error;
@@ -114,18 +203,28 @@ function FormQR({ tenantDbId, userId, initial, onSaved, onCancel }) {
     }
     if (error) { setErro(error.message); return; }
     if (!initial?.id) {
-      setTitulo(''); setAtalho(''); setTipo('text'); setConteudo(''); setMediaUrl('');
+      setTitulo(''); setAtalho(''); setTipo('text'); setConteudo('');
+      setGrupo(''); setFilePath(null); setFilePreview(null);
+      setVisUserIds([]); setVisDeptIds([]);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
     onSaved();
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {erro && <div style={{ color: 'var(--red)', fontSize: 12 }}>{erro}</div>}
+
+      {/* Título + Atalho */}
       <div style={{ display: 'flex', gap: 8 }}>
         <input style={{ ...inputStyle, flex: 2 }} placeholder="Título*" value={titulo} onChange={e => setTitulo(e.target.value)} />
         <input style={{ ...inputStyle, flex: 1 }} placeholder="Atalho (ex: /ola)" value={atalho} onChange={e => setAtalho(e.target.value)} />
       </div>
+
+      {/* Grupo */}
+      <input style={inputStyle} placeholder="Grupo (ex: Boas-vindas, Cobrança)" value={grupo} onChange={e => setGrupo(e.target.value)} />
+
+      {/* Tipo */}
       <div style={{ display: 'flex', gap: 6 }}>
         {TIPOS.map(t => (
           <button
@@ -133,12 +232,14 @@ function FormQR({ tenantDbId, userId, initial, onSaved, onCancel }) {
             type="button"
             className={tipo === t.id ? 'cv2-btn' : 'cv2-btn sec'}
             style={{ fontSize: 12, padding: '5px 10px' }}
-            onClick={() => setTipo(t.id)}
+            onClick={() => { setTipo(t.id); setFilePath(null); setFilePreview(null); setRecording(false); }}
           >
             {TIPO_ICONE[t.id]} {t.label}
           </button>
         ))}
       </div>
+
+      {/* Conteúdo por tipo */}
       {tipo === 'text' && (
         <>
           <FormatToolbar textareaRef={textareaRef} />
@@ -151,28 +252,122 @@ function FormQR({ tenantDbId, userId, initial, onSaved, onCancel }) {
           />
         </>
       )}
-      {tipo !== 'text' && (
+
+      {tipo === 'image' && (
         <>
+          {/* Input oculto de arquivo */}
           <input
-            style={inputStyle}
-            placeholder={
-              tipo === 'image'      ? 'URL da imagem (https://…)' :
-              tipo === 'audio'      ? 'URL do áudio (https://…)'  :
-                                     'URL do vídeo (https://…)'
-            }
-            value={mediaUrl}
-            onChange={e => setMediaUrl(e.target.value)}
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handleFileChange}
           />
+          {!filePath ? (
+            <button
+              type="button"
+              className="cv2-btn sec"
+              style={{ alignSelf: 'flex-start' }}
+              disabled={uploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {uploading ? 'Enviando…' : '📎 Anexar imagem'}
+            </button>
+          ) : (
+            <div style={{ position: 'relative', display: 'inline-block', alignSelf: 'flex-start' }}>
+              <img
+                src={filePreview}
+                alt=""
+                style={{ maxHeight: 120, maxWidth: '100%', borderRadius: 4, border: '1px solid var(--line)', display: 'block' }}
+              />
+              <button
+                type="button"
+                onClick={removerArquivo}
+                style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.65)', color: '#fff', border: 'none', borderRadius: '50%', width: 22, height: 22, cursor: 'pointer', fontSize: 12, lineHeight: '22px', padding: 0 }}
+              >✕</button>
+            </div>
+          )}
           <textarea
             style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }}
-            placeholder="Legenda / texto opcional"
+            placeholder="Legenda da imagem (opcional)"
             value={conteudo}
             onChange={e => setConteudo(e.target.value)}
           />
         </>
       )}
+
+      {tipo === 'audio' && (
+        <>
+          {!filePath ? (
+            recording ? (
+              <button
+                type="button"
+                className="cv2-btn"
+                style={{ background: 'var(--red)', borderColor: 'var(--red)', alignSelf: 'flex-start' }}
+                onClick={pararGravacao}
+              >
+                ⏹ Parar gravação ({recSeconds}s)
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="cv2-btn sec"
+                style={{ alignSelf: 'flex-start' }}
+                disabled={uploading}
+                onClick={iniciarGravacao}
+              >
+                {uploading ? 'Salvando áudio…' : '🎙 Iniciar gravação'}
+              </button>
+            )
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {filePreview && <audio controls src={filePreview} style={{ height: 36 }} />}
+              <button type="button" className="cv2-btn sec" style={{ fontSize: 11 }} onClick={removerArquivo}>✕ Regravar</button>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Visibilidade: Departamentos */}
+      {depts.length > 0 && (
+        <div>
+          <div style={{ fontSize: 11, color: 'var(--tx2)', marginBottom: 4 }}>Departamentos (vazio = todos)</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {depts.map(d => (
+              <label key={d.id} style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={visDeptIds.includes(d.id)}
+                  onChange={e => setVisDeptIds(prev => e.target.checked ? [...prev, d.id] : prev.filter(x => x !== d.id))}
+                />
+                {d.name}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Visibilidade: Atendentes */}
+      {agents.length > 0 && (
+        <div>
+          <div style={{ fontSize: 11, color: 'var(--tx2)', marginBottom: 4 }}>Atendentes (vazio = todos)</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {agents.map(a => (
+              <label key={a.user_id} style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={visUserIds.includes(a.user_id)}
+                  onChange={e => setVisUserIds(prev => e.target.checked ? [...prev, a.user_id] : prev.filter(x => x !== a.user_id))}
+                />
+                {a.full_name || a.email}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 8 }}>
-        <button className="cv2-btn" disabled={salvando} onClick={salvar}>
+        <button className="cv2-btn" disabled={salvando || uploading || recording} onClick={salvar}>
           {salvando ? 'Salvando…' : (initial?.id ? 'Salvar alterações' : 'Criar resposta rápida')}
         </button>
         {onCancel && (
@@ -195,7 +390,7 @@ export default function RespostasRapidas({ tenantDbId, userId }) {
     if (!tenantDbId) return;
     const { data, error } = await supabase
       .from('quick_replies')
-      .select('id, title, shortcut, content, media_type, media_url')
+      .select('id, title, shortcut, content, media_type, media_url, file_path, group_name, visible_user_ids, visible_dept_ids')
       .eq('tenant_id', tenantDbId)
       .order('title');
     if (error) { setErro(error.message); return; }
@@ -224,18 +419,14 @@ export default function RespostasRapidas({ tenantDbId, userId }) {
       </h1>
       <div className="cv2-rule" />
       <div className="cv2-sub">
-        Mensagens pré-definidas acessíveis durante o atendimento — suportam texto com formatação WhatsApp, imagem, áudio e link de vídeo.
+        Mensagens pré-definidas acessíveis durante o atendimento — texto com formatação WhatsApp, imagem com legenda ou áudio gravado.
         {erro ? <span style={{ color: 'var(--red)', marginLeft: 8 }}>Erro: {erro}</span> : null}
       </div>
 
       {/* Formulário de criação */}
-      <div className="cv2-card" style={{ maxWidth: 680 }}>
+      <div className="cv2-card" style={{ maxWidth: 700 }}>
         <h3 style={{ marginBottom: 14 }}>Nova resposta rápida</h3>
-        <FormQR
-          tenantDbId={tenantDbId}
-          userId={userId}
-          onSaved={carregar}
-        />
+        <FormQR tenantDbId={tenantDbId} userId={userId} onSaved={carregar} />
       </div>
 
       {/* Lista de respostas salvas */}
@@ -248,10 +439,13 @@ export default function RespostasRapidas({ tenantDbId, userId }) {
         </div>
       )}
       {rows && rows.map(r => {
-        const bdg  = TIPO_BADGE[r.media_type] ?? TIPO_BADGE.text;
-        const icone = TIPO_ICONE[r.media_type] ?? '⭐';
-        const isEditing   = editandoId === r.id;
-        const isConfirm   = confirmaId === r.id;
+        const bdg    = TIPO_BADGE[r.media_type] ?? TIPO_BADGE.text;
+        const icone  = TIPO_ICONE[r.media_type] ?? '⭐';
+        const isEditing = editandoId === r.id;
+        const isConfirm = confirmaId === r.id;
+        const pubUrl = r.file_path
+          ? supabase.storage.from('public').getPublicUrl(r.file_path).data?.publicUrl
+          : null;
 
         return (
           <div key={r.id} className="cv2-card">
@@ -274,12 +468,19 @@ export default function RespostasRapidas({ tenantDbId, userId }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 16 }}>{icone}</span>
                     <div>
-                      <b style={{ fontSize: 14 }}>{r.title}</b>
-                      {r.shortcut && (
-                        <code style={{ marginLeft: 8, fontSize: 11, color: 'var(--tx2)', background: '#f0f0f0', padding: '1px 5px', borderRadius: 3 }}>
-                          {r.shortcut}
-                        </code>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <b style={{ fontSize: 14 }}>{r.title}</b>
+                        {r.shortcut && (
+                          <code style={{ fontSize: 11, color: 'var(--tx2)', background: '#f0f0f0', padding: '1px 5px', borderRadius: 3 }}>
+                            {r.shortcut}
+                          </code>
+                        )}
+                        {r.group_name && (
+                          <span style={{ fontSize: 11, color: 'var(--tx2)', background: '#ebebeb', padding: '1px 6px', borderRadius: 10 }}>
+                            {r.group_name}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -322,16 +523,21 @@ export default function RespostasRapidas({ tenantDbId, userId }) {
                   </div>
                 </div>
 
-                {/* Preview do conteúdo */}
+                {/* Preview de conteúdo */}
                 {r.content && (
                   <div style={{ marginTop: 6, fontSize: 12.5, color: 'var(--tx2)', whiteSpace: 'pre-wrap' }}>
                     {r.content}
                   </div>
                 )}
-                {r.media_url && (
-                  <div style={{ marginTop: 4, fontSize: 11, color: 'var(--tx3)' }}>
-                    🔗 <a href={r.media_url} target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>{r.media_url}</a>
-                  </div>
+                {pubUrl && r.media_type === 'image' && (
+                  <img
+                    src={pubUrl}
+                    alt=""
+                    style={{ marginTop: 8, maxHeight: 100, maxWidth: '100%', borderRadius: 4, border: '1px solid var(--line)', display: 'block' }}
+                  />
+                )}
+                {pubUrl && r.media_type === 'audio' && (
+                  <audio controls src={pubUrl} style={{ marginTop: 8, height: 36, width: '100%', maxWidth: 300 }} />
                 )}
               </>
             )}
