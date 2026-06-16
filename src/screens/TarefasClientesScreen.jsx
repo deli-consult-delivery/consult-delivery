@@ -44,7 +44,7 @@ const priorityOf = id => PRIORITIES.find(p => p.id === id) || PRIORITIES[2];
 
 /* ─── Main ──────────────────────────────────────────────────── */
 
-export default function TarefasClientesScreen({ tenantDbId, userId }) {
+export default function TarefasClientesScreen({ tenantDbId, userId, deepLinkCustomerId }) {
   /* ── Google Fonts (Oswald + Montserrat) ── */
   useEffect(() => {
     if (document.getElementById('tar-gfonts')) return;
@@ -67,6 +67,7 @@ export default function TarefasClientesScreen({ tenantDbId, userId }) {
   const [filterMode,    setFilterMode]    = useState('all');   // all|mine|urgent|due
   const [search,        setSearch]        = useState('');
   const [dragId,        setDragId]        = useState(null);
+  const deepLinkApplied = useRef(false);
   const [hoverCol,      setHoverCol]      = useState(null);
   const [ghostPos,      setGhostPos]      = useState(null);
   const [showModal,     setShowModal]     = useState(false);
@@ -83,6 +84,21 @@ export default function TarefasClientesScreen({ tenantDbId, userId }) {
       .catch(() => { if (alive) setLoadingCli(false); });
     return () => { alive = false; };
   }, [tenantDbId]);
+
+  /* Deep-link: pré-selecionar cliente quando vindo do chat */
+  useEffect(() => {
+    if (!deepLinkCustomerId || deepLinkApplied.current || !clients.length) return;
+    const cli = clients.find(c => c.id === deepLinkCustomerId);
+    if (!cli) return;
+    deepLinkApplied.current = true;
+    setExpanded(e => ({ ...e, [cli.id]: true }));
+    setActiveClient(cli);
+    setActivePhase(PHASES[0]);
+    setView('board');
+    setSearch('');
+    setFilterMode('all');
+    loadClientTasks(cli);
+  }, [clients, deepLinkCustomerId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Carregar todas as tasks do cliente ativo */
   async function loadClientTasks(client) {

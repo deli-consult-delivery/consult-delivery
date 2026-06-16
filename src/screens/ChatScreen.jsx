@@ -4439,6 +4439,16 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
                     <Icon name="arrowright" size={15} />
                   </button>
                   <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.1)', margin: '0 2px' }} />
+                  {active.customer_id && onNavigate && (
+                    <button
+                      className="lc-action-btn"
+                      style={{ fontSize: 11 }}
+                      onClick={() => onNavigate('espacos', { customerId: active.customer_id })}
+                      title="Ver Espaços deste cliente"
+                    >
+                      Espaços
+                    </button>
+                  )}
                   {(active.type === 'whatsapp' || active.type === 'group') && (
                     <DepartmentSelector dark conversationId={active.id} tenantId={tenantDbId} currentDepartmentId={active.department_id ?? null} onChanged={async dept => {
                       const oldDept = departments.find(d => d.id === active.department_id);
