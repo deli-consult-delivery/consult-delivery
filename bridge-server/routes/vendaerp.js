@@ -1,16 +1,16 @@
 // bridge-server/routes/vendaerp.js
-// Endpoints de LEITURA do VendaERP. Ponto único de contato com o ERP:
+// Endpoints de LEITURA e ESCRITA do VendaERP. Ponto único de contato com o ERP:
 //   Console v2 (JWT do usuário) e Hermes (x-internal-token) chamam aqui;
 //   o Bridge injeta a credencial (3 headers) via lib/vendaerp.js.
 //
 // Auth: requireJwtOrInternal — aceita JWT do Console OU x-internal-token do Hermes.
-// Fase 1 = só GET. Escrita é Fase 2 (gated + confirmação no Telegram).
+// Fase 1 = GET (leitura). Fase 2 = POST (escrita, gated + confirmação no Telegram).
 'use strict';
 
 module.exports = function ({ requireJwtOrInternal, erp }) {
   const router = require('express').Router();
 
-  // Wrapper: executa um método de leitura do ERP e devolve JSON padronizado.
+  // Wrapper: executa um método do ERP (leitura ou escrita) e devolve JSON padronizado.
   // Erros viram { ok:false, status, error } sem derrubar o Bridge.
   function handle(fn) {
     return async (req, res) => {
@@ -85,6 +85,32 @@ module.exports = function ({ requireJwtOrInternal, erp }) {
     const { codigo, empresa, cliente } = req.query;
     return erp.pesquisarOportunidades({ codigo, empresa, cliente }, tid(req));
   }));
+
+  // ── CRM — criar oportunidade (Fase 2, escrita) ──────────────────────────────
+  router.post('/vendaerp/oportunidade', requireJwtOrInternal, handle((req) =>
+    erp.criarOportunidade(req.body, tid(req))
+  ));
+
+  // ── Financeiro — criar lançamento (Fase 2, escrita) ─────────────────────────
+  router.post('/vendaerp/lancamento', requireJwtOrInternal, handle((req) =>
+    erp.criarLancamento(req.body, tid(req))
+  ));
+
+  // ── Financeiro — gerar boleto/cobrança (Fase 2, escrita) ────────────────────
+  router.post('/vendaerp/boleto', requireJwtOrInternal, handle((req) =>
+    erp.gerarBoleto(req.body, tid(req))
+  ));
+
+  // ── Fiscal — emitir NFE (Fase 2, escrita) ───────────────────────────────────
+  // Recebe o payload normal; a lib traduz CodigoVenda p/ query param do ERP.
+  router.post('/vendaerp/nfe', requireJwtOrInternal, handle((req) =>
+    erp.emitirNfe(req.body, tid(req))
+  ));
+
+  // ── Estoque — ajuste (Fase 2, escrita) ──────────────────────────────────────
+  router.post('/vendaerp/estoque-ajuste', requireJwtOrInternal, handle((req) =>
+    erp.ajustarEstoque(req.body, tid(req))
+  ));
 
   // ── Auxiliares ──────────────────────────────────────────────────────────────
   router.get('/vendaerp/empresas', requireJwtOrInternal, handle((req) => erp.getEmpresas(tid(req))));
