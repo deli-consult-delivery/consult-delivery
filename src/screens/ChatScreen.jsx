@@ -2527,10 +2527,14 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
   }
 
   async function loadQuickReplies() {
-    try {
-      const { data } = await supabase.from('quick_replies').select('id, title, content').order('title');
-      if (data) setQuickReplies(data);
-    } catch { /* ignore */ }
+    if (!tenantDbId) return;
+    const { data, error } = await supabase
+      .from('quick_replies')
+      .select('id, title, shortcut, content, media_type, media_url')
+      .eq('tenant_id', tenantDbId)
+      .order('title');
+    if (error) { console.warn('[QR] loadQuickReplies:', error.message); return; }
+    if (data) setQuickReplies(data);
   }
 
   async function loadWAGroups() {
@@ -3743,8 +3747,17 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
 
   const insertQR = (qr) => {
     setShowQR(false);
-    setDraft(qr.content || qr.text || '');
+    const texto = qr.content || qr.text || '';
+    if (qr.media_type && qr.media_type !== 'text' && qr.media_url) {
+      // Mídia: insere URL + legenda no draft para o atendente revisar antes de enviar
+      setDraft((texto ? texto + '\n' : '') + qr.media_url);
+    } else {
+      setDraft(texto);
+    }
   };
+
+  const qrIconByType = (t) =>
+    t === 'image' ? 'image' : t === 'audio' ? 'mic' : t === 'video_link' ? 'play' : 'star';
 
   // ── DERIVADOS ─────────────────────────────────────────────
   const active         = convs.find(c => c.id === activeId) || searchConvs.find(c => c.id === activeId) || null;
@@ -4665,13 +4678,31 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
                 )}
                 {showQR && (
                   <div className="lc-popover lc-qr">
-                    <div className="lc-pop-head">Respostas rápidas</div>
+                    <div className="lc-pop-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>Respostas rápidas</span>
+                      <button
+                        style={{ fontSize: 10, color: 'var(--red-light)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px' }}
+                        onClick={() => { setShowQR(false); onNavigate?.('respostas-rapidas'); }}
+                      >
+                        + Gerenciar
+                      </button>
+                    </div>
                     {(quickReplies.length > 0 ? quickReplies : QUICK_REPLIES_DEFAULT).map(qr => (
                       <button key={qr.id} className="lc-pop-item" onClick={() => insertQR(qr)}>
-                        <Icon name="star" size={14} />
+                        <Icon name={qrIconByType(qr.media_type)} size={14} />
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 12, color: 'white', fontWeight: 600 }}>{qr.title || qr.label}</div>
-                          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{qr.content || qr.text}</div>
+                          <div style={{ fontSize: 12, color: 'white', fontWeight: 600 }}>
+                            {qr.title || qr.label}
+                            {qr.shortcut && (
+                              <span style={{ marginLeft: 6, fontSize: 10, opacity: 0.4, fontWeight: 400 }}>{qr.shortcut}</span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {qr.media_type === 'image'      ? '🖼 Imagem'
+                            : qr.media_type === 'audio'     ? '🎵 Áudio'
+                            : qr.media_type === 'video_link'? '🎬 Vídeo'
+                            : (qr.content || qr.text)}
+                          </div>
                         </div>
                       </button>
                     ))}
