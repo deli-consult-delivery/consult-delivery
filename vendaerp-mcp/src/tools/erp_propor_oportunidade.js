@@ -14,22 +14,34 @@ module.exports = {
     'Esta tool NÃO executa nada — ela cria uma proposta PENDENTE e devolve um proposal_id e um resumo. ' +
     'Mostre o resumo ao usuário no formato "Vou criar a oportunidade — <resumo>. Confirma? (sim/não)" e ' +
     'só chame erp_confirmar com o proposal_id retornado APÓS um "sim" explícito do usuário. ' +
-    'Nunca chame erp_confirmar sem confirmação.',
+    'Nunca chame erp_confirmar sem confirmação. ' +
+    'Regras do ERP: `cliente` precisa referenciar um cliente JÁ EXISTENTE e `responsavel` é obrigatório.',
   inputShape: {
     titulo: z.string().min(1).describe('Título/descrição da oportunidade'),
-    cliente: z.string().optional().describe('Cliente associado'),
+    cliente: z.string().optional().describe('Cliente associado (precisa já existir no ERP)'),
     empresa: z.string().optional().describe('Empresa'),
-    valor: z.number().optional().describe('Valor estimado'),
+    valor: z.number().optional().describe('Valor estimado do negócio'),
+    responsavel: z.string().optional().describe('Responsável pela oportunidade (obrigatório no ERP)'),
   },
   async handler(args, { cfg, proposals }) {
     const resumo = `Criar oportunidade "${args.titulo}"` +
       (args.cliente ? ` para ${args.cliente}` : '') +
       (args.valor != null ? ` (R$ ${args.valor})` : '');
 
+    // Mapeia os campos amigáveis → schema `Oportunidade` do ERP (titulo→descricao,
+    // valor→valorNegocio). O Bridge é pass-through (JSON.stringify direto), então o
+    // `payload` guardado já tem que ser o corpo no formato do ERP.
+    const payload = {};
+    payload.descricao = args.titulo;
+    if (args.cliente != null) payload.cliente = args.cliente;
+    if (args.empresa != null) payload.empresa = args.empresa;
+    if (args.valor != null) payload.valorNegocio = args.valor;
+    if (args.responsavel != null) payload.responsavel = args.responsavel;
+
     const out = await proposals.create({
       tipo: 'oportunidade',
       endpoint: '/oportunidade',
-      payload: args,
+      payload,
       resumo,
     });
 
