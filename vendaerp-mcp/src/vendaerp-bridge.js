@@ -13,11 +13,22 @@
 'use strict';
 
 class BridgeError extends Error {
-  constructor(message, status) {
+  constructor(message, status, details) {
     super(message);
     this.name = 'BridgeError';
     this.status = status;
+    this.details = details ?? null;
   }
+}
+
+// O Bridge devolve { error, details } onde `details` é o corpo de erro do próprio
+// ERP (ex.: "O cliente informado não foi encontrado. Informe um responsável.").
+// Sem ele o usuário no Telegram só veria "retornou 400: Bad Request" — opaco. Por
+// isso anexamos a regra de negócio à mensagem, que é o que erp_confirmar relata.
+function montarMensagemErro(json, statusHttp) {
+  const base = (json && (json.error || json.message)) || `Bridge retornou ${statusHttp}`;
+  const det = json && typeof json.details === 'string' ? json.details.trim() : '';
+  return det ? `${base} — ${det}` : base;
 }
 
 /** Monta querystring omitindo undefined/null/''. */
@@ -50,9 +61,8 @@ function makeErpBridge({ bridgeUrl, internalToken, timeoutMs = 25000 }) {
 
     const json = await res.json().catch(() => null);
     if (!res.ok || (json && json.ok === false)) {
-      const msg = (json && (json.error || json.message)) || `Bridge retornou ${res.status}`;
       const status = (json && json.status) || res.status;
-      throw new BridgeError(msg, status);
+      throw new BridgeError(montarMensagemErro(json, res.status), status, json && json.details);
     }
     return json && Object.prototype.hasOwnProperty.call(json, 'data') ? json.data : json;
   }
@@ -77,9 +87,8 @@ function makeErpBridge({ bridgeUrl, internalToken, timeoutMs = 25000 }) {
     }
     const json = await res.json().catch(() => null);
     if (!res.ok || (json && json.ok === false)) {
-      const msg = (json && (json.error || json.message)) || `Bridge retornou ${res.status}`;
       const status = (json && json.status) || res.status;
-      throw new BridgeError(msg, status);
+      throw new BridgeError(montarMensagemErro(json, res.status), status, json && json.details);
     }
     return json && Object.prototype.hasOwnProperty.call(json, 'data') ? json.data : json;
   }
