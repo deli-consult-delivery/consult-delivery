@@ -24,6 +24,7 @@ import Marca from './Marca.jsx';
 import { Gatilhos, Topicos, TarefasAgendadas, Links, Provedores, Integracoes, Sistemas, Arquivos } from './CvNovas.jsx';
 import VendaErpPainel from './VendaErpPainel.jsx';
 // telas reusadas do console clássico (funcionais — visual convertido nas ondas 2-3)
+import TarefasClientesScreen from '../screens/TarefasClientesScreen.jsx';
 import ChatScreen from '../screens/ChatScreen.jsx';
 import DeliScreen from '../screens/DeliScreen.jsx';
 import CrmScreen from '../screens/CRMScreen.jsx';
@@ -65,6 +66,7 @@ const GRUPOS = [
     { id: 'defesa', ic: 'i-shield', label: 'Defesa Comercial' },
     { id: 'radar', ic: 'i-radio', label: 'Dashboard iFood' },
     { id: 'avaliacoes', ic: 'i-chart', label: 'Avaliações' },
+    { id: 'espacos', ic: 'i-layers', label: 'Espaços' },
     { id: 'ativar', ic: 'i-plug', label: 'Ativar loja' },
   ]},
   { label: 'Agentes IA', items: [
@@ -196,7 +198,7 @@ function GlobalSearch({ tenantDbId, onNavigate }) {
 }
 
 // telas reusadas do clássico (dark) — renderizadas em área cheia até converter
-const LEGADO = new Set(['deli', 'crm', 'lojas', 'mia', 'cobranca', 'heartbeats', 'metas', 'memoria', 'conhecimento', 'configsys']);
+const LEGADO = new Set(['deli', 'crm', 'lojas', 'mia', 'cobranca', 'heartbeats', 'metas', 'memoria', 'conhecimento', 'configsys', 'espacos']);
 
 const OK_STATUSES = ['ok', 'completed', 'success'];
 const CREDITOS_MES = 10000; // freemium: 10k créditos/mês, 1 por execução de IA
@@ -549,6 +551,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try { return localStorage.getItem('cv2_sb_collapsed') === '1'; } catch { return false; }
   });
+  const [deepLinkCustomerId, setDeepLinkCustomerId] = useState(null);
   const [tenantsList, sel, setSel] = useTenants(userId, { dbId: propDbId, slug: tenantInfo?.id, nome: tenantInfo?.name });
 
   // tenant ativo = selecionado no topo (todas as telas seguem isto)
@@ -575,6 +578,15 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [sidebarOpen]);
+
+  const navWithParams = useCallback((novaTela, params) => {
+    if (params?.customerId !== undefined) setDeepLinkCustomerId(params.customerId);
+    setTela(novaTela);
+  }, []);
+
+  useEffect(() => {
+    if (tela !== 'espacos') setDeepLinkCustomerId(null);
+  }, [tela]);
 
   // hambúrguer: no mobile (≤1023px) abre/fecha o drawer; no desktop recolhe/expande a sidebar fixa (persiste)
   const toggleMenu = useCallback(() => {
@@ -606,6 +618,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       case 'defesa': return defesaOn === false ? <PaywallDefesa /> : <Defesa tenantDbId={tenantDbId} userId={userId} />;
       case 'radar': return <RadarReal tenantNome={tenantNome} tenantDbId={tenantDbId} />;
       case 'avaliacoes': return <Avaliacoes tenantDbId={tenantDbId} userId={userId} />;
+      case 'espacos': return <TarefasClientesScreen tenantDbId={tenantDbId} userId={userId} deepLinkCustomerId={deepLinkCustomerId} />;
       case 'ativar': return <AtivarLoja tenantDbId={tenantDbId} />;
       case 'catalogo': return <PainelAgentes tenantDbId={tenantDbId} />;
       case 'estudio': return <Estudio tenantDbId={tenantDbId} userId={userId} />;
@@ -685,7 +698,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
               <span className="crumb">Console › <b>{LABELS[tela] || tela}</b></span>
             </div>
             <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-              <ChatScreen tenant={tenantSlug} tenantDbId={tenantDbId} onNavigate={setTela} deepLinkConvId={null} />
+              <ChatScreen tenant={tenantSlug} tenantDbId={tenantDbId} onNavigate={navWithParams} deepLinkConvId={null} />
             </div>
           </>
         ) : (
