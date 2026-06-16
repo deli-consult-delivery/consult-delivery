@@ -3756,6 +3756,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
       setQrConfirm({ qr, publicUrl: data.publicUrl, mimeType });
       return;
     }
+    if (qr.media_url && qr.media_type !== 'text') {
+      const mimeType = qr.media_type === 'audio' ? 'audio/ogg' : 'image/jpeg';
+      setQrConfirm({ qr, publicUrl: qr.media_url, mimeType });
+      return;
+    }
     setDraft(qr.content || qr.text || '');
   };
 
