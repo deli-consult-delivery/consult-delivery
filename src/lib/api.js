@@ -195,10 +195,22 @@ export async function listAnalises(tenantId) {
 }
 
 export async function listClientes(tenantId) {
+  // ESPAÇOS: lista só clientes de lojas em consultoria ativa (is_consultoria_ativa=true).
+  // Reativar uma loja faz o cliente voltar automaticamente, sem mexer no código.
+  const { data: lojasAtivas, error: eLojas } = await supabase
+    .from('lojas')
+    .select('client_id')
+    .eq('tenant_id', tenantId)
+    .eq('is_consultoria_ativa', true)
+    .not('client_id', 'is', null);
+  if (eLojas) throw eLojas;
+  const ids = [...new Set((lojasAtivas ?? []).map(l => l.client_id))];
+  if (ids.length === 0) return [];
   const { data, error } = await supabase
     .from('customers')
     .select('id, name, phone')
     .eq('tenant_id', tenantId)
+    .in('id', ids)
     .order('name');
   if (error) throw error;
   return data ?? [];
@@ -813,4 +825,3 @@ export async function rejeitarTarefa(id, lojaId) {
   if (error) throw error;
   if (!data?.length) throw new Error('Tarefa não encontrada ou já processada');
 }
-
