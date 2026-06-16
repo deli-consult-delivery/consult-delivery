@@ -18,6 +18,7 @@ import AuditLog from './AuditLog.jsx';
 import AcessoUsuarios from './AcessoUsuarios.jsx';
 import Habilidades from './Habilidades.jsx';
 import Templates from './Templates.jsx';
+import RespostasRapidas from './RespostasRapidas.jsx';
 import AgenteAnalise from './AgenteAnalise.jsx';
 import Marca from './Marca.jsx';
 import { Gatilhos, Topicos, TarefasAgendadas, Links, Provedores, Integracoes, Sistemas, Arquivos } from './CvNovas.jsx';
@@ -56,7 +57,8 @@ const GRUPOS = [
   { label: 'Operação', items: [
     { id: 'crm', ic: 'i-users', label: 'Clientes' },
     { id: 'lojas', ic: 'i-store', label: 'Lojas' },
-    { id: 'chat', ic: 'i-chat', label: 'Chat ao Vivo' },
+    { id: 'chat',             ic: 'i-chat',  label: 'Chat ao Vivo' },
+    { id: 'respostas-rapidas', ic: 'i-reply', label: 'Respostas Rápidas' },
     { id: 'mia', ic: 'i-eye', label: 'Conversas · MIA' },
     { id: 'aprovacoes', ic: 'i-check', label: 'Aprovações' },
     { id: 'cobranca', ic: 'i-cash', label: 'Cobrança' },
@@ -608,6 +610,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       case 'catalogo': return <PainelAgentes tenantDbId={tenantDbId} />;
       case 'estudio': return <Estudio tenantDbId={tenantDbId} userId={userId} />;
       case 'habilidades': return <Habilidades tenantDbId={tenantDbId} userId={userId} />;
+      case 'respostas-rapidas': return <RespostasRapidas tenantDbId={tenantDbId} userId={userId} />;
       case 'analise': return <AnaliseLoja tenantDbId={tenantDbId} userId={userId} />;
       case 'cardapio': return <AgenteAnalise tenantDbId={tenantDbId} userId={userId} agente="cardapio" titulo="Cardápio" descricao="O agente analisa o funil e os itens do cardápio e sugere otimizações de nomes, descrições e preços." />;
       case 'multicanal': return <AgenteAnalise tenantDbId={tenantDbId} userId={userId} agente="multicanal" titulo="Multicanal" descricao="O agente consolida as métricas dos seus canais de delivery num panorama único e aponta onde focar." />;
