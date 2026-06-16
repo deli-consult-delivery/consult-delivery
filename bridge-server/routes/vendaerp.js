@@ -11,7 +11,11 @@ module.exports = function ({ requireJwtOrInternal, erp }) {
   const router = require('express').Router();
 
   // Wrapper: executa um método do ERP (leitura ou escrita) e devolve JSON padronizado.
-  // Erros viram { ok:false, status, error } sem derrubar o Bridge.
+  // Erros viram { ok:false, status, error, details } sem derrubar o Bridge.
+  // `details` carrega o corpo de erro do próprio ERP (VendaErpApiError.body) — sem ele
+  // o cliente só via "retornou 400: Bad Request", perdendo a regra de negócio real
+  // (ex.: "O cliente informado não foi encontrado. Informe um responsável."). É o que
+  // torna o write-live-smoke um artefato de evidência útil em vez de um 400 opaco.
   function handle(fn) {
     return async (req, res) => {
       try {
@@ -19,8 +23,13 @@ module.exports = function ({ requireJwtOrInternal, erp }) {
         res.json({ ok: true, data });
       } catch (err) {
         const status = err && typeof err.status === 'number' && err.status >= 400 ? err.status : 502;
-        console.error(`[vendaerp] ${req.path} erro ${err.status ?? '?'}: ${err.message}`);
-        res.status(status).json({ ok: false, status: err.status ?? null, error: err.message });
+        console.error(`[vendaerp] ${req.path} erro ${err.status ?? '?'}: ${err.message}`, err.body ?? '');
+        res.status(status).json({
+          ok: false,
+          status: err.status ?? null,
+          error: err.message,
+          details: err.body ?? null,
+        });
       }
     };
   }
