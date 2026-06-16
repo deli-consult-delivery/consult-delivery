@@ -33,7 +33,7 @@ const cfg = { auditTenantId: 'tenant-cd', principal: 'ceo_agent' };
     assert.strictEqual(proposals.created.endpoint, '/oportunidade');
   });
   check('resumo é legível e cita o título', () => assert.match(proposals.created.resumo, /Lead Padaria/));
-  check('payload carrega os campos do args', () => assert.strictEqual(proposals.created.payload.titulo, 'Lead Padaria'));
+  check('payload mapeia titulo→descricao (formato do ERP)', () => assert.strictEqual(proposals.created.payload.descricao, 'Lead Padaria'));
 
   check('inputShape exige titulo', () => {
     const z = require('zod');
@@ -63,14 +63,15 @@ const cfg = { auditTenantId: 'tenant-cd', principal: 'ceo_agent' };
   {
     const t = require('../src/tools/erp_propor_boleto');
     const p = fakeProposals();
-    const res2 = await t.handler({ lancamento: 'L-99', cliente: 'Padaria X', valor: 150 }, { erp, cfg, proposals: p });
+    const res2 = await t.handler({ lancamento: 99, cliente: 'Padaria X', valor: 150 }, { erp, cfg, proposals: p });
     check('boleto: devolve proposal_id', () => assert.strictEqual(res2.data.proposal_id, 'p-1'));
     check('boleto: tipo+endpoint corretos', () => {
       assert.strictEqual(p.created.tipo, 'boleto');
       assert.strictEqual(p.created.endpoint, '/boleto');
     });
-    check('boleto: resumo legível cita o lançamento', () => assert.match(p.created.resumo, /L-99/));
-    check('boleto: payload carrega os campos', () => assert.strictEqual(p.created.payload.lancamento, 'L-99'));
+    check('boleto: resumo legível cita o lançamento', () => assert.match(p.created.resumo, /99/));
+    check('boleto: payload mapeia lancamento→codigoLancamento (Number)', () => assert.strictEqual(p.created.payload.codigoLancamento, 99));
+    check('boleto: payload tem formaPagamento padrão 0', () => assert.strictEqual(p.created.payload.formaPagamento, 0));
     check('boleto: tenantIds=[auditTenantId]', () => assert.deepStrictEqual(res2.tenantIds, ['tenant-cd']));
     check('boleto: inputShape exige lancamento', () => assert.throws(() => z.object(t.inputShape).parse({}), /lancamento/i));
   }
@@ -102,7 +103,12 @@ const cfg = { auditTenantId: 'tenant-cd', principal: 'ceo_agent' };
       assert.strictEqual(p.created.endpoint, '/estoque-ajuste');
     });
     check('estoque: resumo legível cita o produto', () => assert.match(p.created.resumo, /Coca 2L/));
-    check('estoque: payload carrega os campos', () => assert.strictEqual(p.created.payload.produto, 'Coca 2L'));
+    check('estoque: payload mapeia produto→produtoCodigo', () => assert.strictEqual(p.created.payload.produtoCodigo, 'Coca 2L'));
+    check('estoque: payload mapeia deposito→depositoNome', () => assert.strictEqual(p.created.payload.depositoNome, 'Central'));
+    check('estoque: quantidade negativa vira saída (ehEntrada=false, qtd absoluta)', () => {
+      assert.strictEqual(p.created.payload.ehEntrada, false);
+      assert.strictEqual(p.created.payload.quantidade, 3);
+    });
     check('estoque: tenantIds=[auditTenantId]', () => assert.deepStrictEqual(res2.tenantIds, ['tenant-cd']));
     check('estoque: inputShape exige produto', () => assert.throws(() => z.object(t.inputShape).parse({}), /produto/i));
   }

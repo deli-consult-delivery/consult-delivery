@@ -19,7 +19,8 @@ module.exports = {
     valor: z.number().describe('Valor do lançamento'),
     descricao: z.string().optional().describe('Descrição/histórico do lançamento'),
     cliente: z.string().optional().describe('Cliente/fornecedor associado'),
-    vencimento: z.string().optional().describe('Data de vencimento'),
+    vencimento: z.string().optional().describe('Data de vencimento (YYYY-MM-DD)'),
+    ehDespesa: z.boolean().optional().describe('true = despesa, false = receita (padrão: receita)'),
   },
   async handler(args, { cfg, proposals }) {
     const resumo = `Criar lançamento de R$ ${args.valor}` +
@@ -27,10 +28,17 @@ module.exports = {
       (args.cliente ? ` para ${args.cliente}` : '') +
       (args.vencimento ? ` venc. ${args.vencimento}` : '');
 
+    // Mapeia os campos amigáveis → schema `Lancamento` do ERP (vencimento→
+    // dataVencimento; ehDespesa default false = receita). O Bridge é pass-through.
+    const payload = { valor: args.valor, ehDespesa: args.ehDespesa ?? false };
+    if (args.descricao != null) payload.descricao = args.descricao;
+    if (args.cliente != null) payload.cliente = args.cliente;
+    if (args.vencimento != null) payload.dataVencimento = args.vencimento;
+
     const out = await proposals.create({
       tipo: 'lancamento',
       endpoint: '/lancamento',
-      payload: args,
+      payload,
       resumo,
     });
 
