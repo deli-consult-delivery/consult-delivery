@@ -16,19 +16,29 @@ module.exports = {
     'só chame erp_confirmar com o proposal_id retornado APÓS um "sim" explícito do usuário. ' +
     'Nunca chame erp_confirmar sem confirmação.',
   inputShape: {
-    lancamento: z.string().min(1).describe('Código do lançamento a cobrar'),
-    cliente: z.string().optional().describe('Cliente associado'),
-    valor: z.number().optional().describe('Valor da cobrança'),
+    lancamento: z.union([z.string(), z.number()]).describe('Código do lançamento a cobrar'),
+    cliente: z.string().optional().describe('Cliente associado (só p/ o resumo; o ERP não usa)'),
+    valor: z.number().optional().describe('Valor da cobrança (só p/ o resumo; o ERP não usa)'),
+    formaPagamento: z.number().int().min(0).max(2).optional()
+      .describe('Forma de pagamento da cobrança (enum int 0–2; padrão 0)'),
   },
   async handler(args, { cfg, proposals }) {
     const resumo = `Gerar boleto do lançamento ${args.lancamento}` +
       (args.cliente ? ` para ${args.cliente}` : '') +
       (args.valor != null ? ` (R$ ${args.valor})` : '');
 
+    // Mapeia → schema `DadosPagamentoCobrancaInput` do ERP. Só codigoLancamento e
+    // formaPagamento existem no contrato; cliente/valor servem apenas ao resumo.
+    // O Bridge é pass-through.
+    const payload = {
+      codigoLancamento: Number(args.lancamento),
+      formaPagamento: args.formaPagamento ?? 0,
+    };
+
     const out = await proposals.create({
       tipo: 'boleto',
       endpoint: '/boleto',
-      payload: args,
+      payload,
       resumo,
     });
 
