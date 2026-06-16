@@ -113,6 +113,9 @@ function FormQR({ tenantDbId, userId, initial, onSaved, onCancel }) {
       setSalvando(false);
     }
     if (error) { setErro(error.message); return; }
+    if (!initial?.id) {
+      setTitulo(''); setAtalho(''); setTipo('text'); setConteudo(''); setMediaUrl('');
+    }
     onSaved();
   }
 
@@ -203,9 +206,10 @@ export default function RespostasRapidas({ tenantDbId, userId }) {
 
   async function remover(id) {
     setRemovendo(true);
-    const { error } = await supabase.from('quick_replies').delete().eq('id', id);
+    const { error, count } = await supabase.from('quick_replies').delete({ count: 'exact' }).eq('id', id);
     setRemovendo(false);
     if (error) { setErro(error.message); return; }
+    if (count === 0) { setErro('Sem permissão para apagar este item.'); return; }
     setConfirmaId(null);
     await carregar();
   }
