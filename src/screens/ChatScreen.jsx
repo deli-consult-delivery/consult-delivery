@@ -2527,15 +2527,14 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
   }
 
   async function loadQuickReplies() {
-    try {
-      if (!tenantDbId) return;
-      const { data } = await supabase
-        .from('quick_replies')
-        .select('id, title, shortcut, content, media_type, media_url')
-        .eq('tenant_id', tenantDbId)
-        .order('title');
-      if (data) setQuickReplies(data);
-    } catch { /* ignore */ }
+    if (!tenantDbId) return;
+    const { data, error } = await supabase
+      .from('quick_replies')
+      .select('id, title, shortcut, content, media_type, media_url')
+      .eq('tenant_id', tenantDbId)
+      .order('title');
+    if (error) { console.warn('[QR] loadQuickReplies:', error.message); return; }
+    if (data) setQuickReplies(data);
   }
 
   async function loadWAGroups() {

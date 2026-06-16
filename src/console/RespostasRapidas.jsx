@@ -92,7 +92,6 @@ function FormQR({ tenantDbId, userId, initial, onSaved, onCancel }) {
     setErro(null);
     if (!titulo.trim()) { setErro('Informe o título.'); return; }
     if (tipo !== 'text' && !mediaUrl.trim()) { setErro('Informe a URL da mídia.'); return; }
-    setSalvando(true);
     const payload = {
       tenant_id:  tenantDbId,
       title:      titulo.trim(),
@@ -102,13 +101,17 @@ function FormQR({ tenantDbId, userId, initial, onSaved, onCancel }) {
       media_url:  mediaUrl.trim() || null,
       created_by: userId ?? null,
     };
+    setSalvando(true);
     let error;
-    if (initial?.id) {
-      ({ error } = await supabase.from('quick_replies').update(payload).eq('id', initial.id));
-    } else {
-      ({ error } = await supabase.from('quick_replies').insert(payload));
+    try {
+      if (initial?.id) {
+        ({ error } = await supabase.from('quick_replies').update(payload).eq('id', initial.id));
+      } else {
+        ({ error } = await supabase.from('quick_replies').insert(payload));
+      }
+    } finally {
+      setSalvando(false);
     }
-    setSalvando(false);
     if (error) { setErro(error.message); return; }
     onSaved();
   }
@@ -200,8 +203,9 @@ export default function RespostasRapidas({ tenantDbId, userId }) {
 
   async function remover(id) {
     setRemovendo(true);
-    await supabase.from('quick_replies').delete().eq('id', id);
+    const { error } = await supabase.from('quick_replies').delete().eq('id', id);
     setRemovendo(false);
+    if (error) { setErro(error.message); return; }
     setConfirmaId(null);
     await carregar();
   }
@@ -226,7 +230,7 @@ export default function RespostasRapidas({ tenantDbId, userId }) {
         <FormQR
           tenantDbId={tenantDbId}
           userId={userId}
-          onSaved={() => carregar()}
+          onSaved={carregar}
         />
       </div>
 
@@ -256,7 +260,7 @@ export default function RespostasRapidas({ tenantDbId, userId }) {
                   tenantDbId={tenantDbId}
                   userId={userId}
                   initial={r}
-                  onSaved={() => { setEditandoId(null); carregar(); }}
+                  onSaved={() => { setEditandoId(null); void carregar(); }}
                   onCancel={() => setEditandoId(null)}
                 />
               </>
