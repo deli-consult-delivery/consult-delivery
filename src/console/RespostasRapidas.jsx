@@ -176,14 +176,14 @@ function FormQR({ tenantDbId, userId, initial, onSaved, onCancel }) {
   async function salvar() {
     setErro(null);
     if (!titulo.trim()) { setErro('Informe o título.'); return; }
-    if (tipo !== 'text' && !filePath) { setErro('Selecione ou grave o arquivo de mídia.'); return; }
+    if (tipo !== 'text' && !filePath && !initial?.media_url) { setErro('Selecione ou grave o arquivo de mídia.'); return; }
     const payload = {
       tenant_id:        tenantDbId,
       title:            titulo.trim(),
       shortcut:         atalho.trim() || null,
       content:          conteudo,
       media_type:       tipo,
-      media_url:        null,
+      media_url:        filePath ? null : (initial?.media_url ?? null),
       file_path:        filePath ?? null,
       group_name:       grupo.trim() || null,
       visible_user_ids: visUserIds.length > 0 ? visUserIds : null,
@@ -232,7 +232,7 @@ function FormQR({ tenantDbId, userId, initial, onSaved, onCancel }) {
             type="button"
             className={tipo === t.id ? 'cv2-btn' : 'cv2-btn sec'}
             style={{ fontSize: 12, padding: '5px 10px' }}
-            onClick={() => { setTipo(t.id); setFilePath(null); setFilePreview(null); setRecording(false); }}
+            onClick={() => { if (recording) pararGravacao(); setTipo(t.id); setFilePath(null); setFilePreview(null); }}
           >
             {TIPO_ICONE[t.id]} {t.label}
           </button>
