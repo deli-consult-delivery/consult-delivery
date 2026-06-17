@@ -4,8 +4,9 @@ import UserAvatar from '../components/UserAvatar.jsx';
 import { SETTINGS_DATA } from '../data.js';
 import {
   listClientes,
-  listFolders, createFolder, deleteFolder,
-  listLists, createList, deleteList,
+  listFolders, createFolder, updateFolder, deleteFolder,
+  listLists, createList, updateList, deleteList,
+  updateCustomer,
   listColumns, createColumn, updateColumn, deleteColumn,
   listClientTasks, createClientTask, updateClientTask, moveClientTask, deleteClientTask,
 } from '../lib/api.js';
@@ -195,6 +196,30 @@ export default function TarefasClientesScreen({ tenantDbId, userId, deepLinkCust
     } catch {}
   }
 
+  async function handleRenameFolder(client, folder) {
+    const name = window.prompt('Renomear pasta:', folder.name);
+    if (!name || name === folder.name) return;
+    setFoldersByClient(m => ({ ...m, [client.id]: (m[client.id] || []).map(f => f.id === folder.id ? { ...f, name } : f) }));
+    if (activeFolder?.id === folder.id) setActiveFolder(f => ({ ...f, name }));
+    updateFolder(folder.id, { name }).catch(() => {});
+  }
+
+  async function handleRenameList(folder, list) {
+    const name = window.prompt('Renomear lista:', list.name);
+    if (!name || name === list.name) return;
+    setListsByFolder(m => ({ ...m, [folder.id]: (m[folder.id] || []).map(l => l.id === list.id ? { ...l, name } : l) }));
+    if (activeList?.id === list.id) setActiveList(l => ({ ...l, name }));
+    updateList(list.id, { name }).catch(() => {});
+  }
+
+  async function handleRenameClient(client) {
+    const name = window.prompt('Renomear cliente:', client.name);
+    if (!name || name === client.name) return;
+    setClients(cs => cs.map(c => c.id === client.id ? { ...c, name } : c));
+    if (activeClient?.id === client.id) setActiveClient(c => ({ ...c, name }));
+    updateCustomer(client.id, { name }).catch(() => {});
+  }
+
   /* ── Colunas ── */
 
   async function handleCreateColumn() {
@@ -329,16 +354,17 @@ export default function TarefasClientesScreen({ tenantDbId, userId, deepLinkCust
               <div className={`cv2-item${activeClient?.id === client.id ? ' on' : ''}`}
                    onClick={() => toggleClient(client)}
                    style={{ cursor: 'pointer' }}
-                   onMouseEnter={e => { const b = e.currentTarget.querySelector('.add-folder'); if (b) b.style.opacity = 1; }}
-                   onMouseLeave={e => { const b = e.currentTarget.querySelector('.add-folder'); if (b) b.style.opacity = 0; }}>
+                   onMouseEnter={e => { const b = e.currentTarget.querySelector('.row-actions'); if (b) b.style.opacity = 1; }}
+                   onMouseLeave={e => { const b = e.currentTarget.querySelector('.row-actions'); if (b) b.style.opacity = 0; }}>
                 <Icon name={cliOpen ? 'chevdown' : 'chevright'} size={12} />
                 <Icon name="building" size={13} />
                 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{client.name}</span>
-                <button className="add-folder" title="Nova pasta"
-                        onClick={e => { e.stopPropagation(); handleCreateFolder(client); }}
-                        style={{ opacity: 0, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', display: 'flex', alignItems: 'center', padding: 0 }}>
-                  <Icon name="plus" size={12} />
-                </button>
+                <span className="row-actions" style={{ opacity: 0, display: 'flex', gap: 6 }}>
+                  <button title="Renomear cliente" onClick={e => { e.stopPropagation(); handleRenameClient(client); }}
+                          style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', padding: 0, display: 'flex' }}><Icon name="edit" size={11} /></button>
+                  <button title="Nova pasta" onClick={e => { e.stopPropagation(); handleCreateFolder(client); }}
+                          style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', padding: 0, display: 'flex' }}><Icon name="plus" size={12} /></button>
+                </span>
               </div>
 
               {/* Pastas */}
@@ -362,6 +388,8 @@ export default function TarefasClientesScreen({ tenantDbId, userId, deepLinkCust
                       <Icon name="folder" size={12} />
                       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folder.name}</span>
                       <span className="row-actions" style={{ opacity: 0, display: 'flex', gap: 6 }}>
+                        <button title="Renomear pasta" onClick={e => { e.stopPropagation(); handleRenameFolder(client, folder); }}
+                                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', padding: 0, display: 'flex' }}><Icon name="edit" size={11} /></button>
                         <button title="Nova lista" onClick={e => { e.stopPropagation(); handleCreateList(client, folder); }}
                                 style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', padding: 0, display: 'flex' }}><Icon name="plus" size={11} /></button>
                         <button title="Apagar pasta" onClick={e => { e.stopPropagation(); handleDeleteFolder(client, folder); }}
@@ -383,8 +411,12 @@ export default function TarefasClientesScreen({ tenantDbId, userId, deepLinkCust
                            onMouseLeave={e => { const b = e.currentTarget.querySelector('.row-actions'); if (b) b.style.opacity = 0; }}>
                         <Icon name="list" size={12} />
                         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</span>
-                        <button className="row-actions" title="Apagar lista" onClick={e => { e.stopPropagation(); handleDeleteList(folder, list); }}
-                                style={{ opacity: 0, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', padding: 0, display: 'flex' }}><Icon name="trash" size={11} /></button>
+                        <span className="row-actions" style={{ opacity: 0, display: 'flex', gap: 6 }}>
+                          <button title="Renomear lista" onClick={e => { e.stopPropagation(); handleRenameList(folder, list); }}
+                                  style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', padding: 0, display: 'flex' }}><Icon name="edit" size={11} /></button>
+                          <button title="Apagar lista" onClick={e => { e.stopPropagation(); handleDeleteList(folder, list); }}
+                                  style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', padding: 0, display: 'flex' }}><Icon name="trash" size={11} /></button>
+                        </span>
                       </div>
                     ))}
                   </div>

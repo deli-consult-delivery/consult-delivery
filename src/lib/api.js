@@ -216,6 +216,11 @@ export async function listClientes(tenantId) {
   return data ?? [];
 }
 
+export async function updateCustomer(id, updates) {
+  const { error } = await supabase.from('customers').update(updates).eq('id', id);
+  if (error) throw error;
+}
+
 // subscribeToAnalise is NOT async — it returns an unsubscribe cleanup function synchronously.
 // REPLICA IDENTITY FULL on the analises table ensures payload.new contains the full row,
 // not just the primary key. Call the returned function in useEffect's cleanup.
@@ -345,7 +350,7 @@ export async function deleteTask(taskId) {
 export async function listClientTasks(tenantId, listId) {
   let q = supabase
     .from('client_tasks')
-    .select('*, assignee:profiles!client_tasks_assignee_fkey(id, full_name, avatar_url)')
+    .select('*, assignee:profiles!assignee_id(id, full_name, avatar_url)')
     .order('position', { ascending: true });
   if (tenantId) q = q.eq('tenant_id', tenantId);
   if (listId)   q = q.eq('list_id', listId);
