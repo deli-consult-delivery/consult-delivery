@@ -5354,11 +5354,9 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
           display: 'flex', alignItems: 'stretch',
         }}
       >
-        <div style={{ flex: 1, background: 'rgba(0,0,0,0.45)' }} onClick={() => setDemandasDrawer({ open: false, customerId: null })} />
         <div style={{
-          width: 'min(780px, 100vw)', height: '100%',
+          width: '100%', height: '100%',
           background: '#0f172a', display: 'flex', flexDirection: 'column',
-          boxShadow: '-4px 0 32px rgba(0,0,0,0.5)',
         }}>
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
