@@ -164,7 +164,7 @@ function DraftsTab({ tenantDbId, canApprove, onToast }) {
                 <div className="cv2-sub">{fmtDatetime(d.created_at)}</div>
               </div>
               <button
-                onClick={() => setExpanded(isOpen ? null : d.id)}
+                onClick={() => { setExpanded(isOpen ? null : d.id); if (!isOpen) setFeedback(''); }}
                 className="cv2-btn sec"
                 style={{ fontSize: 12, padding: '4px 10px' }}
               >
@@ -251,6 +251,7 @@ function CalendarioTab({ tenantDbId }) {
 
   useEffect(() => {
     if (!tenantDbId) return;
+    let cancelled = false;
     setLoading(true);
     supabase
       .from('content_calendar')
@@ -259,10 +260,12 @@ function CalendarioTab({ tenantDbId }) {
       .order('data_alvo', { ascending: true })
       .limit(50)
       .then(({ data, error: err }) => {
+        if (cancelled) return;
         setLoading(false);
         if (err) { setError(err.message); return; }
         setItems(data || []);
       });
+    return () => { cancelled = true; };
   }, [tenantDbId]);
 
   if (loading) return <div className="cv2-sub" style={{ padding: 20 }}>Carregando calendário...</div>;
@@ -306,6 +309,7 @@ function PublicadosTab({ tenantDbId }) {
 
   useEffect(() => {
     if (!tenantDbId) return;
+    let cancelled = false;
     setLoading(true);
     supabase
       .from('content_published')
@@ -314,10 +318,12 @@ function PublicadosTab({ tenantDbId }) {
       .order('published_at', { ascending: false })
       .limit(50)
       .then(({ data, error: err }) => {
+        if (cancelled) return;
         setLoading(false);
         if (err) { setError(err.message); return; }
         setItems(data || []);
       });
+    return () => { cancelled = true; };
   }, [tenantDbId]);
 
   if (loading) return <div className="cv2-sub" style={{ padding: 20 }}>Carregando publicados...</div>;
@@ -380,10 +386,10 @@ export default function LaraEditorial({ tenantDbId, userId }) {
   const { can } = usePermissions(userId);
   const canApprove = can('content', 'approve') || can('content', 'edit');
 
-  function showToast(msg, type = 'error') {
+  const showToast = useCallback((msg, type = 'error') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
-  }
+  }, []);
 
   return (
     <div style={{ padding: '28px 32px 56px', maxWidth: 1000, margin: '0 auto' }}>
