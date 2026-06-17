@@ -4551,6 +4551,16 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
                       {active.whatsapp_chat_id && <code style={{ fontSize: 10, background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: 3 }}>{active.whatsapp_chat_id.split('@')[0]}</code>}
                     </div>
                   </div>
+                  {espacosClientId && espacosHasFolder && (
+                    <button
+                      className="lc-action-btn"
+                      style={{ fontSize: 11, flexShrink: 0 }}
+                      onClick={() => setDemandasDrawer({ open: true, customerId: espacosClientId })}
+                      title="Abrir demandas deste cliente"
+                    >
+                      Demandas
+                    </button>
+                  )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
                   <button className="lc-icon-btn-dark" onClick={() => runCommand('/resumir')} title="Resumir conversa">
@@ -4564,21 +4574,12 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
                     <button
                       className="lc-action-btn"
                       style={{ fontSize: 11 }}
-                      onClick={() => setDemandasDrawer({ open: true, customerId: espacosClientId })}
-                      title="Abrir demandas deste cliente"
+                      onClick={() => onNavigate?.('espacos', { customerId: espacosClientId })}
+                      title="Abrir Espaços deste cliente"
                     >
-                      Demandas
+                      <Icon name="folder" size={12} /> Espaços
                     </button>
                   )}
-                  <button
-                    className="lc-action-btn"
-                    style={{ fontSize: 11 }}
-                    onClick={() => onNavigate?.('espacos', { customerId: espacosClientId })}
-                    disabled={!espacosClientId}
-                    title={espacosClientId ? 'Abrir Espaços deste cliente' : 'Cliente sem pasta'}
-                  >
-                    <Icon name="folder" size={12} /> Espaços
-                  </button>
                   {(active.type === 'whatsapp' || active.type === 'group') && (
                     <DepartmentSelector dark conversationId={active.id} tenantId={tenantDbId} currentDepartmentId={active.department_id ?? null} onChanged={async dept => {
                       const oldDept = departments.find(d => d.id === active.department_id);
