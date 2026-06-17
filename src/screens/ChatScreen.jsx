@@ -2689,7 +2689,7 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
         const updated = prev.map(c => {
           const fresh = mappedById.get(c.id);
           if (!fresh) return c;
-          const keys = Object.keys(fresh);
+          const keys = Object.keys(fresh).filter(k => k !== 'messages');
           if (keys.every(k => c[k] === fresh[k])) return c;
           changed = true;
           return { ...c, ...fresh };
@@ -5109,7 +5109,7 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
                   <div className="lc-actions-grid">
                     <button className="lc-mini-action"><Icon name="plus" size={12} /> Adicionar negócio</button>
                     <button className="lc-mini-action"><Icon name="sparkles" size={12} /> Executar automação</button>
-                    <button className="lc-mini-action" onClick={() => onNavigate?.('tasks')}><Icon name="check" size={12} /> Ver tarefas</button>
+                    <button className="lc-mini-action" onClick={() => onNavigate?.('tarefas')}><Icon name="check" size={12} /> Ver tarefas</button>
                   </div>
                 </div>
 
