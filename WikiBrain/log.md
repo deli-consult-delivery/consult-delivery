@@ -536,3 +536,15 @@ Touched: none
 - **Conflito de merge resolvido (add/add):** `git checkout --ours` nos 2 arquivos conflitantes — a branch tinha v3 completa, main tinha v2; HEAD preservado integralmente.
 - **PR #372 squash-mergeado** (SHA `7663811`). Bundle `index-Cc7fMl5M.js` live em `app.consultdelivery.com.br` confirmado via curl.
 - **Code review LOCAL (Stop hook):** 9 bugs CONFIRMADOS — 3 críticos (mic leak ao trocar tipo durante gravação, media_url legada zerada para null no edit, insertQR silencia QRs legados com media_url), 4 médios (MIME hardcoded jpeg, erros swallowed em enviarQrMidia, JID stripping inconsistente audio vs media, double-tap race em iniciarGravacao), 2 baixos (blob URL nunca revogado, orphans no Storage). Registrados como follow-up PR.
+
+## 2026-06-17 — Sessão 65: ESPAÇOS v2 — browser test completo + fix de bug workspace (PRs #407/#408)
+
+- **Contexto:** Continuação da sessão 64 (PRs #405: ESPAÇOS v2 workspaces + assignees dinâmicos). Browser test havia ficado pendente — retomado nesta sessão.
+- **Bug encontrado e corrigido (PR #407):** `toggleWorkspace` nunca chamava `loadWorkspaceFolders` → sidebar de workspace sempre exibia lista de clientes vazia. Causa: `foldersByClient` era lazy por cliente (carregado só ao clicar no cliente), nunca por workspace. Fix: helper `loadWorkspaceFolders(wsId)` + chamada no `toggleWorkspace` (ao abrir) e no init `useEffect` (auto-expand do primeiro workspace). Branch `wandson/espacos-workspace-folder-loading` (PR #407, squash SHA `01f00a2`).
+- **Browser test APROVADO (3/3):**
+  - (a) ✅ Sidebar mostra "Consultoria" com "Planet Pizza" aninhado corretamente
+  - (b) ✅ Botão "Novo espaço" funciona — abre `window.prompt` nativo
+  - (c) ✅ Dropdown "Responsável" mostra Wandson Silva, Breno, Lorena — sem Yasmin nem Eduardo (assignees dinâmicos via RPC `get_tenant_members` funcionando)
+  - Console V2: ✅ ESPAÇOS disponível na sidebar com mesma hierarquia workspace-first
+- **Tracker atualizado:** PR #408 (squash SHA `fce35dd`).
+- **Regra de memória atualizada:** browser test é autônomo — nunca pedir permissão.
