@@ -26,6 +26,7 @@ import { Gatilhos, Topicos, TarefasAgendadas, Links, Provedores, Integracoes, Si
 import VendaErpPainel from './VendaErpPainel.jsx';
 import Disparos from './Disparos.jsx';
 import LaraEditorial from './LaraEditorial.jsx';
+import Onboarding from './Onboarding.jsx';
 // telas reusadas do console clássico (funcionais — visual convertido nas ondas 2-3)
 import TarefasClientesScreen from '../screens/TarefasClientesScreen.jsx';
 import ChatScreen from '../screens/ChatScreen.jsx';
@@ -109,6 +110,7 @@ const GRUPOS = [
     { id: 'integracoes', ic: 'i-plug', label: 'Integrações' },
     { id: 'vendaerp', ic: 'i-box', label: 'VendaERP' },
     { id: 'sistemas', ic: 'i-box', label: 'Sistemas externos' },
+    { id: 'onboarding', ic: 'i-grid', label: 'Onboarding' },
     { id: 'acesso', ic: 'i-key', label: 'Acesso por usuário' },
     { id: 'auditoria', ic: 'i-scroll', label: 'Auditoria' },
     { id: 'notificacoes', ic: 'i-bell', label: 'Notificações' },
@@ -662,6 +664,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       case 'auditoria': return <AuditLog tenantDbId={tenantDbId} />;
       case 'notificacoes': return <Notificacoes tenantDbId={tenantDbId} userId={userId} onNavigate={nav} />;
       case 'lara-editorial': return <LaraEditorial tenantDbId={tenantDbId} userId={userId} />;
+      case 'onboarding': return <Onboarding tenantDbId={tenantDbId} userId={userId} />;
       default: return <div className="cv2-card">Tela não encontrada.</div>;
     }
   }
