@@ -3662,16 +3662,23 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
     try {
       const BRIDGE_URL = import.meta.env.VITE_BRIDGE_URL || '';
       const { data: { session } } = await supabase.auth.getSession();
-      const mediaRes = await fetch(mediaUrl);
-      if (!mediaRes.ok) throw new Error(`Falha ao buscar mídia: ${mediaRes.status}`);
-      const blob = await mediaRes.blob();
-      const form = new FormData();
-      form.append('audio', blob, 'audio.webm');
-      const r = await fetch(`${BRIDGE_URL}/api/whisper/transcribe`, {
-        method: 'POST',
-        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
-        body: form,
-      });
+      const authHeader = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+      let r;
+      if (mediaUrl.startsWith('data:')) {
+        // data: URI (base64 inline no banco) — browser converte em blob sem CORS
+        const blobRes = await fetch(mediaUrl);
+        const blob = await blobRes.blob();
+        const form = new FormData();
+        form.append('audio', blob, 'audio.ogg');
+        r = await fetch(`${BRIDGE_URL}/api/whisper/transcribe`, { method: 'POST', headers: authHeader, body: form });
+      } else {
+        // HTTP URL — bridge busca server-side (evita CORS do browser)
+        r = await fetch(`${BRIDGE_URL}/api/whisper/transcribe`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeader },
+          body: JSON.stringify({ mediaUrl }),
+        });
+      }
       if (!r.ok) throw new Error(`Transcrição falhou: ${r.status}`);
       const data = await r.json();
       setTranscriptions(t => ({ ...t, [msgId]: { loading: false, text: data.text || '' } }));
