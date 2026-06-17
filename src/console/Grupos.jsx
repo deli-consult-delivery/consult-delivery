@@ -691,7 +691,7 @@ function TabChannels({ tenantDbId }) {
   async function loadChannels() {
     setLoading(true);
     try {
-      const query = supabase
+      let query = supabase
         .from('internal_channels')
         .select('*, channel_members(user_id)')
         .order('created_at', { ascending: false });
