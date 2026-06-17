@@ -1534,6 +1534,9 @@ app.use('/api', require('./routes/vendaerp')({
   erp: require('./lib/vendaerp'),
 }));
 
+// Whisper — transcrição de áudio/vídeo recebidos no chat
+app.use('/api/whisper', require('./routes/whisper'));
+
 // ════════════════════════════════════════════════════════════════════════════
 // BRENO Off-Hours — smoke routes
 // ════════════════════════════════════════════════════════════════════════════

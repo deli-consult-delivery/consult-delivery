@@ -1328,7 +1328,7 @@ function DeliveryTick({ status }) {
 }
 
 // ─── MESSAGE BUBBLE ────────────────────────────────────────────
-function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onStar, onDelete, onResumirMsg, onTraduzirMsg, onForward, translation }) {
+function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onStar, onDelete, onResumirMsg, onTraduzirMsg, onTranscribeMsg, onForward, translation, transcription }) {
   const isOut = m.from === 'out';
   const isSystem = m.from === 'system';
 
@@ -1448,6 +1448,27 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onSta
             )}
           </div>
         )}
+        {!isOut && transcription && (m.mediaType?.includes('audio') || m.mediaType === 'video') && (
+          <div style={{ marginTop: 4, marginLeft: 4, maxWidth: 340 }}>
+            {transcription.loading && (
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center', padding: '3px 0' }}>
+                <span className="lc-typ-dot" style={{ animationDelay: '0s', width: 5, height: 5 }} />
+                <span className="lc-typ-dot" style={{ animationDelay: '0.15s', width: 5, height: 5 }} />
+                <span className="lc-typ-dot" style={{ animationDelay: '0.3s', width: 5, height: 5 }} />
+              </div>
+            )}
+            {!transcription.loading && transcription.error && (
+              <div style={{ fontSize: 11, color: 'rgba(239,68,68,0.6)', fontStyle: 'italic' }}>
+                Transcrição indisponível
+              </div>
+            )}
+            {!transcription.loading && transcription.text && (
+              <div style={{ fontSize: 12, color: 'var(--g-400, rgba(255,255,255,0.5))', fontStyle: 'italic', lineHeight: 1.4 }}>
+                {transcription.text}
+              </div>
+            )}
+          </div>
+        )}
         {m.reactions?.length > 0 && (() => {
           const grouped = {};
           (m.reactions || []).forEach(r => { if (r.emoji) grouped[r.emoji] = (grouped[r.emoji] || 0) + 1; });
@@ -1470,6 +1491,11 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onSta
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg>
             </button>
             <button title="Traduzir" onClick={() => onTraduzirMsg?.(m)}><Icon name="globe" size={11} /></button>
+            {(m.mediaType?.includes('audio') || m.mediaType === 'video') && (
+              <button title="Transcrever" onClick={() => onTranscribeMsg?.(m)}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+              </button>
+            )}
             <button title="Virar tarefa" onClick={() => onCreateTask?.(m)}><Icon name="check" size={11} /></button>
             <button title="Resumir conversa" onClick={() => onResumirMsg?.(m)}><Icon name="sparkles" size={11} /></button>
             <button title="Apagar mensagem" onClick={() => onDelete?.(m)} style={{ color: 'rgba(239,68,68,0.7)' }}>
@@ -1831,6 +1857,8 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
 
   // ── Tradução por mensagem ─────────────────────────────────
   const [translations, setTranslations]      = useState({}); // { msgId: { loading, text, lang, error } }
+  // ── Transcrição Whisper por mensagem ──────────────────────
+  const [transcriptions, setTranscriptions]  = useState({}); // { msgId: { loading, text, error } }
 
   // ── AI / Composer ─────────────────────────────────────────
   const [aiMode, setAiMode]                  = useState('humano');
@@ -3590,6 +3618,31 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
     }
   }
 
+  // ── Transcrição Whisper ───────────────────────────────────
+  async function transcribeMessage(msgId, mediaUrl) {
+    if (!mediaUrl) return;
+    setTranscriptions(t => ({ ...t, [msgId]: { loading: true } }));
+    try {
+      const BRIDGE_URL = import.meta.env.VITE_BRIDGE_URL || '';
+      const { data: { session } } = await supabase.auth.getSession();
+      const mediaRes = await fetch(mediaUrl);
+      if (!mediaRes.ok) throw new Error(`Falha ao buscar mídia: ${mediaRes.status}`);
+      const blob = await mediaRes.blob();
+      const form = new FormData();
+      form.append('audio', blob, 'audio.webm');
+      const r = await fetch(`${BRIDGE_URL}/api/whisper/transcribe`, {
+        method: 'POST',
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+        body: form,
+      });
+      if (!r.ok) throw new Error(`Transcrição falhou: ${r.status}`);
+      const data = await r.json();
+      setTranscriptions(t => ({ ...t, [msgId]: { loading: false, text: data.text || '' } }));
+    } catch {
+      setTranscriptions(t => ({ ...t, [msgId]: { loading: false, error: true } }));
+    }
+  }
+
   async function triggerIaAutoReply(convId, chatId) {
     if (!chatId || iaPendingRef.current.has(convId)) return;
     iaPendingRef.current.add(convId);
@@ -4608,8 +4661,10 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
                       onCreateTask={msg => console.log('criar tarefa:', msg.text)}
                       onResumirMsg={() => runCommand('/resumir')}
                       onTraduzirMsg={msg => translateMessage(msg.id, msg.text)}
+                      onTranscribeMsg={msg => transcribeMessage(msg.id, msg.mediaUrl)}
                       onForward={msg => setForwardMsg(msg)}
                       translation={translations[m.id]}
+                      transcription={transcriptions[m.id]}
                     />
                   );
                   return acc;
