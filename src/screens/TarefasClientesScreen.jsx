@@ -135,6 +135,17 @@ export default function TarefasClientesScreen({ tenantDbId, userId, deepLinkCust
       if (ws.length > 0) {
         setActiveWorkspace(ws[0]);
         setExpandedWorkspaces({ [ws[0].id]: true });
+        listFolders(tenantDbId, null, ws[0].id).then(wsFolders => {
+          if (!alive) return;
+          const grouped = {};
+          wsFolders.forEach(f => {
+            if (f.customer_id) {
+              if (!grouped[f.customer_id]) grouped[f.customer_id] = [];
+              grouped[f.customer_id].push(f);
+            }
+          });
+          setFoldersByClient(grouped);
+        }).catch(() => {});
       }
     }).catch(() => { if (alive) setLoadingCli(false); });
     return () => { alive = false; };
@@ -169,9 +180,23 @@ export default function TarefasClientesScreen({ tenantDbId, userId, deepLinkCust
 
   /* ── Workspace handlers ── */
 
-  function toggleWorkspace(ws) {
+  async function loadWorkspaceFolders(wsId) {
+    const wsFolders = await listFolders(tenantDbId, null, wsId);
+    const grouped = {};
+    wsFolders.forEach(f => {
+      if (f.customer_id) {
+        if (!grouped[f.customer_id]) grouped[f.customer_id] = [];
+        grouped[f.customer_id].push(f);
+      }
+    });
+    setFoldersByClient(m => ({ ...m, ...grouped }));
+  }
+
+  async function toggleWorkspace(ws) {
+    const opening = !expandedWorkspaces[ws.id];
     setExpandedWorkspaces(e => ({ ...e, [ws.id]: !e[ws.id] }));
     setActiveWorkspace(ws);
+    if (opening) loadWorkspaceFolders(ws.id);
   }
 
   async function handleCreateWorkspace() {
