@@ -4530,6 +4530,16 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
                       {active.whatsapp_chat_id && <code style={{ fontSize: 10, background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: 3 }}>{active.whatsapp_chat_id.split('@')[0]}</code>}
                     </div>
                   </div>
+                  {(espacosClientId || active.customer_id) && (
+                    <button
+                      className="lc-action-btn"
+                      style={{ fontSize: 11, flexShrink: 0 }}
+                      onClick={() => setDemandasDrawer({ open: true, customerId: espacosClientId ?? active.customer_id })}
+                      title="Abrir demandas deste cliente"
+                    >
+                      Demandas
+                    </button>
+                  )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
                   <button className="lc-icon-btn-dark" onClick={() => runCommand('/resumir')} title="Resumir conversa">
@@ -4539,16 +4549,6 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
                     <Icon name="arrowright" size={15} />
                   </button>
                   <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.1)', margin: '0 2px' }} />
-                  {(espacosClientId || active.customer_id) && (
-                    <button
-                      className="lc-action-btn"
-                      style={{ fontSize: 11 }}
-                      onClick={() => setDemandasDrawer({ open: true, customerId: espacosClientId ?? active.customer_id })}
-                      title="Abrir demandas deste cliente"
-                    >
-                      Demandas
-                    </button>
-                  )}
                   {(active.type === 'whatsapp' || active.type === 'group') && (
                     <DepartmentSelector dark conversationId={active.id} tenantId={tenantDbId} currentDepartmentId={active.department_id ?? null} onChanged={async dept => {
                       const oldDept = departments.find(d => d.id === active.department_id);
