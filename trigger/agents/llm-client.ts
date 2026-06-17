@@ -49,7 +49,7 @@ async function chatOllamaCloud(messages: ChatMessage[]): Promise<ChatResponse> {
         messages,
         stream: false,
         format: "json",
-        options: { temperature: 0.1, num_predict: 2048 },
+        options: { temperature: 0.1, num_predict: 8192 },
       }),
       signal: controller.signal,
     });
