@@ -1865,6 +1865,9 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
   const [translations, setTranslations]      = useState({}); // { msgId: { loading, text, lang, error } }
   // ── Transcrição Whisper por mensagem ──────────────────────
   const [transcriptions, setTranscriptions]  = useState({}); // { msgId: { loading, text, error } }
+  const [autoTranscribe, setAutoTranscribe]  = useState(() => localStorage.getItem('cd_auto_transcribe') === '1');
+  const autoTranscribeRef                    = useRef(false);
+  autoTranscribeRef.current = autoTranscribe;
 
   // ── AI / Composer ─────────────────────────────────────────
   const [aiMode, setAiMode]                  = useState('humano');
@@ -2270,9 +2273,11 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
         });
         if (isInbound) {
           setWaLastInbound(msg.created_at || new Date().toISOString());
-          // Clear any pending typing indicator when the actual message arrives
           if (typingTimerRef.current) { clearTimeout(typingTimerRef.current); typingTimerRef.current = null; }
           setTyping(false);
+        }
+        if (autoTranscribeRef.current && msg.media_url && (mediaType?.includes('audio') || mediaType === 'video')) {
+          transcribeMessage(msg.id, msg.media_url);
         }
         setConvs(prev => {
           const idx = prev.findIndex(c => c.id === convId);
@@ -4572,6 +4577,15 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
                   </button>
                   <button className="lc-icon-btn-dark" onClick={() => runCommand('/proxima')} title="Próxima ação">
                     <Icon name="arrowright" size={15} />
+                  </button>
+                  <button
+                    className="lc-icon-btn-dark"
+                    onClick={() => setAutoTranscribe(v => { const next = !v; localStorage.setItem('cd_auto_transcribe', next ? '1' : '0'); return next; })}
+                    title={autoTranscribe ? 'Transcrição automática de áudio: ATIVA — clique para desativar' : 'Transcrição automática de áudio: desativada — clique para ativar'}
+                    style={{ color: autoTranscribe ? '#22C55E' : 'rgba(255,255,255,0.45)', position: 'relative' }}
+                  >
+                    <Icon name="mic" size={15} />
+                    {autoTranscribe && <span style={{ position: 'absolute', top: 2, right: 2, width: 5, height: 5, borderRadius: '50%', background: '#22C55E' }} />}
                   </button>
                   <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.1)', margin: '0 2px' }} />
                   {espacosClientId && espacosHasFolder && (
