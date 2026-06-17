@@ -1,26 +1,8 @@
 import { task, logger } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
-import Anthropic from "@anthropic-ai/sdk";
+import { chat } from "../agents/llm-client";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
-
-async function withOverloadedRetry<T>(fn: () => Promise<T>, maxAttempts = 4): Promise<T> {
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      return await fn();
-    } catch (err: unknown) {
-      const status = (err as { status?: number })?.status;
-      if (status === 529 && attempt < maxAttempts) {
-        const delay = attempt * 15_000;
-        logger.warn(`Anthropic overloaded (529) — aguardando ${delay / 1000}s antes de tentar novamente`, { attempt });
-        await new Promise(r => setTimeout(r, delay));
-        continue;
-      }
-      throw err;
-    }
-  }
-  throw new Error("withOverloadedRetry: unreachable");
-}
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -359,8 +341,6 @@ async function executar(input: Input, runId: string): Promise<Output> {
 
   logger.info("encerramento-gerar-imagem iniciado", { dateStr, dayName, theme, isManual });
 
-  const anthropic = new Anthropic();
-
   const returnLine = isSat
     ? "🕘 Segunda-feira voltamos às 09h — demandas recebidas serão respondidas no próximo dia útil"
     : weekday === 5
@@ -381,10 +361,8 @@ async function executar(input: Input, runId: string): Promise<Output> {
 
   const greetingLine = isSat ? "Bom fim de semana!" : "Boa noite!";
 
-  const claudeResp = await withOverloadedRetry(() => anthropic.messages.create({
-    model:      "claude-sonnet-4-6",
-    max_tokens: 1400,
-    system: `Você é o Superagente de Imagens de Encerramento de Expediente da Consult Delivery — consultoria de delivery do Wandson Silva. Gere diariamente: prompt de imagem (Recraft) + headline + legenda WhatsApp para o encerramento do dia de trabalho.
+  const claudeResp = await chat([
+    { role: "system", content: `Você é o Superagente de Imagens de Encerramento de Expediente da Consult Delivery — consultoria de delivery do Wandson Silva. Gere diariamente: prompt de imagem (Recraft) + headline + legenda WhatsApp para o encerramento do dia de trabalho.
 
 ═══ ESTILOS VISUAIS ═══
 O estilo do dia é indicado no input. Siga RIGOROSAMENTE o estilo indicado — não misture estilos.
@@ -413,10 +391,8 @@ Linha 2: frase curta reforçando que a equipe da Consult Delivery encerrou o exp
 Linha 3: horário de retorno (ex: "${returnLine}")
 SEM links, SEM @, SEM hashtag, SEM CTA de compra
 
-Retorne SOMENTE JSON válido, sem texto extra.`,
-    messages: [{
-      role:    "user",
-      content: `Dia: ${dayName}
+Retorne SOMENTE JSON válido, sem texto extra.` },
+    { role: "user", content: `Dia: ${dayName}
 Tema: ${theme}
 Data: ${dateStr}
 Estilo visual do dia: Estilo ${visualStyle.id} — ${visualStyle.name}
@@ -449,14 +425,10 @@ Gere JSON com exatamente 4 campos:
 
 4. "theme": tema resumido em PT-BR
 
-Retorne: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme":"..."}`,
-    }],
-  }));
+Retorne: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme":"..."}` },
+  ]);
 
-  const rawText = claudeResp.content
-    .filter((b) => b.type === "text")
-    .map((b) => (b as Anthropic.TextBlock).text)
-    .join("");
+  const rawText = claudeResp.content;
 
   const jsonMatch = rawText.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error("Claude não retornou JSON válido");
