@@ -37,21 +37,21 @@ import Cora from './Cora.jsx';
 import Lara from './Lara.jsx';
 import Contratos from './Contratos.jsx';
 import Automacoes from './Automacoes.jsx';
+import Deli from './Deli.jsx';
+import MiaAudit from './MiaAudit.jsx';
+import Oracle from './Oracle.jsx';
+import AgentInbox from './AgentInbox.jsx';
+import Heartbeats from './Heartbeats.jsx';
+import Metas from './Metas.jsx';
+import Memorias from './Memorias.jsx';
+import Conhecimento from './Conhecimento.jsx';
+import Configuracoes from './Configuracoes.jsx';
 // telas reusadas do console clássico (funcionais — visual convertido nas ondas 2-3)
 import TarefasClientesScreen from '../screens/TarefasClientesScreen.jsx';
 import ChatScreen from '../screens/ChatScreen.jsx';
-import DeliScreen from '../screens/DeliScreen.jsx';
 import CrmScreen from '../screens/CRMScreen.jsx';
-import MiaAuditScreen from '../screens/MiaAuditScreen.jsx';
 import InadimplentesScreen from '../screens/InadimplentesScreen.jsx';
 import AgentBuilderScreen from '../screens/AgentBuilderScreen.jsx';
-import OracleScreen from '../screens/OracleScreen.jsx';
-import AgentInboxScreen from '../screens/AgentInboxScreen.jsx';
-import HeartbeatsScreen from '../screens/HeartbeatsScreen.jsx';
-import GoalsScreen from '../screens/GoalsScreen.jsx';
-import MemoriesScreen from '../screens/MemoriesScreen.jsx';
-import KnowledgeBaseScreen from '../screens/KnowledgeBaseScreen.jsx';
-import SettingsScreen from '../screens/SettingsScreen.jsx';
 import LojasScreen from '../screens/lojas/LojasScreen.jsx';
 import './console.css';
 
@@ -225,7 +225,7 @@ function GlobalSearch({ tenantDbId, onNavigate }) {
 }
 
 // telas reusadas do clássico (dark) — renderizadas em área cheia até converter
-const LEGADO = new Set(['deli', 'crm', 'lojas', 'mia', 'cobranca', 'heartbeats', 'metas', 'memoria', 'conhecimento', 'configsys']);
+const LEGADO = new Set(['crm', 'lojas', 'cobranca']);
 
 const OK_STATUSES = ['ok', 'completed', 'success'];
 const CREDITOS_MES = 10000; // freemium: 10k créditos/mês, 1 por execução de IA
@@ -637,10 +637,10 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
   function render() {
     switch (tela) {
       case 'visao': return <VisaoGeral tenantNome={tenantNome} tenantDbId={tenantDbId} onNav={nav} />;
-      case 'deli': return <DeliScreen tenantDbId={tenantDbId} userId={userId} />;
+      case 'deli': return <Deli tenantDbId={tenantDbId} userId={userId} />;
       case 'crm': return <CrmScreen tenant={tenantSlug} tenantDbId={tenantDbId} onNavigate={nav} />;
       case 'lojas': return <LojasScreen tenantDbId={tenantDbId} userId={userId} />;
-      case 'mia': return <MiaAuditScreen tenantDbId={tenantDbId} />;
+      case 'mia': return <MiaAudit tenantDbId={tenantDbId} userId={userId} />;
       case 'aprovacoes': return <AprovacoesUnificadas tenantDbId={tenantDbId} userId={userId} />;
       case 'recontratacao': return <Recontratacao tenantDbId={tenantDbId} userId={userId} />;
       case 'sofia': return <Sofia tenantDbId={tenantDbId} userId={userId} />;
@@ -663,23 +663,23 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       case 'cardapio': return <AgenteAnalise tenantDbId={tenantDbId} userId={userId} agente="cardapio" titulo="Cardápio" descricao="O agente analisa o funil e os itens do cardápio e sugere otimizações de nomes, descrições e preços." />;
       case 'multicanal': return <AgenteAnalise tenantDbId={tenantDbId} userId={userId} agente="multicanal" titulo="Multicanal" descricao="O agente consolida as métricas dos seus canais de delivery num panorama único e aponta onde focar." />;
       case 'construtor': return <AgentBuilderScreen tenantDbId={tenantDbId} onNavigate={nav} />;
-      case 'oracle': return <OracleScreen />;
-      case 'inbox': return <AgentInboxScreen tenantDbId={tenantDbId} onNavigate={nav} />;
+      case 'oracle': return <Oracle tenantDbId={tenantDbId} userId={userId} />;
+      case 'inbox': return <AgentInbox tenantDbId={tenantDbId} userId={userId} onNavigate={nav} />;
       case 'tarefas': return <TarefasAgendadas tenantDbId={tenantDbId} userId={userId} />;
       case 'gatilhos': return <Gatilhos tenantDbId={tenantDbId} userId={userId} />;
-      case 'heartbeats': return <HeartbeatsScreen tenantDbId={tenantDbId} onNavigate={nav} />;
+      case 'heartbeats': return <Heartbeats tenantDbId={tenantDbId} userId={userId} onNavigate={nav} />;
       case 'atividade': return <Execucoes tenantDbId={tenantDbId} />;
-      case 'metas': return <GoalsScreen tenantDbId={tenantDbId} onNavigate={nav} />;
+      case 'metas': return <Metas tenantDbId={tenantDbId} userId={userId} onNavigate={nav} />;
       case 'topicos': return <Topicos tenantDbId={tenantDbId} userId={userId} />;
       case 'modelos': return <Templates tenantDbId={tenantDbId} userId={userId} />;
       case 'config': return <AgenteConfig tenantDbId={tenantDbId} />;
       case 'arquivos': return <Arquivos tenantDbId={tenantDbId} userId={userId} />;
       case 'links': return <Links tenantDbId={tenantDbId} userId={userId} />;
-      case 'memoria': return <MemoriesScreen tenantDbId={tenantDbId} />;
-      case 'conhecimento': return <KnowledgeBaseScreen tenantDbId={tenantDbId} />;
+      case 'memoria': return <Memorias tenantDbId={tenantDbId} userId={userId} />;
+      case 'conhecimento': return <Conhecimento tenantDbId={tenantDbId} userId={userId} />;
       case 'custos': return <CustosIA tenantDbId={tenantDbId} />;
       case 'importar': return <ImportarRelatorios tenantDbId={tenantDbId} userId={userId} />;
-      case 'configsys': return <SettingsScreen tenant={tenantSlug} tenantDbId={tenantDbId} userId={userId} onTenantChange={() => {}} />;
+      case 'configsys': return <Configuracoes tenantDbId={tenantDbId} userId={userId} onTenantChange={() => {}} />;
       case 'clientesplat': return <Clientes userId={userId} />;
       case 'marca': return <Marca tenantDbId={tenantDbId} onChanged={recarregarBrand} />;
       case 'provedores': return <Provedores tenantDbId={tenantDbId} />;
