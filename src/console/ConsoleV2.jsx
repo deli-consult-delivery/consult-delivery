@@ -29,6 +29,14 @@ import LaraEditorial from './LaraEditorial.jsx';
 import Onboarding from './Onboarding.jsx';
 import Recontratacao from './Recontratacao.jsx';
 import Sofia from './Sofia.jsx';
+import Relatorios from './Relatorios.jsx';
+import TarefasGlobais from './TarefasGlobais.jsx';
+import Campanhas from './Campanhas.jsx';
+import Grupos from './Grupos.jsx';
+import Cora from './Cora.jsx';
+import Lara from './Lara.jsx';
+import Contratos from './Contratos.jsx';
+import Automacoes from './Automacoes.jsx';
 // telas reusadas do console clássico (funcionais — visual convertido nas ondas 2-3)
 import TarefasClientesScreen from '../screens/TarefasClientesScreen.jsx';
 import ChatScreen from '../screens/ChatScreen.jsx';
@@ -71,17 +79,23 @@ const GRUPOS = [
     { id: 'recontratacao', ic: 'i-reply', label: 'Re-contratação' },
     { id: 'sofia', ic: 'i-bot', label: 'SOFIA' },
     { id: 'disparos', ic: 'i-reply', label: 'Disparos' },
-    { id: 'cobranca', ic: 'i-cash', label: 'Cobrança' },
+    { id: 'cora', ic: 'i-cash', label: 'Cobrança' },
     { id: 'defesa', ic: 'i-shield', label: 'Defesa Comercial' },
     { id: 'radar', ic: 'i-radio', label: 'Dashboard iFood' },
     { id: 'avaliacoes', ic: 'i-chart', label: 'Avaliações' },
     { id: 'espacos', ic: 'i-layers', label: 'Espaços' },
     { id: 'ativar', ic: 'i-plug', label: 'Ativar loja' },
+    { id: 'campanhas', ic: 'i-flag', label: 'Campanhas' },
+    { id: 'grupos', ic: 'i-users', label: 'Grupos WhatsApp' },
+    { id: 'contratos', ic: 'i-doc', label: 'Contratos' },
   ]},
   { label: 'Agentes IA', items: [
     { id: 'catalogo', ic: 'i-box', label: 'Catálogo' },
     { id: 'estudio', ic: 'i-palette', label: 'Estúdio de Conteúdo' },
     { id: 'lara-editorial', ic: 'i-palette', label: 'LARA Editorial' },
+    { id: 'lara', ic: 'i-bot', label: 'LARA' },
+    { id: 'tarefas-globais', ic: 'i-list', label: 'Tarefas Globais' },
+    { id: 'automacoes', ic: 'i-zap', label: 'Automações' },
     { id: 'habilidades', ic: 'i-zap', label: 'Habilidades' },
     { id: 'analise', ic: 'i-chart', label: 'Análise de Loja' },
     { id: 'cardapio', ic: 'i-menu', label: 'Cardápio' },
@@ -105,6 +119,7 @@ const GRUPOS = [
     { id: 'conhecimento', ic: 'i-book', label: 'Conhecimento (RAG)' },
     { id: 'custos', ic: 'i-dollar', label: 'Custos de IA' },
     { id: 'importar', ic: 'i-save', label: 'Importar relatórios' },
+    { id: 'relatorios', ic: 'i-chart', label: 'Relatórios' },
   ]},
   { label: 'Sistema', items: [
     { id: 'configsys', ic: 'i-gear', label: 'Configurações' },
@@ -333,7 +348,7 @@ function useAlertas(tenantDbId) {
       if (!alive) return;
       const lista = [];
       if ((casos ?? 0) > 0) lista.push({ cls: 'err', txt: `${casos} caso(s) de Defesa aguardando seu OK`, ir: 'defesa' });
-      if ((atrasadas ?? 0) > 0) lista.push({ cls: 'err', txt: `${atrasadas} assinatura(s) atrasada(s)`, ir: 'cobranca' });
+      if ((atrasadas ?? 0) > 0) lista.push({ cls: 'err', txt: `${atrasadas} assinatura(s) atrasada(s)`, ir: 'cora' });
       if ((fontesPend ?? 0) > 0) lista.push({ cls: 'warn', txt: `${fontesPend} relatório(s) em processamento`, ir: 'importar' });
       setAl(lista);
     })();
@@ -631,6 +646,10 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       case 'sofia': return <Sofia tenantDbId={tenantDbId} userId={userId} />;
       case 'disparos': return <Disparos tenantDbId={tenantDbId} userId={userId} />;
       case 'cobranca': return <InadimplentesScreen tenantDbId={tenantDbId} userId={userId} />;
+      case 'cora': return <Cora tenantDbId={tenantDbId} userId={userId} />;
+      case 'campanhas': return <Campanhas tenantDbId={tenantDbId} userId={userId} />;
+      case 'grupos': return <Grupos tenantDbId={tenantDbId} userId={userId} />;
+      case 'contratos': return <Contratos tenantDbId={tenantDbId} userId={userId} />;
       case 'defesa': return defesaOn === false ? <PaywallDefesa /> : <Defesa tenantDbId={tenantDbId} userId={userId} />;
       case 'radar': return <RadarReal tenantNome={tenantNome} tenantDbId={tenantDbId} />;
       case 'avaliacoes': return <Avaliacoes tenantDbId={tenantDbId} userId={userId} />;
@@ -671,6 +690,10 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       case 'auditoria': return <AuditLog tenantDbId={tenantDbId} />;
       case 'notificacoes': return <Notificacoes tenantDbId={tenantDbId} userId={userId} onNavigate={nav} />;
       case 'lara-editorial': return <LaraEditorial tenantDbId={tenantDbId} userId={userId} />;
+      case 'lara': return <Lara tenantDbId={tenantDbId} userId={userId} />;
+      case 'tarefas-globais': return <TarefasGlobais tenantDbId={tenantDbId} userId={userId} />;
+      case 'automacoes': return <Automacoes tenantDbId={tenantDbId} userId={userId} onNavigate={nav} />;
+      case 'relatorios': return <Relatorios tenantDbId={tenantDbId} userId={userId} />;
       case 'onboarding': return <Onboarding tenantDbId={tenantDbId} userId={userId} />;
       default: return <div className="cv2-card">Tela não encontrada.</div>;
     }
