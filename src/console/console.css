@@ -113,6 +113,7 @@
 .cv2-ham,.cv2-sb-close{appearance:none;background:none;border:none;padding:6px;margin:0;cursor:pointer;color:var(--ink);border-radius:4px;align-items:center;justify-content:center;flex:none}
 .cv2-ham:hover,.cv2-sb-close:hover{background:#f0eeec}
 @keyframes cv2fade{from{opacity:0}to{opacity:1}}
+@keyframes spin{to{transform:rotate(360deg)}}
 
 /* DESKTOP (≥1024px): sidebar recolhível. Escondê-la faz o .cv2-main (flex:1) refluir
    sozinho para a largura toda — sem overlay (o objetivo é GANHAR espaço, não cobrir). */

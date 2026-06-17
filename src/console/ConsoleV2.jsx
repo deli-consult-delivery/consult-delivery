@@ -15,6 +15,7 @@ import Avaliacoes from './Avaliacoes.jsx';
 import AnaliseLoja from './AnaliseLoja.jsx';
 import AgenteConfig from './AgenteConfig.jsx';
 import AuditLog from './AuditLog.jsx';
+import Notificacoes from './Notificacoes.jsx';
 import AcessoUsuarios from './AcessoUsuarios.jsx';
 import Habilidades from './Habilidades.jsx';
 import Templates from './Templates.jsx';
@@ -23,6 +24,11 @@ import AgenteAnalise from './AgenteAnalise.jsx';
 import Marca from './Marca.jsx';
 import { Gatilhos, Topicos, TarefasAgendadas, Links, Provedores, Integracoes, Sistemas, Arquivos } from './CvNovas.jsx';
 import VendaErpPainel from './VendaErpPainel.jsx';
+import Disparos from './Disparos.jsx';
+import LaraEditorial from './LaraEditorial.jsx';
+import Onboarding from './Onboarding.jsx';
+import Recontratacao from './Recontratacao.jsx';
+import Sofia from './Sofia.jsx';
 // telas reusadas do console clássico (funcionais — visual convertido nas ondas 2-3)
 import TarefasClientesScreen from '../screens/TarefasClientesScreen.jsx';
 import ChatScreen from '../screens/ChatScreen.jsx';
@@ -62,6 +68,9 @@ const GRUPOS = [
     { id: 'respostas-rapidas', ic: 'i-reply', label: 'Respostas Rápidas' },
     { id: 'mia', ic: 'i-eye', label: 'Conversas · MIA' },
     { id: 'aprovacoes', ic: 'i-check', label: 'Aprovações' },
+    { id: 'recontratacao', ic: 'i-reply', label: 'Re-contratação' },
+    { id: 'sofia', ic: 'i-bot', label: 'SOFIA' },
+    { id: 'disparos', ic: 'i-reply', label: 'Disparos' },
     { id: 'cobranca', ic: 'i-cash', label: 'Cobrança' },
     { id: 'defesa', ic: 'i-shield', label: 'Defesa Comercial' },
     { id: 'radar', ic: 'i-radio', label: 'Dashboard iFood' },
@@ -72,6 +81,7 @@ const GRUPOS = [
   { label: 'Agentes IA', items: [
     { id: 'catalogo', ic: 'i-box', label: 'Catálogo' },
     { id: 'estudio', ic: 'i-palette', label: 'Estúdio de Conteúdo' },
+    { id: 'lara-editorial', ic: 'i-palette', label: 'LARA Editorial' },
     { id: 'habilidades', ic: 'i-zap', label: 'Habilidades' },
     { id: 'analise', ic: 'i-chart', label: 'Análise de Loja' },
     { id: 'cardapio', ic: 'i-menu', label: 'Cardápio' },
@@ -104,8 +114,10 @@ const GRUPOS = [
     { id: 'integracoes', ic: 'i-plug', label: 'Integrações' },
     { id: 'vendaerp', ic: 'i-box', label: 'VendaERP' },
     { id: 'sistemas', ic: 'i-box', label: 'Sistemas externos' },
+    { id: 'onboarding', ic: 'i-grid', label: 'Onboarding' },
     { id: 'acesso', ic: 'i-key', label: 'Acesso por usuário' },
     { id: 'auditoria', ic: 'i-scroll', label: 'Auditoria' },
+    { id: 'notificacoes', ic: 'i-bell', label: 'Notificações' },
   ]},
 ];
 
@@ -615,6 +627,9 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       case 'lojas': return <LojasScreen tenantDbId={tenantDbId} userId={userId} />;
       case 'mia': return <MiaAuditScreen tenantDbId={tenantDbId} />;
       case 'aprovacoes': return <AprovacoesUnificadas tenantDbId={tenantDbId} userId={userId} />;
+      case 'recontratacao': return <Recontratacao tenantDbId={tenantDbId} userId={userId} />;
+      case 'sofia': return <Sofia tenantDbId={tenantDbId} userId={userId} />;
+      case 'disparos': return <Disparos tenantDbId={tenantDbId} userId={userId} />;
       case 'cobranca': return <InadimplentesScreen tenantDbId={tenantDbId} userId={userId} />;
       case 'defesa': return defesaOn === false ? <PaywallDefesa /> : <Defesa tenantDbId={tenantDbId} userId={userId} />;
       case 'radar': return <RadarReal tenantNome={tenantNome} tenantDbId={tenantDbId} />;
@@ -654,6 +669,9 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       case 'sistemas': return <Sistemas tenantDbId={tenantDbId} />;
       case 'acesso': return <AcessoUsuarios tenantDbId={tenantDbId} />;
       case 'auditoria': return <AuditLog tenantDbId={tenantDbId} />;
+      case 'notificacoes': return <Notificacoes tenantDbId={tenantDbId} userId={userId} onNavigate={nav} />;
+      case 'lara-editorial': return <LaraEditorial tenantDbId={tenantDbId} userId={userId} />;
+      case 'onboarding': return <Onboarding tenantDbId={tenantDbId} userId={userId} />;
       default: return <div className="cv2-card">Tela não encontrada.</div>;
     }
   }
