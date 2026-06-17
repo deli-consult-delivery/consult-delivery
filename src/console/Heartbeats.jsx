@@ -461,7 +461,7 @@ export default function Heartbeats({ tenantDbId, userId, onNavigate }) {
   const inactiveCount = heartbeats.length - activeCount;
 
   return (
-    <div className="cv2-ct" style={{ maxWidth: 900, margin: '0 auto' }}>
+    <div style={{ maxWidth: 900, margin: '0 auto' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>

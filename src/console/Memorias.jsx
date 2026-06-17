@@ -270,7 +270,7 @@ export default function Memorias({ tenantDbId, userId }) {
   };
 
   return (
-    <div className="cv2-ct">
+    <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
         <div>
           <h1>Memória dos Agentes</h1>

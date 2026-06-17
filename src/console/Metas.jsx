@@ -732,7 +732,8 @@ export default function Metas({ tenantDbId, userId, onNavigate }) {
   async function deleteMission(m) {
     if (!confirm(`Remover missão "${m.title}"? Todos os projetos e metas serão excluídos.`)) return;
     try {
-      await fetch(`${BRIDGE}/api/goals/missions/${m.id}`, { method: 'DELETE', headers });
+      const r = await fetch(`${BRIDGE}/api/goals/missions/${m.id}`, { method: 'DELETE', headers });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       setMissions(prev => prev.filter(x => x.id !== m.id));
     } catch (e) { setError(e.message); }
   }
@@ -740,7 +741,8 @@ export default function Metas({ tenantDbId, userId, onNavigate }) {
   async function deleteProject(p) {
     if (!confirm(`Remover projeto "${p.title}"?`)) return;
     try {
-      await fetch(`${BRIDGE}/api/goals/projects/${p.id}`, { method: 'DELETE', headers });
+      const r = await fetch(`${BRIDGE}/api/goals/projects/${p.id}`, { method: 'DELETE', headers });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       setProjects(prev => prev.filter(x => x.id !== p.id));
     } catch (e) { setError(e.message); }
   }
@@ -748,7 +750,8 @@ export default function Metas({ tenantDbId, userId, onNavigate }) {
   async function deleteGoal(g) {
     if (!confirm(`Remover meta "${g.title}"?`)) return;
     try {
-      await fetch(`${BRIDGE}/api/goals/goals/${g.id}`, { method: 'DELETE', headers });
+      const r = await fetch(`${BRIDGE}/api/goals/goals/${g.id}`, { method: 'DELETE', headers });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       setGoals(prev => prev.filter(x => x.id !== g.id));
     } catch (e) { setError(e.message); }
   }
@@ -756,7 +759,8 @@ export default function Metas({ tenantDbId, userId, onNavigate }) {
   async function deleteTask(t) {
     if (!confirm(`Remover tarefa "${t.title}"?`)) return;
     try {
-      await fetch(`${BRIDGE}/api/goals/tasks/${t.id}`, { method: 'DELETE', headers });
+      const r = await fetch(`${BRIDGE}/api/goals/tasks/${t.id}`, { method: 'DELETE', headers });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       setGoals(prev => prev.map(g => ({
         ...g,
         tasks: (g.tasks || []).filter(x => x.id !== t.id),

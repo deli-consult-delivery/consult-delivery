@@ -189,7 +189,7 @@ export default function Conhecimento({ tenantDbId, userId }) {
   };
 
   return (
-    <div className="cv2-ct">
+    <div>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18, gap: 12 }}>
         <div>

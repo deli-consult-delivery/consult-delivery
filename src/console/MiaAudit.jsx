@@ -30,7 +30,7 @@ export default function MiaAudit({ tenantDbId, userId }) {
       .from('lojas')
       .select('id, nome')
       .eq('tenant_id', tenantDbId)
-      .eq('status', 'ativo')
+      .eq('is_consultoria_ativa', true)
       .order('nome')
       .then(({ data }) => setLojas(data || []));
   }, [tenantDbId]);
@@ -68,7 +68,7 @@ export default function MiaAudit({ tenantDbId, userId }) {
   } : null;
 
   return (
-    <div className="cv2-ct">
+    <div>
       <h1>Audit MIA — Monitor IA</h1>
       <div className="cv2-rule" />
       <div className="cv2-sub">Logs de privacidade de cada run do worker (últimas 100 chamadas por loja).</div>

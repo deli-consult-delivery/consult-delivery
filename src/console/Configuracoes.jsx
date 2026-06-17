@@ -299,6 +299,7 @@ function InviteUserModal({ tenantDbId, onClose, onSuccess }) {
     if (!email.trim()) { setError('Informe o e-mail'); return; }
     setSaving(true); setError('');
     const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setSaving(false); setError('Sessão expirada. Recarregue a página.'); return; }
     const res = await fetch(`${BRIDGE}/api/users/invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },

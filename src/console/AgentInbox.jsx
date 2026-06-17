@@ -344,8 +344,10 @@ export default function AgentInbox({ tenantDbId, userId, onNavigate }) {
 
   const loadTickets = useCallback(async () => {
     setLoading(true);
+    setSelected(null);
     try {
       let path = '/agent-tickets?';
+      if (tenantDbId)   path += `tenant_id=${encodeURIComponent(tenantDbId)}&`;
       if (filterAgent)  path += `assignee_agent=${encodeURIComponent(filterAgent)}&`;
       if (filterStatus) path += `status=${encodeURIComponent(filterStatus)}&`;
       const data = await apiFetch(path);
@@ -355,7 +357,7 @@ export default function AgentInbox({ tenantDbId, userId, onNavigate }) {
     } finally {
       setLoading(false);
     }
-  }, [filterAgent, filterStatus]);
+  }, [tenantDbId, filterAgent, filterStatus]);
 
   useEffect(() => { loadTickets(); }, [loadTickets]);
 

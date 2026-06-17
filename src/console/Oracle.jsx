@@ -88,7 +88,7 @@ function ProposalCard({ proposal, onSave, saving, saved }) {
 }
 
 // ── Chat com o Oracle ──────────────────────────────────────────────────────────
-function OracleChat({ onDraftSaved }) {
+function OracleChat({ onDraftSaved, tenantDbId }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -110,7 +110,7 @@ function OracleChat({ onDraftSaved }) {
       const apiMessages = next.map(m => ({ role: m.role, content: m.content })).slice(-40);
       const data = await apiFetch('/api/oracle/chat', {
         method: 'POST',
-        body: JSON.stringify({ messages: apiMessages }),
+        body: JSON.stringify({ messages: apiMessages, tenant_id: tenantDbId }),
       });
       setMessages(curr => [...curr, {
         role: 'assistant',
@@ -136,7 +136,7 @@ function OracleChat({ onDraftSaved }) {
       const sourceChat = messages.slice(0, idx + 1).map(m => ({ role: m.role, content: m.content }));
       await apiFetch('/api/oracle/drafts', {
         method: 'POST',
-        body: JSON.stringify({ payload: msg.proposal, source_chat: sourceChat }),
+        body: JSON.stringify({ payload: msg.proposal, source_chat: sourceChat, tenant_id: tenantDbId }),
       });
       setMessages(curr => curr.map((m, i) => (i === idx ? { ...m, savedDraft: true } : m)));
       onDraftSaved?.();
@@ -309,7 +309,7 @@ export default function Oracle({ tenantDbId, userId }) {
 
   const carregar = useCallback(async () => {
     try {
-      const data = await apiFetch('/api/oracle/drafts');
+      const data = await apiFetch(`/api/oracle/drafts?tenant_id=${encodeURIComponent(tenantDbId || '')}`);
       setDrafts(data.drafts || []);
       setIsAdmin(!!data.is_admin);
       setErro('');
@@ -318,7 +318,7 @@ export default function Oracle({ tenantDbId, userId }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tenantDbId]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -351,7 +351,7 @@ export default function Oracle({ tenantDbId, userId }) {
           {/* Chat */}
           <div className="cv2-card" style={{ padding: 16, minHeight: 480, display: 'flex' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <OracleChat onDraftSaved={carregar} />
+              <OracleChat onDraftSaved={carregar} tenantDbId={tenantDbId} />
             </div>
           </div>
 
