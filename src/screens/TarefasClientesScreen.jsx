@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Icon from '../components/Icon.jsx';
 import UserAvatar from '../components/UserAvatar.jsx';
-import { SETTINGS_DATA } from '../data.js';
 import {
   listClientes,
+  listWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace,
+  listActiveMembers,
   listFolders, createFolder, updateFolder, deleteFolder,
   listLists, createList, updateList, deleteList,
   updateCustomer,
@@ -19,8 +20,6 @@ const PRIORITIES = [
   { id: 'normal', label: 'NORMAL',  color: '#6B7280', bg: 'rgba(107,114,128,0.1)' },
   { id: 'low',    label: 'BAIXA',   color: '#9CA3AF', bg: 'rgba(156,163,175,0.1)' },
 ];
-
-const MEMBERS = SETTINGS_DATA?.users ?? [];
 
 const priorityOf = id => PRIORITIES.find(p => p.id === id) || PRIORITIES[2];
 
@@ -51,6 +50,11 @@ export default function TarefasClientesScreen({ tenantDbId, userId, deepLinkCust
   const [showModal,      setShowModal]      = useState(false);
   const [drawerTask,     setDrawerTask]     = useState(null);
   const [busy,           setBusy]           = useState(false);     // criando folder/list/coluna
+
+  const [workspaces,         setWorkspaces]         = useState([]);
+  const [activeWorkspace,    setActiveWorkspace]    = useState(null);
+  const [expandedWorkspaces, setExpandedWorkspaces] = useState({});
+  const [members,            setMembers]            = useState([]);
 
   const deepLinkApplied = useRef(null);
 
@@ -113,14 +117,26 @@ export default function TarefasClientesScreen({ tenantDbId, userId, deepLinkCust
     }
   }, [tenantDbId, loadLists]);
 
-  /* ── Carregar clientes ── */
+  /* ── Carregar clientes + workspaces + membros ── */
   useEffect(() => {
     if (!tenantDbId) return;
     let alive = true;
     setLoadingCli(true);
-    listClientes(tenantDbId)
-      .then(r => { if (alive) { setClients(r); setLoadingCli(false); } })
-      .catch(() => { if (alive) setLoadingCli(false); });
+    Promise.all([
+      listClientes(tenantDbId),
+      listWorkspaces(tenantDbId),
+      listActiveMembers(tenantDbId),
+    ]).then(([clis, ws, mbs]) => {
+      if (!alive) return;
+      setClients(clis);
+      setWorkspaces(ws);
+      setMembers(mbs);
+      setLoadingCli(false);
+      if (ws.length > 0) {
+        setActiveWorkspace(ws[0]);
+        setExpandedWorkspaces({ [ws[0].id]: true });
+      }
+    }).catch(() => { if (alive) setLoadingCli(false); });
     return () => { alive = false; };
   }, [tenantDbId]);
 
@@ -151,12 +167,57 @@ export default function TarefasClientesScreen({ tenantDbId, userId, deepLinkCust
 
   /* ── Criar entidades ── */
 
+  /* ── Workspace handlers ── */
+
+  function toggleWorkspace(ws) {
+    setExpandedWorkspaces(e => ({ ...e, [ws.id]: !e[ws.id] }));
+    setActiveWorkspace(ws);
+  }
+
+  async function handleCreateWorkspace() {
+    const name = window.prompt('Nome do espaço de trabalho:');
+    if (!name) return;
+    try {
+      const ws = await createWorkspace({ tenantId: tenantDbId, name, position: workspaces.length });
+      setWorkspaces(prev => [...prev, ws]);
+      setActiveWorkspace(ws);
+      setExpandedWorkspaces(e => ({ ...e, [ws.id]: true }));
+    } catch {}
+  }
+
+  async function handleRenameWorkspace(ws) {
+    const name = window.prompt('Renomear espaço:', ws.name);
+    if (!name || name === ws.name) return;
+    setWorkspaces(prev => prev.map(w => w.id === ws.id ? { ...w, name } : w));
+    if (activeWorkspace?.id === ws.id) setActiveWorkspace(w => ({ ...w, name }));
+    updateWorkspace(ws.id, { name }).catch(() => {});
+  }
+
+  async function handleDeleteWorkspace(ws) {
+    if (!window.confirm(`Apagar o espaço "${ws.name}"?`)) return;
+    try {
+      await deleteWorkspace(ws.id);
+      setWorkspaces(prev => prev.filter(w => w.id !== ws.id));
+      if (activeWorkspace?.id === ws.id) setActiveWorkspace(null);
+    } catch {}
+  }
+
+  async function handleAddClientToWorkspace(ws) {
+    const name = window.prompt('Nome da pasta para o cliente (ex: Planet Pizza):');
+    if (!name) return;
+    setBusy(true);
+    try {
+      const folder = await createFolder({ tenantId: tenantDbId, customerId: null, workspaceId: ws.id, name, color: '#B70C00', icon: 'folder', position: 0 });
+      setFoldersByClient(m => ({ ...m, [`ws:${ws.id}`]: [...(m[`ws:${ws.id}`] || []), folder] }));
+    } catch {} finally { setBusy(false); }
+  }
+
   async function handleCreateFolder(client) {
     const name = window.prompt('Nome da pasta:', 'Nova pasta');
     if (!name) return;
     setBusy(true);
     try {
-      const folder = await createFolder({ tenantId: tenantDbId, customerId: client.id, name, color: '#B70C00', icon: 'folder', position: (foldersByClient[client.id]?.length || 0) });
+      const folder = await createFolder({ tenantId: tenantDbId, customerId: client.id, workspaceId: activeWorkspace?.id ?? null, name, color: '#B70C00', icon: 'folder', position: (foldersByClient[client.id]?.length || 0) });
       setFoldersByClient(m => ({ ...m, [client.id]: [...(m[client.id] || []), folder] }));
       setExpandedClients(e => ({ ...e, [client.id]: true }));
       setExpandedFolders(e => ({ ...e, [folder.id]: true }));
@@ -334,94 +395,138 @@ export default function TarefasClientesScreen({ tenantDbId, userId, deepLinkCust
 
       {/* ─── Sidebar ─────────────────────────────────────────── */}
       <div className="cv2-sb" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', overflowY: 'auto', borderRight: '1px solid var(--line)', background: 'var(--panel)' }}>
-        <div className="cv2-grp">ESPAÇOS</div>
-        <div className="cv2-grp" style={{ paddingTop: 2 }}>Minha Carteira</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 14px 2px' }}>
+          <span className="cv2-grp" style={{ padding: 0 }}>ESPAÇOS</span>
+          <button title="Novo espaço" onClick={handleCreateWorkspace}
+                  style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', display: 'flex', padding: 2 }}><Icon name="plus" size={13} /></button>
+        </div>
 
         {loadingCli && <div style={{ padding: '8px 16px', fontSize: 12, color: 'var(--tx2)' }}>Carregando…</div>}
 
-        {!loadingCli && clients.length === 0 && (
+        {!loadingCli && workspaces.length === 0 && (
           <div style={{ padding: '10px 16px', fontSize: 12, color: 'var(--tx2)', lineHeight: 1.5 }}>
-            Nenhum cliente em consultoria ativa.
+            Nenhum espaço de trabalho.{' '}
+            <button onClick={handleCreateWorkspace} className="cv2-btn sec" style={{ fontSize: 11, padding: '2px 7px', marginTop: 4 }}>+ Espaço</button>
           </div>
         )}
 
-        {clients.map(client => {
-          const cliOpen = !!expandedClients[client.id];
-          const cliFolders = foldersByClient[client.id] || [];
+        {workspaces.map(ws => {
+          const wsOpen = !!expandedWorkspaces[ws.id];
+          const wsClients = clients.filter(c => (foldersByClient[c.id] || []).some(f => f.workspace_id === ws.id));
           return (
-            <div key={client.id}>
-              {/* Cliente */}
-              <div className={`cv2-item${activeClient?.id === client.id ? ' on' : ''}`}
-                   onClick={() => toggleClient(client)}
-                   style={{ cursor: 'pointer' }}
+            <div key={ws.id}>
+              {/* Workspace */}
+              <div className={`cv2-item${activeWorkspace?.id === ws.id && !activeClient ? ' on' : ''}`}
+                   onClick={() => toggleWorkspace(ws)}
+                   style={{ cursor: 'pointer', fontWeight: 600 }}
                    onMouseEnter={e => { const b = e.currentTarget.querySelector('.row-actions'); if (b) b.style.opacity = 1; }}
                    onMouseLeave={e => { const b = e.currentTarget.querySelector('.row-actions'); if (b) b.style.opacity = 0; }}>
-                <Icon name={cliOpen ? 'chevdown' : 'chevright'} size={12} />
-                <Icon name="building" size={13} />
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{client.name}</span>
-                <span className="row-actions" style={{ opacity: 0, display: 'flex', gap: 6 }}>
-                  <button title="Renomear cliente" onClick={e => { e.stopPropagation(); handleRenameClient(client); }}
-                          style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', padding: 0, display: 'flex' }}><Icon name="edit" size={11} /></button>
-                  <button title="Nova pasta" onClick={e => { e.stopPropagation(); handleCreateFolder(client); }}
-                          style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', padding: 0, display: 'flex' }}><Icon name="plus" size={12} /></button>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: ws.color || '#B70C00', flexShrink: 0 }} />
+                <Icon name={wsOpen ? 'chevdown' : 'chevright'} size={11} />
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, letterSpacing: 0.2 }}>{ws.name}</span>
+                <span className="row-actions" style={{ opacity: 0, display: 'flex', gap: 5 }}>
+                  <button title="Renomear espaço" onClick={e => { e.stopPropagation(); handleRenameWorkspace(ws); }}
+                          style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', padding: 0, display: 'flex' }}><Icon name="edit" size={10} /></button>
+                  <button title="Apagar espaço" onClick={e => { e.stopPropagation(); handleDeleteWorkspace(ws); }}
+                          style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', padding: 0, display: 'flex' }}><Icon name="trash" size={10} /></button>
                 </span>
               </div>
 
-              {/* Pastas */}
-              {cliOpen && cliFolders.length === 0 && (
-                <div style={{ paddingLeft: 38, padding: '6px 16px 6px 38px', fontSize: 12, color: 'var(--tx2)' }}>
-                  <button onClick={() => handleCreateFolder(client)} className="cv2-btn sec" style={{ fontSize: 11, padding: '3px 8px' }}>+ Pasta</button>
-                </div>
-              )}
+              {wsOpen && (
+                <>
+                  {/* Clientes que têm folders neste workspace */}
+                  {clients.map(client => {
+                    const cliFolders = (foldersByClient[client.id] || []).filter(f => f.workspace_id === ws.id);
+                    if (cliFolders.length === 0 && wsClients.length > 0 && !wsClients.find(c => c.id === client.id)) return null;
+                    if (cliFolders.length === 0 && !wsClients.find(c => c.id === client.id)) return null;
+                    const cliOpen = !!expandedClients[client.id];
+                    return (
+                      <div key={client.id}>
+                        <div className={`cv2-item${activeClient?.id === client.id ? ' on' : ''}`}
+                             onClick={() => toggleClient(client)}
+                             style={{ cursor: 'pointer', paddingLeft: 22 }}
+                             onMouseEnter={e => { const b = e.currentTarget.querySelector('.row-actions'); if (b) b.style.opacity = 1; }}
+                             onMouseLeave={e => { const b = e.currentTarget.querySelector('.row-actions'); if (b) b.style.opacity = 0; }}>
+                          <Icon name={cliOpen ? 'chevdown' : 'chevright'} size={11} />
+                          <Icon name="building" size={12} />
+                          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{client.name}</span>
+                          <span className="row-actions" style={{ opacity: 0, display: 'flex', gap: 5 }}>
+                            <button title="Renomear cliente" onClick={e => { e.stopPropagation(); handleRenameClient(client); }}
+                                    style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', padding: 0, display: 'flex' }}><Icon name="edit" size={10} /></button>
+                            <button title="Nova pasta" onClick={e => { e.stopPropagation(); handleCreateFolder(client); }}
+                                    style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', padding: 0, display: 'flex' }}><Icon name="plus" size={11} /></button>
+                          </span>
+                        </div>
 
-              {cliOpen && cliFolders.map(folder => {
-                const fOpen = !!expandedFolders[folder.id];
-                const fLists = listsByFolder[folder.id] || [];
-                return (
-                  <div key={folder.id}>
-                    <div className={`cv2-item${activeFolder?.id === folder.id && !activeList ? ' on' : ''}`}
-                         onClick={() => toggleFolder(client, folder)}
-                         style={{ cursor: 'pointer', paddingLeft: 30 }}
-                         onMouseEnter={e => { const b = e.currentTarget.querySelector('.row-actions'); if (b) b.style.opacity = 1; }}
-                         onMouseLeave={e => { const b = e.currentTarget.querySelector('.row-actions'); if (b) b.style.opacity = 0; }}>
-                      <Icon name={fOpen ? 'chevdown' : 'chevright'} size={11} />
-                      <Icon name="folder" size={12} />
-                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folder.name}</span>
-                      <span className="row-actions" style={{ opacity: 0, display: 'flex', gap: 6 }}>
-                        <button title="Renomear pasta" onClick={e => { e.stopPropagation(); handleRenameFolder(client, folder); }}
-                                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', padding: 0, display: 'flex' }}><Icon name="edit" size={11} /></button>
-                        <button title="Nova lista" onClick={e => { e.stopPropagation(); handleCreateList(client, folder); }}
-                                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', padding: 0, display: 'flex' }}><Icon name="plus" size={11} /></button>
-                        <button title="Apagar pasta" onClick={e => { e.stopPropagation(); handleDeleteFolder(client, folder); }}
-                                style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', padding: 0, display: 'flex' }}><Icon name="trash" size={11} /></button>
-                      </span>
+                        {cliOpen && cliFolders.length === 0 && (
+                          <div style={{ padding: '5px 16px 5px 52px' }}>
+                            <button onClick={() => handleCreateFolder(client)} className="cv2-btn sec" style={{ fontSize: 11, padding: '3px 8px' }}>+ Pasta</button>
+                          </div>
+                        )}
+
+                        {cliOpen && cliFolders.map(folder => {
+                          const fOpen = !!expandedFolders[folder.id];
+                          const fLists = listsByFolder[folder.id] || [];
+                          return (
+                            <div key={folder.id}>
+                              <div className={`cv2-item${activeFolder?.id === folder.id && !activeList ? ' on' : ''}`}
+                                   onClick={() => toggleFolder(client, folder)}
+                                   style={{ cursor: 'pointer', paddingLeft: 40 }}
+                                   onMouseEnter={e => { const b = e.currentTarget.querySelector('.row-actions'); if (b) b.style.opacity = 1; }}
+                                   onMouseLeave={e => { const b = e.currentTarget.querySelector('.row-actions'); if (b) b.style.opacity = 0; }}>
+                                <Icon name={fOpen ? 'chevdown' : 'chevright'} size={10} />
+                                <Icon name="folder" size={11} />
+                                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folder.name}</span>
+                                <span className="row-actions" style={{ opacity: 0, display: 'flex', gap: 5 }}>
+                                  <button title="Renomear pasta" onClick={e => { e.stopPropagation(); handleRenameFolder(client, folder); }}
+                                          style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', padding: 0, display: 'flex' }}><Icon name="edit" size={10} /></button>
+                                  <button title="Nova lista" onClick={e => { e.stopPropagation(); handleCreateList(client, folder); }}
+                                          style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', padding: 0, display: 'flex' }}><Icon name="plus" size={10} /></button>
+                                  <button title="Apagar pasta" onClick={e => { e.stopPropagation(); handleDeleteFolder(client, folder); }}
+                                          style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', padding: 0, display: 'flex' }}><Icon name="trash" size={10} /></button>
+                                </span>
+                              </div>
+
+                              {fOpen && fLists.length === 0 && (
+                                <div style={{ padding: '4px 16px 4px 62px' }}>
+                                  <button onClick={() => handleCreateList(client, folder)} className="cv2-btn sec" style={{ fontSize: 11, padding: '3px 8px' }}>+ Lista</button>
+                                </div>
+                              )}
+                              {fOpen && fLists.map(list => (
+                                <div key={list.id} className={`cv2-item${activeList?.id === list.id ? ' on' : ''}`}
+                                     onClick={() => selectList(client, folder, list)}
+                                     style={{ cursor: 'pointer', paddingLeft: 60 }}
+                                     onMouseEnter={e => { const b = e.currentTarget.querySelector('.row-actions'); if (b) b.style.opacity = 1; }}
+                                     onMouseLeave={e => { const b = e.currentTarget.querySelector('.row-actions'); if (b) b.style.opacity = 0; }}>
+                                  <Icon name="list" size={11} />
+                                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</span>
+                                  <span className="row-actions" style={{ opacity: 0, display: 'flex', gap: 5 }}>
+                                    <button title="Renomear lista" onClick={e => { e.stopPropagation(); handleRenameList(folder, list); }}
+                                            style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', padding: 0, display: 'flex' }}><Icon name="edit" size={10} /></button>
+                                    <button title="Apagar lista" onClick={e => { e.stopPropagation(); handleDeleteList(folder, list); }}
+                                            style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', padding: 0, display: 'flex' }}><Icon name="trash" size={10} /></button>
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+
+                  {/* Clientes sem folders carregados mas que podem pertencer ao WS */}
+                  {clients.filter(c => {
+                    const loaded = foldersByClient[c.id];
+                    return !loaded;
+                  }).length > 0 && !loadingCli && (
+                    <div style={{ padding: '4px 16px 4px 28px' }}>
+                      <button onClick={() => handleAddClientToWorkspace(ws)} className="cv2-btn sec"
+                              style={{ fontSize: 11, padding: '3px 8px' }}>+ Cliente</button>
                     </div>
-
-                    {/* Listas */}
-                    {fOpen && fLists.length === 0 && (
-                      <div style={{ padding: '5px 16px 5px 52px' }}>
-                        <button onClick={() => handleCreateList(client, folder)} className="cv2-btn sec" style={{ fontSize: 11, padding: '3px 8px' }}>+ Lista</button>
-                      </div>
-                    )}
-                    {fOpen && fLists.map(list => (
-                      <div key={list.id} className={`cv2-item${activeList?.id === list.id ? ' on' : ''}`}
-                           onClick={() => selectList(client, folder, list)}
-                           style={{ cursor: 'pointer', paddingLeft: 50 }}
-                           onMouseEnter={e => { const b = e.currentTarget.querySelector('.row-actions'); if (b) b.style.opacity = 1; }}
-                           onMouseLeave={e => { const b = e.currentTarget.querySelector('.row-actions'); if (b) b.style.opacity = 0; }}>
-                        <Icon name="list" size={12} />
-                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</span>
-                        <span className="row-actions" style={{ opacity: 0, display: 'flex', gap: 6 }}>
-                          <button title="Renomear lista" onClick={e => { e.stopPropagation(); handleRenameList(folder, list); }}
-                                  style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', padding: 0, display: 'flex' }}><Icon name="edit" size={11} /></button>
-                          <button title="Apagar lista" onClick={e => { e.stopPropagation(); handleDeleteList(folder, list); }}
-                                  style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--tx2)', padding: 0, display: 'flex' }}><Icon name="trash" size={11} /></button>
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })}
+                  )}
+                </>
+              )}
             </div>
           );
         })}
@@ -509,13 +614,13 @@ export default function TarefasClientesScreen({ tenantDbId, userId, deepLinkCust
 
       {/* Modal nova tarefa */}
       {showModal && (
-        <NewTaskModal columns={columns} listName={activeList?.name} onSave={handleCreateTask} onClose={() => setShowModal(false)} />
+        <NewTaskModal columns={columns} listName={activeList?.name} members={members} onSave={handleCreateTask} onClose={() => setShowModal(false)} />
       )}
 
       {/* Drawer */}
       {drawerTask && (
         <TaskDrawer
-          task={drawerTask} columns={columns}
+          task={drawerTask} columns={columns} members={members}
           onUpdate={patch => handleUpdateTask(drawerTask.id, patch)}
           onMove={(colId) => { const dest = tasks.filter(t => t.column_id === colId && t.id !== drawerTask.id).length; patchTask(drawerTask.id, { column_id: colId, position: dest }); moveClientTask(drawerTask.id, colId, dest).catch(() => {}); }}
           onDelete={() => handleDeleteTask(drawerTask.id)}
@@ -769,7 +874,7 @@ function VizView({ columns, byColumn, total, listName }) {
 
 /* ─── TaskDrawer ─────────────────────────────────────────────── */
 
-function TaskDrawer({ task, columns, onUpdate, onMove, onDelete, onClose }) {
+function TaskDrawer({ task, columns, members, onUpdate, onMove, onDelete, onClose }) {
   const [title, setTitle] = useState(task.title || '');
   const [desc,  setDesc]  = useState(task.description || '');
   const [colId, setColId] = useState(task.column_id || (columns[0]?.id ?? ''));
@@ -830,7 +935,7 @@ function TaskDrawer({ task, columns, onUpdate, onMove, onDelete, onClose }) {
             <Field label="Responsável">
               <select className="input" style={{ fontSize: 12, padding: '5px 8px' }} value={assignee} onChange={e => { setAssignee(e.target.value); mark(); }}>
                 <option value="">— Ninguém —</option>
-                {MEMBERS.map(m => <option key={m.avatar || m.name} value={m.name}>{m.name}</option>)}
+                {(members || []).map(m => <option key={m.id || m.name} value={m.name}>{m.name}</option>)}
               </select>
             </Field>
           </div>
@@ -855,7 +960,7 @@ function Field({ label, children }) {
 
 /* ─── NewTaskModal ───────────────────────────────────────────── */
 
-function NewTaskModal({ columns, listName, onSave, onClose }) {
+function NewTaskModal({ columns, listName, members, onSave, onClose }) {
   const [form, setForm] = useState({ title: '', description: '', column_id: columns[0]?.id ?? '', priority: 'normal', due_date: '', assignee: '' });
   const [err, setErr]   = useState('');
 
@@ -913,7 +1018,7 @@ function NewTaskModal({ columns, listName, onSave, onClose }) {
               <label style={labelStyle}>Responsável</label>
               <select className="input" value={form.assignee} onChange={e => set('assignee', e.target.value)}>
                 <option value="">— Ninguém —</option>
-                {MEMBERS.map(m => <option key={m.avatar || m.name} value={m.name}>{m.name}</option>)}
+                {(members || []).map(m => <option key={m.id || m.name} value={m.name}>{m.name}</option>)}
               </select>
             </div>
           </div>

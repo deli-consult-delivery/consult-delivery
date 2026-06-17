@@ -394,23 +394,64 @@ const DEFAULT_COLUMNS = [
   { name: 'Concluído',  color: '#10B981', position: 3, is_done: true  },
 ];
 
+// Workspaces ──────────────────────────────────────────────────────────────
+export async function listWorkspaces(tenantId) {
+  const { data, error } = await supabase
+    .from('espacos_workspaces')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('position', { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createWorkspace({ tenantId, name, color = '#B70C00', icon = null, position = 0 }) {
+  const { data, error } = await supabase
+    .from('espacos_workspaces')
+    .insert({ tenant_id: tenantId, name, color, icon, position })
+    .select('*').single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateWorkspace(id, updates) {
+  const { error } = await supabase.from('espacos_workspaces').update(updates).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteWorkspace(id) {
+  const { error } = await supabase.from('espacos_workspaces').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function listActiveMembers(tenantId) {
+  const { data, error } = await supabase.rpc('get_tenant_members', { p_tenant_id: tenantId });
+  if (error) throw error;
+  return (data ?? []).map(m => ({
+    id: m.user_id,
+    name: m.display_name || m.full_name || m.email,
+    role: m.role,
+  }));
+}
+
 // Pastas ──────────────────────────────────────────────────────────────────
-export async function listFolders(tenantId, customerId) {
+export async function listFolders(tenantId, customerId, workspaceId) {
   let q = supabase
     .from('espacos_folders')
     .select('*')
     .eq('tenant_id', tenantId)
     .order('position', { ascending: true });
-  if (customerId) q = q.eq('customer_id', customerId);
+  if (customerId)   q = q.eq('customer_id', customerId);
+  if (workspaceId)  q = q.eq('workspace_id', workspaceId);
   const { data, error } = await q;
   if (error) throw error;
   return data ?? [];
 }
 
-export async function createFolder({ tenantId, customerId = null, name, color, icon, position = 0 }) {
+export async function createFolder({ tenantId, customerId = null, workspaceId = null, name, color, icon, position = 0 }) {
   const { data, error } = await supabase
     .from('espacos_folders')
-    .insert({ tenant_id: tenantId, customer_id: customerId, name, color, icon, position })
+    .insert({ tenant_id: tenantId, customer_id: customerId, workspace_id: workspaceId, name, color, icon, position })
     .select('*').single();
   if (error) throw error;
   return data;
