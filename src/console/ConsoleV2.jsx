@@ -28,6 +28,7 @@ import Disparos from './Disparos.jsx';
 import LaraEditorial from './LaraEditorial.jsx';
 import Onboarding from './Onboarding.jsx';
 import Recontratacao from './Recontratacao.jsx';
+import Sofia from './Sofia.jsx';
 // telas reusadas do console clássico (funcionais — visual convertido nas ondas 2-3)
 import TarefasClientesScreen from '../screens/TarefasClientesScreen.jsx';
 import ChatScreen from '../screens/ChatScreen.jsx';
@@ -68,6 +69,7 @@ const GRUPOS = [
     { id: 'mia', ic: 'i-eye', label: 'Conversas · MIA' },
     { id: 'aprovacoes', ic: 'i-check', label: 'Aprovações' },
     { id: 'recontratacao', ic: 'i-reply', label: 'Re-contratação' },
+    { id: 'sofia', ic: 'i-bot', label: 'SOFIA' },
     { id: 'disparos', ic: 'i-reply', label: 'Disparos' },
     { id: 'cobranca', ic: 'i-cash', label: 'Cobrança' },
     { id: 'defesa', ic: 'i-shield', label: 'Defesa Comercial' },
@@ -625,6 +627,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       case 'mia': return <MiaAuditScreen tenantDbId={tenantDbId} />;
       case 'aprovacoes': return <AprovacoesUnificadas tenantDbId={tenantDbId} userId={userId} />;
       case 'recontratacao': return <Recontratacao tenantDbId={tenantDbId} userId={userId} />;
+      case 'sofia': return <Sofia tenantDbId={tenantDbId} userId={userId} />;
       case 'disparos': return <Disparos tenantDbId={tenantDbId} userId={userId} />;
       case 'cobranca': return <InadimplentesScreen tenantDbId={tenantDbId} userId={userId} />;
       case 'defesa': return defesaOn === false ? <PaywallDefesa /> : <Defesa tenantDbId={tenantDbId} userId={userId} />;
