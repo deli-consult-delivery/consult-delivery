@@ -348,7 +348,7 @@ function useAlertas(tenantDbId) {
       if (!alive) return;
       const lista = [];
       if ((casos ?? 0) > 0) lista.push({ cls: 'err', txt: `${casos} caso(s) de Defesa aguardando seu OK`, ir: 'defesa' });
-      if ((atrasadas ?? 0) > 0) lista.push({ cls: 'err', txt: `${atrasadas} assinatura(s) atrasada(s)`, ir: 'cobranca' });
+      if ((atrasadas ?? 0) > 0) lista.push({ cls: 'err', txt: `${atrasadas} assinatura(s) atrasada(s)`, ir: 'cora' });
       if ((fontesPend ?? 0) > 0) lista.push({ cls: 'warn', txt: `${fontesPend} relatório(s) em processamento`, ir: 'importar' });
       setAl(lista);
     })();

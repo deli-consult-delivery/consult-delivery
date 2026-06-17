@@ -608,7 +608,7 @@ function CobrancaV2Drawer({ cobranca, tenantDbId, userId, onClose, onRefresh }) 
                 <div>
                   <div style={{ fontSize: 11, color: 'var(--tx2)', marginBottom: 4 }}>PIX copia-e-cola</div>
                   <div style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--tx2)', wordBreak: 'break-all', background: 'var(--panel)', padding: '6px 8px', borderRadius: 6 }}>
-                    {cobranca.pix_qr_code.slice(0, 120)}…
+                    {cobranca.pix_qr_code.length > 120 ? `${cobranca.pix_qr_code.slice(0, 120)}…` : cobranca.pix_qr_code}
                   </div>
                 </div>
               )}

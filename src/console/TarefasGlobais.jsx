@@ -100,10 +100,11 @@ export default function TarefasGlobais({ tenantDbId, userId }) {
   }, [tenantDbId]);
 
   // Carregar tarefas (lista/board)
-  const loadTarefas = useCallback(async (resetPage = false) => {
+  const loadTarefas = useCallback(async (resetPage = false, pageOverride = null) => {
     if (!tenantDbId) return;
     setLoading(true);
-    const offset = resetPage ? 0 : page * LIMIT;
+    const effectivePage = pageOverride !== null ? pageOverride : page;
+    const offset = resetPage ? 0 : effectivePage * LIMIT;
     const params = new URLSearchParams({ limit: LIMIT, offset });
     if (filtroLoja)       params.set('loja_id',   filtroLoja);
     if (filtroStatus)     params.set('status',    filtroStatus);
@@ -264,7 +265,7 @@ export default function TarefasGlobais({ tenantDbId, userId }) {
             page={page}
             setPage={setPage}
             hasMore={hasMore}
-            loadMore={() => { const np = page + 1; setPage(np); loadTarefas(false); }}
+            loadMore={() => { const np = page + 1; setPage(np); loadTarefas(false, np); }}
           />
         )}
 

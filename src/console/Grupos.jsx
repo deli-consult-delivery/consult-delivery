@@ -695,7 +695,7 @@ function TabChannels({ tenantDbId }) {
         .from('internal_channels')
         .select('*, channel_members(user_id)')
         .order('created_at', { ascending: false });
-      if (tenantDbId) query.or(`tenant_id.eq.${tenantDbId},is_global.eq.true`);
+      if (tenantDbId) query = query.or(`tenant_id.eq.${tenantDbId},is_global.eq.true`);
       const { data } = await query;
       setChannels(data || []);
     } catch { setChannels([]); }
