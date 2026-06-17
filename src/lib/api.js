@@ -345,7 +345,7 @@ export async function deleteTask(taskId) {
 export async function listClientTasks(tenantId, listId) {
   let q = supabase
     .from('client_tasks')
-    .select('*, assignee:profiles!client_tasks_assignee_fkey(id, full_name, avatar_url)')
+    .select('*, assignee:profiles!assignee_id(id, full_name, avatar_url)')
     .order('position', { ascending: true });
   if (tenantId) q = q.eq('tenant_id', tenantId);
   if (listId)   q = q.eq('list_id', listId);
