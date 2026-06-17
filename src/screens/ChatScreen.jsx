@@ -2679,9 +2679,11 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
         return { id: c.id, name, avatar: name.slice(0, 2).toUpperCase(), photoUrl: c.push_photo_url || null, type: c.is_group ? 'group' : 'whatsapp', whatsapp_chat_id: c.whatsapp_chat_id, preview, previewFrom, time: c.updated_at ? new Date(c.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '', _sortTs: c.updated_at || '', unread: 0, online: false, messages: [], status: c.status, department_id: c.department_id || null, customer_id: c.customer_id || null, status_v2: c.status_v2 || 'open', tenant_id: c.tenant_id || null, breno_paused: c.breno_paused || false, last_breno_handled_at: c.last_breno_handled_at || null, _recentInbound: c._recentInbound || false };
       });
       setConvs(prev => {
+        const mappedById = new Map(mapped.map(c => [c.id, c]));
         const existingIds = new Set(prev.map(c => c.id));
+        const updated = prev.map(c => { const fresh = mappedById.get(c.id); return fresh ? { ...c, ...fresh } : c; });
         const toAdd = mapped.filter(c => !existingIds.has(c.id));
-        return toAdd.length ? [...toAdd, ...prev] : prev;
+        return toAdd.length ? [...toAdd, ...updated] : updated;
       });
       setActiveId(prev => prev || mapped[0]?.id);
       if (deepLinkConvId && !deepLinkApplied.current) {
