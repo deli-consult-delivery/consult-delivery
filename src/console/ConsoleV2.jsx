@@ -46,13 +46,14 @@ import Metas from './Metas.jsx';
 import Memorias from './Memorias.jsx';
 import Conhecimento from './Conhecimento.jsx';
 import Configuracoes from './Configuracoes.jsx';
+// telas cv2 — onda 4 (últimas migrações de legado)
+import CRM from './CRM.jsx';
+import Lojas from './Lojas.jsx';
+import Inadimplentes from './Inadimplentes.jsx';
 // telas reusadas do console clássico (funcionais — visual convertido nas ondas 2-3)
 import TarefasClientesScreen from '../screens/TarefasClientesScreen.jsx';
 import ChatScreen from '../screens/ChatScreen.jsx';
-import CrmScreen from '../screens/CRMScreen.jsx';
-import InadimplentesScreen from '../screens/InadimplentesScreen.jsx';
 import AgentBuilderScreen from '../screens/AgentBuilderScreen.jsx';
-import LojasScreen from '../screens/lojas/LojasScreen.jsx';
 import './console.css';
 
 // ============================================================
@@ -225,7 +226,7 @@ function GlobalSearch({ tenantDbId, onNavigate }) {
 }
 
 // telas reusadas do clássico (dark) — renderizadas em área cheia até converter
-const LEGADO = new Set(['crm', 'lojas', 'cobranca']);
+const LEGADO = new Set([]);
 
 const OK_STATUSES = ['ok', 'completed', 'success'];
 const CREDITOS_MES = 10000; // freemium: 10k créditos/mês, 1 por execução de IA
@@ -638,14 +639,14 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
     switch (tela) {
       case 'visao': return <VisaoGeral tenantNome={tenantNome} tenantDbId={tenantDbId} onNav={nav} />;
       case 'deli': return <Deli tenantDbId={tenantDbId} userId={userId} />;
-      case 'crm': return <CrmScreen tenant={tenantSlug} tenantDbId={tenantDbId} onNavigate={nav} />;
-      case 'lojas': return <LojasScreen tenantDbId={tenantDbId} userId={userId} />;
+      case 'crm': return <CRM tenantSlug={tenantSlug} tenantDbId={tenantDbId} onNavigate={nav} />;
+      case 'lojas': return <Lojas tenantDbId={tenantDbId} userId={userId} />;
       case 'mia': return <MiaAudit tenantDbId={tenantDbId} userId={userId} />;
       case 'aprovacoes': return <AprovacoesUnificadas tenantDbId={tenantDbId} userId={userId} />;
       case 'recontratacao': return <Recontratacao tenantDbId={tenantDbId} userId={userId} />;
       case 'sofia': return <Sofia tenantDbId={tenantDbId} userId={userId} />;
       case 'disparos': return <Disparos tenantDbId={tenantDbId} userId={userId} />;
-      case 'cobranca': return <InadimplentesScreen tenantDbId={tenantDbId} userId={userId} />;
+      case 'cobranca': return <Inadimplentes tenantDbId={tenantDbId} />;
       case 'cora': return <Cora tenantDbId={tenantDbId} userId={userId} />;
       case 'campanhas': return <Campanhas tenantDbId={tenantDbId} userId={userId} />;
       case 'grupos': return <Grupos tenantDbId={tenantDbId} userId={userId} />;
