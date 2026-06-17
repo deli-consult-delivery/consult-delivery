@@ -698,7 +698,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
               <span className="crumb">Console › <b>{LABELS[tela] || tela}</b></span>
             </div>
             <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-              <ChatScreen tenant={tenantSlug} tenantDbId={tenantDbId} onNavigate={navWithParams} deepLinkConvId={null} />
+              <ChatScreen tenant={tenantSlug} tenantDbId={tenantDbId} userId={userId} onNavigate={navWithParams} deepLinkConvId={null} />
             </div>
           </>
         ) : (
