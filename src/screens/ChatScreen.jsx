@@ -1820,6 +1820,30 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
 
   // ── Drawer Demandas ───────────────────────────────────────
   const [demandasDrawer, setDemandasDrawer]  = useState({ open: false, customerId: null });
+  const [espacosClientId, setEspacosClientId] = useState(null);
+
+  useEffect(() => {
+    if (!active?.whatsapp_chat_id || !tenantDbId) { setEspacosClientId(null); return; }
+    let cancelled = false;
+    const jid = active.whatsapp_chat_id;
+    const isGroup = jid.endsWith('@g.us');
+    if (isGroup) {
+      supabase.from('whatsapp_groups').select('loja_id').eq('tenant_id', tenantDbId).eq('group_jid', jid).maybeSingle()
+        .then(async ({ data: wg }) => {
+          if (cancelled || !wg?.loja_id) { if (!cancelled) setEspacosClientId(null); return; }
+          const { data: loja } = await supabase.from('lojas').select('client_id').eq('id', wg.loja_id).eq('is_consultoria_ativa', true).not('client_id', 'is', null).maybeSingle();
+          if (!cancelled) setEspacosClientId(loja?.client_id ?? null);
+        })
+        .catch(() => { if (!cancelled) setEspacosClientId(null); });
+    } else if (active.customer_id) {
+      supabase.from('lojas').select('client_id').eq('tenant_id', tenantDbId).eq('client_id', active.customer_id).eq('is_consultoria_ativa', true).not('client_id', 'is', null).maybeSingle()
+        .then(({ data }) => { if (!cancelled) setEspacosClientId(data?.client_id ?? null); })
+        .catch(() => { if (!cancelled) setEspacosClientId(null); });
+    } else {
+      setEspacosClientId(null);
+    }
+    return () => { cancelled = true; };
+  }, [active?.id, tenantDbId]);
 
   // ── UI state ──────────────────────────────────────────────
   const [activeId, setActiveId]              = useState(() => deepLinkConvId ?? null);
@@ -4507,11 +4531,11 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
                     <Icon name="arrowright" size={15} />
                   </button>
                   <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.1)', margin: '0 2px' }} />
-                  {active.customer_id && (
+                  {(espacosClientId || active.customer_id) && (
                     <button
                       className="lc-action-btn"
                       style={{ fontSize: 11 }}
-                      onClick={() => setDemandasDrawer({ open: true, customerId: active.customer_id })}
+                      onClick={() => setDemandasDrawer({ open: true, customerId: espacosClientId ?? active.customer_id })}
                       title="Abrir demandas deste cliente"
                     >
                       Demandas
