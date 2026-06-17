@@ -15,6 +15,7 @@ import Avaliacoes from './Avaliacoes.jsx';
 import AnaliseLoja from './AnaliseLoja.jsx';
 import AgenteConfig from './AgenteConfig.jsx';
 import AuditLog from './AuditLog.jsx';
+import Notificacoes from './Notificacoes.jsx';
 import AcessoUsuarios from './AcessoUsuarios.jsx';
 import Habilidades from './Habilidades.jsx';
 import Templates from './Templates.jsx';
@@ -106,6 +107,7 @@ const GRUPOS = [
     { id: 'sistemas', ic: 'i-box', label: 'Sistemas externos' },
     { id: 'acesso', ic: 'i-key', label: 'Acesso por usuário' },
     { id: 'auditoria', ic: 'i-scroll', label: 'Auditoria' },
+    { id: 'notificacoes', ic: 'i-bell', label: 'Notificações' },
   ]},
 ];
 
@@ -653,6 +655,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       case 'sistemas': return <Sistemas tenantDbId={tenantDbId} />;
       case 'acesso': return <AcessoUsuarios tenantDbId={tenantDbId} />;
       case 'auditoria': return <AuditLog tenantDbId={tenantDbId} />;
+      case 'notificacoes': return <Notificacoes tenantDbId={tenantDbId} userId={userId} onNavigate={nav} />;
       default: return <div className="cv2-card">Tela não encontrada.</div>;
     }
   }
