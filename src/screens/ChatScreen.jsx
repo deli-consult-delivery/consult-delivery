@@ -3899,7 +3899,7 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
     };
 
     if (isGroup) {
-      supabase.from('whatsapp_groups').select('loja_id').eq('tenant_id', tenantDbId).eq('group_jid', jid).maybeSingle()
+      supabase.from('whatsapp_groups').select('loja_id').eq('tenant_id', tenantDbId).eq('evolution_jid', jid).maybeSingle()
         .then(async ({ data: wg }) => {
           if (cancelled) return;
           if (!wg?.loja_id) { resolve(null); return; }
