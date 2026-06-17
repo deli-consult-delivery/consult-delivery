@@ -2275,9 +2275,9 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
           setWaLastInbound(msg.created_at || new Date().toISOString());
           if (typingTimerRef.current) { clearTimeout(typingTimerRef.current); typingTimerRef.current = null; }
           setTyping(false);
-          if (autoTranscribeRef.current && msg.media_url && (mediaType?.includes('audio') || mediaType === 'video')) {
-            transcribeMessage(msg.id, msg.media_url);
-          }
+        }
+        if (autoTranscribeRef.current && msg.media_url && (mediaType?.includes('audio') || mediaType === 'video')) {
+          transcribeMessage(msg.id, msg.media_url);
         }
         setConvs(prev => {
           const idx = prev.findIndex(c => c.id === convId);
