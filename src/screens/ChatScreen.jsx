@@ -1823,50 +1823,6 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
   const [espacosClientId, setEspacosClientId] = useState(null);
   const [espacosHasFolder, setEspacosHasFolder] = useState(false);
 
-  useEffect(() => {
-    if (!active?.whatsapp_chat_id || !tenantDbId) { setEspacosClientId(null); setEspacosHasFolder(false); return; }
-    let cancelled = false;
-    const jid = active.whatsapp_chat_id;
-    const isGroup = jid.endsWith('@g.us');
-
-    const checkFolder = async (cid) => {
-      try {
-        if (cid && tenantDbId) {
-          const { count } = await supabase.from('espacos_folders')
-            .select('id', { count: 'exact', head: true })
-            .eq('tenant_id', tenantDbId).eq('customer_id', cid);
-          if (!cancelled) setEspacosHasFolder((count ?? 0) > 0);
-        } else if (!cancelled) {
-          setEspacosHasFolder(false);
-        }
-      } catch { if (!cancelled) setEspacosHasFolder(false); }
-    };
-
-    const resolve = (cid) => {
-      if (cancelled) return;
-      setEspacosClientId(cid ?? null);
-      checkFolder(cid ?? null);
-    };
-
-    if (isGroup) {
-      supabase.from('whatsapp_groups').select('loja_id').eq('tenant_id', tenantDbId).eq('group_jid', jid).maybeSingle()
-        .then(async ({ data: wg }) => {
-          if (cancelled) return;
-          if (!wg?.loja_id) { resolve(null); return; }
-          const { data: loja } = await supabase.from('lojas').select('client_id').eq('id', wg.loja_id).eq('is_consultoria_ativa', true).not('client_id', 'is', null).maybeSingle();
-          resolve(loja?.client_id ?? null);
-        })
-        .catch(() => { resolve(null); });
-    } else if (active.customer_id) {
-      supabase.from('lojas').select('client_id').eq('tenant_id', tenantDbId).eq('client_id', active.customer_id).eq('is_consultoria_ativa', true).not('client_id', 'is', null).maybeSingle()
-        .then(({ data }) => { resolve(data?.client_id ?? null); })
-        .catch(() => { resolve(null); });
-    } else {
-      resolve(null);
-    }
-    return () => { cancelled = true; };
-  }, [active?.id, tenantDbId]);
-
   // ── UI state ──────────────────────────────────────────────
   const [activeId, setActiveId]              = useState(() => deepLinkConvId ?? null);
   const [headerTab, setHeaderTab]            = useState('inbox');
@@ -1909,6 +1865,9 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
   const [translations, setTranslations]      = useState({}); // { msgId: { loading, text, lang, error } }
   // ── Transcrição Whisper por mensagem ──────────────────────
   const [transcriptions, setTranscriptions]  = useState({}); // { msgId: { loading, text, error } }
+  const [autoTranscribe, setAutoTranscribe]  = useState(() => localStorage.getItem('cd_auto_transcribe') === '1');
+  const autoTranscribeRef                    = useRef(false);
+  autoTranscribeRef.current = autoTranscribe;
 
   // ── AI / Composer ─────────────────────────────────────────
   const [aiMode, setAiMode]                  = useState('humano');
@@ -2314,9 +2273,11 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
         });
         if (isInbound) {
           setWaLastInbound(msg.created_at || new Date().toISOString());
-          // Clear any pending typing indicator when the actual message arrives
           if (typingTimerRef.current) { clearTimeout(typingTimerRef.current); typingTimerRef.current = null; }
           setTyping(false);
+        }
+        if (autoTranscribeRef.current && msg.media_url && (mediaType?.includes('audio') || mediaType === 'video')) {
+          transcribeMessage(msg.id, msg.media_url);
         }
         setConvs(prev => {
           const idx = prev.findIndex(c => c.id === convId);
@@ -3914,6 +3875,52 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
 
   // ── DERIVADOS ─────────────────────────────────────────────
   const active         = convs.find(c => c.id === activeId) || searchConvs.find(c => c.id === activeId) || null;
+
+  // ── ESPAÇOS: resolve client_id da conversa + checa se tem pasta ──
+  // (declarado após `active` para evitar TDZ no dep array — ver bug "Cannot access ... before initialization")
+  useEffect(() => {
+    if (!active?.whatsapp_chat_id || !tenantDbId) { setEspacosClientId(null); setEspacosHasFolder(false); return; }
+    let cancelled = false;
+    const jid = active.whatsapp_chat_id;
+    const isGroup = jid.endsWith('@g.us');
+
+    const checkFolder = async (cid) => {
+      try {
+        if (cid && tenantDbId) {
+          const { count } = await supabase.from('espacos_folders')
+            .select('id', { count: 'exact', head: true })
+            .eq('tenant_id', tenantDbId).eq('customer_id', cid);
+          if (!cancelled) setEspacosHasFolder((count ?? 0) > 0);
+        } else if (!cancelled) {
+          setEspacosHasFolder(false);
+        }
+      } catch { if (!cancelled) setEspacosHasFolder(false); }
+    };
+
+    const resolve = (cid) => {
+      if (cancelled) return;
+      setEspacosClientId(cid ?? null);
+      checkFolder(cid ?? null);
+    };
+
+    if (isGroup) {
+      supabase.from('whatsapp_groups').select('loja_id').eq('tenant_id', tenantDbId).eq('evolution_jid', jid).maybeSingle()
+        .then(async ({ data: wg }) => {
+          if (cancelled) return;
+          if (!wg?.loja_id) { resolve(null); return; }
+          const { data: loja } = await supabase.from('lojas').select('client_id').eq('id', wg.loja_id).eq('is_consultoria_ativa', true).not('client_id', 'is', null).maybeSingle();
+          resolve(loja?.client_id ?? null);
+        })
+        .catch(() => { resolve(null); });
+    } else if (active.customer_id) {
+      supabase.from('lojas').select('client_id').eq('tenant_id', tenantDbId).eq('client_id', active.customer_id).eq('is_consultoria_ativa', true).not('client_id', 'is', null).maybeSingle()
+        .then(({ data }) => { resolve(data?.client_id ?? null); })
+        .catch(() => { resolve(null); });
+    } else {
+      resolve(null);
+    }
+    return () => { cancelled = true; };
+  }, [active?.id, tenantDbId]);
   const activeMsgs     = messages[activeId] || [];
   const isChannel      = !!activeId?.startsWith('chan-');
   const activeChanMsgs = isChannel ? (chanMsgs[active?.chanId] || []) : [];
@@ -3981,8 +3988,9 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
                 { id: 'bots',  icon: 'bot',   label: 'Bots' },
                 { id: 'proto', icon: 'paper', label: 'Protocolos',   overflow: true },
                 { id: 'viz',   icon: 'chart', label: 'Visualização', overflow: true },
+                { id: 'espacos', icon: 'folder', label: 'Demandas', overflow: true, action: () => onNavigate?.('espacos', espacosClientId ? { customerId: espacosClientId } : {}) },
               ].map(t => (
-                <button key={t.id} className={`lc-tab${t.overflow ? ' lc-tabs-overflow' : ''}${headerTab === t.id ? ' on' : ''}`} onClick={() => setHeaderTab(t.id)}>
+                <button key={t.id} className={`lc-tab${t.overflow ? ' lc-tabs-overflow' : ''}${headerTab === t.id ? ' on' : ''}`} onClick={() => t.action ? t.action() : setHeaderTab(t.id)}>
                   <Icon name={t.icon} size={13} /> <span className="lc-tab-label">{t.label}</span>
                 </button>
               ))}
@@ -4037,8 +4045,9 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
               { id: 'bots',  icon: 'bot',   label: 'Bots' },
               { id: 'proto', icon: 'paper', label: 'Protocolos',   overflow: true },
               { id: 'viz',   icon: 'chart', label: 'Visualização', overflow: true },
+              { id: 'espacos', icon: 'folder', label: 'Demandas', overflow: true, action: () => onNavigate?.('espacos', espacosClientId ? { customerId: espacosClientId } : {}) },
             ].map(t => (
-              <button key={t.id} className={`lc-tab${t.overflow ? ' lc-tabs-overflow' : ''}${headerTab === t.id ? ' on' : ''}`} onClick={() => setHeaderTab(t.id)}>
+              <button key={t.id} className={`lc-tab${t.overflow ? ' lc-tabs-overflow' : ''}${headerTab === t.id ? ' on' : ''}`} onClick={() => t.action ? t.action() : setHeaderTab(t.id)}>
                 <Icon name={t.icon} size={13} /> <span className="lc-tab-label">{t.label}</span>
               </button>
             ))}
@@ -4568,6 +4577,15 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
                   </button>
                   <button className="lc-icon-btn-dark" onClick={() => runCommand('/proxima')} title="Próxima ação">
                     <Icon name="arrowright" size={15} />
+                  </button>
+                  <button
+                    className="lc-icon-btn-dark"
+                    onClick={() => setAutoTranscribe(v => { const next = !v; localStorage.setItem('cd_auto_transcribe', next ? '1' : '0'); return next; })}
+                    title={autoTranscribe ? 'Transcrição automática de áudio: ATIVA — clique para desativar' : 'Transcrição automática de áudio: desativada — clique para ativar'}
+                    style={{ color: autoTranscribe ? '#22C55E' : 'rgba(255,255,255,0.45)', position: 'relative' }}
+                  >
+                    <Icon name="mic" size={15} />
+                    {autoTranscribe && <span style={{ position: 'absolute', top: 2, right: 2, width: 5, height: 5, borderRadius: '50%', background: '#22C55E' }} />}
                   </button>
                   <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.1)', margin: '0 2px' }} />
                   {espacosClientId && espacosHasFolder && (

@@ -23,7 +23,7 @@ export interface ChatResponse {
   tokens_out?: number;
 }
 
-const TIMEOUT_MS = 30_000;
+const TIMEOUT_MS = 60_000;
 
 // ─── Ollama Cloud ─────────────────────────────────────────────────────────────
 async function chatOllamaCloud(messages: ChatMessage[]): Promise<ChatResponse> {
@@ -49,7 +49,7 @@ async function chatOllamaCloud(messages: ChatMessage[]): Promise<ChatResponse> {
         messages,
         stream: false,
         format: "json",
-        options: { temperature: 0.1, num_predict: 1024 },
+        options: { temperature: 0.1, num_predict: 2048 },
       }),
       signal: controller.signal,
     });

@@ -29,22 +29,31 @@ import LaraEditorial from './LaraEditorial.jsx';
 import Onboarding from './Onboarding.jsx';
 import Recontratacao from './Recontratacao.jsx';
 import Sofia from './Sofia.jsx';
+import Relatorios from './Relatorios.jsx';
+import TarefasGlobais from './TarefasGlobais.jsx';
+import Campanhas from './Campanhas.jsx';
+import Grupos from './Grupos.jsx';
+import Cora from './Cora.jsx';
+import Lara from './Lara.jsx';
+import Contratos from './Contratos.jsx';
+import Automacoes from './Automacoes.jsx';
+import Deli from './Deli.jsx';
+import MiaAudit from './MiaAudit.jsx';
+import Oracle from './Oracle.jsx';
+import AgentInbox from './AgentInbox.jsx';
+import Heartbeats from './Heartbeats.jsx';
+import Metas from './Metas.jsx';
+import Memorias from './Memorias.jsx';
+import Conhecimento from './Conhecimento.jsx';
+import Configuracoes from './Configuracoes.jsx';
+// telas cv2 — onda 4 (últimas migrações de legado)
+import CRM from './CRM.jsx';
+import Lojas from './Lojas.jsx';
+import Inadimplentes from './Inadimplentes.jsx';
 // telas reusadas do console clássico (funcionais — visual convertido nas ondas 2-3)
 import TarefasClientesScreen from '../screens/TarefasClientesScreen.jsx';
 import ChatScreen from '../screens/ChatScreen.jsx';
-import DeliScreen from '../screens/DeliScreen.jsx';
-import CrmScreen from '../screens/CRMScreen.jsx';
-import MiaAuditScreen from '../screens/MiaAuditScreen.jsx';
-import InadimplentesScreen from '../screens/InadimplentesScreen.jsx';
 import AgentBuilderScreen from '../screens/AgentBuilderScreen.jsx';
-import OracleScreen from '../screens/OracleScreen.jsx';
-import AgentInboxScreen from '../screens/AgentInboxScreen.jsx';
-import HeartbeatsScreen from '../screens/HeartbeatsScreen.jsx';
-import GoalsScreen from '../screens/GoalsScreen.jsx';
-import MemoriesScreen from '../screens/MemoriesScreen.jsx';
-import KnowledgeBaseScreen from '../screens/KnowledgeBaseScreen.jsx';
-import SettingsScreen from '../screens/SettingsScreen.jsx';
-import LojasScreen from '../screens/lojas/LojasScreen.jsx';
 import './console.css';
 
 // ============================================================
@@ -71,17 +80,23 @@ const GRUPOS = [
     { id: 'recontratacao', ic: 'i-reply', label: 'Re-contratação' },
     { id: 'sofia', ic: 'i-bot', label: 'SOFIA' },
     { id: 'disparos', ic: 'i-reply', label: 'Disparos' },
-    { id: 'cobranca', ic: 'i-cash', label: 'Cobrança' },
+    { id: 'cora', ic: 'i-cash', label: 'Cobrança' },
     { id: 'defesa', ic: 'i-shield', label: 'Defesa Comercial' },
     { id: 'radar', ic: 'i-radio', label: 'Dashboard iFood' },
     { id: 'avaliacoes', ic: 'i-chart', label: 'Avaliações' },
     { id: 'espacos', ic: 'i-layers', label: 'Espaços' },
     { id: 'ativar', ic: 'i-plug', label: 'Ativar loja' },
+    { id: 'campanhas', ic: 'i-flag', label: 'Campanhas' },
+    { id: 'grupos', ic: 'i-users', label: 'Grupos WhatsApp' },
+    { id: 'contratos', ic: 'i-doc', label: 'Contratos' },
   ]},
   { label: 'Agentes IA', items: [
     { id: 'catalogo', ic: 'i-box', label: 'Catálogo' },
     { id: 'estudio', ic: 'i-palette', label: 'Estúdio de Conteúdo' },
     { id: 'lara-editorial', ic: 'i-palette', label: 'LARA Editorial' },
+    { id: 'lara', ic: 'i-bot', label: 'LARA' },
+    { id: 'tarefas-globais', ic: 'i-list', label: 'Tarefas Globais' },
+    { id: 'automacoes', ic: 'i-zap', label: 'Automações' },
     { id: 'habilidades', ic: 'i-zap', label: 'Habilidades' },
     { id: 'analise', ic: 'i-chart', label: 'Análise de Loja' },
     { id: 'cardapio', ic: 'i-menu', label: 'Cardápio' },
@@ -105,6 +120,7 @@ const GRUPOS = [
     { id: 'conhecimento', ic: 'i-book', label: 'Conhecimento (RAG)' },
     { id: 'custos', ic: 'i-dollar', label: 'Custos de IA' },
     { id: 'importar', ic: 'i-save', label: 'Importar relatórios' },
+    { id: 'relatorios', ic: 'i-chart', label: 'Relatórios' },
   ]},
   { label: 'Sistema', items: [
     { id: 'configsys', ic: 'i-gear', label: 'Configurações' },
@@ -210,7 +226,7 @@ function GlobalSearch({ tenantDbId, onNavigate }) {
 }
 
 // telas reusadas do clássico (dark) — renderizadas em área cheia até converter
-const LEGADO = new Set(['deli', 'crm', 'lojas', 'mia', 'cobranca', 'heartbeats', 'metas', 'memoria', 'conhecimento', 'configsys']);
+const LEGADO = new Set([]);
 
 const OK_STATUSES = ['ok', 'completed', 'success'];
 const CREDITOS_MES = 10000; // freemium: 10k créditos/mês, 1 por execução de IA
@@ -333,7 +349,7 @@ function useAlertas(tenantDbId) {
       if (!alive) return;
       const lista = [];
       if ((casos ?? 0) > 0) lista.push({ cls: 'err', txt: `${casos} caso(s) de Defesa aguardando seu OK`, ir: 'defesa' });
-      if ((atrasadas ?? 0) > 0) lista.push({ cls: 'err', txt: `${atrasadas} assinatura(s) atrasada(s)`, ir: 'cobranca' });
+      if ((atrasadas ?? 0) > 0) lista.push({ cls: 'err', txt: `${atrasadas} assinatura(s) atrasada(s)`, ir: 'cora' });
       if ((fontesPend ?? 0) > 0) lista.push({ cls: 'warn', txt: `${fontesPend} relatório(s) em processamento`, ir: 'importar' });
       setAl(lista);
     })();
@@ -622,15 +638,19 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
   function render() {
     switch (tela) {
       case 'visao': return <VisaoGeral tenantNome={tenantNome} tenantDbId={tenantDbId} onNav={nav} />;
-      case 'deli': return <DeliScreen tenantDbId={tenantDbId} userId={userId} />;
-      case 'crm': return <CrmScreen tenant={tenantSlug} tenantDbId={tenantDbId} onNavigate={nav} />;
-      case 'lojas': return <LojasScreen tenantDbId={tenantDbId} userId={userId} />;
-      case 'mia': return <MiaAuditScreen tenantDbId={tenantDbId} />;
+      case 'deli': return <Deli tenantDbId={tenantDbId} userId={userId} />;
+      case 'crm': return <CRM tenantSlug={tenantSlug} tenantDbId={tenantDbId} onNavigate={nav} />;
+      case 'lojas': return <Lojas tenantDbId={tenantDbId} userId={userId} />;
+      case 'mia': return <MiaAudit tenantDbId={tenantDbId} userId={userId} />;
       case 'aprovacoes': return <AprovacoesUnificadas tenantDbId={tenantDbId} userId={userId} />;
       case 'recontratacao': return <Recontratacao tenantDbId={tenantDbId} userId={userId} />;
       case 'sofia': return <Sofia tenantDbId={tenantDbId} userId={userId} />;
       case 'disparos': return <Disparos tenantDbId={tenantDbId} userId={userId} />;
-      case 'cobranca': return <InadimplentesScreen tenantDbId={tenantDbId} userId={userId} />;
+      case 'cobranca': return <Inadimplentes tenantDbId={tenantDbId} />;
+      case 'cora': return <Cora tenantDbId={tenantDbId} userId={userId} />;
+      case 'campanhas': return <Campanhas tenantDbId={tenantDbId} userId={userId} />;
+      case 'grupos': return <Grupos tenantDbId={tenantDbId} userId={userId} />;
+      case 'contratos': return <Contratos tenantDbId={tenantDbId} userId={userId} />;
       case 'defesa': return defesaOn === false ? <PaywallDefesa /> : <Defesa tenantDbId={tenantDbId} userId={userId} />;
       case 'radar': return <RadarReal tenantNome={tenantNome} tenantDbId={tenantDbId} />;
       case 'avaliacoes': return <Avaliacoes tenantDbId={tenantDbId} userId={userId} />;
@@ -644,23 +664,23 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       case 'cardapio': return <AgenteAnalise tenantDbId={tenantDbId} userId={userId} agente="cardapio" titulo="Cardápio" descricao="O agente analisa o funil e os itens do cardápio e sugere otimizações de nomes, descrições e preços." />;
       case 'multicanal': return <AgenteAnalise tenantDbId={tenantDbId} userId={userId} agente="multicanal" titulo="Multicanal" descricao="O agente consolida as métricas dos seus canais de delivery num panorama único e aponta onde focar." />;
       case 'construtor': return <AgentBuilderScreen tenantDbId={tenantDbId} onNavigate={nav} />;
-      case 'oracle': return <OracleScreen />;
-      case 'inbox': return <AgentInboxScreen tenantDbId={tenantDbId} onNavigate={nav} />;
+      case 'oracle': return <Oracle tenantDbId={tenantDbId} userId={userId} />;
+      case 'inbox': return <AgentInbox tenantDbId={tenantDbId} userId={userId} onNavigate={nav} />;
       case 'tarefas': return <TarefasAgendadas tenantDbId={tenantDbId} userId={userId} />;
       case 'gatilhos': return <Gatilhos tenantDbId={tenantDbId} userId={userId} />;
-      case 'heartbeats': return <HeartbeatsScreen tenantDbId={tenantDbId} onNavigate={nav} />;
+      case 'heartbeats': return <Heartbeats tenantDbId={tenantDbId} userId={userId} onNavigate={nav} />;
       case 'atividade': return <Execucoes tenantDbId={tenantDbId} />;
-      case 'metas': return <GoalsScreen tenantDbId={tenantDbId} onNavigate={nav} />;
+      case 'metas': return <Metas tenantDbId={tenantDbId} userId={userId} onNavigate={nav} />;
       case 'topicos': return <Topicos tenantDbId={tenantDbId} userId={userId} />;
       case 'modelos': return <Templates tenantDbId={tenantDbId} userId={userId} />;
       case 'config': return <AgenteConfig tenantDbId={tenantDbId} />;
       case 'arquivos': return <Arquivos tenantDbId={tenantDbId} userId={userId} />;
       case 'links': return <Links tenantDbId={tenantDbId} userId={userId} />;
-      case 'memoria': return <MemoriesScreen tenantDbId={tenantDbId} />;
-      case 'conhecimento': return <KnowledgeBaseScreen tenantDbId={tenantDbId} />;
+      case 'memoria': return <Memorias tenantDbId={tenantDbId} userId={userId} />;
+      case 'conhecimento': return <Conhecimento tenantDbId={tenantDbId} userId={userId} />;
       case 'custos': return <CustosIA tenantDbId={tenantDbId} />;
       case 'importar': return <ImportarRelatorios tenantDbId={tenantDbId} userId={userId} />;
-      case 'configsys': return <SettingsScreen tenant={tenantSlug} tenantDbId={tenantDbId} userId={userId} onTenantChange={() => {}} />;
+      case 'configsys': return <Configuracoes tenantDbId={tenantDbId} userId={userId} onTenantChange={() => {}} />;
       case 'clientesplat': return <Clientes userId={userId} />;
       case 'marca': return <Marca tenantDbId={tenantDbId} onChanged={recarregarBrand} />;
       case 'provedores': return <Provedores tenantDbId={tenantDbId} />;
@@ -671,6 +691,10 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       case 'auditoria': return <AuditLog tenantDbId={tenantDbId} />;
       case 'notificacoes': return <Notificacoes tenantDbId={tenantDbId} userId={userId} onNavigate={nav} />;
       case 'lara-editorial': return <LaraEditorial tenantDbId={tenantDbId} userId={userId} />;
+      case 'lara': return <Lara tenantDbId={tenantDbId} userId={userId} />;
+      case 'tarefas-globais': return <TarefasGlobais tenantDbId={tenantDbId} userId={userId} />;
+      case 'automacoes': return <Automacoes tenantDbId={tenantDbId} userId={userId} onNavigate={nav} />;
+      case 'relatorios': return <Relatorios tenantDbId={tenantDbId} userId={userId} />;
       case 'onboarding': return <Onboarding tenantDbId={tenantDbId} userId={userId} />;
       default: return <div className="cv2-card">Tela não encontrada.</div>;
     }
