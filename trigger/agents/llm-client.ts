@@ -69,8 +69,11 @@ async function chatOllamaCloud(messages: ChatMessage[]): Promise<ChatResponse> {
 
     if (data.error) throw new Error(`Ollama error: ${data.error}`);
 
+    const content = data.message?.content ?? "";
+    if (!content) throw new Error("Ollama retornou content vazio (thinking consumiu todo num_predict?)");
+
     return {
-      content:    data.message?.content ?? "",
+      content,
       modelo:     data.model ?? model,
       latencia_ms: Date.now() - t0,
       tokens_in:  data.prompt_eval_count,
@@ -98,7 +101,7 @@ async function chatAnthropic(messages: ChatMessage[]): Promise<ChatResponse> {
 
   const response = await client.messages.create({
     model,
-    max_tokens: 1024,
+    max_tokens: 4096,
     system:   systemMsg,
     messages: userMsgs,
   });
