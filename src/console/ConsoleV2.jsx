@@ -25,6 +25,7 @@ import Marca from './Marca.jsx';
 import { Gatilhos, Topicos, TarefasAgendadas, Links, Provedores, Integracoes, Sistemas, Arquivos } from './CvNovas.jsx';
 import VendaErpPainel from './VendaErpPainel.jsx';
 import Disparos from './Disparos.jsx';
+import LaraEditorial from './LaraEditorial.jsx';
 // telas reusadas do console clássico (funcionais — visual convertido nas ondas 2-3)
 import TarefasClientesScreen from '../screens/TarefasClientesScreen.jsx';
 import ChatScreen from '../screens/ChatScreen.jsx';
@@ -75,6 +76,7 @@ const GRUPOS = [
   { label: 'Agentes IA', items: [
     { id: 'catalogo', ic: 'i-box', label: 'Catálogo' },
     { id: 'estudio', ic: 'i-palette', label: 'Estúdio de Conteúdo' },
+    { id: 'lara-editorial', ic: 'i-palette', label: 'LARA Editorial' },
     { id: 'habilidades', ic: 'i-zap', label: 'Habilidades' },
     { id: 'analise', ic: 'i-chart', label: 'Análise de Loja' },
     { id: 'cardapio', ic: 'i-menu', label: 'Cardápio' },
@@ -659,6 +661,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       case 'acesso': return <AcessoUsuarios tenantDbId={tenantDbId} />;
       case 'auditoria': return <AuditLog tenantDbId={tenantDbId} />;
       case 'notificacoes': return <Notificacoes tenantDbId={tenantDbId} userId={userId} onNavigate={nav} />;
+      case 'lara-editorial': return <LaraEditorial tenantDbId={tenantDbId} userId={userId} />;
       default: return <div className="cv2-card">Tela não encontrada.</div>;
     }
   }
