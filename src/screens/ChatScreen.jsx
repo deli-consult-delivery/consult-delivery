@@ -1822,29 +1822,6 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
   const [demandasDrawer, setDemandasDrawer]  = useState({ open: false, customerId: null });
   const [espacosClientId, setEspacosClientId] = useState(null);
 
-  useEffect(() => {
-    if (!active?.whatsapp_chat_id || !tenantDbId) { setEspacosClientId(null); return; }
-    let cancelled = false;
-    const jid = active.whatsapp_chat_id;
-    const isGroup = jid.endsWith('@g.us');
-    if (isGroup) {
-      supabase.from('whatsapp_groups').select('loja_id').eq('tenant_id', tenantDbId).eq('group_jid', jid).maybeSingle()
-        .then(async ({ data: wg }) => {
-          if (cancelled || !wg?.loja_id) { if (!cancelled) setEspacosClientId(null); return; }
-          const { data: loja } = await supabase.from('lojas').select('client_id').eq('id', wg.loja_id).eq('is_consultoria_ativa', true).not('client_id', 'is', null).maybeSingle();
-          if (!cancelled) setEspacosClientId(loja?.client_id ?? null);
-        })
-        .catch(() => { if (!cancelled) setEspacosClientId(null); });
-    } else if (active.customer_id) {
-      supabase.from('lojas').select('client_id').eq('tenant_id', tenantDbId).eq('client_id', active.customer_id).eq('is_consultoria_ativa', true).not('client_id', 'is', null).maybeSingle()
-        .then(({ data }) => { if (!cancelled) setEspacosClientId(data?.client_id ?? null); })
-        .catch(() => { if (!cancelled) setEspacosClientId(null); });
-    } else {
-      setEspacosClientId(null);
-    }
-    return () => { cancelled = true; };
-  }, [active?.id, tenantDbId]);
-
   // ── UI state ──────────────────────────────────────────────
   const [activeId, setActiveId]              = useState(() => deepLinkConvId ?? null);
   const [headerTab, setHeaderTab]            = useState('inbox');
@@ -3900,6 +3877,30 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
 
   // ── MIA: loja vinculada à conversa ativa ─────────────────
   const lojaVinculada  = useLojaPorRemoteJid(active?.whatsapp_chat_id);
+
+  // ── Resolve client ESPAÇOS correto via whatsapp_groups → lojas ───
+  useEffect(() => {
+    if (!active?.whatsapp_chat_id || !tenantDbId) { setEspacosClientId(null); return; }
+    let cancelled = false;
+    const jid = active.whatsapp_chat_id;
+    const isGroup = jid.endsWith('@g.us');
+    if (isGroup) {
+      supabase.from('whatsapp_groups').select('loja_id').eq('tenant_id', tenantDbId).eq('group_jid', jid).maybeSingle()
+        .then(async ({ data: wg }) => {
+          if (cancelled || !wg?.loja_id) { if (!cancelled) setEspacosClientId(null); return; }
+          const { data: loja } = await supabase.from('lojas').select('client_id').eq('id', wg.loja_id).eq('is_consultoria_ativa', true).not('client_id', 'is', null).maybeSingle();
+          if (!cancelled) setEspacosClientId(loja?.client_id ?? null);
+        })
+        .catch(() => { if (!cancelled) setEspacosClientId(null); });
+    } else if (active.customer_id) {
+      supabase.from('lojas').select('client_id').eq('tenant_id', tenantDbId).eq('client_id', active.customer_id).eq('is_consultoria_ativa', true).not('client_id', 'is', null).maybeSingle()
+        .then(({ data }) => { if (!cancelled) setEspacosClientId(data?.client_id ?? null); })
+        .catch(() => { if (!cancelled) setEspacosClientId(null); });
+    } else {
+      setEspacosClientId(null);
+    }
+    return () => { cancelled = true; };
+  }, [active?.id, tenantDbId]);
 
   const abertosCount    = statusCounts.nao_iniciado + statusCounts.aguardando + statusCounts.aberto;
   const finalizadoCount = statusCounts.finalizado;
