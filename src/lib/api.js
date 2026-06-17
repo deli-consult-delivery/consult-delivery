@@ -341,14 +341,14 @@ export async function deleteTask(taskId) {
 
 // ─── Client Tasks (Tarefas Clientes) ──────────────────────────────────────
 
-export async function listClientTasks(tenantId, customerId, phaseId) {
+// Tarefas de uma lista (modelo ClickUp). Aceita listId; mantém customerId/tenantId opcionais.
+export async function listClientTasks(tenantId, listId) {
   let q = supabase
     .from('client_tasks')
-    .select('*, assignee:profiles!client_tasks_assignee_id_fkey(id, full_name, avatar_url)')
-    .eq('tenant_id', tenantId)
+    .select('*, assignee:profiles!client_tasks_assignee_fkey(id, full_name, avatar_url)')
     .order('position', { ascending: true });
-  if (customerId) q = q.eq('customer_id', customerId);
-  if (phaseId)    q = q.eq('phase_id', phaseId);
+  if (tenantId) q = q.eq('tenant_id', tenantId);
+  if (listId)   q = q.eq('list_id', listId);
   const { data, error } = await q;
   if (error) throw error;
   return data ?? [];
@@ -367,15 +367,135 @@ export async function updateClientTask(id, updates) {
   if (error) throw error;
 }
 
-export async function moveClientTask(id, status, position) {
+// Mover tarefa entre colunas (drag-and-drop). columnId = nova coluna, position = índice de drop.
+export async function moveClientTask(id, columnId, position) {
   const { error } = await supabase
-    .from('client_tasks').update({ status, position, updated_at: new Date().toISOString() }).eq('id', id);
+    .from('client_tasks').update({ column_id: columnId, position, updated_at: new Date().toISOString() }).eq('id', id);
   if (error) throw error;
 }
 
 export async function deleteClientTask(id) {
   const { error } = await supabase.from('client_tasks').delete().eq('id', id);
   if (error) throw error;
+}
+
+// ─── ESPAÇOS — hierarquia Pasta → Lista → Coluna (estilo ClickUp) ──────────
+
+// Colunas default semeadas ao criar uma lista nova.
+const DEFAULT_COLUMNS = [
+  { name: 'A Fazer',    color: '#6B7280', position: 0, is_done: false },
+  { name: 'Fazendo',    color: '#3B82F6', position: 1, is_done: false },
+  { name: 'Aguardando', color: '#F59E0B', position: 2, is_done: false },
+  { name: 'Concluído',  color: '#10B981', position: 3, is_done: true  },
+];
+
+// Pastas ──────────────────────────────────────────────────────────────────
+export async function listFolders(tenantId, customerId) {
+  let q = supabase
+    .from('espacos_folders')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('position', { ascending: true });
+  if (customerId) q = q.eq('customer_id', customerId);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createFolder({ tenantId, customerId = null, name, color, icon, position = 0 }) {
+  const { data, error } = await supabase
+    .from('espacos_folders')
+    .insert({ tenant_id: tenantId, customer_id: customerId, name, color, icon, position })
+    .select('*').single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateFolder(id, updates) {
+  const { error } = await supabase.from('espacos_folders').update(updates).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteFolder(id) {
+  const { error } = await supabase.from('espacos_folders').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// Listas ──────────────────────────────────────────────────────────────────
+export async function listLists(folderId) {
+  const { data, error } = await supabase
+    .from('espacos_lists')
+    .select('*')
+    .eq('folder_id', folderId)
+    .order('position', { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+// Cria lista + semeia colunas default. Retorna { list, columns }.
+export async function createList({ tenantId, folderId, name, color = '#6B7280', position = 0 }) {
+  const { data: list, error } = await supabase
+    .from('espacos_lists')
+    .insert({ tenant_id: tenantId, folder_id: folderId, name, color, position })
+    .select('*').single();
+  if (error) throw error;
+
+  const rows = DEFAULT_COLUMNS.map((c) => ({ ...c, tenant_id: tenantId, list_id: list.id }));
+  const { data: columns, error: colErr } = await supabase
+    .from('espacos_columns').insert(rows).select('*');
+  if (colErr) throw colErr;
+
+  return { list, columns: columns ?? [] };
+}
+
+export async function updateList(id, updates) {
+  const { error } = await supabase.from('espacos_lists').update(updates).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteList(id) {
+  const { error } = await supabase.from('espacos_lists').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// Colunas ───────────────────────────────────────────────────────────────────
+export async function listColumns(listId) {
+  const { data, error } = await supabase
+    .from('espacos_columns')
+    .select('*')
+    .eq('list_id', listId)
+    .order('position', { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createColumn({ tenantId, listId, name, color = '#6B7280', position = 0, isDone = false }) {
+  const { data, error } = await supabase
+    .from('espacos_columns')
+    .insert({ tenant_id: tenantId, list_id: listId, name, color, position, is_done: isDone })
+    .select('*').single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateColumn(id, updates) {
+  const { error } = await supabase.from('espacos_columns').update(updates).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deleteColumn(id) {
+  const { error } = await supabase.from('espacos_columns').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// Reordena colunas: recebe [{id, position}, ...] e aplica em paralelo.
+export async function reorderColumns(updates) {
+  const results = await Promise.all(
+    updates.map(({ id, position }) =>
+      supabase.from('espacos_columns').update({ position }).eq('id', id))
+  );
+  const firstErr = results.find((r) => r.error);
+  if (firstErr) throw firstErr.error;
 }
 
 export async function createTasksFromAnalise({ tenantId, analiseId, clienteId, pontos }) {
