@@ -284,10 +284,10 @@ function DisparosContent({ tenantDbId, userId }) {
   useEffect(() => { loadDrafts(); }, [loadDrafts]);
 
   useEffect(() => {
-    if (!tenantDbId) return;
+    if (!tenantDbId || !userId) return;
     const unsub = subscribeToDrafts(tenantDbId, () => loadDrafts());
     return unsub;
-  }, [tenantDbId, loadDrafts]);
+  }, [tenantDbId, userId, loadDrafts]);
 
   async function handleApprove(draft) {
     try {
