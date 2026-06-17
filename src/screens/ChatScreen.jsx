@@ -2685,8 +2685,17 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
       setConvs(prev => {
         const mappedById = new Map(mapped.map(c => [c.id, c]));
         const existingIds = new Set(prev.map(c => c.id));
-        const updated = prev.map(c => { const fresh = mappedById.get(c.id); return fresh ? { ...c, ...fresh } : c; });
+        let changed = false;
+        const updated = prev.map(c => {
+          const fresh = mappedById.get(c.id);
+          if (!fresh) return c;
+          const keys = Object.keys(fresh);
+          if (keys.every(k => c[k] === fresh[k])) return c;
+          changed = true;
+          return { ...c, ...fresh };
+        });
         const toAdd = mapped.filter(c => !existingIds.has(c.id));
+        if (!toAdd.length && !changed) return prev;
         return toAdd.length ? [...toAdd, ...updated] : updated;
       });
       setActiveId(prev => prev || mapped[0]?.id);
@@ -5257,7 +5266,6 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
           position: 'fixed', inset: 0, zIndex: 9999,
           display: 'flex', alignItems: 'stretch',
         }}
-        onClick={e => { if (e.target === e.currentTarget) setDemandasDrawer({ open: false, customerId: null }); }}
       >
         <div style={{ flex: 1, background: 'rgba(0,0,0,0.45)' }} onClick={() => setDemandasDrawer({ open: false, customerId: null })} />
         <div style={{

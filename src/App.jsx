@@ -395,7 +395,7 @@ export default function App() {
         )}
         {route === 'chat' && (
           <RequireRole roles={['admin', 'atendimento', 'marketing']} screenId="chat" userId={session?.user?.id}>
-            <ChatScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={setRoute} deepLinkConvId={_deepLinkConvId} />
+            <ChatScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} onNavigate={setRoute} deepLinkConvId={_deepLinkConvId} />
           </RequireRole>
         )}
         {route === 'onboarding' && (
