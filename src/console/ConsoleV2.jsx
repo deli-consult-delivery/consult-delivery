@@ -24,6 +24,7 @@ import AgenteAnalise from './AgenteAnalise.jsx';
 import Marca from './Marca.jsx';
 import { Gatilhos, Topicos, TarefasAgendadas, Links, Provedores, Integracoes, Sistemas, Arquivos } from './CvNovas.jsx';
 import VendaErpPainel from './VendaErpPainel.jsx';
+import Disparos from './Disparos.jsx';
 // telas reusadas do console clássico (funcionais — visual convertido nas ondas 2-3)
 import TarefasClientesScreen from '../screens/TarefasClientesScreen.jsx';
 import ChatScreen from '../screens/ChatScreen.jsx';
@@ -63,6 +64,7 @@ const GRUPOS = [
     { id: 'respostas-rapidas', ic: 'i-reply', label: 'Respostas Rápidas' },
     { id: 'mia', ic: 'i-eye', label: 'Conversas · MIA' },
     { id: 'aprovacoes', ic: 'i-check', label: 'Aprovações' },
+    { id: 'disparos', ic: 'i-reply', label: 'Disparos' },
     { id: 'cobranca', ic: 'i-cash', label: 'Cobrança' },
     { id: 'defesa', ic: 'i-shield', label: 'Defesa Comercial' },
     { id: 'radar', ic: 'i-radio', label: 'Dashboard iFood' },
@@ -616,6 +618,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       case 'lojas': return <LojasScreen tenantDbId={tenantDbId} userId={userId} />;
       case 'mia': return <MiaAuditScreen tenantDbId={tenantDbId} />;
       case 'aprovacoes': return <AprovacoesUnificadas tenantDbId={tenantDbId} userId={userId} />;
+      case 'disparos': return <Disparos tenantDbId={tenantDbId} userId={userId} />;
       case 'cobranca': return <InadimplentesScreen tenantDbId={tenantDbId} userId={userId} />;
       case 'defesa': return defesaOn === false ? <PaywallDefesa /> : <Defesa tenantDbId={tenantDbId} userId={userId} />;
       case 'radar': return <RadarReal tenantNome={tenantNome} tenantDbId={tenantDbId} />;
