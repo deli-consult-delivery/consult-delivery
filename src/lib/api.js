@@ -216,6 +216,11 @@ export async function listClientes(tenantId) {
   return data ?? [];
 }
 
+export async function updateCustomer(id, updates) {
+  const { error } = await supabase.from('customers').update(updates).eq('id', id);
+  if (error) throw error;
+}
+
 // subscribeToAnalise is NOT async — it returns an unsubscribe cleanup function synchronously.
 // REPLICA IDENTITY FULL on the analises table ensures payload.new contains the full row,
 // not just the primary key. Call the returned function in useEffect's cleanup.
