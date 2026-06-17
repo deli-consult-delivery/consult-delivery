@@ -67,7 +67,7 @@ export default function TarefasClientesScreen({ tenantDbId, userId, deepLinkCust
   const [filterMode,    setFilterMode]    = useState('all');   // all|mine|urgent|due
   const [search,        setSearch]        = useState('');
   const [dragId,        setDragId]        = useState(null);
-  const deepLinkApplied = useRef(false);
+  const deepLinkApplied = useRef(null);
   const [hoverCol,      setHoverCol]      = useState(null);
   const [ghostPos,      setGhostPos]      = useState(null);
   const [showModal,     setShowModal]     = useState(false);
@@ -87,10 +87,10 @@ export default function TarefasClientesScreen({ tenantDbId, userId, deepLinkCust
 
   /* Deep-link: pré-selecionar cliente quando vindo do chat */
   useEffect(() => {
-    if (!deepLinkCustomerId || deepLinkApplied.current || !clients.length) return;
+    if (!deepLinkCustomerId || deepLinkApplied.current === deepLinkCustomerId || !clients.length) return;
     const cli = clients.find(c => c.id === deepLinkCustomerId);
     if (!cli) return;
-    deepLinkApplied.current = true;
+    deepLinkApplied.current = deepLinkCustomerId;
     setExpanded(e => ({ ...e, [cli.id]: true }));
     setActiveClient(cli);
     setActivePhase(PHASES[0]);

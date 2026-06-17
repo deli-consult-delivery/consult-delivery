@@ -678,7 +678,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
           <div key={i}>
             <div className="cv2-grp">{g.label}</div>
             {g.items.map(it => (
-              <div key={it.id} className={`cv2-item${tela === it.id ? ' on' : ''}`} onClick={() => { setTela(it.id); setSidebarOpen(false); }}>
+              <div key={it.id} className={`cv2-item${tela === it.id ? ' on' : ''}`} onClick={() => { navWithParams(it.id, {}); setSidebarOpen(false); }}>
                 <Ico name={it.ic} />{it.label}
               </div>
             ))}
@@ -698,7 +698,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
               <span className="crumb">Console › <b>{LABELS[tela] || tela}</b></span>
             </div>
             <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-              <ChatScreen tenant={tenantSlug} tenantDbId={tenantDbId} onNavigate={navWithParams} deepLinkConvId={null} />
+              <ChatScreen tenant={tenantSlug} tenantDbId={tenantDbId} userId={userId} onNavigate={navWithParams} deepLinkConvId={null} />
             </div>
           </>
         ) : (

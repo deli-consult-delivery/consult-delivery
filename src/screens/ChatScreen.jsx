@@ -15,6 +15,7 @@ import CustomerNotesSection from '../components/chat/CustomerNotesSection.jsx';
 import ClienteFocoPanel from '../components/cliente-foco/ClienteFocoPanel.jsx';
 import { useLojaPorRemoteJid } from '../hooks/useLojaPorRemoteJid.js';
 import { getMuted, isMuted, toggleMute } from '../lib/mutedConvs.js';
+import TarefasClientesScreen from './TarefasClientesScreen.jsx';
 
 const HAS_EVO = !!(
   import.meta.env.VITE_EVOLUTION_URL && import.meta.env.VITE_EVOLUTION_KEY
@@ -1805,7 +1806,7 @@ function VisualizacaoScreen({ tenantDbId }) {
 // ═══════════════════════════════════════════════════════════════
 // CHAT SCREEN — componente principal
 // ═══════════════════════════════════════════════════════════════
-export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkConvId }) {
+export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, deepLinkConvId }) {
   // ── Dados e instâncias ────────────────────────────────────
   const [instances, setInstances]            = useState([]);
   const [selectedInstance, setSelectedInstance] = useState(null);
@@ -1816,6 +1817,9 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
   const [currentUser, setCurrentUser]        = useState(null);
   const [departments, setDepartments]        = useState([]);
   const [activeCustomer, setActiveCustomer]  = useState(null);
+
+  // ── Drawer Demandas ───────────────────────────────────────
+  const [demandasDrawer, setDemandasDrawer]  = useState({ open: false, customerId: null });
 
   // ── UI state ──────────────────────────────────────────────
   const [activeId, setActiveId]              = useState(() => deepLinkConvId ?? null);
@@ -2709,8 +2713,17 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
       setConvs(prev => {
         const mappedById = new Map(mapped.map(c => [c.id, c]));
         const existingIds = new Set(prev.map(c => c.id));
-        const updated = prev.map(c => { const fresh = mappedById.get(c.id); return fresh ? { ...c, ...fresh } : c; });
+        let changed = false;
+        const updated = prev.map(c => {
+          const fresh = mappedById.get(c.id);
+          if (!fresh) return c;
+          const keys = Object.keys(fresh).filter(k => k !== 'messages');
+          if (keys.every(k => c[k] === fresh[k])) return c;
+          changed = true;
+          return { ...c, ...fresh };
+        });
         const toAdd = mapped.filter(c => !existingIds.has(c.id));
+        if (!toAdd.length && !changed) return prev;
         return toAdd.length ? [...toAdd, ...updated] : updated;
       });
       setActiveId(prev => prev || mapped[0]?.id);
@@ -4501,14 +4514,14 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
                     <Icon name="arrowright" size={15} />
                   </button>
                   <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.1)', margin: '0 2px' }} />
-                  {active.customer_id && onNavigate && (
+                  {active.customer_id && (
                     <button
                       className="lc-action-btn"
                       style={{ fontSize: 11 }}
-                      onClick={() => onNavigate('espacos', { customerId: active.customer_id })}
-                      title="Ver Espaços deste cliente"
+                      onClick={() => setDemandasDrawer({ open: true, customerId: active.customer_id })}
+                      title="Abrir demandas deste cliente"
                     >
-                      Espaços
+                      Demandas
                     </button>
                   )}
                   {(active.type === 'whatsapp' || active.type === 'group') && (
@@ -5158,7 +5171,7 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
                   <div className="lc-actions-grid">
                     <button className="lc-mini-action"><Icon name="plus" size={12} /> Adicionar negócio</button>
                     <button className="lc-mini-action"><Icon name="sparkles" size={12} /> Executar automação</button>
-                    <button className="lc-mini-action" onClick={() => onNavigate?.('tasks')}><Icon name="check" size={12} /> Ver tarefas</button>
+                    <button className="lc-mini-action" onClick={() => onNavigate?.('tarefas')}><Icon name="check" size={12} /> Ver tarefas</button>
                   </div>
                 </div>
 
@@ -5308,6 +5321,44 @@ export default function ChatScreen({ tenant, tenantDbId, onNavigate, deepLinkCon
         lojas={lojas}
         activeLoja={lojaVinculada}
       />
+    )}
+    {demandasDrawer.open && (
+      <div
+        style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          display: 'flex', alignItems: 'stretch',
+        }}
+      >
+        <div style={{ flex: 1, background: 'rgba(0,0,0,0.45)' }} onClick={() => setDemandasDrawer({ open: false, customerId: null })} />
+        <div style={{
+          width: 'min(780px, 100vw)', height: '100%',
+          background: '#0f172a', display: 'flex', flexDirection: 'column',
+          boxShadow: '-4px 0 32px rgba(0,0,0,0.5)',
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)',
+            background: '#1e293b', flexShrink: 0,
+          }}>
+            <span style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>Demandas do cliente</span>
+            <button
+              onClick={() => setDemandasDrawer({ open: false, customerId: null })}
+              style={{
+                background: 'none', border: 'none', color: '#94a3b8',
+                cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: '2px 6px',
+              }}
+              title="Fechar"
+            >×</button>
+          </div>
+          <div style={{ flex: 1, overflow: 'hidden' }}>
+            <TarefasClientesScreen
+              tenantDbId={tenantDbId}
+              userId={userId ?? currentUser?.id}
+              deepLinkCustomerId={demandasDrawer.customerId}
+            />
+          </div>
+        </div>
+      </div>
     )}
     </>
   );
