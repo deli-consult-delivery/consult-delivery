@@ -12,9 +12,9 @@ import {
 
 const KIND_META = {
   system:          { icon: 'i-bell', color: 'var(--tx2)',    label: 'Sistema'  },
-  deli_alert:      { icon: 'i-bot',  color: '#f59e0b',       label: 'DELI'     },
-  channel_message: { icon: 'i-chat', color: '#2563eb',       label: 'Chat'     },
-  draft_pending:   { icon: 'i-doc',  color: '#ea580c',       label: 'Rascunho' },
+  deli_alert:      { icon: 'i-bot',  color: 'var(--amber)',  label: 'DELI'     },
+  channel_message: { icon: 'i-chat', color: 'var(--ink)',    label: 'Chat'     },
+  draft_pending:   { icon: 'i-doc',  color: 'var(--red)',    label: 'Rascunho' },
 };
 
 const LINK_TO_ROUTE = {
@@ -60,18 +60,19 @@ export default function Notificacoes({ tenantDbId, userId, onNavigate }) {
     try {
       const rows = await listNotifications(tenantDbId, userId, { limit: 200 });
       setNotifs(rows);
-    } catch (err) {
-      console.error('[Notificacoes]', err);
+    } catch {
+      // erro silencioso — UI mantém estado anterior
     } finally {
       setLoading(false);
     }
   }, [tenantDbId, userId]);
 
   useEffect(() => {
+    if (!tenantDbId || !userId) return;
     load();
     const channel = subscribeToNotifications(tenantDbId, userId, load, 'screen');
     return () => supabase.removeChannel(channel);
-  }, [load]);
+  }, [tenantDbId, userId, load]);
 
   const filtered = notifs.filter(n => {
     if (filter === 'unread') return !n.read_at;
@@ -97,8 +98,8 @@ export default function Notificacoes({ tenantDbId, userId, onNavigate }) {
     try {
       await deleteNotification(id);
       setNotifs(prev => prev.filter(x => x.id !== id));
-    } catch (err) {
-      console.error('[Notificacoes] delete', err);
+    } catch {
+      // falha silenciosa — item permanece na lista
     }
   }
 
@@ -108,8 +109,8 @@ export default function Notificacoes({ tenantDbId, userId, onNavigate }) {
     try {
       await markAllNotificationsRead(tenantDbId, userId);
       setNotifs(prev => prev.map(n => ({ ...n, read_at: n.read_at ?? new Date().toISOString() })));
-    } catch (err) {
-      console.error('[Notificacoes] markAll', err);
+    } catch {
+      // falha silenciosa — estado visual mantido
     } finally {
       setMarkingAll(false);
     }
@@ -145,7 +146,7 @@ export default function Notificacoes({ tenantDbId, userId, onNavigate }) {
             border: '1px solid',
             borderColor: filter === f.id ? 'var(--red)' : 'var(--line)',
             background:  filter === f.id ? 'var(--red)' : 'transparent',
-            color:        filter === f.id ? '#fff'       : 'var(--tx2)',
+            color:        filter === f.id ? 'white'      : 'var(--tx2)',
             cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4,
           }}>
             {f.label}
