@@ -1965,6 +1965,7 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
   const selectedInstanceObjRef = useRef(null);
   const iaPendingRef           = useRef(new Set());
   const hibridoPendingRef      = useRef(new Set());
+  const transcribedRef         = useRef(new Set()); // IDs já enviados para transcrição (evita duplo-envio INSERT+UPDATE)
   const fileInputRef   = useRef(null);
   const galleryInputRef = useRef(null);
   const cameraInputRef = useRef(null);
@@ -2276,7 +2277,8 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
           if (typingTimerRef.current) { clearTimeout(typingTimerRef.current); typingTimerRef.current = null; }
           setTyping(false);
         }
-        if (autoTranscribeRef.current && msg.media_url && (mediaType?.includes('audio') || mediaType === 'video')) {
+        if (autoTranscribeRef.current && msg.media_url && (mediaType?.includes('audio') || mediaType === 'video') && !transcribedRef.current.has(msg.id)) {
+          transcribedRef.current.add(msg.id);
           transcribeMessage(msg.id, msg.media_url);
         }
         setConvs(prev => {
@@ -2335,6 +2337,13 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
           return { ...m2, [msg.conversation_id]: updated };
         };
         if (msg.media_url || msg.reactions !== undefined || msg.delivery_status !== undefined) setMessages(convMsgs2);
+        if (autoTranscribeRef.current && msg.media_url && !transcribedRef.current.has(msg.id)) {
+          const mt = msg.media_type || null;
+          if (mt?.includes('audio') || mt === 'video') {
+            transcribedRef.current.add(msg.id);
+            transcribeMessage(msg.id, msg.media_url);
+          }
+        }
         // Show typing indicator for 2s when client reads our message (delivery_status ≥ 4)
         if (msg.delivery_status >= 4 && msg.conversation_id === activeIdRef.current) {
           if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
