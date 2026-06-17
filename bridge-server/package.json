@@ -4,6 +4,10 @@
   "type": "commonjs",
   "description": "Bridge Server — Node.js/Express, porta 3001",
   "dependencies": {
-    "multer": "^1.4.4"
+    "@anthropic-ai/sdk": "^0.95.2",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "multer": "^1.4.4",
+    "zod": "^3.25.76"
   }
 }
