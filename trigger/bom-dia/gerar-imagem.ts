@@ -1,6 +1,6 @@
 import { task, logger, schedules } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
-import Anthropic from "@anthropic-ai/sdk";
+import { chat } from "../agents/llm-client";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 
@@ -631,9 +631,7 @@ async function executar(input: Input, runId: string): Promise<Output> {
     ? `\n\nInstruções personalizadas:\n${agentInstructions.trim()}`
     : "";
 
-  // 3. Claude gera prompt DALL-E + legenda completa
-  const anthropic = new Anthropic();
-
+  // 3. LLM gera prompt DALL-E + legenda completa
   const hoursLine = isSat
     ? "🕗 Atendimento Consult Delivery: 08:00–12:00"
     : "🕘 Atendimento Consult Delivery: 09:00–12:00 | 13:00–18:00 (intervalo de almoço das 12:00 às 13:00)";
@@ -654,10 +652,8 @@ async function executar(input: Input, runId: string): Promise<Output> {
     ? `bold dark #1A1A1A or red #B70C00 condensed headline text`
     : `bold white #FFFFFF condensed headline text`;
 
-  const claudeResp = await anthropic.messages.create({
-    model:      "claude-sonnet-4-6",
-    max_tokens: 1400,
-    system: `Você é o Superagente de Imagens de Bom Dia da Consult Delivery — consultoria de delivery do Wandson Silva. Gere diariamente: prompt de imagem (DALL-E/Recraft) + headline + legenda para WhatsApp.
+  const claudeResp = await chat([
+    { role: "system", content: `Você é o Superagente de Imagens de Bom Dia da Consult Delivery — consultoria de delivery do Wandson Silva. Gere diariamente: prompt de imagem (DALL-E/Recraft) + headline + legenda para WhatsApp.
 
 ═══ ESTILOS VISUAIS ═══
 O estilo do dia é indicado no input. Siga RIGOROSAMENTE o estilo indicado — não misture estilos.
@@ -702,10 +698,8 @@ Linha 2: frase mostrando que a Consult Delivery está à disposição para apoia
 Linha 3: horário de atendimento resumido (ex: "🕘 Seg–Sex 09h–18h | Sáb 08h–12h")
 SEM links, SEM @, SEM hashtag, SEM CTA de compra
 
-Retorne SOMENTE JSON válido, sem texto extra.${memoryBlock}${instructionsBlock}${feedbackContext}`,
-    messages: [{
-      role:    "user",
-      content: `Dia: ${dayName}
+Retorne SOMENTE JSON válido, sem texto extra.${memoryBlock}${instructionsBlock}${feedbackContext}` },
+    { role: "user", content: `Dia: ${dayName}
 Tema: ${theme}
 Data: ${dateStr}
 Estilo visual do dia: Estilo ${visualStyle.id} — ${visualStyle.name}
@@ -739,14 +733,10 @@ Gere JSON com exatamente 4 campos:
 
 4. "theme": tema resumido em PT-BR
 
-Retorne: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme":"..."}`,
-    }],
-  });
+Retorne: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme":"..."}` },
+  ]);
 
-  const rawText = claudeResp.content
-    .filter((b) => b.type === "text")
-    .map((b) => (b as Anthropic.TextBlock).text)
-    .join("");
+  const rawText = claudeResp.content;
 
   const jsonMatch = rawText.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error("Claude não retornou JSON válido");
