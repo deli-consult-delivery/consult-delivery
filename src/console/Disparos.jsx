@@ -11,10 +11,10 @@ import {
 } from '../lib/api.js';
 
 const CHANNEL_LABELS = {
-  whatsapp_grupo:   { label: 'WhatsApp Grupo',  color: '#25D366' },
-  whatsapp_pv:      { label: 'WhatsApp PV',      color: '#128C7E' },
-  telegram_interno: { label: 'Telegram Interno', color: '#2AABEE' },
-  painel:           { label: 'Painel',            color: 'var(--red)' },
+  whatsapp_grupo:   { label: 'WhatsApp Grupo',  color: '#25D366',     bg: 'rgba(37,211,102,0.1)'  },
+  whatsapp_pv:      { label: 'WhatsApp PV',      color: '#128C7E',     bg: 'rgba(18,140,126,0.1)'  },
+  telegram_interno: { label: 'Telegram Interno', color: '#2AABEE',     bg: 'rgba(42,171,238,0.1)'  },
+  painel:           { label: 'Painel',            color: 'var(--red)',  bg: 'var(--red-soft)'       },
 };
 
 function fmtRelTime(iso) {
@@ -39,7 +39,7 @@ function fmtExpira(iso) {
 }
 
 function DraftCard({ draft, onApprove, onReject, onEdit }) {
-  const ch = CHANNEL_LABELS[draft.channel] ?? { label: draft.channel, color: 'var(--tx2)' };
+  const ch = CHANNEL_LABELS[draft.channel] ?? { label: draft.channel, color: 'var(--tx2)', bg: 'var(--bg)' };
   const isExpiring = draft.expires_at && (new Date(draft.expires_at).getTime() - Date.now()) < 3600000;
 
   return (
@@ -56,7 +56,7 @@ function DraftCard({ draft, onApprove, onReject, onEdit }) {
             </span>
             <span style={{
               fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
-              background: ch.color + '22', color: ch.color,
+              background: ch.bg, color: ch.color,
             }}>
               {ch.label}
             </span>
@@ -123,7 +123,7 @@ function DraftCard({ draft, onApprove, onReject, onEdit }) {
   );
 }
 
-function EditModal({ draft, onSave, onClose }) {
+function EditModal({ draft, onSave, onClose, onError }) {
   const [content, setContent] = useState(draft.content);
   const [saving, setSaving] = useState(false);
 
@@ -134,6 +134,8 @@ function EditModal({ draft, onSave, onClose }) {
       await updateDraftContent(draft.id, content, edited);
       await approveDraft(draft.id);
       onSave();
+    } catch {
+      onError?.('Erro ao salvar. Tente novamente.');
     } finally {
       setSaving(false);
     }
@@ -271,6 +273,7 @@ function DisparosContent({ tenantDbId, userId }) {
 
   const loadDrafts = useCallback(async () => {
     if (!tenantDbId) return;
+    setLoading(true);
     try {
       const data = await listAgentDrafts(tenantDbId);
       setDrafts(data);
@@ -293,7 +296,7 @@ function DisparosContent({ tenantDbId, userId }) {
     try {
       await approveDraft(draft.id);
       showToast('Draft aprovado e enviado!');
-      loadDrafts();
+      await loadDrafts();
     } catch {
       showToast('Erro ao aprovar. Tente novamente.', 'error');
     }
@@ -407,15 +410,16 @@ function DisparosContent({ tenantDbId, userId }) {
       {editingDraft && (
         <EditModal
           draft={editingDraft}
-          onSave={() => { setEditingDraft(null); showToast('Editado e aprovado!'); loadDrafts(); }}
+          onSave={async () => { setEditingDraft(null); showToast('Editado e aprovado!'); await loadDrafts(); }}
           onClose={() => setEditingDraft(null)}
+          onError={msg => showToast(msg, 'error')}
         />
       )}
 
       {rejectingDraft && (
         <RejectModal
           draft={rejectingDraft}
-          onConfirm={() => { setRejectingDraft(null); showToast('Draft rejeitado.'); loadDrafts(); }}
+          onConfirm={async () => { setRejectingDraft(null); showToast('Draft rejeitado.'); await loadDrafts(); }}
           onClose={() => setRejectingDraft(null)}
         />
       )}
