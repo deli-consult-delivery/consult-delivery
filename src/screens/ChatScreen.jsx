@@ -3983,8 +3983,9 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
                 { id: 'bots',  icon: 'bot',   label: 'Bots' },
                 { id: 'proto', icon: 'paper', label: 'Protocolos',   overflow: true },
                 { id: 'viz',   icon: 'chart', label: 'Visualização', overflow: true },
+                { id: 'espacos', icon: 'folder', label: 'Espaços', overflow: true, action: () => onNavigate?.('espacos', espacosClientId ? { customerId: espacosClientId } : {}) },
               ].map(t => (
-                <button key={t.id} className={`lc-tab${t.overflow ? ' lc-tabs-overflow' : ''}${headerTab === t.id ? ' on' : ''}`} onClick={() => setHeaderTab(t.id)}>
+                <button key={t.id} className={`lc-tab${t.overflow ? ' lc-tabs-overflow' : ''}${headerTab === t.id ? ' on' : ''}`} onClick={() => t.action ? t.action() : setHeaderTab(t.id)}>
                   <Icon name={t.icon} size={13} /> <span className="lc-tab-label">{t.label}</span>
                 </button>
               ))}
@@ -4039,8 +4040,9 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
               { id: 'bots',  icon: 'bot',   label: 'Bots' },
               { id: 'proto', icon: 'paper', label: 'Protocolos',   overflow: true },
               { id: 'viz',   icon: 'chart', label: 'Visualização', overflow: true },
+              { id: 'espacos', icon: 'folder', label: 'Espaços', overflow: true, action: () => onNavigate?.('espacos', espacosClientId ? { customerId: espacosClientId } : {}) },
             ].map(t => (
-              <button key={t.id} className={`lc-tab${t.overflow ? ' lc-tabs-overflow' : ''}${headerTab === t.id ? ' on' : ''}`} onClick={() => setHeaderTab(t.id)}>
+              <button key={t.id} className={`lc-tab${t.overflow ? ' lc-tabs-overflow' : ''}${headerTab === t.id ? ' on' : ''}`} onClick={() => t.action ? t.action() : setHeaderTab(t.id)}>
                 <Icon name={t.icon} size={13} /> <span className="lc-tab-label">{t.label}</span>
               </button>
             ))}
