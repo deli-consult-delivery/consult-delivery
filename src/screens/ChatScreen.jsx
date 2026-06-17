@@ -1823,50 +1823,6 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
   const [espacosClientId, setEspacosClientId] = useState(null);
   const [espacosHasFolder, setEspacosHasFolder] = useState(false);
 
-  useEffect(() => {
-    if (!active?.whatsapp_chat_id || !tenantDbId) { setEspacosClientId(null); setEspacosHasFolder(false); return; }
-    let cancelled = false;
-    const jid = active.whatsapp_chat_id;
-    const isGroup = jid.endsWith('@g.us');
-
-    const checkFolder = async (cid) => {
-      try {
-        if (cid && tenantDbId) {
-          const { count } = await supabase.from('espacos_folders')
-            .select('id', { count: 'exact', head: true })
-            .eq('tenant_id', tenantDbId).eq('customer_id', cid);
-          if (!cancelled) setEspacosHasFolder((count ?? 0) > 0);
-        } else if (!cancelled) {
-          setEspacosHasFolder(false);
-        }
-      } catch { if (!cancelled) setEspacosHasFolder(false); }
-    };
-
-    const resolve = (cid) => {
-      if (cancelled) return;
-      setEspacosClientId(cid ?? null);
-      checkFolder(cid ?? null);
-    };
-
-    if (isGroup) {
-      supabase.from('whatsapp_groups').select('loja_id').eq('tenant_id', tenantDbId).eq('group_jid', jid).maybeSingle()
-        .then(async ({ data: wg }) => {
-          if (cancelled) return;
-          if (!wg?.loja_id) { resolve(null); return; }
-          const { data: loja } = await supabase.from('lojas').select('client_id').eq('id', wg.loja_id).eq('is_consultoria_ativa', true).not('client_id', 'is', null).maybeSingle();
-          resolve(loja?.client_id ?? null);
-        })
-        .catch(() => { resolve(null); });
-    } else if (active.customer_id) {
-      supabase.from('lojas').select('client_id').eq('tenant_id', tenantDbId).eq('client_id', active.customer_id).eq('is_consultoria_ativa', true).not('client_id', 'is', null).maybeSingle()
-        .then(({ data }) => { resolve(data?.client_id ?? null); })
-        .catch(() => { resolve(null); });
-    } else {
-      resolve(null);
-    }
-    return () => { cancelled = true; };
-  }, [active?.id, tenantDbId]);
-
   // ── UI state ──────────────────────────────────────────────
   const [activeId, setActiveId]              = useState(() => deepLinkConvId ?? null);
   const [headerTab, setHeaderTab]            = useState('inbox');
@@ -3914,6 +3870,52 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
 
   // ── DERIVADOS ─────────────────────────────────────────────
   const active         = convs.find(c => c.id === activeId) || searchConvs.find(c => c.id === activeId) || null;
+
+  // ── ESPAÇOS: resolve client_id da conversa + checa se tem pasta ──
+  // (declarado após `active` para evitar TDZ no dep array — ver bug "Cannot access ... before initialization")
+  useEffect(() => {
+    if (!active?.whatsapp_chat_id || !tenantDbId) { setEspacosClientId(null); setEspacosHasFolder(false); return; }
+    let cancelled = false;
+    const jid = active.whatsapp_chat_id;
+    const isGroup = jid.endsWith('@g.us');
+
+    const checkFolder = async (cid) => {
+      try {
+        if (cid && tenantDbId) {
+          const { count } = await supabase.from('espacos_folders')
+            .select('id', { count: 'exact', head: true })
+            .eq('tenant_id', tenantDbId).eq('customer_id', cid);
+          if (!cancelled) setEspacosHasFolder((count ?? 0) > 0);
+        } else if (!cancelled) {
+          setEspacosHasFolder(false);
+        }
+      } catch { if (!cancelled) setEspacosHasFolder(false); }
+    };
+
+    const resolve = (cid) => {
+      if (cancelled) return;
+      setEspacosClientId(cid ?? null);
+      checkFolder(cid ?? null);
+    };
+
+    if (isGroup) {
+      supabase.from('whatsapp_groups').select('loja_id').eq('tenant_id', tenantDbId).eq('group_jid', jid).maybeSingle()
+        .then(async ({ data: wg }) => {
+          if (cancelled) return;
+          if (!wg?.loja_id) { resolve(null); return; }
+          const { data: loja } = await supabase.from('lojas').select('client_id').eq('id', wg.loja_id).eq('is_consultoria_ativa', true).not('client_id', 'is', null).maybeSingle();
+          resolve(loja?.client_id ?? null);
+        })
+        .catch(() => { resolve(null); });
+    } else if (active.customer_id) {
+      supabase.from('lojas').select('client_id').eq('tenant_id', tenantDbId).eq('client_id', active.customer_id).eq('is_consultoria_ativa', true).not('client_id', 'is', null).maybeSingle()
+        .then(({ data }) => { resolve(data?.client_id ?? null); })
+        .catch(() => { resolve(null); });
+    } else {
+      resolve(null);
+    }
+    return () => { cancelled = true; };
+  }, [active?.id, tenantDbId]);
   const activeMsgs     = messages[activeId] || [];
   const isChannel      = !!activeId?.startsWith('chan-');
   const activeChanMsgs = isChannel ? (chanMsgs[active?.chanId] || []) : [];
