@@ -1821,26 +1821,48 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
   // ── Drawer Demandas ───────────────────────────────────────
   const [demandasDrawer, setDemandasDrawer]  = useState({ open: false, customerId: null });
   const [espacosClientId, setEspacosClientId] = useState(null);
+  const [espacosHasFolder, setEspacosHasFolder] = useState(false);
 
   useEffect(() => {
-    if (!active?.whatsapp_chat_id || !tenantDbId) { setEspacosClientId(null); return; }
+    if (!active?.whatsapp_chat_id || !tenantDbId) { setEspacosClientId(null); setEspacosHasFolder(false); return; }
     let cancelled = false;
     const jid = active.whatsapp_chat_id;
     const isGroup = jid.endsWith('@g.us');
+
+    const checkFolder = async (cid) => {
+      try {
+        if (cid && tenantDbId) {
+          const { count } = await supabase.from('espacos_folders')
+            .select('id', { count: 'exact', head: true })
+            .eq('tenant_id', tenantDbId).eq('customer_id', cid);
+          if (!cancelled) setEspacosHasFolder((count ?? 0) > 0);
+        } else if (!cancelled) {
+          setEspacosHasFolder(false);
+        }
+      } catch { if (!cancelled) setEspacosHasFolder(false); }
+    };
+
+    const resolve = (cid) => {
+      if (cancelled) return;
+      setEspacosClientId(cid ?? null);
+      checkFolder(cid ?? null);
+    };
+
     if (isGroup) {
       supabase.from('whatsapp_groups').select('loja_id').eq('tenant_id', tenantDbId).eq('group_jid', jid).maybeSingle()
         .then(async ({ data: wg }) => {
-          if (cancelled || !wg?.loja_id) { if (!cancelled) setEspacosClientId(null); return; }
+          if (cancelled) return;
+          if (!wg?.loja_id) { resolve(null); return; }
           const { data: loja } = await supabase.from('lojas').select('client_id').eq('id', wg.loja_id).eq('is_consultoria_ativa', true).not('client_id', 'is', null).maybeSingle();
-          if (!cancelled) setEspacosClientId(loja?.client_id ?? null);
+          resolve(loja?.client_id ?? null);
         })
-        .catch(() => { if (!cancelled) setEspacosClientId(null); });
+        .catch(() => { resolve(null); });
     } else if (active.customer_id) {
       supabase.from('lojas').select('client_id').eq('tenant_id', tenantDbId).eq('client_id', active.customer_id).eq('is_consultoria_ativa', true).not('client_id', 'is', null).maybeSingle()
-        .then(({ data }) => { if (!cancelled) setEspacosClientId(data?.client_id ?? null); })
-        .catch(() => { if (!cancelled) setEspacosClientId(null); });
+        .then(({ data }) => { resolve(data?.client_id ?? null); })
+        .catch(() => { resolve(null); });
     } else {
-      setEspacosClientId(null);
+      resolve(null);
     }
     return () => { cancelled = true; };
   }, [active?.id, tenantDbId]);
@@ -4538,16 +4560,25 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
                     <Icon name="arrowright" size={15} />
                   </button>
                   <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.1)', margin: '0 2px' }} />
-                  {(espacosClientId || active.customer_id) && (
+                  {espacosClientId && espacosHasFolder && (
                     <button
                       className="lc-action-btn"
                       style={{ fontSize: 11 }}
-                      onClick={() => setDemandasDrawer({ open: true, customerId: espacosClientId ?? active.customer_id })}
+                      onClick={() => setDemandasDrawer({ open: true, customerId: espacosClientId })}
                       title="Abrir demandas deste cliente"
                     >
                       Demandas
                     </button>
                   )}
+                  <button
+                    className="lc-action-btn"
+                    style={{ fontSize: 11 }}
+                    onClick={() => onNavigate?.('espacos', { customerId: espacosClientId })}
+                    disabled={!espacosClientId}
+                    title={espacosClientId ? 'Abrir Espaços deste cliente' : 'Cliente sem pasta'}
+                  >
+                    <Icon name="folder" size={12} /> Espaços
+                  </button>
                   {(active.type === 'whatsapp' || active.type === 'group') && (
                     <DepartmentSelector dark conversationId={active.id} tenantId={tenantDbId} currentDepartmentId={active.department_id ?? null} onChanged={async dept => {
                       const oldDept = departments.find(d => d.id === active.department_id);
@@ -5353,22 +5384,22 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
           display: 'flex', alignItems: 'stretch',
         }}
       >
-        <div style={{ flex: 1, background: 'rgba(0,0,0,0.45)' }} onClick={() => setDemandasDrawer({ open: false, customerId: null })} />
+        <div style={{ flex: 1, background: 'rgba(0,0,0,0.35)' }} onClick={() => setDemandasDrawer({ open: false, customerId: null })} />
         <div style={{
           width: 'min(780px, 100vw)', height: '100%',
-          background: '#0f172a', display: 'flex', flexDirection: 'column',
-          boxShadow: '-4px 0 32px rgba(0,0,0,0.5)',
+          background: 'var(--panel, #fff)', display: 'flex', flexDirection: 'column',
+          boxShadow: '-4px 0 32px rgba(0,0,0,0.18)',
         }}>
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)',
-            background: '#1e293b', flexShrink: 0,
+            padding: '12px 16px', borderBottom: '1px solid var(--line, #e6e4e1)',
+            background: 'var(--panel, #fff)', flexShrink: 0,
           }}>
-            <span style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>Demandas do cliente</span>
+            <span style={{ color: 'var(--tx, #1c1b1a)', fontWeight: 700, fontSize: 15 }}>Demandas do cliente</span>
             <button
               onClick={() => setDemandasDrawer({ open: false, customerId: null })}
               style={{
-                background: 'none', border: 'none', color: '#94a3b8',
+                background: 'none', border: 'none', color: 'var(--tx2, #76716c)',
                 cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: '2px 6px',
               }}
               title="Fechar"

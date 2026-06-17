@@ -198,7 +198,7 @@ function GlobalSearch({ tenantDbId, onNavigate }) {
 }
 
 // telas reusadas do clássico (dark) — renderizadas em área cheia até converter
-const LEGADO = new Set(['deli', 'crm', 'lojas', 'mia', 'cobranca', 'heartbeats', 'metas', 'memoria', 'conhecimento', 'configsys', 'espacos']);
+const LEGADO = new Set(['deli', 'crm', 'lojas', 'mia', 'cobranca', 'heartbeats', 'metas', 'memoria', 'conhecimento', 'configsys']);
 
 const OK_STATUSES = ['ok', 'completed', 'success'];
 const CREDITOS_MES = 10000; // freemium: 10k créditos/mês, 1 por execução de IA
@@ -603,6 +603,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
 
   const temaStyle = brand?.cor ? { '--red': brand.cor, '--red-dark': brand.cor, '--red-soft': brand.cor + '1a' } : undefined;
   const ehChat = tela === 'chat';
+  const ehEspacos = tela === 'espacos';
   const ehLegado = LEGADO.has(tela);
   const nav = setTela;
 
@@ -727,6 +728,8 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
             </div>
             {ehLegado ? (
               <div className="cv2-legado">{render()}</div>
+            ) : ehEspacos ? (
+              <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>{render()}</div>
             ) : (
               <div className="cv2-ct">{render()}</div>
             )}
