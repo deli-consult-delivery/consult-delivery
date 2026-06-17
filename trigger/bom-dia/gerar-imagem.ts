@@ -738,16 +738,14 @@ Retorne: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme":"..
 
   const rawText = claudeResp.content;
 
-  logger.info("bom-dia: raw LLM response", {
-    modelo:      claudeResp.modelo,
-    latencia_ms: claudeResp.latencia_ms,
-    length:      rawText.length,
-    preview:     rawText.slice(0, 500),
-  });
-
   const jsonMatch = rawText.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    logger.error("bom-dia: LLM não retornou JSON", { full: rawText.slice(0, 1000) });
+    logger.error("bom-dia: LLM não retornou JSON", {
+      modelo:      claudeResp.modelo,
+      latencia_ms: claudeResp.latencia_ms,
+      length:      rawText.length,
+      full:        rawText.slice(0, 1000),
+    });
     throw new Error("Claude não retornou JSON válido");
   }
 
