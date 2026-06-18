@@ -91,6 +91,7 @@ function FormQR({ tenantDbId, userId, initial, onSaved, onCancel }) {
   const [erro,         setErro]         = useState(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
+  const uploadCancelledRef = useRef(false);
 
   // Se editando, carrega preview da imagem/áudio já salvo
   useEffect(() => {
@@ -135,7 +136,9 @@ function FormQR({ tenantDbId, userId, initial, onSaved, onCancel }) {
   }
 
   async function iniciarGravacao() {
+    if (recording) return;
     setErro(null);
+    uploadCancelledRef.current = false;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const chunks = [];
@@ -144,6 +147,7 @@ function FormQR({ tenantDbId, userId, initial, onSaved, onCancel }) {
       recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
       recorder.onstop = async () => {
         stream.getTracks().forEach(t => t.stop());
+        if (uploadCancelledRef.current) { uploadCancelledRef.current = false; return; }
         const blob = new Blob(chunks, { type: mimeType });
         setFilePreview(URL.createObjectURL(blob));
         setUploading(true);
@@ -232,7 +236,7 @@ function FormQR({ tenantDbId, userId, initial, onSaved, onCancel }) {
             type="button"
             className={tipo === t.id ? 'cv2-btn' : 'cv2-btn sec'}
             style={{ fontSize: 12, padding: '5px 10px' }}
-            onClick={() => { if (recording) pararGravacao(); setTipo(t.id); setFilePath(null); setFilePreview(null); }}
+            onClick={() => { if (recording) { uploadCancelledRef.current = true; pararGravacao(); } setTipo(t.id); setFilePath(null); setFilePreview(null); }}
           >
             {TIPO_ICONE[t.id]} {t.label}
           </button>
