@@ -798,6 +798,7 @@ function BotsScreen({ tenantDbId }) {
   const [schedule, setSchedule]               = useState(DEFAULT_SCHEDULE);
   const [message, setMessage]                 = useState('Olá! No momento estamos fora do horário de atendimento. Em breve um consultor irá te atender. 🚀');
   const [respondOnlyFirst, setRespondOnlyFirst] = useState(true);
+  const [respondToGroups, setRespondToGroups] = useState(false);
   const [extraMessages, setExtraMessages]     = useState([]);
   const [saving, setSaving]                   = useState(false);
   const [savedOk, setSavedOk]                 = useState(false);
@@ -813,6 +814,7 @@ function BotsScreen({ tenantDbId }) {
         setSchedule(data.schedule ?? DEFAULT_SCHEDULE);
         setMessage(data.message ?? '');
         setRespondOnlyFirst(data.respond_only_first ?? true);
+        setRespondToGroups(data.respond_to_groups ?? false);
         setExtraMessages(data.extra_messages ?? []);
       });
   }, [tenantDbId]);
@@ -859,6 +861,7 @@ function BotsScreen({ tenantDbId }) {
         schedule,
         message,
         respond_only_first: respondOnlyFirst,
+        respond_to_groups:  respondToGroups,
         extra_messages:     extraMessages,
         updated_at:         new Date().toISOString(),
       }, { onConflict: 'tenant_id' });
@@ -888,6 +891,15 @@ function BotsScreen({ tenantDbId }) {
           <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginTop: 3 }}>Quando ativo, responde automaticamente mensagens recebidas fora do horário</div>
         </div>
         <Toggle value={isActive} onChange={setIsActive} />
+      </div>
+
+      {/* Responder em grupos */}
+      <div style={{ ...card, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <div style={{ color: 'white', fontWeight: 600, fontSize: 13 }}>Responder em grupos</div>
+          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginTop: 3 }}>Envia a resposta automática também em grupos de consultoria ativos</div>
+        </div>
+        <Toggle value={respondToGroups} onChange={setRespondToGroups} />
       </div>
 
       {/* Horários */}
