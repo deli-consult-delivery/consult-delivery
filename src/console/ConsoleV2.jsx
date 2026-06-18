@@ -54,6 +54,7 @@ import Inadimplentes from './Inadimplentes.jsx';
 import TarefasClientesScreen from '../screens/TarefasClientesScreen.jsx';
 import ChatScreen from '../screens/ChatScreen.jsx';
 import AgentBuilderScreen from '../screens/AgentBuilderScreen.jsx';
+import AgentsHub from '../screens/AgentsPage.jsx';
 import './console.css';
 
 // ============================================================
@@ -91,6 +92,7 @@ const GRUPOS = [
     { id: 'contratos', ic: 'i-doc', label: 'Contratos' },
   ]},
   { label: 'Agentes IA', items: [
+    { id: 'hub', ic: 'i-bot', label: 'Painel Agentes' },
     { id: 'catalogo', ic: 'i-box', label: 'Catálogo' },
     { id: 'estudio', ic: 'i-palette', label: 'Estúdio de Conteúdo' },
     { id: 'lara-editorial', ic: 'i-palette', label: 'LARA Editorial' },
@@ -656,6 +658,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       case 'avaliacoes': return <Avaliacoes tenantDbId={tenantDbId} userId={userId} />;
       case 'espacos': return <TarefasClientesScreen tenantDbId={tenantDbId} userId={userId} deepLinkCustomerId={deepLinkCustomerId} />;
       case 'ativar': return <AtivarLoja tenantDbId={tenantDbId} />;
+      case 'hub': return <AgentsHub tenantDbId={tenantDbId} userId={userId} />;
       case 'catalogo': return <PainelAgentes tenantDbId={tenantDbId} />;
       case 'estudio': return <Estudio tenantDbId={tenantDbId} userId={userId} />;
       case 'habilidades': return <Habilidades tenantDbId={tenantDbId} userId={userId} />;
