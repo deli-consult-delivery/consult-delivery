@@ -1169,6 +1169,9 @@ async function checkAndSendBotResponse({ inst, tenantId, instance, chatId, convI
   // PK (conversation_id, reply_date) garante que apenas UM ganha.
   // Insert acontece ANTES do fetch para Evolution → mesmo se o worker for
   // cancelado depois, o claim persistiu e bloqueia próximas tentativas.
+  //
+  // O claim é por conversation_id — grupos e PVs têm conversation_id distintos,
+  // portanto o "já respondeu hoje" de um grupo nunca bloqueia um PV do mesmo tenant.
   let claimedDate: string | null = null;
   if (config.respond_only_first) {
     const todayStr = new Intl.DateTimeFormat('en-CA', {

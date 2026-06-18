@@ -3900,7 +3900,9 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
       if (qr.media_type === 'audio') {
         await sendAudioMessage(instance, chatId, base64);
       } else {
-        const fileName = qr.file_path.split('/').pop();
+        const fileName = qr.file_path
+          ? qr.file_path.split('/').pop()
+          : (publicUrl.split('/').pop().split('?')[0] || 'media');
         await sendMediaMessage(instance, chatId, base64, 'image', mimeType, qr.content || '', fileName);
       }
     } catch (err) {
