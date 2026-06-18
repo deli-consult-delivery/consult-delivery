@@ -568,3 +568,5 @@ Touched: none
 - **Deploy:** Edge function `evolution-webhook` versão 55 deployada via Supabase MCP (projeto `czyanilrverorwenikqw`).
 - **Migration:** aplicada com sucesso via Supabase MCP antes do deploy.
 - **PR #421** criado: `feat(bot): resposta automática em grupos via toggle por tenant`.
+- **Regressão corrigida (code review):** `enviarQrMidia` no ChatScreen.jsx tinha perdido o ternário null-check de `qr.file_path` → restaurado. Comentário adicionado em `evolution-webhook` explicando que o claim `respond_only_first` é por `conversation_id` (grupos e PVs têm contadores independentes).
+- **PR #421 mergeado** (squash) em main — f3a7122.
