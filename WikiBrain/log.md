@@ -1,5 +1,22 @@
 # Wiki Log
 
+## 2026-06-18 — Sessão 67/68: Painel Agentes reescrito com identidade Console v2 (PR #420) [Console v2 — hub]
+
+**Contexto:** Wandson pediu para refazer o Painel Agentes com identidade visual do Console v2, e verificar conformidade em produção.
+
+**Problema:** O antigo `AgentsHub` (`src/screens/AgentsPage.jsx`) usava fundo escuro `#0f172a`, hero layout, gradiente e prompt composer dark — totalmente fora do design system do Console v2.
+
+**Entregue:**
+- `src/console/DeliHub.jsx` — novo componente com identidade v2 nativa: `.cv2-kpis`, `.cv2-card`, `.cv2-btn`, `var(--red)`, fundo claro `var(--bg)`. 11 agentes em `AGENT_META` com avatar colorido + letra, descrição, ETA. Grid responsivo de AgentCards. KPIs: execuções 30d, custo, taxa sucesso, agentes ativos. Execuções recentes via `agent_runs` (30d, limit 50) + Supabase Realtime. PromptBox delegando à DELI via Bridge. Overlays `BomDiaScreen`/`EncerramentoScreen` reusadas.
+- `src/console/ConsoleV2.jsx` — import `AgentsHub` trocado por `DeliHub`, case `'hub'` atualizado.
+
+**Verificação em produção:**
+- Bundle `index-DEVP-sio.js` em `app.consultdelivery.com.br` confirmado com `analise-ifood` + `COO digital` (strings literais do novo `AGENT_META`)
+- `DELI Hub` ausente (antigo removido)
+- PR #420 squash-mergeado → `ba5e014` em main
+
+---
+
 ## 2026-06-18 — Sessão 66/67: 3 bugs críticos Respostas Rápidas (PR #418) [T9 — chat ao vivo]
 
 **Contexto:** bugs identificados no code review da sessão 60 (PR #372) ainda não corrigidos. Wandson aprovou com "Pode resolver isso".
