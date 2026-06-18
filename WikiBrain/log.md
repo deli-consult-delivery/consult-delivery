@@ -1,5 +1,28 @@
 # Wiki Log
 
+## 2026-06-18 — Sessão 66/67: 3 bugs críticos Respostas Rápidas (PR #418) [T9 — chat ao vivo]
+
+**Contexto:** bugs identificados no code review da sessão 60 (PR #372) ainda não corrigidos. Wandson aprovou com "Pode resolver isso".
+
+**Bug 1 — Mic leak ao double-tap (`RespostasRapidas.jsx:iniciarGravacao`)**
+- Sintoma: clicar 2x rápido no botão de gravação antes do React re-renderizar criava dois `getUserMedia` simultâneos; o primeiro stream nunca era parado.
+- Raiz: nenhum guard de re-entrância.
+- Fix: `if (recording) return;` no topo de `iniciarGravacao`.
+
+**Bug 2 — `onstop` assíncrono sobrescreve `setFilePath(null)` após troca de tipo**
+- Sintoma: usuário grava áudio, troca para outro tipo (ex: Texto) → o callback `onstop` (assíncrono) faz upload ao Storage e chama `setFilePath(path)` DEPOIS de `setFilePath(null)` → QR fica com `filePath` não-nulo → ao salvar, `media_url` de QRs legados é zerada para null.
+- Raiz: `pararGravacao()` chama `recorder.stop()`, mas `onstop` é callback async; `setFilePath(null)` no handler do botão é sync — race condition.
+- Fix: `uploadCancelledRef = useRef(false)` — setado para `true` antes de `pararGravacao()` na troca de tipo; checado no início de `onstop` para abortar o upload se cancelado.
+
+**Bug 3 — crash silencioso em `enviarQrMidia` para QRs com `media_url` legada (`ChatScreen.jsx`)**
+- Sintoma: QR antigo (criado antes de `file_path` existir, usa campo `media_url`) chegava ao modal de confirmação via branch `media_url` em `insertQR`, mas em `enviarQrMidia` a linha `qr.file_path.split('/')` lançava `TypeError: Cannot read properties of null` — swallowed pelo catch → mensagem nunca enviada, sem feedback ao usuário.
+- Raiz: `qr.file_path` é `null` para QRs legados; `insertQR` roteia corretamente, mas `enviarQrMidia` não tratava o null.
+- Fix: null-safe com fallback: `qr.file_path ? qr.file_path.split('/').pop() : (publicUrl.split('/').pop().split('?')[0] || 'media')`.
+
+**Resultado:** PR #418 squash-mergeado (SHA `c25a900`). Build verde (6.78s). 2 arquivos modificados, 8 linhas adicionadas, 2 removidas.
+
+## 2026-06-18 — Sessão 65/66: Transcrição automática de áudio outbound (PR #413) [T9 — chat ao vivo]
+
 ## [2026-05-24] session | G01 DELI Core — 5/5 sub-goals shipados
 - G01.2: migration agent_prompts (RLS via tenant_members, profiles sem tenant_id), seed 3 prompts globais. Smoke: COUNT=3 ✓
 - G01.1: src/agents/shared/runtime.ts — executeAgent/getPrompt/logRun. tsc --noEmit EXIT:0 ✓
