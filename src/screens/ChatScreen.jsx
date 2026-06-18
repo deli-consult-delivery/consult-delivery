@@ -1449,7 +1449,7 @@ function MsgBubble({ m, conv, onReply, onCreateTask, onViewImage, starred, onSta
             )}
           </div>
         )}
-        {!isOut && transcription && (m.mediaType?.includes('audio') || m.mediaType === 'video') && (
+        {transcription && (m.mediaType?.includes('audio') || m.mediaType === 'video') && (
           <div style={{ marginTop: 4, marginLeft: 4, maxWidth: 340 }}>
             {transcription.loading && (
               <div style={{ display: 'flex', gap: 4, alignItems: 'center', padding: '3px 0' }}>
@@ -2259,6 +2259,7 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
         const isActive  = convId === activeIdRef.current;
         const mediaType = msg.media_type || null;
         const preview   = text || (mediaType === 'image' ? '🖼 Imagem' : mediaType === 'video' ? '🎬 Vídeo' : mediaType === 'document' ? '📄 Documento' : mediaType?.includes('audio') ? '🎵 Áudio' : mediaType === 'sticker' ? '🔖 Figurinha' : '');
+        let capturedTmpId = null;
         setMessages(m => {
           const convMsgs = m[convId] || [];
           if (convMsgs.some(ex => ex.id === msg.id)) return m;
@@ -2268,10 +2269,22 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
               ex.from === 'out' &&
               (mediaType ? ex.mediaType === mediaType : ex.text === text)
             );
-            if (tmpIdx !== -1) return { ...m, [convId]: convMsgs.map((ex, i) => i === tmpIdx ? { ...ex, id: msg.id, _ts: msg.created_at || ex._ts } : ex) };
+            if (tmpIdx !== -1) {
+              capturedTmpId = convMsgs[tmpIdx].id;
+              return { ...m, [convId]: convMsgs.map((ex, i) => i === tmpIdx ? { ...ex, id: msg.id, _ts: msg.created_at || ex._ts } : ex) };
+            }
           }
           return { ...m, [convId]: [...convMsgs, { id: msg.id, from: isInbound ? 'in' : 'out', text, time, _ts: msg.created_at || new Date().toISOString(), mediaType, mediaUrl: msg.media_url || null, agentName: msg.sender_name || null, waMsgId: msg.whatsapp_msg_id || null, replyTo: msg.quoted_content || null, deliveryStatus: msg.delivery_status ?? null }] };
         });
+        if (capturedTmpId) {
+          setTranscriptions(t => {
+            if (!t[msg.id] && t[capturedTmpId]) {
+              const { [capturedTmpId]: v, ...rest } = t;
+              return { ...rest, [msg.id]: v };
+            }
+            return t;
+          });
+        }
         if (isInbound) {
           setWaLastInbound(msg.created_at || new Date().toISOString());
           if (typingTimerRef.current) { clearTimeout(typingTimerRef.current); typingTimerRef.current = null; }
@@ -3461,13 +3474,17 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
     if (!active || !HAS_EVO || !selectedInstance || !active.whatsapp_chat_id) return;
     // URL local para o player funcionar imediatamente enquanto o upload acontece
     const localUrl = URL.createObjectURL(blob);
+    const tmpId = 'tmp-' + Date.now(); // gerado fora do callback para evitar inconsistência e permitir transcrição
     const reader = new FileReader();
     reader.onloadend = async () => {
       const base64 = reader.result.split(',')[1];
       const now = new Date();
       const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
       const nowAudio = new Date();
-      setMessages(m => ({ ...m, [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text: '', time, _ts: nowAudio.toISOString(), mediaType: 'audio', mediaUrl: localUrl }] }));
+      setMessages(m => ({ ...m, [active.id]: [...(m[active.id] || []), { id: tmpId, from: 'out', text: '', time, _ts: nowAudio.toISOString(), mediaType: 'audio', mediaUrl: localUrl }] }));
+      if (autoTranscribeRef.current) {
+        transcribeMessage(tmpId, reader.result); // data: URI — transcribeMessage converte para FormData antes de enviar ao bridge
+      }
       setSending(true);
       try { await sendAudioMessage(selectedInstance, active.whatsapp_chat_id, base64); }
       catch (err) { console.error('Falha ao enviar áudio:', err); }
