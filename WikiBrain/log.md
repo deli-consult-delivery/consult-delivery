@@ -549,6 +549,17 @@ Touched: none
 - **Tracker atualizado:** PR #408 (squash SHA `fce35dd`).
 - **Regra de memória atualizada:** browser test é autônomo — nunca pedir permissão.
 
+## 2026-06-18 — Sessão 66/67: Regras de feriado nacional para bom-dia e encerramento (PR #416) [T8 — agentes]
+
+- **Contexto:** Wandson pediu que as mensagens automáticas de bom-dia e encerramento respeitassem feriados nacionais: (a) no próprio dia do feriado → não enviar nada; (b) no dia anterior a um feriado nacional → encerramento não pode dizer "voltamos amanhã" nem sugerir disponibilidade no feriado; (c) feriado facultativo → funciona normalmente (empresa trabalha).
+- **`trigger/_shared/feriados.ts` (NOVO):** fonte única de verdade para feriados 2026/2027. Inclui 11-20 Consciência Negra (Lei 14.759/2023), que estava faltando em todos os arquivos. Exporta `isFeriadoNacional()` e `getNextWorkingDayReturnLine()` (itera até 10 dias à frente para cobrir correntes de feriados como Páscoa+Tiradentes 04-20+04-21 em 2026).
+- **`bom-dia/envio-agendado.ts` + `encerramento/envio-agendado.ts`:** removida lista local duplicada de feriados; passam a importar `isFeriadoNacional` do `_shared`.
+- **`encerramento/gerar-imagem.ts`:** detecta se amanhã é feriado nacional via `isFeriadoNacional(tomorrowYear, tomorrowMd)`; ajusta `returnLine` para indicar o próximo dia útil real; injeta `linha2System`/`linha2User` dinâmicos no prompt LLM para impedir que o modelo diga "disponível amanhã" ou qualquer variação quando o dia seguinte é feriado.
+- **`bom-dia/gerar-imagem.ts`:** os dois schedules de cache-warming (seg–sex e sáb) pulam a geração de imagem em feriado nacional com early return + log.
+- **TypeScript:** 0 erros (`/root/consult-delivery/node_modules/.bin/tsc --noEmit` EXIT 0).
+- **Deploy:** versão `20260618.7` no Trigger.dev — 71 tasks detectadas e deployadas.
+- **PR #416** squash-mergeado (SHA `e562387`).
+
 ## 2026-06-18 — Sessão 65/66: Transcrição automática de áudio outbound (PR #413) [T9 — chat ao vivo]
 
 - **Contexto:** O toggle de transcrição automática funcionava para inbound mas não para áudio enviado pelo operador (outbound). Wandson testou e confirmou que a transcrição não aparecia para mensagens enviadas, pedindo correção holística.
