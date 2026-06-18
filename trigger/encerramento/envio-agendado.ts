@@ -2,18 +2,7 @@ import { schedules, tasks, logger } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
-
-// ─── Feriados nacionais brasileiros (hardcoded 2026 e 2027) ──────────────────
-const FERIADOS_POR_ANO: Record<number, string[]> = {
-  2026: [
-    "01-01", "04-20", "04-21", "05-01", "06-11",
-    "09-07", "10-12", "11-02", "11-15", "12-25",
-  ],
-  2027: [
-    "01-01", "04-05", "04-06", "05-01", "06-03",
-    "09-07", "10-12", "11-02", "11-15", "12-25",
-  ],
-};
+import { isFeriadoNacional } from "../_shared/feriados";
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -46,11 +35,6 @@ function getSPDate(): { dateStr: string; year: number; monthDay: string } {
     year:     parseInt(yearStr, 10),
     monthDay: `${month}-${day}`,
   };
-}
-
-function isFeriadoNacional(year: number, monthDay: string): boolean {
-  const feriados = FERIADOS_POR_ANO[year] ?? [];
-  return feriados.includes(monthDay);
 }
 
 // ─── Lógica principal ─────────────────────────────────────────────────────────

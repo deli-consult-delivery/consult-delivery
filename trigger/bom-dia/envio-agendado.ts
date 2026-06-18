@@ -2,37 +2,7 @@ import { schedules, tasks, logger } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
-
-// ─── Feriados nacionais brasileiros (hardcoded 2026 e 2027) ──────────────────
-// Formato: "MM-DD" (mês-dia) para comparação com qualquer ano coberto.
-// 2026: Páscoa = 20/04, Corpus Christi = 11/06
-// 2027: Páscoa = 05/04, Corpus Christi = 03/06
-const FERIADOS_POR_ANO: Record<number, string[]> = {
-  2026: [
-    "01-01", // Confraternização Universal
-    "04-20", // Páscoa
-    "04-21", // Tiradentes
-    "05-01", // Dia do Trabalho
-    "06-11", // Corpus Christi
-    "09-07", // Independência
-    "10-12", // Nossa Senhora Aparecida
-    "11-02", // Finados
-    "11-15", // Proclamação da República
-    "12-25", // Natal
-  ],
-  2027: [
-    "01-01", // Confraternização Universal
-    "04-05", // Páscoa
-    "04-06", // Tiradentes (próximo a Páscoa — verificar decreto)
-    "05-01", // Dia do Trabalho
-    "06-03", // Corpus Christi
-    "09-07", // Independência
-    "10-12", // Nossa Senhora Aparecida
-    "11-02", // Finados
-    "11-15", // Proclamação da República
-    "12-25", // Natal
-  ],
-};
+import { isFeriadoNacional } from "../_shared/feriados";
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -70,12 +40,6 @@ function getSPDate(): { dateStr: string; year: number; monthDay: string } {
     year:     parseInt(yearStr, 10),
     monthDay: `${month}-${day}`,
   };
-}
-
-/** Verifica se a data fornecida é feriado nacional brasileiro. */
-function isFeriadoNacional(year: number, monthDay: string): boolean {
-  const feriados = FERIADOS_POR_ANO[year] ?? [];
-  return feriados.includes(monthDay);
 }
 
 // ─── Lógica principal (compartilhada entre as duas schedules) ─────────────────

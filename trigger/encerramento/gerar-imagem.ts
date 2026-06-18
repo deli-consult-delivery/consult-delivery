@@ -3,6 +3,7 @@ import { z } from "zod";
 import { chat } from "../agents/llm-client";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
+import { isFeriadoNacional, getNextWorkingDayReturnLine } from "../_shared/feriados";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -339,13 +340,22 @@ async function executar(input: Input, runId: string): Promise<Output> {
   const closingTone = CLOSING_TONE[weekday] ?? CLOSING_TONE[5];
   const visualStyle = selectVisualStyle(weekday, dateStr);
 
-  logger.info("encerramento-gerar-imagem iniciado", { dateStr, dayName, theme, isManual });
+  // Verificar se amanhã é feriado nacional
+  const [spY, spM, spD] = dateStr.split("-").map(Number);
+  const tomorrowDate = new Date(spY, spM - 1, spD + 1);
+  const tomorrowYear = tomorrowDate.getFullYear();
+  const tomorrowMd   = `${String(tomorrowDate.getMonth() + 1).padStart(2, "0")}-${String(tomorrowDate.getDate()).padStart(2, "0")}`;
+  const isTomorrowNationalHoliday = isFeriadoNacional(tomorrowYear, tomorrowMd);
 
-  const returnLine = isSat
-    ? "🕘 Segunda-feira voltamos às 09h — demandas recebidas serão respondidas no próximo dia útil"
-    : weekday === 5
-      ? "🕘 Voltamos amanhã às 08h — demandas recebidas serão respondidas no próximo dia útil"
-      : "🕘 Voltamos amanhã às 09h — demandas recebidas serão respondidas no próximo dia útil";
+  logger.info("encerramento-gerar-imagem iniciado", { dateStr, dayName, theme, isManual, isTomorrowNationalHoliday });
+
+  const returnLine = isTomorrowNationalHoliday
+    ? getNextWorkingDayReturnLine(dateStr)
+    : isSat
+      ? "🕘 Segunda-feira voltamos às 09h — demandas recebidas serão respondidas no próximo dia útil"
+      : weekday === 5
+        ? "🕘 Voltamos amanhã às 08h — demandas recebidas serão respondidas no próximo dia útil"
+        : "🕘 Voltamos amanhã às 09h — demandas recebidas serão respondidas no próximo dia útil";
 
   const briefLine = input.custom_brief?.trim()
     ? `\nContexto adicional: ${input.custom_brief.trim()}`
@@ -360,6 +370,14 @@ async function executar(input: Input, runId: string): Promise<Output> {
     : `bold white #FFFFFF condensed headline text`;
 
   const greetingLine = isSat ? "Bom fim de semana!" : "Boa noite!";
+
+  const linha2System = isTomorrowNationalHoliday
+    ? `Linha 2: frase curta informando que amanhã é feriado nacional e a equipe retorna conforme indicado em Linha 3 (NÃO dizer "disponível amanhã", NÃO dizer "atenderemos amanhã", NÃO sugerir disponibilidade no feriado — máx 12 palavras)`
+    : `Linha 2: frase curta reforçando que a equipe da Consult Delivery encerrou o expediente e está disponível para responder no próximo dia útil (máx 12 palavras — NÃO mencionar "operação", "pedidos" ou sugerir que o cliente também encerrou)`;
+
+  const linha2User = isTomorrowNationalHoliday
+    ? `Linha 2: frase curta informando que amanhã é feriado nacional e a equipe retorna conforme Linha 3 (NÃO dizer "disponível amanhã" ou qualquer variação — máx 12 palavras)`
+    : `Linha 2: frase curta reforçando que a equipe da Consult Delivery encerrou o expediente e estará disponível no próximo dia útil (máx 12 palavras — NÃO mencionar "operação", "pedidos" ou sugerir que o cliente também encerrou)`;
 
   const claudeResp = await chat([
     { role: "system", content: `Você é o Superagente de Imagens de Encerramento de Expediente da Consult Delivery — consultoria de delivery do Wandson Silva. Gere diariamente: prompt de imagem (Recraft) + headline + legenda WhatsApp para o encerramento do dia de trabalho.
@@ -386,7 +404,7 @@ Canto inferior direito: foguete laranja #f97316 + chamas brancas + texto "Consul
 
 ═══ LEGENDA WHATSAPP (PT-BR — máx 4 linhas, tom de encerramento) ═══
 Linha 1: "${greetingLine}" + [1 emoji] + frase calorosa de encerramento relacionada ao tema (máx 10 palavras)
-Linha 2: frase curta reforçando que a equipe da Consult Delivery encerrou o expediente e está disponível para responder no próximo dia útil (máx 12 palavras — NÃO mencionar "operação", "pedidos" ou sugerir que o cliente também encerrou)
+${linha2System}
 [linha em branco]
 Linha 3: horário de retorno (ex: "${returnLine}")
 SEM links, SEM @, SEM hashtag, SEM CTA de compra
@@ -418,7 +436,7 @@ Gere JSON com exatamente 4 campos:
 
 3. "caption" (PT-BR — máx 4 linhas, tom de encerramento):
    Linha 1: "${greetingLine}" + [1 emoji] + frase calorosa de encerramento sobre "${theme}" (máx 10 palavras)
-   Linha 2: frase curta reforçando que a equipe da Consult Delivery encerrou o expediente e estará disponível no próximo dia útil (máx 12 palavras — NÃO mencionar "operação", "pedidos" ou sugerir que o cliente também encerrou)
+   ${linha2User}
    [linha em branco]
    Linha 3: "${returnLine}"
    — sem links, @, hashtag, CTA de compra
