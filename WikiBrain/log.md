@@ -610,3 +610,12 @@ Touched: none
 - **Build:** `npm run build` EXIT 0 (9.89s, warnings pré-existentes apenas — chunk >500kB + dynamic/static supabase.js — não causados por este PR).
 - **Branch:** `wandson/fix-transcricao-update` → conflito resolvido via `git merge origin/wandson/fix-transcricao-update` (force-push bloqueado per memória). PR #413 squash-mergeado (SHA `6d2a1f4025c2d14c9c973bf944366b97e2b31c29`).
 - **Follow-up:** 6 bugs da sessão 60 (Respostas Rápidas v3) ainda pendentes — 3 críticos (mic leak, media_url orfanada no edit, insertQR silencia QRs legados com media_url antiga) + 4 médios/baixos.
+
+## [2026-06-18] sessão 67 | feat: bot resposta automática em grupos
+
+- **Diagnóstico:** bot de atendimento não respondia em grupos WhatsApp (`@g.us`) — causa raiz: condição hardcoded `if (!isGroup && convId)` em `evolution-webhook/index.ts:538` bloqueava grupos explicitamente (design intencional original para evitar spam).
+- **Solução:** feature configurável por tenant. (1) Migration aditiva `20260618_001_bot_configs_respond_to_groups.sql` — `ALTER TABLE bot_configs ADD COLUMN respond_to_groups BOOLEAN NOT NULL DEFAULT false`. (2) Edge function: outer condition alterada para `if (convId)`, passando `isGroup`; guard interno `if (isGroup && !config.respond_to_groups) return` em `checkAndSendBotResponse`. (3) UI: toggle "Responder em grupos" em ChatScreen.jsx (estado + load + save + JSX).
+- **Zero regressão:** `respond_to_groups` default `false` → tenants existentes continuam com comportamento PV-only.
+- **Deploy:** Edge function `evolution-webhook` versão 55 deployada via Supabase MCP (projeto `czyanilrverorwenikqw`).
+- **Migration:** aplicada com sucesso via Supabase MCP antes do deploy.
+- **PR #421** criado: `feat(bot): resposta automática em grupos via toggle por tenant`.

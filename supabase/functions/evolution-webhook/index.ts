@@ -530,13 +530,15 @@ async function handleMessagesUpsert({ inst, tenantId, instance, data }: {
     }
   }
 
-  // ── Bot: resposta automática fora do horário (somente PV, não grupos) ───────
+  // ── Bot: resposta automática fora do horário ─────────────────────────────────
+  // Grupos: o filtro foi movido para dentro de checkAndSendBotResponse, onde
+  // verifica config.respond_to_groups antes de agir.
 
   // AWAIT (não fire-and-forget) — Deno Edge Runtime cancela tasks pendentes
   // após Response retornar, e isso fazia o INSERT do bot nunca persistir,
   // causando o bot a responder de novo na próxima mensagem do cliente.
-  if (!isGroup && convId) {
-    await checkAndSendBotResponse({ inst, tenantId, instance, chatId, convId }).catch(err => {
+  if (convId) {
+    await checkAndSendBotResponse({ inst, tenantId, instance, chatId, convId, isGroup }).catch(err => {
       console.warn('[BOT] checkAndSendBotResponse falhou (não crítico):', err.message);
     });
   }
@@ -1103,17 +1105,20 @@ async function triggerBrenoIfNeeded({ tenantId, conversationId, messageId, messa
 }
 
 // Verifica se mensagem chegou fora do horário e envia resposta automática
-async function checkAndSendBotResponse({ inst, tenantId, instance, chatId, convId }: {
+async function checkAndSendBotResponse({ inst, tenantId, instance, chatId, convId, isGroup }: {
   inst: { evolution_url: string; api_key: string };
-  tenantId: string; instance: string; chatId: string; convId: string;
+  tenantId: string; instance: string; chatId: string; convId: string; isGroup: boolean;
 }) {
   const { data: config } = await supabase
     .from('bot_configs')
-    .select('is_active, schedule, message, extra_messages, respond_only_first, timezone')
+    .select('is_active, schedule, message, extra_messages, respond_only_first, timezone, respond_to_groups')
     .eq('tenant_id', tenantId)
     .maybeSingle();
 
   if (!config?.is_active) return;
+
+  // Grupos só recebem resposta automática se o tenant habilitou respond_to_groups
+  if (isGroup && !config.respond_to_groups) return;
 
   // Determina hora local do tenant
   const tz  = (config.timezone as string) || 'America/Sao_Paulo';
@@ -1164,6 +1169,9 @@ async function checkAndSendBotResponse({ inst, tenantId, instance, chatId, convI
   // PK (conversation_id, reply_date) garante que apenas UM ganha.
   // Insert acontece ANTES do fetch para Evolution → mesmo se o worker for
   // cancelado depois, o claim persistiu e bloqueia próximas tentativas.
+  //
+  // O claim é por conversation_id — grupos e PVs têm conversation_id distintos,
+  // portanto o "já respondeu hoje" de um grupo nunca bloqueia um PV do mesmo tenant.
   let claimedDate: string | null = null;
   if (config.respond_only_first) {
     const todayStr = new Intl.DateTimeFormat('en-CA', {
