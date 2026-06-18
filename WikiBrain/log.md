@@ -548,3 +548,14 @@ Touched: none
   - Console V2: ✅ ESPAÇOS disponível na sidebar com mesma hierarquia workspace-first
 - **Tracker atualizado:** PR #408 (squash SHA `fce35dd`).
 - **Regra de memória atualizada:** browser test é autônomo — nunca pedir permissão.
+
+## 2026-06-18 — Sessão 65/66: Transcrição automática de áudio outbound (PR #413) [T9 — chat ao vivo]
+
+- **Contexto:** O toggle de transcrição automática funcionava para inbound mas não para áudio enviado pelo operador (outbound). Wandson testou e confirmou que a transcrição não aparecia para mensagens enviadas, pedindo correção holística.
+- **Plano aprovado (3 bugs):** identificados via leitura do `ChatScreen.jsx` antes de qualquer código.
+- **Bug 1 — Display (`!isOut` na linha 1452):** a condição JSX `{!isOut && transcription && ...}` impedia a renderização do bloco de transcrição para mensagens enviadas → removido `!isOut &&`; transcrição agora renderiza para inbound E outbound.
+- **Bug 2 — Trigger (`sendAudioBlob` nunca chamava `transcribeMessage`):** `sendAudioBlob` enviava o áudio via Evolution API mas não acionava `transcribeMessage`. Também o `tmpId` era gerado dentro do `setMessages` callback (React pode chamá-lo múltiplas vezes). Fix: `tmpId` gerado fora do callback (`const tmpId = 'tmp-' + Date.now()`) + `transcribeMessage(tmpId, reader.result)` chamado imediatamente após o `setMessages` (o `reader.result` é um `data:` URI — `transcribeMessage` já converte para FormData antes de enviar ao bridge via `/api/whisper/transcribe`).
+- **Bug 3 — Vínculo orfanado (INSERT handler):** quando o INSERT do Supabase Realtime chegava e substituía o `tmpId` pelo `msg.id` real no `setMessages`, a entrada `transcriptions[tmpId]` ficava órfã — `transcriptions[msg.id]` nunca era preenchido. Fix: `let capturedTmpId = null` declarado antes do `setMessages`; dentro do callback (mutação síncrona no batch do React), `capturedTmpId = convMsgs[tmpIdx].id`; depois do `setMessages`, `setTranscriptions(t => { if (!t[msg.id] && t[capturedTmpId]) { ... }})` migra a entrada.
+- **Build:** `npm run build` EXIT 0 (9.89s, warnings pré-existentes apenas — chunk >500kB + dynamic/static supabase.js — não causados por este PR).
+- **Branch:** `wandson/fix-transcricao-update` → conflito resolvido via `git merge origin/wandson/fix-transcricao-update` (force-push bloqueado per memória). PR #413 squash-mergeado (SHA `6d2a1f4025c2d14c9c973bf944366b97e2b31c29`).
+- **Follow-up:** 6 bugs da sessão 60 (Respostas Rápidas v3) ainda pendentes — 3 críticos (mic leak, media_url orfanada no edit, insertQR silencia QRs legados com media_url antiga) + 4 médios/baixos.
