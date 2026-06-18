@@ -3,6 +3,7 @@ import { z } from "zod";
 import { chat } from "../agents/llm-client";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
+import { isFeriadoNacional } from "../_shared/feriados";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -876,6 +877,14 @@ export const bomDiaScheduleWeekday = schedules.task({
   retry: { maxAttempts: 2, minTimeoutInMs: 5000 },
 
   run: async () => {
+    const SP_OFFSET_MS = -3 * 60 * 60 * 1000;
+    const nowSP = new Date(Date.now() + SP_OFFSET_MS);
+    const spDateStr = nowSP.toISOString().split("T")[0];
+    const [yearStr, mm, dd] = spDateStr.split("-");
+    if (isFeriadoNacional(parseInt(yearStr, 10), `${mm}-${dd}`)) {
+      logger.info("bom-dia-schedule-weekday: feriado nacional — skip warming", { spDateStr });
+      return;
+    }
     logger.info("bom-dia-schedule-weekday: disparando (seg–sex)");
     await bomDiaGerarImagem.trigger({});
   },
@@ -889,6 +898,14 @@ export const bomDiaScheduleSabado = schedules.task({
   retry: { maxAttempts: 2, minTimeoutInMs: 5000 },
 
   run: async () => {
+    const SP_OFFSET_MS = -3 * 60 * 60 * 1000;
+    const nowSP = new Date(Date.now() + SP_OFFSET_MS);
+    const spDateStr = nowSP.toISOString().split("T")[0];
+    const [yearStr, mm, dd] = spDateStr.split("-");
+    if (isFeriadoNacional(parseInt(yearStr, 10), `${mm}-${dd}`)) {
+      logger.info("bom-dia-schedule-sabado: feriado nacional — skip warming", { spDateStr });
+      return;
+    }
     logger.info("bom-dia-schedule-sabado: disparando (sáb)");
     await bomDiaGerarImagem.trigger({});
   },
