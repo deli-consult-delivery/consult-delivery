@@ -1,5 +1,44 @@
 # Wiki Log
 
+## 2026-06-19 — Sessão 68/69: Integração Asaas completa — Dashboard Financeiro + Agente Cora ativado (PR #423) [T8 — Cora / financeiro]
+
+**Contexto:** Wandson pediu integração completa do Asaas em uma sessão: sync de cobranças → dashboard financeiro → régua diária de cobrança → aprovação com 1 clique via WhatsApp.
+
+**Decisões tomadas:**
+- Modo Cora = Híbrido (draft → aprovação humana → Evolution API envia)
+- Cora.jsx reformulada: 2 abas (Financeiro + Agente Cora)
+- Tabela `cobrancas` = fonte primária (Supabase); Asaas = origem dos dados via cron
+- `autonomy_level` mapeado: humano→vermelho, hibrido→amarelo, ia→verde (constraint DB)
+- `tenant_agent_config` usa coluna `agent_id` (não `agent`)
+- CSS flex bars para gráfico (sem biblioteca de charting instalada)
+- `MAIN_TENANT_ID` via Infisical (lazy getter)
+
+**Arquivos criados:**
+- `trigger/asaas/sync-financeiro.ts` — cron a cada 30 min, upsert completo Asaas → `cobrancas` via `asaas_charge_id`
+- `trigger/cora/regua-diaria.ts` — cron 09h BRT (12h UTC), janela T-7 a T+90, skip se já houve ação hoje
+- `trigger/cora/processar-cobranca.ts` — subtask: lê V2, chama claude-haiku-4-5-20251001, insere `agent_drafts` + `cora_acoes`
+- `bridge-server/routes/cora-aprovacao.js` — `POST /api/cora/aprovar/:id` (Evolution API) + `POST /api/cora/rejeitar/:id`
+
+**Arquivos modificados:**
+- `trigger/_shared/asaas.ts` — adicionado `listChargesAll()` com paginação completa (offset/limit)
+- `bridge-server/index.js` — montagem da rota `cora-aprovacao` com `requireJwt`
+- `src/console/Cora.jsx` — reescrita do componente principal: 2 abas, KPIs V2, CSS bar chart receita 6m, aging, tabela filtrada, fila de drafts com Aprovar/Rejeitar, histórico `cora_acoes`, ModoToggle
+
+**Bug corrigido:**
+- V1/V2 mismatch: régua original importava `coraEscalonar` (lê `cora_cobrancas` V1); refatorado para `coraProcessarCobranca` direto (V2)
+
+**Verificação:**
+- PR #423 squash-mergeado → SHA `d2f13fb635f7270b45e9dee9c912b7c5dd599722` em main
+- `trigger.config.ts` usa `dirs: ["./trigger"]` — auto-descobre tasks novas sem registro manual
+
+**Pendente (requer Wandson):**
+- Fase 0: chave de produção Asaas → Infisical (`ASAAS_API_KEY` + `ASAAS_ENVIRONMENT=production`)
+- Adicionar `MAIN_TENANT_ID` (UUID do tenant) ao Infisical
+- `pm2 restart bridge-server` após atualizar Infisical
+- `npx trigger.dev@4.4.6 deploy` para registrar as 3 novas tasks no Trigger.dev cloud
+
+---
+
 ## 2026-06-18 — Sessão 67/68: Painel Agentes reescrito com identidade Console v2 (PR #420) [Console v2 — hub]
 
 **Contexto:** Wandson pediu para refazer o Painel Agentes com identidade visual do Console v2, e verificar conformidade em produção.
