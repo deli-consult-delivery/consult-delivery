@@ -59,6 +59,8 @@ export const AsaasCharge = z.object({
     .optional(),
   dateCreated: z.string().optional(),
   paymentDate: z.string().nullable().optional(),
+  invoiceViewedDate: z.string().nullable().optional(),
+  confirmedDate: z.string().nullable().optional(),
 });
 
 export const AsaasListResponse = z.object({

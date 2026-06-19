@@ -780,6 +780,7 @@ function DraftCard({ draft, tenantDbId, onDone }) {
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function Cora({ tenantDbId, userId }) {
   const [activeTab, setActiveTab] = useState('financeiro');
+  const [finSubTab, setFinSubTab] = useState('visao-geral');
 
   // V2 (Asaas) state
   const [cobrancasV2, setCobrancasV2] = useState([]);
@@ -985,6 +986,29 @@ export default function Cora({ tenantDbId, userId }) {
     return true;
   });
 
+  // Extrato — pagamentos recebidos com dados ricos
+  const extrato = cobrancasV2
+    .filter(c => c.status === 'received' && (c.payment_date || c.confirmed_date || c.vencimento))
+    .sort((a, b) => {
+      const da = a.payment_date || a.confirmed_date || a.vencimento;
+      const db = b.payment_date || b.confirmed_date || b.vencimento;
+      return db.localeCompare(da);
+    });
+
+  const totalRecebidoBruto = extrato.reduce((s, c) => s + Number(c.valor), 0);
+  const totalRecebidoLiquido = extrato.reduce((s, c) => s + Number(c.net_value ?? c.valor), 0);
+  const totalTaxaAsaas = totalRecebidoBruto - totalRecebidoLiquido;
+
+  const billingBreakdown = {};
+  cobrancasV2.forEach(c => {
+    const bt = c.billing_type || 'UNDEFINED';
+    if (!billingBreakdown[bt]) billingBreakdown[bt] = { qtd: 0, valor: 0 };
+    billingBreakdown[bt].qtd++;
+    billingBreakdown[bt].valor += Number(c.valor);
+  });
+  const billingLabel = { BOLETO: 'Boleto', PIX: 'PIX', CREDIT_CARD: 'Cartão', UNDEFINED: 'Indefinido' };
+  const billingColor = { BOLETO: '#2563eb', PIX: '#16a34a', CREDIT_CARD: '#7c3aed', UNDEFINED: '#6b7280' };
+
   const selected = cobrancas.find(c => c.id === selectedId);
   const selectedV2 = cobrancasV2.find(c => c.id === selectedV2Id);
   const overdueCount = cobrancasV2.filter(c => c.status === 'overdue').length;
@@ -1039,6 +1063,24 @@ export default function Cora({ tenantDbId, userId }) {
       {/* ── TAB: FINANCEIRO ─────────────────────────────────────────────────── */}
       {activeTab === 'financeiro' && (
         <>
+          {/* Sub-tabs */}
+          <div style={{ display: 'flex', gap: 2, marginBottom: 20, borderBottom: '1px solid var(--g-100)' }}>
+            {[
+              { id: 'visao-geral', label: 'Visão Geral' },
+              { id: 'extrato',     label: 'Extrato de Pagamentos' },
+              { id: 'cobrancas',  label: 'Cobranças' },
+            ].map(t => (
+              <button key={t.id} onClick={() => setFinSubTab(t.id)} style={{
+                padding: '8px 16px', fontSize: 13, fontWeight: finSubTab === t.id ? 700 : 500,
+                color: finSubTab === t.id ? 'var(--red)' : 'var(--g-500)',
+                borderBottom: finSubTab === t.id ? '2px solid var(--red)' : '2px solid transparent',
+                marginBottom: -1, background: 'none', border: 'none', cursor: 'pointer',
+              }}>{t.label}</button>
+            ))}
+          </div>
+
+          {/* ── Sub-tab: Visão Geral ─────────────────────── */}
+          {finSubTab === 'visao-geral' && <>
           {/* KPIs */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
             <div className="cv2-kpi">
@@ -1211,6 +1253,127 @@ export default function Cora({ tenantDbId, userId }) {
             </div>
           )}
 
+          </>}{/* fim visao-geral */}
+
+          {/* ── Sub-tab: Extrato de Pagamentos ───────────── */}
+          {finSubTab === 'extrato' && (
+            <>
+              {/* KPIs do extrato */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
+                <div className="cv2-kpi">
+                  <div className="cv2-kpi l">Total recebido (bruto)</div>
+                  <div className="cv2-kpi v" style={{ marginTop: 8, color: 'var(--success)' }}>{fmtBRL(totalRecebidoBruto)}</div>
+                  <div className="kpi-delta neutral" style={{ marginTop: 10 }}>{extrato.length} pagamentos confirmados</div>
+                </div>
+                <div className="cv2-kpi">
+                  <div className="cv2-kpi l">Total líquido (após taxa)</div>
+                  <div className="cv2-kpi v accent" style={{ marginTop: 8 }}>{fmtBRL(totalRecebidoLiquido)}</div>
+                  <div className="kpi-delta down" style={{ marginTop: 10 }}>−{fmtBRL(totalTaxaAsaas)} em taxas Asaas</div>
+                </div>
+                <div className="cv2-kpi">
+                  <div className="cv2-kpi l">Taxa média Asaas</div>
+                  <div className="cv2-kpi v" style={{ marginTop: 8 }}>
+                    {totalRecebidoBruto > 0 ? `${((totalTaxaAsaas / totalRecebidoBruto) * 100).toFixed(2)}%` : '—'}
+                  </div>
+                  <div className="kpi-delta neutral" style={{ marginTop: 10 }}>Bruto − Líquido</div>
+                </div>
+              </div>
+
+              {/* Breakdown por forma de pagamento */}
+              <div className="cv2-card" style={{ padding: 20, marginBottom: 20 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--g-700)', marginBottom: 16 }}>Breakdown por forma de pagamento</div>
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                  {Object.entries(billingBreakdown).map(([bt, d]) => {
+                    const pct = cobrancasV2.length > 0 ? ((d.qtd / cobrancasV2.length) * 100).toFixed(1) : 0;
+                    const color = billingColor[bt] || '#6b7280';
+                    return (
+                      <div key={bt} style={{ flex: 1, minWidth: 140, padding: '12px 16px', borderRadius: 10, border: `1px solid ${color}33`, background: `${color}11` }}>
+                        <div style={{ fontSize: 12, color: color, fontWeight: 700, marginBottom: 6 }}>{billingLabel[bt] || bt}</div>
+                        <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--tx)', marginBottom: 2 }}>{pct}%</div>
+                        <div style={{ fontSize: 12, color: 'var(--g-500)' }}>{d.qtd} cobranças · {fmtBRL(d.valor)}</div>
+                        <div style={{ marginTop: 8, height: 4, borderRadius: 2, background: 'var(--g-100)', overflow: 'hidden' }}>
+                          <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 2, transition: 'width 0.5s ease' }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Timeline de pagamentos */}
+              <div className="cv2-card" style={{ overflow: 'hidden' }}>
+                <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--g-100)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontWeight: 700, fontSize: 14 }}>Histórico de confirmações</span>
+                  <span style={{ fontSize: 12, color: 'var(--tx-2)', background: 'var(--g-100)', borderRadius: 10, padding: '1px 8px' }}>{extrato.length}</span>
+                </div>
+                {extrato.length === 0 ? (
+                  <div style={{ padding: 48, textAlign: 'center', color: 'var(--g-400)' }}>
+                    Nenhum pagamento confirmado ainda. Rode o sync Asaas para atualizar.
+                  </div>
+                ) : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="tbl">
+                      <thead>
+                        <tr>
+                          <th>Cliente</th>
+                          <th>Descrição</th>
+                          <th>Forma</th>
+                          <th style={{ textAlign: 'right' }}>Bruto</th>
+                          <th style={{ textAlign: 'right' }}>Taxa</th>
+                          <th style={{ textAlign: 'right' }}>Líquido</th>
+                          <th>Data pagamento</th>
+                          <th>Fatura</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {extrato.map(c => {
+                          const taxa = c.net_value != null ? Number(c.valor) - Number(c.net_value) : null;
+                          const dataExibir = c.payment_date || c.confirmed_date || c.vencimento;
+                          const btColor = billingColor[c.billing_type] || '#6b7280';
+                          return (
+                            <tr key={c.id} onClick={() => setSelectedV2Id(c.id)} style={{ cursor: 'pointer' }}>
+                              <td style={{ fontWeight: 600 }}>{c.customer_name || '—'}</td>
+                              <td style={{ fontSize: 12, color: 'var(--g-600)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {c.description || '—'}
+                              </td>
+                              <td>
+                                <span style={{ background: `${btColor}22`, color: btColor, border: `1px solid ${btColor}44`, borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>
+                                  {billingLabel[c.billing_type] || c.billing_type || '—'}
+                                </span>
+                              </td>
+                              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmtBRL(c.valor)}</td>
+                              <td style={{ textAlign: 'right', fontSize: 12, color: taxa != null ? '#dc2626' : 'var(--g-400)', fontVariantNumeric: 'tabular-nums' }}>
+                                {taxa != null ? `−${fmtBRL(taxa)}` : '—'}
+                              </td>
+                              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: 'var(--success)' }}>
+                                {c.net_value != null ? fmtBRL(c.net_value) : fmtBRL(c.valor)}
+                              </td>
+                              <td style={{ fontSize: 12, color: 'var(--g-600)', whiteSpace: 'nowrap' }}>
+                                {dataExibir ? new Date(dataExibir).toLocaleDateString('pt-BR') : '—'}
+                              </td>
+                              <td>
+                                {c.invoice_viewed_date ? (
+                                  <span title={`Visualizado em ${new Date(c.invoice_viewed_date).toLocaleString('pt-BR')}`}
+                                    style={{ background: '#d1fae5', color: '#065f46', border: '1px solid #6ee7b7', borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 600, cursor: 'default' }}>
+                                    👁 Visualizado
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize: 11, color: 'var(--g-400)' }}>Não visto</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* ── Sub-tab: Cobranças ───────────────────────── */}
+          {finSubTab === 'cobrancas' && <>
           {/* Charge table */}
           <div className="cv2-card" style={{ overflow: 'hidden' }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--g-100)', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1277,6 +1440,7 @@ export default function Cora({ tenantDbId, userId }) {
               </table>
             )}
           </div>
+          </>}
         </>
       )}
 
