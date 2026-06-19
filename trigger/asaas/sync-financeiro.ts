@@ -9,13 +9,20 @@ function getMainTenantId(): string {
 }
 
 const ASAAS_TO_STATUS: Record<string, string> = {
-  PENDING:   "pending",
-  RECEIVED:  "received",
-  CONFIRMED: "received",
-  OVERDUE:   "overdue",
-  REFUNDED:  "refunded",
-  REMOVED:   "canceled",
-  RESTORED:  "pending",
+  PENDING:              "pending",
+  RECEIVED:             "received",
+  CONFIRMED:            "received",
+  RECEIVED_IN_CASH:     "received",
+  OVERDUE:              "overdue",
+  REFUNDED:             "refunded",
+  REMOVED:              "canceled",
+  RESTORED:             "pending",
+  CHARGEBACK_REQUESTED: "canceled",
+  CHARGEBACK_DISPUTE:   "canceled",
+  AWAITING_CHARGEBACK_REVERSAL: "canceled",
+  DUNNING_REQUESTED:    "overdue",
+  DUNNING_RECEIVED:     "received",
+  IN_DEBT_RECOVERY:     "overdue",
 };
 
 export const asaasSyncFinanceiro = schedules.task({
