@@ -113,7 +113,7 @@ function getAsaasConfig(): AsaasConfig {
   const baseUrl =
     env === "sandbox"
       ? "https://sandbox.asaas.com/api/v3"
-      : "https://api.asaas.com/api/v3";
+      : "https://www.asaas.com/api/v3";
 
   return { baseUrl, apiKey };
 }
