@@ -686,37 +686,124 @@ function CobrancaV2Drawer({ cobranca, tenantDbId, userId, onClose, onRefresh }) 
   );
 }
 
+// ── Aging helper ──────────────────────────────────────────────────────────────
+function agingBucket(dias) {
+  if (dias <= 30) return '1–30';
+  if (dias <= 60) return '31–60';
+  if (dias <= 90) return '61–90';
+  return '90+';
+}
+
+// ── Ton badge ─────────────────────────────────────────────────────────────────
+function TomBadge({ tom }) {
+  const map = {
+    amigavel: { label: 'Amigável',  color: '#16a34a' },
+    neutro:   { label: 'Neutro',    color: '#2563eb' },
+    formal:   { label: 'Formal',    color: '#D97706' },
+    urgente:  { label: 'Urgente',   color: '#dc2626' },
+  };
+  const m = map[tom] || map.neutro;
+  return (
+    <span style={{ background: `${m.color}22`, color: m.color, border: `1px solid ${m.color}44`, borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>
+      {m.label}
+    </span>
+  );
+}
+
+// ── Draft approval card ───────────────────────────────────────────────────────
+function DraftCard({ draft, tenantDbId, onDone }) {
+  const [expanded, setExpanded] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const call = async (endpoint) => {
+    setLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch(`${BRIDGE}/api/cora/${endpoint}/${draft.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ tenant_id: tenantDbId }),
+      });
+      if (!r.ok) { const e = await r.json(); alert(e.error || 'Erro'); }
+      else onDone();
+    } catch (e) { alert(e.message); }
+    setLoading(false);
+  };
+
+  const meta = draft.metadata || {};
+  const dias = meta.dias_atraso ?? 0;
+  const diasLabel = dias <= 0 ? `vence em ${Math.abs(dias)}d` : `${dias}d em atraso`;
+
+  return (
+    <div className="cv2-card" style={{ padding: 16, marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 700, fontSize: 14 }}>{meta.customer_name || '—'}</span>
+            <span style={{ fontWeight: 700, color: dias > 0 ? 'var(--red)' : 'var(--success)', fontSize: 13 }}>{fmtBRL(meta.valor)}</span>
+            <span style={{ fontSize: 12, color: dias > 30 ? 'var(--red)' : 'var(--g-600)' }}>{diasLabel}</span>
+            {meta.tom && <TomBadge tom={meta.tom} />}
+          </div>
+          {meta.customer_phone && (
+            <div style={{ fontSize: 12, color: 'var(--g-500)', marginBottom: 6 }}>{meta.customer_phone}</div>
+          )}
+          <div style={{ fontSize: 13, color: 'var(--g-700)', lineHeight: 1.5, whiteSpace: 'pre-wrap',
+            maxHeight: expanded ? 'none' : 72, overflow: 'hidden', position: 'relative' }}>
+            {draft.body}
+            {!expanded && draft.body?.length > 200 && (
+              <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 32,
+                background: 'linear-gradient(transparent, var(--bg))' }} />
+            )}
+          </div>
+          {draft.body?.length > 200 && (
+            <button onClick={() => setExpanded(v => !v)} style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: 12, padding: '4px 0', marginTop: 4 }}>
+              {expanded ? 'Ver menos' : 'Ver mensagem completa'}
+            </button>
+          )}
+          {meta.dica_envio && (
+            <div style={{ fontSize: 11, color: 'var(--g-500)', marginTop: 6 }}>💡 {meta.dica_envio}</div>
+          )}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 130 }}>
+          <button className="cv2-btn" disabled={loading} onClick={() => call('aprovar')} style={{ fontSize: 12, background: '#16a34a', color: '#fff', borderColor: '#16a34a' }}>
+            {loading ? '…' : '✓ Aprovar e Enviar'}
+          </button>
+          <button className="cv2-btn sec" disabled={loading} onClick={() => call('rejeitar')} style={{ fontSize: 12 }}>
+            ✕ Rejeitar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function Cora({ tenantDbId, userId }) {
-  const [tab, setTab] = useState('inad');
+  const [activeTab, setActiveTab] = useState('financeiro');
 
-  // V1 state
-  const [cobrancas, setCobrancas] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedId, setSelectedId] = useState(null);
-  const [showNovaModal, setShowNovaModal] = useState(false);
-
-  // V2 state
+  // V2 (Asaas) state
   const [cobrancasV2, setCobrancasV2] = useState([]);
   const [loadingV2, setLoadingV2] = useState(true);
   const [selectedV2Id, setSelectedV2Id] = useState(null);
   const [showNovaAsaasModal, setShowNovaAsaasModal] = useState(false);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('todos');
+
+  // V1 (legacy) state — mantido para o drawer
+  const [cobrancas, setCobrancas] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [showNovaModal, setShowNovaModal] = useState(false);
+
+  // Agente CORA drafts
+  const [drafts, setDrafts] = useState([]);
+  const [loadingDrafts, setLoadingDrafts] = useState(true);
+  const [acoes, setAcoes] = useState([]);
 
   // Modo CORA
   const [modo, setModo] = useState('humano');
   const [savingModo, setSavingModo] = useState(false);
 
-  const loadCobrancas = useCallback(async () => {
-    if (!tenantDbId) return;
-    setLoading(true);
-    const { data } = await supabase
-      .from('cora_cobrancas')
-      .select('*')
-      .eq('tenant_id', tenantDbId)
-      .order('data_vencimento', { ascending: true });
-    setCobrancas(data || []);
-    setLoading(false);
-  }, [tenantDbId]);
+  // ── Loaders ────────────────────────────────────────────────────────────────
 
   const loadCobrancasV2 = useCallback(async () => {
     if (!tenantDbId) return;
@@ -725,9 +812,45 @@ export default function Cora({ tenantDbId, userId }) {
       .from('cobrancas')
       .select('*')
       .eq('tenant_id', tenantDbId)
-      .order('vencimento', { ascending: true });
+      .order('vencimento', { ascending: false });
     setCobrancasV2(data || []);
     setLoadingV2(false);
+  }, [tenantDbId]);
+
+  const loadCobrancas = useCallback(async () => {
+    if (!tenantDbId) return;
+    const { data } = await supabase
+      .from('cora_cobrancas')
+      .select('*')
+      .eq('tenant_id', tenantDbId);
+    setCobrancas(data || []);
+  }, [tenantDbId]);
+
+  const loadDrafts = useCallback(async () => {
+    if (!tenantDbId) return;
+    setLoadingDrafts(true);
+    const { data } = await supabase
+      .from('agent_drafts')
+      .select('*')
+      .eq('tenant_id', tenantDbId)
+      .eq('agent_name', 'cora')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+    setDrafts(data || []);
+    setLoadingDrafts(false);
+  }, [tenantDbId]);
+
+  const loadAcoes = useCallback(async () => {
+    if (!tenantDbId) return;
+    const since = new Date(); since.setDate(since.getDate() - 7);
+    const { data } = await supabase
+      .from('cora_acoes')
+      .select('id, tipo, acao, canal, created_at, conteudo, metadata')
+      .eq('tenant_id', tenantDbId)
+      .gte('created_at', since.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(50);
+    setAcoes(data || []);
   }, [tenantDbId]);
 
   const loadModo = useCallback(async () => {
@@ -736,8 +859,8 @@ export default function Cora({ tenantDbId, userId }) {
       .from('tenant_agent_config')
       .select('mode')
       .eq('tenant_id', tenantDbId)
-      .eq('agent', 'cora')
-      .single();
+      .eq('agent_id', 'cora')
+      .maybeSingle();
     if (data?.mode) setModo(data.mode);
   }, [tenantDbId]);
 
@@ -745,47 +868,87 @@ export default function Cora({ tenantDbId, userId }) {
     if (!tenantDbId) return;
     setSavingModo(true);
     await supabase.from('tenant_agent_config').upsert(
-      { tenant_id: tenantDbId, agent: 'cora', mode: novoModo },
-      { onConflict: 'tenant_id,agent' }
+      { tenant_id: tenantDbId, agent_id: 'cora', mode: novoModo },
+      { onConflict: 'tenant_id,agent_id' }
     );
     setModo(novoModo);
     setSavingModo(false);
   };
 
-  useEffect(() => { loadCobrancas(); }, [loadCobrancas]);
-  useEffect(() => { loadCobrancasV2(); }, [loadCobrancasV2]);
-  useEffect(() => { loadModo(); }, [loadModo]);
+  useEffect(() => { loadCobrancasV2(); loadCobrancas(); loadDrafts(); loadAcoes(); loadModo(); },
+    [loadCobrancasV2, loadCobrancas, loadDrafts, loadAcoes, loadModo]);
 
-  // Realtime — V1
+  // Realtime — cobranças V2
   useEffect(() => {
     if (!tenantDbId) return;
-    const ch = supabase.channel('cora-cobrancas-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cora_cobrancas', filter: `tenant_id=eq.${tenantDbId}` }, () => loadCobrancas())
-      .subscribe();
-    return () => supabase.removeChannel(ch);
-  }, [tenantDbId, loadCobrancas]);
-
-  // Realtime — V2
-  useEffect(() => {
-    if (!tenantDbId) return;
-    const ch = supabase.channel('cora-cobrancas-v2-realtime')
+    const ch = supabase.channel('cora-cobrancas-v2')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'cobrancas', filter: `tenant_id=eq.${tenantDbId}` }, () => loadCobrancasV2())
       .subscribe();
     return () => supabase.removeChannel(ch);
   }, [tenantDbId, loadCobrancasV2]);
 
-  const emAberto = cobrancas.filter(c => c.status === 'aberto' || c.status === 'negociando');
-  const pagos = cobrancas.filter(c => c.status === 'pago');
-  const escalonados = cobrancas.filter(c => c.status === 'escalonado');
-  const vencidosV2 = cobrancasV2.filter(c => c.status === 'overdue');
+  // Realtime — drafts CORA
+  useEffect(() => {
+    if (!tenantDbId) return;
+    const ch = supabase.channel('cora-drafts')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'agent_drafts', filter: `tenant_id=eq.${tenantDbId}` }, () => { loadDrafts(); loadAcoes(); })
+      .subscribe();
+    return () => supabase.removeChannel(ch);
+  }, [tenantDbId, loadDrafts, loadAcoes]);
 
-  const totalAberto = emAberto.reduce((s, c) => s + Number(c.valor_atual), 0);
-  const totalPago = pagos.reduce((s, c) => s + Number(c.valor_original), 0);
-  const taxaRec = cobrancas.length > 0 ? Math.round((pagos.length / cobrancas.length) * 100) : 0;
+  // ── Derived data ──────────────────────────────────────────────────────────
 
-  const tabCobrancas = tab === 'inad' ? emAberto : tab === 'escalonados' ? escalonados : tab === 'asaas' ? cobrancasV2 : pagos;
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+
+  const recebidoMes = cobrancasV2
+    .filter(c => c.status === 'received' && c.vencimento?.slice(0, 7) === mesAtual)
+    .reduce((s, c) => s + Number(c.valor), 0);
+
+  const aReceber = cobrancasV2
+    .filter(c => c.status === 'pending')
+    .reduce((s, c) => s + Number(c.valor), 0);
+
+  const totalInad = cobrancasV2
+    .filter(c => c.status === 'overdue')
+    .reduce((s, c) => s + Number(c.valor), 0);
+
+  const totalEmitido = cobrancasV2.reduce((s, c) => s + Number(c.valor), 0);
+  const taxaInad = totalEmitido > 0 ? ((totalInad / totalEmitido) * 100).toFixed(1) : '0.0';
+
+  // Aging (overdue only)
+  const aging = { '1–30': { qtd: 0, valor: 0 }, '31–60': { qtd: 0, valor: 0 }, '61–90': { qtd: 0, valor: 0 }, '90+': { qtd: 0, valor: 0 } };
+  cobrancasV2.filter(c => c.status === 'overdue').forEach(c => {
+    const d = diasAtraso(c.vencimento);
+    const b = agingBucket(d);
+    aging[b].qtd++;
+    aging[b].valor += Number(c.valor);
+  });
+
+  // Bar chart — last 6 months received
+  const chartMonths = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+    chartMonths.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  }
+  const chartData = chartMonths.map(m => ({
+    label: new Date(m + '-01').toLocaleDateString('pt-BR', { month: 'short' }),
+    valor: cobrancasV2.filter(c => c.status === 'received' && c.vencimento?.slice(0, 7) === m).reduce((s, c) => s + Number(c.valor), 0),
+  }));
+  const chartMax = Math.max(...chartData.map(d => d.valor), 1);
+
+  // Filtered charge table
+  const filteredV2 = cobrancasV2.filter(c => {
+    if (statusFilter !== 'todos' && c.status !== statusFilter) return false;
+    if (search && !(c.customer_name || '').toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+
   const selected = cobrancas.find(c => c.id === selectedId);
   const selectedV2 = cobrancasV2.find(c => c.id === selectedV2Id);
+  const overdueCount = cobrancasV2.filter(c => c.status === 'overdue').length;
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div style={{ padding: 32, maxWidth: 1400, margin: '0 auto' }}>
@@ -798,180 +961,259 @@ export default function Cora({ tenantDbId, userId }) {
             <p className="page-sub">
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ width: 7, height: 7, background: 'var(--success)', borderRadius: '50%' }} className="pulse-green" />
-                <strong style={{ color: 'var(--success)' }}>Ativa</strong> · {emAberto.length} em aberto · {vencidosV2.length} vencidos Asaas
+                <strong style={{ color: 'var(--success)' }}>Ativa</strong> · {overdueCount} vencido{overdueCount !== 1 ? 's' : ''} · {drafts.length} aguardando aprovação
               </span>
             </p>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <ModoToggle modo={modo} onChange={saveModo} saving={savingModo} />
-          <button className="cv2-btn" onClick={() => setShowNovaAsaasModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Icon name="plus" size={14} /> Asaas
-          </button>
-          <button className="cv2-btn sec" onClick={() => setShowNovaModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Icon name="plus" size={14} /> Manual
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <button className="cv2-btn" onClick={() => setShowNovaAsaasModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+            <Icon name="plus" size={13} /> Nova cobrança
           </button>
         </div>
       </div>
 
-      {/* KPIs */}
-      <div className="cv2-kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
-        <div className="cv2-kpi">
-          <div className="cv2-kpi l">Total a receber</div>
-          <div className="cv2-kpi v accent" style={{ marginTop: 8 }}>{fmtBRL(totalAberto)}</div>
-          <div className="kpi-delta down" style={{ marginTop: 10 }}><Icon name="info" size={11} /> Em aberto</div>
-        </div>
-        <div className="cv2-kpi">
-          <div className="cv2-kpi l">Recebido no total</div>
-          <div className="cv2-kpi v" style={{ marginTop: 8, color: 'var(--success)' }}>{fmtBRL(totalPago)}</div>
-          <div className="kpi-delta up" style={{ marginTop: 10 }}><Icon name="arrowup" size={11} /> CORA recuperou</div>
-        </div>
-        <div className="cv2-kpi">
-          <div className="cv2-kpi l">Taxa de recuperação</div>
-          <div className="cv2-kpi v" style={{ marginTop: 8 }}>{taxaRec}%</div>
-          <div className="kpi-delta up" style={{ marginTop: 10 }}><Icon name="info" size={11} /> {pagos.length} pago{pagos.length !== 1 ? 's' : ''}</div>
-        </div>
-        <div className="cv2-kpi">
-          <div className="cv2-kpi l">Escalonados</div>
-          <div className="cv2-kpi v" style={{ marginTop: 8, color: escalonados.length > 0 ? 'var(--red)' : 'var(--g-900)' }}>{escalonados.length}</div>
-          <div className="kpi-delta neutral" style={{ marginTop: 10 }}><Icon name="info" size={11} /> Precisam de atenção</div>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 2, marginBottom: 16, borderBottom: '1px solid var(--g-200)' }}>
+      {/* Main tabs */}
+      <div style={{ display: 'flex', gap: 2, marginBottom: 24, borderBottom: '1px solid var(--g-200)' }}>
         {[
-          { id: 'inad', label: 'Em aberto', count: emAberto.length },
-          { id: 'escalonados', label: 'Escalonados', count: escalonados.length },
-          { id: 'pagos', label: 'Pagos', count: pagos.length },
-          { id: 'asaas', label: 'Asaas V2', count: cobrancasV2.length, badge: vencidosV2.length > 0 },
+          { id: 'financeiro', label: 'Financeiro' },
+          { id: 'agente', label: 'Agente CORA', badge: drafts.length },
         ].map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{
-            padding: '12px 16px', fontSize: 13, fontWeight: tab === t.id ? 700 : 500,
-            color: tab === t.id ? 'var(--red)' : 'var(--g-600)',
-            borderBottom: tab === t.id ? '2px solid var(--red)' : '2px solid transparent',
-            marginBottom: -1, transition: 'all 150ms', background: 'none', border: 'none', cursor: 'pointer',
+          <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
+            padding: '12px 18px', fontSize: 14, fontWeight: activeTab === t.id ? 700 : 500,
+            color: activeTab === t.id ? 'var(--red)' : 'var(--g-600)',
+            borderBottom: activeTab === t.id ? '2px solid var(--red)' : '2px solid transparent',
+            marginBottom: -1, background: 'none', border: 'none', cursor: 'pointer', transition: 'all 150ms',
           }}>
             {t.label}
-            {t.count != null && <span style={{ marginLeft: 6, color: 'var(--g-500)', fontSize: 12 }}>{t.count}</span>}
-            {t.badge && <span style={{ marginLeft: 4, background: 'var(--red)', color: 'var(--tx)', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 6px' }}>{vencidosV2.length}</span>}
+            {t.badge > 0 && (
+              <span style={{ marginLeft: 7, background: 'var(--red)', color: '#fff', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '2px 7px' }}>
+                {t.badge}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
-      {/* Tabela */}
-      <div className="cv2-card" style={{ overflow: 'hidden' }}>
-        {(tab === 'asaas' ? loadingV2 : loading) ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--g-500)' }}>Carregando cobranças…</div>
-        ) : tabCobrancas.length === 0 ? (
-          <div style={{ padding: 60, textAlign: 'center', color: 'var(--g-500)' }}>
-            {tab === 'inad' ? '🎉 Nenhuma cobrança em aberto!' : tab === 'escalonados' ? '✅ Sem escalonamentos pendentes.' : tab === 'asaas' ? '📭 Nenhuma cobrança Asaas registrada.' : '💰 Nenhum pagamento registrado ainda.'}
+      {/* ── TAB: FINANCEIRO ─────────────────────────────────────────────────── */}
+      {activeTab === 'financeiro' && (
+        <>
+          {/* KPIs */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+            <div className="cv2-kpi">
+              <div className="cv2-kpi l">Recebido este mês</div>
+              <div className="cv2-kpi v" style={{ marginTop: 8, color: 'var(--success)' }}>{fmtBRL(recebidoMes)}</div>
+              <div className="kpi-delta up" style={{ marginTop: 10 }}><Icon name="arrowup" size={11} /> Asaas confirmado</div>
+            </div>
+            <div className="cv2-kpi">
+              <div className="cv2-kpi l">A receber</div>
+              <div className="cv2-kpi v accent" style={{ marginTop: 8 }}>{fmtBRL(aReceber)}</div>
+              <div className="kpi-delta neutral" style={{ marginTop: 10 }}><Icon name="info" size={11} /> Pendente</div>
+            </div>
+            <div className="cv2-kpi">
+              <div className="cv2-kpi l">Inadimplência</div>
+              <div className="cv2-kpi v" style={{ marginTop: 8, color: totalInad > 0 ? 'var(--red)' : 'var(--g-900)' }}>{fmtBRL(totalInad)}</div>
+              <div className="kpi-delta down" style={{ marginTop: 10 }}><Icon name="info" size={11} /> {overdueCount} cobranças vencidas</div>
+            </div>
+            <div className="cv2-kpi">
+              <div className="cv2-kpi l">Taxa inadimplência</div>
+              <div className="cv2-kpi v" style={{ marginTop: 8, color: Number(taxaInad) > 10 ? 'var(--red)' : 'var(--g-900)' }}>{taxaInad}%</div>
+              <div className="kpi-delta neutral" style={{ marginTop: 10 }}><Icon name="info" size={11} /> Do total emitido</div>
+            </div>
           </div>
-        ) : tab === 'asaas' ? (
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Cliente</th>
-                <th>Tipo</th>
-                <th>Valor</th>
-                <th>Atraso</th>
-                <th>Vencimento</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tabCobrancas.map(c => {
-                const dias = diasAtraso(c.vencimento);
-                const initials = c.customer_name ? c.customer_name.slice(0, 2).toUpperCase() : '??';
-                return (
-                  <tr key={c.id} onClick={() => setSelectedV2Id(c.id)} style={{ cursor: 'pointer' }}>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#B70C00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#fff', fontSize: 11 }}>{initials}</div>
-                        <div style={{ fontWeight: 600 }}>{c.customer_name}</div>
-                      </div>
-                    </td>
-                    <td style={{ fontSize: 12, color: 'var(--g-600)' }}>{c.billing_type}</td>
-                    <td style={{ fontWeight: 700, color: c.status === 'overdue' ? 'var(--red)' : 'var(--g-900)', fontVariantNumeric: 'tabular-nums' }}>
-                      {fmtBRL(c.valor)}
-                    </td>
-                    <td>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: dias > 30 ? 'var(--red)' : dias > 10 ? 'var(--warn)' : 'var(--g-700)' }}>
-                        {dias > 0 ? `${dias} ${dias === 1 ? 'dia' : 'dias'}` : '—'}
-                      </span>
-                    </td>
-                    <td style={{ fontSize: 12, color: 'var(--g-600)' }}>
-                      {new Date(c.vencimento).toLocaleDateString('pt-BR')}
-                    </td>
-                    <td><StatusBadgeV2 status={c.status} /></td>
-                    <td style={{ textAlign: 'right' }}>
-                      <button className="cv2-btn sec" style={{ fontSize: 12 }}
-                        onClick={(e) => { e.stopPropagation(); setSelectedV2Id(c.id); }}>
-                        <Icon name="eye" size={12} /> Ver
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        ) : (
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Cliente</th>
-                <th>Valor</th>
-                <th>Atraso</th>
-                <th>Vencimento</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tabCobrancas.map(c => {
-                const dias = diasAtraso(c.data_vencimento);
-                const initials = c.customer_name ? c.customer_name.slice(0, 2).toUpperCase() : '??';
-                return (
-                  <tr key={c.id} onClick={() => setSelectedId(c.id)} style={{ cursor: 'pointer' }}>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#B70C00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#fff', fontSize: 11 }}>{initials}</div>
-                        <div>
-                          <div style={{ fontWeight: 600 }}>{c.customer_name}</div>
-                          {c.cora_analise?.nivel_risco && (
-                            <NivelRiscoBadge nivel={c.cora_analise.nivel_risco} />
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td style={{ fontWeight: 700, color: c.status === 'escalonado' ? 'var(--red)' : 'var(--g-900)', fontVariantNumeric: 'tabular-nums' }}>
-                      {fmtBRL(c.valor_atual)}
-                    </td>
-                    <td>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: dias > 30 ? 'var(--red)' : dias > 10 ? 'var(--warn)' : 'var(--g-700)' }}>
-                        {dias} {dias === 1 ? 'dia' : 'dias'}
-                      </span>
-                    </td>
-                    <td style={{ fontSize: 12, color: 'var(--g-600)' }}>
-                      {new Date(c.data_vencimento).toLocaleDateString('pt-BR')}
-                    </td>
-                    <td><StatusBadge status={c.status} /></td>
-                    <td style={{ textAlign: 'right' }}>
-                      <button className="cv2-btn sec" style={{ fontSize: 12 }}
-                        onClick={(e) => { e.stopPropagation(); setSelectedId(c.id); }}>
-                        <Icon name="eye" size={12} /> Ver
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
 
-      {/* Modals */}
+          {/* Chart + Aging side by side */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
+            {/* Bar chart */}
+            <div className="cv2-card" style={{ padding: 20 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--g-700)', marginBottom: 16 }}>Recebido por mês (últimos 6 meses)</div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 120 }}>
+                {chartData.map(d => (
+                  <div key={d.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                    <div style={{ fontSize: 10, color: 'var(--g-500)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                      {d.valor > 0 ? `R$${(d.valor / 1000).toFixed(1)}k` : ''}
+                    </div>
+                    <div style={{
+                      width: '100%', background: d.label === chartData[5].label ? 'var(--red)' : 'var(--g-200)',
+                      borderRadius: '4px 4px 0 0',
+                      height: `${Math.max(4, (d.valor / chartMax) * 90)}px`,
+                      transition: 'height 0.4s ease',
+                    }} />
+                    <div style={{ fontSize: 11, color: 'var(--g-500)' }}>{d.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Aging table */}
+            <div className="cv2-card" style={{ padding: 20 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--g-700)', marginBottom: 16 }}>Aging de inadimplência</div>
+              <table className="tbl" style={{ fontSize: 13 }}>
+                <thead>
+                  <tr>
+                    <th>Faixa</th>
+                    <th style={{ textAlign: 'right' }}>Qtd</th>
+                    <th style={{ textAlign: 'right' }}>Valor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(aging).map(([faixa, v]) => (
+                    <tr key={faixa}>
+                      <td style={{ fontWeight: 600 }}>{faixa} dias</td>
+                      <td style={{ textAlign: 'right', color: 'var(--g-600)' }}>{v.qtd}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 600, color: v.valor > 0 ? 'var(--red)' : 'var(--g-400)' }}>{fmtBRL(v.valor)}</td>
+                    </tr>
+                  ))}
+                  <tr style={{ borderTop: '2px solid var(--g-200)' }}>
+                    <td style={{ fontWeight: 700 }}>Total</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700 }}>{overdueCount}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--red)' }}>{fmtBRL(totalInad)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Charge table */}
+          <div className="cv2-card" style={{ overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--g-100)', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <input
+                placeholder="Buscar cliente…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{ flex: 1, minWidth: 180, padding: '6px 12px', borderRadius: 8, border: '1px solid var(--g-200)', fontSize: 13, background: 'var(--bg)' }}
+              />
+              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+                style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--g-200)', fontSize: 13, background: 'var(--bg)', color: 'var(--tx)' }}>
+                <option value="todos">Todos os status</option>
+                <option value="pending">Pendente</option>
+                <option value="received">Recebido</option>
+                <option value="overdue">Vencido</option>
+                <option value="canceled">Cancelado</option>
+              </select>
+            </div>
+            {loadingV2 ? (
+              <div style={{ padding: 40, textAlign: 'center', color: 'var(--g-500)' }}>Carregando cobranças…</div>
+            ) : filteredV2.length === 0 ? (
+              <div style={{ padding: 60, textAlign: 'center', color: 'var(--g-500)' }}>Nenhuma cobrança encontrada.</div>
+            ) : (
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Cliente</th>
+                    <th>Tipo</th>
+                    <th style={{ textAlign: 'right' }}>Valor</th>
+                    <th>Atraso</th>
+                    <th>Vencimento</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredV2.map(c => {
+                    const dias = diasAtraso(c.vencimento);
+                    const initials = (c.customer_name || '??').slice(0, 2).toUpperCase();
+                    return (
+                      <tr key={c.id} onClick={() => setSelectedV2Id(c.id)} style={{ cursor: 'pointer' }}>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#B70C00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#fff', fontSize: 11, flexShrink: 0 }}>{initials}</div>
+                            <span style={{ fontWeight: 600 }}>{c.customer_name || '—'}</span>
+                          </div>
+                        </td>
+                        <td style={{ fontSize: 12, color: 'var(--g-600)' }}>{c.billing_type || '—'}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 700, color: c.status === 'overdue' ? 'var(--red)' : 'var(--g-900)', fontVariantNumeric: 'tabular-nums' }}>
+                          {fmtBRL(c.valor)}
+                        </td>
+                        <td>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: dias > 30 ? 'var(--red)' : dias > 10 ? 'var(--warn)' : 'var(--g-700)' }}>
+                            {dias > 0 ? `${dias}d` : '—'}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: 12, color: 'var(--g-600)' }}>
+                          {c.vencimento ? new Date(c.vencimento).toLocaleDateString('pt-BR') : '—'}
+                        </td>
+                        <td><StatusBadgeV2 status={c.status} /></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ── TAB: AGENTE CORA ────────────────────────────────────────────────── */}
+      {activeTab === 'agente' && (
+        <>
+          {/* Modo + controles */}
+          <div className="cv2-card" style={{ padding: 16, marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Modo de operação</div>
+              <div style={{ fontSize: 12, color: 'var(--g-500)' }}>Humano = CORA nunca envia sozinha · Híbrido = draft para aprovação · IA = envia direto</div>
+            </div>
+            <ModoToggle modo={modo} onChange={saveModo} saving={savingModo} />
+          </div>
+
+          {/* Fila de aprovação */}
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--g-700)', marginBottom: 12 }}>
+              Fila de aprovação
+              {drafts.length > 0 && (
+                <span style={{ marginLeft: 8, background: 'var(--red)', color: '#fff', borderRadius: 10, fontSize: 11, fontWeight: 700, padding: '2px 8px' }}>
+                  {drafts.length}
+                </span>
+              )}
+            </div>
+            {loadingDrafts ? (
+              <div style={{ padding: 32, textAlign: 'center', color: 'var(--g-500)' }}>Carregando fila…</div>
+            ) : drafts.length === 0 ? (
+              <div className="cv2-card" style={{ padding: 40, textAlign: 'center', color: 'var(--g-500)' }}>
+                ✅ Nenhum draft aguardando aprovação.
+              </div>
+            ) : (
+              drafts.map(d => (
+                <DraftCard key={d.id} draft={d} tenantDbId={tenantDbId} onDone={() => { loadDrafts(); loadAcoes(); }} />
+              ))
+            )}
+          </div>
+
+          {/* Histórico */}
+          {acoes.length > 0 && (
+            <div style={{ marginTop: 28 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--g-700)', marginBottom: 12 }}>Histórico (últimos 7 dias)</div>
+              <div className="cv2-card" style={{ overflow: 'hidden' }}>
+                <table className="tbl" style={{ fontSize: 13 }}>
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>Ação</th>
+                      <th>Canal</th>
+                      <th>Mensagem</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {acoes.map(a => (
+                      <tr key={a.id}>
+                        <td style={{ fontSize: 12, color: 'var(--g-500)', whiteSpace: 'nowrap' }}>
+                          {new Date(a.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                        <td style={{ fontWeight: 600 }}>{a.tipo || a.acao}</td>
+                        <td style={{ fontSize: 12, color: 'var(--g-600)' }}>{a.canal || '—'}</td>
+                        <td style={{ fontSize: 12, color: 'var(--g-600)', maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {a.conteudo || '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Modals / Drawers */}
       {showNovaModal && (
         <NovaCobrancaModal tenantDbId={tenantDbId} onClose={() => setShowNovaModal(false)} onCreated={loadCobrancas} />
       )}

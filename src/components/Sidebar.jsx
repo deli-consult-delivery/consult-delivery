@@ -108,6 +108,10 @@ export default function Sidebar({ route, setRoute, counts, isOpen, userId, onClo
     } catch {}
   }, [expanded, hidden]);
 
+  useEffect(() => {
+    if (isOpen && hidden) setHidden(false);
+  }, [isOpen]);
+
   const hide = () => setHidden(true);
   const show = () => setHidden(false);
 
