@@ -25,9 +25,12 @@ const ASAAS_TO_STATUS: Record<string, string> = {
   IN_DEBT_RECOVERY:     "overdue",
 };
 
+const BATCH_SIZE = 200;
+
 export const asaasSyncFinanceiro = schedules.task({
   id: "asaas-sync-financeiro",
   cron: "*/30 * * * *",
+  maxDuration: 600, // 10 minutos — carga inicial pode ter 2000+ cobranças
   retry: { maxAttempts: 3, minTimeoutInMs: 30_000, maxTimeoutInMs: 120_000, factor: 2 },
 
   run: async (_payload, { ctx }) => {
@@ -35,6 +38,7 @@ export const asaasSyncFinanceiro = schedules.task({
 
     const tenantId = getMainTenantId();
     const sb = getSupabase();
+    const now = new Date().toISOString();
 
     const charges = await listChargesAll();
     logger.info(`asaas-sync-financeiro: ${charges.length} cobranças recebidas do Asaas`);
@@ -42,35 +46,37 @@ export const asaasSyncFinanceiro = schedules.task({
     let upserted = 0;
     let errors = 0;
 
-    for (const charge of charges) {
-      const status = ASAAS_TO_STATUS[charge.status] ?? "canceled";
+    for (let i = 0; i < charges.length; i += BATCH_SIZE) {
+      const batch = charges.slice(i, i + BATCH_SIZE);
 
-      const row = {
+      const rows = batch.map((charge) => ({
         tenant_id:       tenantId,
         asaas_charge_id: charge.id,
         valor:           charge.value,
         vencimento:      charge.dueDate,
-        status,
+        status:          ASAAS_TO_STATUS[charge.status] ?? "canceled",
         billing_type:    charge.billingType,
         invoice_url:     charge.invoiceUrl ?? null,
         bank_slip_url:   charge.bankSlipUrl ?? null,
         pix_qr_code:     charge.pixQrCode?.payload ?? null,
         customer_name:   null as string | null,
         customer_phone:  null as string | null,
-        metadata:        { asaas_raw: charge, synced_at: new Date().toISOString() },
-        updated_at:      new Date().toISOString(),
-      };
+        metadata:        { asaas_raw: charge, synced_at: now },
+        updated_at:      now,
+      }));
 
       const { error } = await sb
         .from("cobrancas")
-        .upsert(row, { onConflict: "asaas_charge_id", ignoreDuplicates: false });
+        .upsert(rows, { onConflict: "asaas_charge_id", ignoreDuplicates: false });
 
       if (error) {
-        logger.warn(`[sync-financeiro] upsert falhou ${charge.id}: ${error.message}`);
-        errors++;
+        logger.warn(`[sync-financeiro] batch ${i}–${i + batch.length} falhou: ${error.message}`);
+        errors += batch.length;
       } else {
-        upserted++;
+        upserted += batch.length;
       }
+
+      logger.info(`[sync-financeiro] progresso: ${Math.min(i + BATCH_SIZE, charges.length)}/${charges.length}`);
     }
 
     logger.info("asaas-sync-financeiro: concluído", {
