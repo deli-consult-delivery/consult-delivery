@@ -684,3 +684,18 @@ Touched: none
 - **Deploy:** Edge function `evolution-webhook` versão 55 deployada via Supabase MCP (projeto `czyanilrverorwenikqw`).
 - **Migration:** aplicada com sucesso via Supabase MCP antes do deploy.
 - **PR #421** criado: `feat(bot): resposta automática em grupos via toggle por tenant`.
+
+## 2026-06-19 — Sessão 70/71: Extrato de Pagamentos Asaas no Dashboard Cora (PR #432) [T8 — Cora]
+
+- **Contexto:** Wandson pediu: área de extrato com confirmação de pagamento, forma de pagamento (PIX/Boleto/Cartão), se o cliente visualizou a fatura (`invoiceViewedDate`) e extrair tudo possível da API Asaas.
+- **Migration `20260619_001_cobrancas_extrato_fields.sql`** (APLICADA): 6 colunas aditivas em `cobrancas` — `payment_date` (date), `net_value` (numeric), `date_created` (date), `invoice_viewed_date` (timestamptz), `description` (text), `confirmed_date` (date). Antes esses campos existiam só no JSON bruto de `metadata.asaas_raw`.
+- **`trigger/_shared/asaas.ts`:** schema `AsaasCharge` expandido com `invoiceViewedDate` e `confirmedDate` (nullable optional) — para que o Zod os valide/passe ao mapper.
+- **`trigger/asaas/sync-financeiro.ts`:** upsert atualizado — os 6 campos agora salvos em colunas dedicadas para query eficiente no frontend (sem ter que fazer `->>'invoiceViewedDate'` no JSON).
+- **`src/console/Cora.jsx`:** aba Financeiro reestruturada com estado `finSubTab` e 3 sub-tabs:
+  - **Visão Geral:** KPIs existentes (total, overdue, pendente, taxa inadimplência).
+  - **Extrato de Pagamentos:** KPI bruto/líquido/taxa Asaas %; breakdown por forma de pagamento (PIX, Boleto, Cartão, Indefinido) com cards coloridos + barra de progresso percentual; timeline cronológica reversa (mais recente no topo) — Cliente, Descrição, Forma (badge colorido), Bruto, Taxa (−R$X.XX), Líquido, Data pagamento, Fatura (👁 badge "Visualizado" com hover mostrando timestamp, ou "Não visto").
+  - **Cobranças:** tabela filtrada existente (movida do sub-tab de Visão Geral).
+- **Build:** `vite build` ✓ antes do commit.
+- **PR #432** squash-mergeado em main (SHA `577da6fb`).
+- **Deploy Trigger.dev:** versão `20260619.27` (75 tasks detectadas) — sync passará a popular `invoice_viewed_date` e `confirmed_date` a partir do próximo ciclo de 30 min.
+- **Próxima ação:** nenhuma pendente nesta feature. Aguardar próximo sync do Asaas para as novas colunas preencherem; Extrato sub-tab então mostrará taxa real e badges "👁 Visualizado" para clientes que abriram a fatura.
