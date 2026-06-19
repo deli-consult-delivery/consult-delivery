@@ -639,13 +639,13 @@ input, textarea { font-family: inherit; }
   left: 0;
   top: 50%;
   transform: translateY(-50%);
-  width: 16px;
-  height: 48px;
+  width: 20px;
+  height: 56px;
   background: var(--black-soft, #0E0E0E);
   border: 1px solid rgba(255,255,255,0.08);
   border-left: none;
   border-radius: 0 6px 6px 0;
-  color: rgba(255,255,255,0.4);
+  color: rgba(255,255,255,0.55);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -655,7 +655,7 @@ input, textarea { font-family: inherit; }
   padding: 0;
 }
 .side-reveal-btn:hover {
-  width: 22px;
+  width: 26px;
   color: rgba(255,255,255,0.8);
   background: rgba(255,255,255,0.06);
 }
