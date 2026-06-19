@@ -1,5 +1,31 @@
 # Wiki Log
 
+## 2026-06-19 — Sessão 69/70: Dashboard Financeiro — seções "Vencidas por cliente" + "Vencem em 7 dias" + task `cora-gerar-mensagem-asaas` (PR #430) [T8 — Cora / financeiro]
+
+**Contexto:** Continuação da sessão 68/69. O dashboard financeiro da Cora precisava de dois blocos de ação rápida: (1) cobranças já vencidas agrupadas por cliente com botão de geração de mensagem com tom automático; (2) cobranças que vencem nos próximos 7 dias com lembrete preventivo. Além disso, havia um gap V1/V2: a task `cora-gerar-mensagem` original lia da tabela `cora_cobrancas` (V1) e não preenchia `metadata.customer_phone` nem `metadata.cobranca_v2_id` — campos obrigatórios para o `cora-aprovacao.js` enviar via WhatsApp.
+
+**Decisões tomadas:**
+- Nova task dedicada `cora-gerar-mensagem-asaas` lendo de `cobrancas` (V2/Asaas) em vez de reutilizar a V1
+- Auto-seleção de tom: `isLembrete` (dias<0) → amigavel, ≤7d → neutro, ≤14d → formal, 15+d → urgente
+- `metadata` salvo com `customer_phone` + `cobranca_v2_id` para `cora-aprovacao.js` funcionar
+- Geração via `claude-haiku-4-5-20251001` (mais barato para volume de cobranças)
+- UI: grupos "vencidas por cliente" por `customer_name || customer_phone || id`, ordenado por `maxDias DESC`
+
+**Arquivos criados:**
+- `trigger/cora/gerar-mensagem-asaas.ts` — task `cora-gerar-mensagem-asaas` com leitura de `cobrancas` V2, auto-tom, Haiku, draft + `cora_acoes`
+
+**Arquivos modificados:**
+- `src/console/Cora.jsx` — dois novos blocos na aba Financeiro entre o aging e a tabela de cobranças: "Cobranças vencidas por cliente" (badge vermelho pulsante, tabela cliente/qtd/total/dias/botão auto-tom) + "Vencem nos próximos 7 dias" (badge âmbar pulsante, tabela cliente/valor/vencimento/faltam/botão lembrete); novo estado `loadingMsg`; nova função `gerarMensagemRapida(cobId, tom)` via Bridge `/agents/cora-gerar-mensagem-asaas/run`
+
+**Verificação:**
+- PR #430 squash-mergeado em main — SHA `9af365dc00f9d848b4cb4effd878b351ce15b04f`
+- Trigger.dev deployado versão `20260619.21` com 75 tasks (inclui `cora-gerar-mensagem-asaas`)
+
+**Próxima ação:**
+- Teste E2E ponta-a-ponta: aba Financeiro → "Cobranças vencidas por cliente" → botão "Gerar cobrança" → verificar draft na aba "Agente Cora" → aprovar → mensagem chega no WhatsApp do cliente
+
+---
+
 ## 2026-06-19 — Sessão 68/69: Integração Asaas completa — Dashboard Financeiro + Agente Cora ativado (PR #423) [T8 — Cora / financeiro]
 
 **Contexto:** Wandson pediu integração completa do Asaas em uma sessão: sync de cobranças → dashboard financeiro → régua diária de cobrança → aprovação com 1 clique via WhatsApp.
