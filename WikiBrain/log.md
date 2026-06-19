@@ -1,5 +1,18 @@
 # Wiki Log
 
+## 2026-06-19 — Sessão 71/72: Continuação pós-compactação — confirmação de integridade + fix commit docs travado (PR #433) [T8/Cora + docs]
+
+**Contexto:** Sessão de continuação após compactação de contexto da 70/71. Não havia trabalho técnico novo — objetivo era confirmar integridade e corrigir uma pendência de docs.
+
+**Decisões/ações:**
+- **Verificação:** migration `20260619_001` aplicada, `sync-financeiro.ts` mapeando 6 colunas, `Cora.jsx` com 3 sub-tabs, PR #432 mergeado, Trigger.dev `20260619.27` deployado (75 tasks) — tudo confirmado com leitura dos arquivos reais.
+- **Fix de commit travado:** commit `a9d8848` (`docs(tracker): sessão 70/71`) estava em main local mas o hook bloqueou push direto. Solução: branch `wandson/tracker-sessao-70-71` criada do HEAD local, PR #433 criado via GitHub MCP e mergeado (SHA `0275da3`).
+- **Tracker atualizado:** entradas formais para sessões 70/71 e 71/72 adicionadas ao log de sessões; "Onde parou" atualizado para sessão 71/72.
+
+**Pendente autônomo (próxima sessão):** 9 bugs Respostas Rápidas identificados no code review da sessão 60 — 3 críticos (mic leak ao trocar tipo, media_url zerando em QRs legados, insertQR silenciando QRs com media_url), 4 médios, 2 baixos. Arquivos: `src/console/RespostasRapidas.jsx` + `src/screens/ChatScreen.jsx`.
+
+---
+
 ## 2026-06-19 — Sessão 69/70: Dashboard Financeiro — seções "Vencidas por cliente" + "Vencem em 7 dias" + task `cora-gerar-mensagem-asaas` (PR #430) [T8 — Cora / financeiro]
 
 **Contexto:** Continuação da sessão 68/69. O dashboard financeiro da Cora precisava de dois blocos de ação rápida: (1) cobranças já vencidas agrupadas por cliente com botão de geração de mensagem com tom automático; (2) cobranças que vencem nos próximos 7 dias com lembrete preventivo. Além disso, havia um gap V1/V2: a task `cora-gerar-mensagem` original lia da tabela `cora_cobrancas` (V1) e não preenchia `metadata.customer_phone` nem `metadata.cobranca_v2_id` — campos obrigatórios para o `cora-aprovacao.js` enviar via WhatsApp.
