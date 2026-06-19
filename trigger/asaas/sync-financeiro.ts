@@ -1,6 +1,6 @@
 import { schedules, logger } from "@trigger.dev/sdk/v3";
 import { getSupabase } from "../_shared/supabase";
-import { listChargesAll } from "../_shared/asaas";
+import { listChargesAll, listCustomersMap } from "../_shared/asaas";
 
 function getMainTenantId(): string {
   const id = process.env.MAIN_TENANT_ID;
@@ -40,8 +40,11 @@ export const asaasSyncFinanceiro = schedules.task({
     const sb = getSupabase();
     const now = new Date().toISOString();
 
-    const charges = await listChargesAll();
-    logger.info(`asaas-sync-financeiro: ${charges.length} cobranças recebidas do Asaas`);
+    const [charges, customersMap] = await Promise.all([
+      listChargesAll(),
+      listCustomersMap(),
+    ]);
+    logger.info(`asaas-sync-financeiro: ${charges.length} cobranças, ${customersMap.size} clientes`);
 
     let upserted = 0;
     let errors = 0;
@@ -49,21 +52,25 @@ export const asaasSyncFinanceiro = schedules.task({
     for (let i = 0; i < charges.length; i += BATCH_SIZE) {
       const batch = charges.slice(i, i + BATCH_SIZE);
 
-      const rows = batch.map((charge) => ({
-        tenant_id:       tenantId,
-        asaas_charge_id: charge.id,
-        valor:           charge.value,
-        vencimento:      charge.dueDate,
-        status:          ASAAS_TO_STATUS[charge.status] ?? "canceled",
-        billing_type:    charge.billingType,
-        invoice_url:     charge.invoiceUrl ?? null,
-        bank_slip_url:   charge.bankSlipUrl ?? null,
-        pix_qr_code:     charge.pixQrCode?.payload ?? null,
-        customer_name:   null as string | null,
-        customer_phone:  null as string | null,
-        metadata:        { asaas_raw: charge, synced_at: now },
-        updated_at:      now,
-      }));
+      const rows = batch.map((charge) => {
+        const customer = customersMap.get(charge.customer);
+        const phone = customer?.mobilePhone ?? customer?.phone ?? null;
+        return {
+          tenant_id:       tenantId,
+          asaas_charge_id: charge.id,
+          valor:           charge.value,
+          vencimento:      charge.dueDate,
+          status:          ASAAS_TO_STATUS[charge.status] ?? "canceled",
+          billing_type:    charge.billingType,
+          invoice_url:     charge.invoiceUrl ?? null,
+          bank_slip_url:   charge.bankSlipUrl ?? null,
+          pix_qr_code:     charge.pixQrCode?.payload ?? null,
+          customer_name:   customer?.name ?? null,
+          customer_phone:  phone,
+          metadata:        { asaas_raw: charge, synced_at: now },
+          updated_at:      now,
+        };
+      });
 
       const { error } = await sb
         .from("cobrancas")
