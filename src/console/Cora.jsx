@@ -803,6 +803,9 @@ export default function Cora({ tenantDbId, userId }) {
   const [modo, setModo] = useState('humano');
   const [savingModo, setSavingModo] = useState(false);
 
+  // Loading por cobrança (gerar mensagem rápida)
+  const [loadingMsg, setLoadingMsg] = useState({});
+
   // ── Loaders ────────────────────────────────────────────────────────────────
 
   const loadCobrancasV2 = useCallback(async () => {
@@ -875,6 +878,26 @@ export default function Cora({ tenantDbId, userId }) {
     setSavingModo(false);
   };
 
+  const gerarMensagemRapida = async (cobrancaId, tom) => {
+    setLoadingMsg(prev => ({ ...prev, [cobrancaId]: true }));
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${BRIDGE}/agents/cora-gerar-mensagem-asaas/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ tenant_id: tenantDbId, cobranca_v2_id: cobrancaId, tom }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao gerar mensagem');
+      await loadDrafts();
+      setActiveTab('agente');
+    } catch (e) {
+      alert(e.message || 'Erro ao gerar mensagem');
+    } finally {
+      setLoadingMsg(prev => ({ ...prev, [cobrancaId]: false }));
+    }
+  };
+
   useEffect(() => { loadCobrancasV2(); loadCobrancas(); loadDrafts(); loadAcoes(); loadModo(); },
     [loadCobrancasV2, loadCobrancas, loadDrafts, loadAcoes, loadModo]);
 
@@ -915,6 +938,24 @@ export default function Cora({ tenantDbId, userId }) {
 
   const totalEmitido = cobrancasV2.reduce((s, c) => s + Number(c.valor), 0);
   const taxaInad = totalEmitido > 0 ? ((totalInad / totalEmitido) * 100).toFixed(1) : '0.0';
+
+  // Vencidas agrupadas por cliente (pior primeiro)
+  const vencidasMap = {};
+  cobrancasV2.filter(c => c.status === 'overdue').forEach(c => {
+    const key = c.customer_name || c.customer_phone || c.id;
+    if (!vencidasMap[key]) vencidasMap[key] = { name: c.customer_name || 'Cliente', phone: c.customer_phone, cobId: c.id, items: [], total: 0, maxDias: 0 };
+    vencidasMap[key].items.push(c);
+    vencidasMap[key].total += Number(c.valor);
+    const d = diasAtraso(c.vencimento);
+    if (d > vencidasMap[key].maxDias) { vencidasMap[key].maxDias = d; vencidasMap[key].cobId = c.id; }
+  });
+  const vencidasPorCliente = Object.values(vencidasMap).sort((a, b) => b.maxDias - a.maxDias);
+
+  // Cobranças que vencem nos próximos 7 dias
+  const em7Dias = new Date(hoje); em7Dias.setDate(em7Dias.getDate() + 7);
+  const venceEm7Dias = cobrancasV2
+    .filter(c => { if (c.status !== 'pending') return false; const v = new Date(c.vencimento + 'T00:00:00'); return v >= hoje && v <= em7Dias; })
+    .sort((a, b) => a.vencimento.localeCompare(b.vencimento));
 
   // Aging (overdue only)
   const aging = { '1–30': { qtd: 0, valor: 0 }, '31–60': { qtd: 0, valor: 0 }, '61–90': { qtd: 0, valor: 0 }, '90+': { qtd: 0, valor: 0 } };
@@ -1073,6 +1114,102 @@ export default function Cora({ tenantDbId, userId }) {
               </table>
             </div>
           </div>
+
+          {/* Cobranças vencidas por cliente */}
+          {vencidasPorCliente.length > 0 && (
+            <div className="cv2-card" style={{ overflow: 'hidden' }}>
+              <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--g-100)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: 'var(--red)', animation: 'pulse 1.5s infinite' }} />
+                <span style={{ fontWeight: 700, fontSize: 14 }}>Cobranças vencidas por cliente</span>
+                <span style={{ marginLeft: 4, fontSize: 12, color: 'var(--tx-2)', background: 'var(--g-100)', borderRadius: 10, padding: '1px 8px' }}>{vencidasPorCliente.length}</span>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--g-50)' }}>
+                      <th style={{ padding: '8px 16px', textAlign: 'left', fontWeight: 600 }}>Cliente</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Faturas</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>Total</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Maior atraso</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vencidasPorCliente.map((cli, i) => {
+                      const tom = cli.maxDias <= 7 ? 'neutro' : cli.maxDias <= 14 ? 'formal' : 'urgente';
+                      return (
+                        <tr key={i} style={{ borderTop: '1px solid var(--g-100)' }}>
+                          <td style={{ padding: '8px 16px' }}>{cli.name}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>{cli.items.length}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--red)', fontWeight: 600 }}>{fmtBRL(cli.total)}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                            <span style={{ background: cli.maxDias > 30 ? '#fee2e2' : '#fef3c7', color: cli.maxDias > 30 ? 'var(--red)' : '#92400e', borderRadius: 10, padding: '2px 8px', fontWeight: 600, fontSize: 12 }}>{cli.maxDias}d</span>
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                            <button
+                              onClick={() => gerarMensagemRapida(cli.cobId, tom)}
+                              disabled={!!loadingMsg[cli.cobId]}
+                              style={{ padding: '5px 12px', borderRadius: 6, border: 'none', background: 'var(--red)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: loadingMsg[cli.cobId] ? 'wait' : 'pointer', opacity: loadingMsg[cli.cobId] ? 0.7 : 1 }}
+                            >
+                              {loadingMsg[cli.cobId] ? '…' : 'Gerar cobrança'}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Vence em 7 dias */}
+          {venceEm7Dias.length > 0 && (
+            <div className="cv2-card" style={{ overflow: 'hidden' }}>
+              <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--g-100)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#f59e0b', animation: 'pulse 1.5s infinite' }} />
+                <span style={{ fontWeight: 700, fontSize: 14 }}>Vencem nos próximos 7 dias</span>
+                <span style={{ marginLeft: 4, fontSize: 12, color: 'var(--tx-2)', background: 'var(--g-100)', borderRadius: 10, padding: '1px 8px' }}>{venceEm7Dias.length}</span>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--g-50)' }}>
+                      <th style={{ padding: '8px 16px', textAlign: 'left', fontWeight: 600 }}>Cliente</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>Valor</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Vencimento</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Faltam</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {venceEm7Dias.map((c, i) => {
+                      const faltam = Math.ceil((new Date(c.vencimento + 'T00:00:00') - hoje) / 86400000);
+                      return (
+                        <tr key={i} style={{ borderTop: '1px solid var(--g-100)' }}>
+                          <td style={{ padding: '8px 16px' }}>{c.customer_name || '—'}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>{fmtBRL(Number(c.valor))}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>{c.vencimento.split('-').reverse().join('/')}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                            <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: 10, padding: '2px 8px', fontWeight: 600, fontSize: 12 }}>{faltam}d</span>
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                            <button
+                              onClick={() => gerarMensagemRapida(c.id, 'amigavel')}
+                              disabled={!!loadingMsg[c.id]}
+                              style={{ padding: '5px 12px', borderRadius: 6, border: 'none', background: '#f59e0b', color: '#fff', fontSize: 12, fontWeight: 600, cursor: loadingMsg[c.id] ? 'wait' : 'pointer', opacity: loadingMsg[c.id] ? 0.7 : 1 }}
+                            >
+                              {loadingMsg[c.id] ? '…' : 'Gerar lembrete'}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Charge table */}
           <div className="cv2-card" style={{ overflow: 'hidden' }}>
