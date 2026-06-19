@@ -1537,6 +1537,9 @@ app.use('/api', require('./routes/vendaerp')({
 // Whisper — transcrição de áudio/vídeo recebidos no chat
 app.use('/api/whisper', requireJwt, require('./routes/whisper'));
 
+// Cora — aprovação e rejeição de drafts de cobrança (envia via Evolution API)
+app.use('/api', requireJwt, require('./routes/cora-aprovacao')({ sbFetch, supabaseInsert }));
+
 // ════════════════════════════════════════════════════════════════════════════
 // BRENO Off-Hours — smoke routes
 // ════════════════════════════════════════════════════════════════════════════

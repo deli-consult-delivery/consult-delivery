@@ -261,6 +261,43 @@ export async function listCharges(filters?: {
 }
 
 /**
+ * GET /payments — lista TODAS as cobranças, iterando páginas até hasMore=false.
+ */
+export async function listChargesAll(filters?: {
+  customer?: string;
+  status?: string;
+  billingType?: string;
+  dueDateGe?: string; // YYYY-MM-DD
+  dueDateLe?: string; // YYYY-MM-DD
+}): Promise<AsaasChargeType[]> {
+  const all: AsaasChargeType[] = [];
+  const PAGE = 100;
+  let offset = 0;
+
+  while (true) {
+    const params = new URLSearchParams();
+    if (filters?.customer)   params.set("customer",   filters.customer);
+    if (filters?.status)     params.set("status",     filters.status);
+    if (filters?.billingType) params.set("billingType", filters.billingType);
+    if (filters?.dueDateGe)  params.set("dueDateGe",  filters.dueDateGe);
+    if (filters?.dueDateLe)  params.set("dueDateLe",  filters.dueDateLe);
+    params.set("limit",  String(PAGE));
+    params.set("offset", String(offset));
+
+    const raw = await withRetry(() =>
+      asaasFetch(`/payments?${params.toString()}`)
+    );
+    const page = AsaasListResponse.parse(raw);
+    all.push(...page.data);
+
+    if (!page.hasMore) break;
+    offset += PAGE;
+  }
+
+  return all;
+}
+
+/**
  * POST /payments/:id/refund — estorna uma cobrança.
  */
 export async function refundCharge(id: string): Promise<AsaasChargeType> {
