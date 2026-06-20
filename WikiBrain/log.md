@@ -1,5 +1,29 @@
 # Wiki Log
 
+## 2026-06-20 — Sessão 72/73: 5 bugs follow-up Respostas Rápidas — encerrando os 9 do code review sessão 60 (PR #435) [T9 — chat ao vivo]
+
+**Contexto:** Sessão de continuação pós-compactação 71/72. O único pendente autônomo era fechar os 9 bugs do code review da sessão 60 (Respostas Rápidas / QR). 3 já foram corrigidos no PR #418 (sessão 66/67). A sessão auditou os arquivos reais e encontrou 5 bugs presentes (1 reclassificado como já-funcionando).
+
+**Bugs corrigidos:**
+- **MIME dinâmico em `ChatScreen.jsx` `insertQR`:** detection por extensão do arquivo (png/gif/webp/jpeg) para `file_path` e `media_url` — antes hardcoded `image/jpeg` para todas as imagens.
+- **Feedback de erro em `ChatScreen.jsx` `enviarQrMidia`:** `!resp.ok` throw + `alert()` no catch — erros eram silenciados (usuário não sabia que a mídia não foi enviada).
+- **JID strip em `evolution.js` `sendMediaMessage`:** `to.split('@')[0]` adicionado para consistência com `sendAudioMessage` (antes o `@s.whatsapp.net` era passado na chamada de mídia, causando falha potencial).
+- **Memory leaks `URL.createObjectURL` em `RespostasRapidas.jsx`:** `URL.revokeObjectURL` adicionado em 3 call-sites: `handleFileChange` (revoga URL anterior antes de criar nova), `removerArquivo` (revoga ao limpar), `recorder.onstop` (revoga áudio anterior ao salvar novo).
+- **Orphans no Storage em `RespostasRapidas.jsx` `remover`:** após DELETE na tabela `quick_replies`, agora deleta o arquivo correspondente do bucket `public` via `supabase.storage.from('public').remove([item.file_path])`.
+
+**Verificação:** `npm run build` ✓ 7.99s (sem novos erros). **PR #435** squash-mergeado em main (SHA `ad0a974`).
+
+**Resultado:** Todos 9 bugs do code review da sessão 60 encerrados — 3 no PR #418 (sessão 66/67) + 5 no PR #435 (esta sessão) + 1 reclassificado como já-funcionando.
+
+**Próximas ações pendentes (do Wandson):**
+- DELI motor: religar 2 triggers (`cliente_sumiu_7d`, `metrica_caiu_20pct`) no banco
+- VendaERP GATE 0: E2E Telegram + rotação do token vazado
+- Oracle: E2E autenticado no console
+- OpenRouter: recarga de créditos (saldo $2.81 < $5)
+- T9: 1º cliente real
+
+---
+
 ## 2026-06-19 — Sessão 71/72: Continuação pós-compactação — confirmação de integridade + fix commit docs travado (PR #433) [T8/Cora + docs]
 
 **Contexto:** Sessão de continuação após compactação de contexto da 70/71. Não havia trabalho técnico novo — objetivo era confirmar integridade e corrigir uma pendência de docs.
