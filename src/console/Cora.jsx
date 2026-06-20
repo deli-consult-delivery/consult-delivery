@@ -687,6 +687,40 @@ function CobrancaV2Drawer({ cobranca, tenantDbId, userId, onClose, onRefresh }) 
 }
 
 // ── Aging helper ──────────────────────────────────────────────────────────────
+// ── Pie chart (SVG, sem dependência externa) ──────────────────────────────────
+function PieChartSimple({ data, size = 140 }) {
+  const total = data.reduce((s, d) => s + (d.value || 0), 0);
+  if (total === 0) return (
+    <div style={{ width: size, height: size, borderRadius: '50%', background: 'var(--g-100)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--g-400)' }}>
+      Sem dados
+    </div>
+  );
+  const cx = size / 2, cy = size / 2;
+  const outerR = size / 2 - 4, innerR = outerR * 0.52;
+  let cumAngle = -Math.PI / 2;
+  const slices = data.filter(d => d.value > 0).map(d => {
+    const sweep = (d.value / total) * 2 * Math.PI;
+    const start = cumAngle; cumAngle += sweep;
+    return { ...d, start, end: cumAngle, sweep };
+  });
+  function polar(angle, r) { return [cx + r * Math.cos(angle), cy + r * Math.sin(angle)]; }
+  function slicePath(s) {
+    const [ox1, oy1] = polar(s.start, outerR), [ox2, oy2] = polar(s.end, outerR);
+    const [ix1, iy1] = polar(s.end, innerR), [ix2, iy2] = polar(s.start, innerR);
+    const lg = s.sweep > Math.PI ? 1 : 0;
+    return `M${ox1.toFixed(2)} ${oy1.toFixed(2)} A${outerR} ${outerR} 0 ${lg} 1 ${ox2.toFixed(2)} ${oy2.toFixed(2)} L${ix1.toFixed(2)} ${iy1.toFixed(2)} A${innerR} ${innerR} 0 ${lg} 0 ${ix2.toFixed(2)} ${iy2.toFixed(2)}Z`;
+  }
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      {slices.map((s, i) => (
+        <path key={i} d={slicePath(s)} fill={s.color} opacity={0.88}>
+          <title>{s.label}: {fmtBRL(s.value)} ({((s.value / total) * 100).toFixed(1)}%)</title>
+        </path>
+      ))}
+    </svg>
+  );
+}
+
 function agingBucket(dias) {
   if (dias <= 30) return '1–30';
   if (dias <= 60) return '31–60';
@@ -803,6 +837,19 @@ export default function Cora({ tenantDbId, userId }) {
   const [modo, setModo] = useState('humano');
   const [savingModo, setSavingModo] = useState(false);
 
+  // Saldo Asaas
+  const [saldoAsaas, setSaldoAsaas] = useState(null);
+  const [loadingSaldo, setLoadingSaldo] = useState(false);
+
+  // UI toggles
+  const [showPie, setShowPie] = useState(false);
+  const [reguaFilter, setReguaFilter] = useState('todas');
+
+  // Per-charge loading + expanded draft state
+  const [loadingMsgMap, setLoadingMsgMap] = useState({});
+  const [expandedDraftMap, setExpandedDraftMap] = useState({});
+  const [sendingMap, setSendingMap] = useState({});
+
   // ── Loaders ────────────────────────────────────────────────────────────────
 
   const loadCobrancasV2 = useCallback(async () => {
@@ -875,8 +922,24 @@ export default function Cora({ tenantDbId, userId }) {
     setSavingModo(false);
   };
 
-  useEffect(() => { loadCobrancasV2(); loadCobrancas(); loadDrafts(); loadAcoes(); loadModo(); },
-    [loadCobrancasV2, loadCobrancas, loadDrafts, loadAcoes, loadModo]);
+  const loadSaldo = useCallback(async () => {
+    if (!tenantDbId) return;
+    setLoadingSaldo(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch(`${BRIDGE}/api/asaas/saldo`, {
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      });
+      if (r.ok) {
+        const json = await r.json();
+        setSaldoAsaas(json.balance ?? json.totalBalance ?? null);
+      }
+    } catch (_) { /* silent — saldo não é crítico */ }
+    setLoadingSaldo(false);
+  }, [tenantDbId]);
+
+  useEffect(() => { loadCobrancasV2(); loadCobrancas(); loadDrafts(); loadAcoes(); loadModo(); loadSaldo(); },
+    [loadCobrancasV2, loadCobrancas, loadDrafts, loadAcoes, loadModo, loadSaldo]);
 
   // Realtime — cobranças V2
   useEffect(() => {
@@ -895,6 +958,16 @@ export default function Cora({ tenantDbId, userId }) {
       .subscribe();
     return () => supabase.removeChannel(ch);
   }, [tenantDbId, loadDrafts, loadAcoes]);
+
+  // Auto-clear spinner quando draft aparecer para uma cobrança em loading
+  useEffect(() => {
+    if (!Object.keys(loadingMsgMap).length) return;
+    const draftIds = new Set(drafts.map(d => d.metadata?.cobranca_v2_id).filter(Boolean));
+    const ready = Object.keys(loadingMsgMap).filter(id => draftIds.has(id));
+    if (!ready.length) return;
+    setLoadingMsgMap(prev => { const n = { ...prev }; ready.forEach(id => delete n[id]); return n; });
+    setExpandedDraftMap(prev => { const n = { ...prev }; ready.forEach(id => { n[id] = true; }); return n; });
+  }, [drafts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Derived data ──────────────────────────────────────────────────────────
 
@@ -948,6 +1021,82 @@ export default function Cora({ tenantDbId, userId }) {
   const selectedV2 = cobrancasV2.find(c => c.id === selectedV2Id);
   const overdueCount = cobrancasV2.filter(c => c.status === 'overdue').length;
 
+  // KPIs extras
+  const confirmadas = cobrancasV2
+    .filter(c => c.status === 'received' && c.confirmed_date)
+    .reduce((s, c) => s + Number(c.valor), 0);
+  const aguardando = cobrancasV2
+    .filter(c => c.status === 'pending' && new Date(c.vencimento) >= hoje)
+    .reduce((s, c) => s + Number(c.valor), 0);
+
+  // Régua — elegíveis: vencidas + pending vencendo em até 7 dias
+  const seteDiasAFrente = new Date(hoje); seteDiasAFrente.setDate(seteDiasAFrente.getDate() + 7);
+  const elegiveisRegua = cobrancasV2.filter(c => {
+    if (c.status === 'overdue') return true;
+    if (c.status === 'pending') { const v = new Date(c.vencimento); return v >= hoje && v <= seteDiasAFrente; }
+    return false;
+  });
+  const elegiveisFiltered = reguaFilter === 'vencidas' ? elegiveisRegua.filter(c => c.status === 'overdue')
+    : reguaFilter === 'proximas7d' ? elegiveisRegua.filter(c => c.status === 'pending')
+    : elegiveisRegua;
+
+  // Pie data
+  const pieStatus = [
+    { label: 'Recebido',  value: cobrancasV2.filter(c => c.status === 'received').reduce((s,c) => s + Number(c.valor), 0), color: '#16a34a' },
+    { label: 'Pendente',  value: cobrancasV2.filter(c => c.status === 'pending').reduce((s,c) => s + Number(c.valor), 0),  color: '#D97706' },
+    { label: 'Vencido',   value: cobrancasV2.filter(c => c.status === 'overdue').reduce((s,c) => s + Number(c.valor), 0),  color: '#dc2626' },
+    { label: 'Outros',    value: cobrancasV2.filter(c => ['canceled','refunded'].includes(c.status)).reduce((s,c) => s + Number(c.valor), 0), color: '#6b7280' },
+  ];
+  const pieBilling = [
+    { label: 'PIX',    value: cobrancasV2.filter(c => c.billing_type === 'PIX').reduce((s,c) => s + Number(c.valor), 0),         color: '#2563eb' },
+    { label: 'Boleto', value: cobrancasV2.filter(c => c.billing_type === 'BOLETO').reduce((s,c) => s + Number(c.valor), 0),      color: '#D97706' },
+    { label: 'Cartão', value: cobrancasV2.filter(c => c.billing_type === 'CREDIT_CARD').reduce((s,c) => s + Number(c.valor), 0), color: '#16a34a' },
+  ];
+
+  // Ações da régua
+  const gerarMensagem = async (cob) => {
+    setLoadingMsgMap(prev => ({ ...prev, [cob.id]: true }));
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch(`${BRIDGE}/agents/cora-gerar-mensagem/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({
+          tenant_id: tenantDbId, cobranca_v2_id: cob.id,
+          customer_name: cob.customer_name, customer_phone: cob.customer_phone,
+          valor: cob.valor, vencimento: cob.vencimento, status: cob.status,
+        }),
+      });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        alert(e.error || 'Erro ao gerar mensagem');
+        setLoadingMsgMap(prev => { const n = { ...prev }; delete n[cob.id]; return n; });
+      }
+    } catch (e) {
+      alert(e.message);
+      setLoadingMsgMap(prev => { const n = { ...prev }; delete n[cob.id]; return n; });
+    }
+  };
+
+  const enviarDraft = async (draft, testPhone = null) => {
+    const key = draft.metadata?.cobranca_v2_id || draft.id;
+    setSendingMap(prev => ({ ...prev, [key]: true }));
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const url = testPhone
+        ? `${BRIDGE}/api/cora/aprovar/${draft.id}?test_phone=${encodeURIComponent(testPhone)}`
+        : `${BRIDGE}/api/cora/aprovar/${draft.id}`;
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ tenant_id: tenantDbId }),
+      });
+      if (!r.ok) { const e = await r.json().catch(() => ({})); alert(e.error || 'Erro ao enviar'); }
+      else { loadDrafts(); loadAcoes(); setExpandedDraftMap(prev => { const n = { ...prev }; delete n[key]; return n; }); }
+    } catch (e) { alert(e.message); }
+    setSendingMap(prev => { const n = { ...prev }; delete n[key]; return n; });
+  };
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -998,29 +1147,89 @@ export default function Cora({ tenantDbId, userId }) {
       {/* ── TAB: FINANCEIRO ─────────────────────────────────────────────────── */}
       {activeTab === 'financeiro' && (
         <>
-          {/* KPIs */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
-            <div className="cv2-kpi">
-              <div className="cv2-kpi l">Recebido este mês</div>
-              <div className="cv2-kpi v" style={{ marginTop: 8, color: 'var(--success)' }}>{fmtBRL(recebidoMes)}</div>
-              <div className="kpi-delta up" style={{ marginTop: 10 }}><Icon name="arrowup" size={11} /> Asaas confirmado</div>
-            </div>
-            <div className="cv2-kpi">
-              <div className="cv2-kpi l">A receber</div>
-              <div className="cv2-kpi v accent" style={{ marginTop: 8 }}>{fmtBRL(aReceber)}</div>
-              <div className="kpi-delta neutral" style={{ marginTop: 10 }}><Icon name="info" size={11} /> Pendente</div>
-            </div>
-            <div className="cv2-kpi">
-              <div className="cv2-kpi l">Inadimplência</div>
-              <div className="cv2-kpi v" style={{ marginTop: 8, color: totalInad > 0 ? 'var(--red)' : 'var(--g-900)' }}>{fmtBRL(totalInad)}</div>
-              <div className="kpi-delta down" style={{ marginTop: 10 }}><Icon name="info" size={11} /> {overdueCount} cobranças vencidas</div>
-            </div>
-            <div className="cv2-kpi">
-              <div className="cv2-kpi l">Taxa inadimplência</div>
-              <div className="cv2-kpi v" style={{ marginTop: 8, color: Number(taxaInad) > 10 ? 'var(--red)' : 'var(--g-900)' }}>{taxaInad}%</div>
-              <div className="kpi-delta neutral" style={{ marginTop: 10 }}><Icon name="info" size={11} /> Do total emitido</div>
-            </div>
+          {/* Toggle cards ↔ gráfico */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+            <button
+              onClick={() => setShowPie(v => !v)}
+              style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid var(--g-200)', background: 'var(--bg)', color: 'var(--tx)', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              {showPie ? '📋 Versão cards' : '🥧 Versão gráfico'}
+            </button>
           </div>
+
+          {showPie ? (
+            /* ── Gráficos de pizza ──────────────────────────────────── */
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16, marginBottom: 24 }}>
+              {/* Pie 1 — Por status */}
+              <div className="cv2-card" style={{ padding: 20 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--g-700)', marginBottom: 16 }}>Distribuição por status</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+                  <PieChartSimple data={pieStatus} size={140} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 120 }}>
+                    {pieStatus.filter(d => d.value > 0).map(d => (
+                      <div key={d.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: 2, background: d.color, flexShrink: 0 }} />
+                        <span style={{ fontSize: 12, color: 'var(--g-600)', flex: 1 }}>{d.label}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtBRL(d.value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              {/* Pie 2 — Por tipo de pagamento */}
+              <div className="cv2-card" style={{ padding: 20 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--g-700)', marginBottom: 16 }}>Distribuição por pagamento</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+                  <PieChartSimple data={pieBilling} size={140} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 120 }}>
+                    {pieBilling.filter(d => d.value > 0).map(d => (
+                      <div key={d.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: 2, background: d.color, flexShrink: 0 }} />
+                        <span style={{ fontSize: 12, color: 'var(--g-600)', flex: 1 }}>{d.label}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtBRL(d.value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* ── KPIs cards ─────────────────────────────────────────── */
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
+              <div className="cv2-kpi">
+                <div className="cv2-kpi l">Saldo na conta</div>
+                <div className="cv2-kpi v" style={{ marginTop: 8, color: 'var(--success)' }}>
+                  {loadingSaldo ? '…' : saldoAsaas !== null ? fmtBRL(saldoAsaas) : '—'}
+                </div>
+                <div className="kpi-delta up" style={{ marginTop: 10 }}><Icon name="arrowup" size={11} /> Asaas saldo atual</div>
+              </div>
+              <div className="cv2-kpi">
+                <div className="cv2-kpi l">Recebido este mês</div>
+                <div className="cv2-kpi v" style={{ marginTop: 8, color: 'var(--success)' }}>{fmtBRL(recebidoMes)}</div>
+                <div className="kpi-delta up" style={{ marginTop: 10 }}><Icon name="arrowup" size={11} /> Confirmados Asaas</div>
+              </div>
+              <div className="cv2-kpi">
+                <div className="cv2-kpi l">Confirmadas</div>
+                <div className="cv2-kpi v accent" style={{ marginTop: 8 }}>{fmtBRL(confirmadas)}</div>
+                <div className="kpi-delta neutral" style={{ marginTop: 10 }}><Icon name="info" size={11} /> Com data de confirmação</div>
+              </div>
+              <div className="cv2-kpi">
+                <div className="cv2-kpi l">Aguardando pagamento</div>
+                <div className="cv2-kpi v" style={{ marginTop: 8, color: '#D97706' }}>{fmtBRL(aguardando)}</div>
+                <div className="kpi-delta neutral" style={{ marginTop: 10 }}><Icon name="info" size={11} /> Pendentes a vencer</div>
+              </div>
+              <div className="cv2-kpi">
+                <div className="cv2-kpi l">Inadimplência</div>
+                <div className="cv2-kpi v" style={{ marginTop: 8, color: totalInad > 0 ? 'var(--red)' : 'var(--g-900)' }}>{fmtBRL(totalInad)}</div>
+                <div className="kpi-delta down" style={{ marginTop: 10 }}><Icon name="info" size={11} /> {overdueCount} cobranças vencidas</div>
+              </div>
+              <div className="cv2-kpi">
+                <div className="cv2-kpi l">Taxa inadimplência</div>
+                <div className="cv2-kpi v" style={{ marginTop: 8, color: Number(taxaInad) > 10 ? 'var(--red)' : 'var(--g-900)' }}>{taxaInad}%</div>
+                <div className="kpi-delta neutral" style={{ marginTop: 10 }}><Icon name="info" size={11} /> Do total emitido</div>
+              </div>
+            </div>
+          )}
 
           {/* Chart + Aging side by side */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
@@ -1072,6 +1281,157 @@ export default function Cora({ tenantDbId, userId }) {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* ── Régua de Cobrança ──────────────────────────────────────────── */}
+          <div className="cv2-card" style={{ marginBottom: 24, overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--g-100)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>Régua de Cobrança</div>
+                <div style={{ fontSize: 12, color: 'var(--g-500)', marginTop: 2 }}>
+                  {elegiveisRegua.length} cliente{elegiveisRegua.length !== 1 ? 's' : ''} elegíveis · vencidas + próximos 7 dias
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {[['todas','Todas'],['vencidas','Vencidas'],['proximas7d','Próx. 7 dias']].map(([v, l]) => (
+                  <button key={v} onClick={() => setReguaFilter(v)} style={{
+                    padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                    background: reguaFilter === v ? 'var(--red, #B70C00)' : 'var(--g-100)',
+                    color: reguaFilter === v ? '#fff' : 'var(--g-600)',
+                    border: reguaFilter === v ? 'none' : '1px solid var(--g-200)',
+                  }}>{l}</button>
+                ))}
+              </div>
+            </div>
+            {elegiveisFiltered.length === 0 ? (
+              <div style={{ padding: 32, textAlign: 'center', color: 'var(--g-500)', fontSize: 13 }}>
+                ✅ Nenhuma cobrança elegível para esta régua.
+              </div>
+            ) : (
+              <div>
+                {elegiveisFiltered.map(cob => {
+                  const dias = diasAtraso(cob.vencimento);
+                  const isLoading = loadingMsgMap[cob.id];
+                  const draftForCob = drafts.find(d => d.metadata?.cobranca_v2_id === cob.id);
+                  const isExpanded = expandedDraftMap[cob.id];
+                  const isSending = sendingMap[draftForCob?.metadata?.cobranca_v2_id || draftForCob?.id];
+                  const sentAcao = acoes.find(a => a.metadata?.cobranca_v2_id === cob.id && a.tipo === 'mensagem_enviada');
+                  return (
+                    <div key={cob.id} style={{ borderBottom: '1px solid var(--g-100)' }}>
+                      {/* Linha principal */}
+                      <div style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                        {/* Avatar */}
+                        <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#B70C00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#fff', fontSize: 12, flexShrink: 0 }}>
+                          {(cob.customer_name || '??').slice(0, 2).toUpperCase()}
+                        </div>
+                        {/* Nome + telefone */}
+                        <div style={{ flex: 1, minWidth: 120 }}>
+                          <div style={{ fontWeight: 600, fontSize: 14 }}>{cob.customer_name || '—'}</div>
+                          {cob.customer_phone && (
+                            <div style={{ fontSize: 11, color: 'var(--g-500)', marginTop: 1 }}>{cob.customer_phone}</div>
+                          )}
+                        </div>
+                        {/* Valor */}
+                        <div style={{ fontWeight: 700, fontSize: 15, color: cob.status === 'overdue' ? 'var(--red)' : 'var(--g-900)', fontVariantNumeric: 'tabular-nums', minWidth: 80 }}>
+                          {fmtBRL(cob.valor)}
+                        </div>
+                        {/* Badge dias */}
+                        <div style={{ minWidth: 90 }}>
+                          {cob.status === 'overdue' ? (
+                            <span style={{ fontSize: 11, fontWeight: 700, color: dias > 30 ? '#7f1d1d' : 'var(--red)', background: dias > 30 ? '#7f1d1d22' : '#dc262622', padding: '3px 9px', borderRadius: 12 }}>
+                              {dias}d vencida
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#D97706', background: '#D9770622', padding: '3px 9px', borderRadius: 12 }}>
+                              vence em {Math.ceil((new Date(cob.vencimento) - hoje) / 86400000)}d
+                            </span>
+                          )}
+                        </div>
+                        {/* Status envio */}
+                        <div style={{ minWidth: 80 }}>
+                          {sentAcao ? (
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a', background: '#16a34a22', padding: '3px 9px', borderRadius: 12 }}>✓ Enviado</span>
+                          ) : draftForCob ? (
+                            <span style={{ fontSize: 11, fontWeight: 600, color: '#2563eb', background: '#2563eb22', padding: '3px 9px', borderRadius: 12 }}>Msg pronta</span>
+                          ) : (
+                            <span style={{ fontSize: 11, color: 'var(--g-400)' }}>Sem mensagem</span>
+                          )}
+                        </div>
+                        {/* Ação */}
+                        <div>
+                          {sentAcao ? null : draftForCob ? (
+                            <button
+                              onClick={() => setExpandedDraftMap(prev => ({ ...prev, [cob.id]: !prev[cob.id] }))}
+                              style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #2563eb', background: 'transparent', color: '#2563eb', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                            >
+                              {isExpanded ? 'Fechar ▲' : 'Ver preview ▼'}
+                            </button>
+                          ) : (
+                            <button
+                              disabled={isLoading}
+                              onClick={() => gerarMensagem(cob)}
+                              style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: 'var(--red, #B70C00)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: isLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: isLoading ? 0.7 : 1 }}
+                            >
+                              {isLoading ? <><Spinner /> Gerando…</> : '✉ Gerar mensagem'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {/* Preview expandido */}
+                      {isExpanded && draftForCob && (
+                        <div style={{ margin: '0 20px 14px', background: 'var(--panel)', borderRadius: 10, padding: 16, border: '1px solid var(--g-200)' }}>
+                          {/* Cabeçalho do preview */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--g-600)' }}>Para:</span>
+                            <span style={{ fontSize: 12, fontWeight: 700 }}>{draftForCob.metadata?.customer_phone || cob.customer_phone || '—'}</span>
+                            {draftForCob.metadata?.tom && <TomBadge tom={draftForCob.metadata.tom} />}
+                          </div>
+                          {/* Texto da mensagem */}
+                          <div style={{ fontSize: 13, color: 'var(--g-700)', lineHeight: 1.6, whiteSpace: 'pre-wrap', background: 'var(--bg)', borderRadius: 8, padding: 12, marginBottom: 12 }}>
+                            {draftForCob.body}
+                          </div>
+                          {/* Botões */}
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            <button
+                              disabled={isSending}
+                              onClick={() => enviarDraft(draftForCob)}
+                              style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#16a34a', color: '#fff', fontSize: 13, fontWeight: 600, cursor: isSending ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                            >
+                              {isSending ? <><Spinner /> Enviando…</> : '✓ Enviar agora'}
+                            </button>
+                            <button
+                              disabled={isSending}
+                              onClick={async () => {
+                                const num = prompt('Número para teste (somente dígitos, ex: 5511999999999):');
+                                if (num) await enviarDraft(draftForCob, num.replace(/\D/g, ''));
+                              }}
+                              style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid var(--g-200)', background: 'transparent', color: 'var(--g-600)', fontSize: 13, cursor: isSending ? 'not-allowed' : 'pointer' }}
+                            >
+                              🧪 Enviar para meu número
+                            </button>
+                            <button
+                              onClick={async () => {
+                                const { data: { session } } = await supabase.auth.getSession();
+                                await fetch(`${BRIDGE}/api/cora/rejeitar/${draftForCob.id}`, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+                                  body: JSON.stringify({ tenant_id: tenantDbId }),
+                                });
+                                loadDrafts();
+                                setExpandedDraftMap(prev => { const n = { ...prev }; delete n[cob.id]; return n; });
+                              }}
+                              style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid var(--g-200)', background: 'transparent', color: 'var(--red)', fontSize: 13, cursor: 'pointer' }}
+                            >
+                              ✕ Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Charge table */}
