@@ -43,7 +43,9 @@ A sessão **Cowork** (desktop) parou aqui e passou o bastão para a **sessão Cl
 
 ## 🔴 Onde parou
 
-_Última sessão: 2026-06-19 (VPS — **sessão 71/72: Continuação da 70/71 após compactação de contexto.** Confirmado que todo o trabalho técnico da sessão 70/71 estava 100% completo: migration `20260619_001_cobrancas_extrato_fields.sql` aplicada (6 colunas), `sync-financeiro.ts` atualizado, `Cora.jsx` com 3 sub-tabs de Extrato, PR #432 squash-mergeado, Trigger.dev `20260619.27` deployado (75 tasks). **Corrigido commit de docs travado** da sessão 70/71 — commit `a9d8848` estava em main local mas bloqueado pelo hook de push direto; solução: branch `wandson/tracker-sessao-70-71` criada do HEAD local, PR #433 criado via GitHub MCP e mergeado (SHA `0275da3`). Atualização do Tracker para sessão 71/72 (este commit). **Pendente autônomo próxima sessão:** 9 bugs Respostas Rápidas (3 críticos confirmados no code review sessão 60). **Track: T8/Cora + docs.**)_
+_Última sessão: 2026-06-20 (VPS — **sessão 72/73: 5 bugs follow-up Respostas Rápidas (PR #435, SHA `ad0a974`) — encerra os 9 bugs do code review da sessão 60.** **Contexto:** sessão de continuação após compactação 71/72. O único pendente autônomo eram os 9 bugs QR (3 críticos já corrigidos no PR #418 da sessão 66/67, 6 restantes). Auditou os arquivos reais e confirmou: 1 reclassificado como já-funcionando, 5 realmente presentes. **Bugs corrigidos (3 arquivos):** **(1) `src/screens/ChatScreen.jsx`** — `insertQR`: MIME hardcoded `image/jpeg` → detecção dinâmica por extensão (`.png`/`.gif`/`.webp`/fallback `jpeg`) para `file_path` e `media_url`; `enviarQrMidia`: adicionado `!resp.ok` throw check + `alert()` visual no `catch`. **(2) `src/lib/evolution.js`** — `sendMediaMessage`: `to.split('@')[0]` adicionado para consistency com `sendAudioMessage` (JID strip). **(3) `src/console/RespostasRapidas.jsx`** — `handleFileChange`: revoke do blob URL anterior antes de criar novo (`URL.revokeObjectURL`); `removerArquivo`: revoke do blob URL antes de limpar; `recorder.onstop`: revoke do blob anterior ao salvar áudio; `remover`: após DELETE na tabela, deleta o arquivo do Storage (`supabase.storage.from('public').remove([item.file_path])`) evitando orphans. `npm run build` ✓ 7.99s. **Track: T9 — chat ao vivo. Todos 9 bugs do code review sessão 60 ENCERRADOS.**)_
+
+_Sessão anterior: 2026-06-19 (VPS — **sessão 71/72: Continuação da 70/71 após compactação de contexto.** Confirmado que todo o trabalho técnico da sessão 70/71 estava 100% completo: migration `20260619_001_cobrancas_extrato_fields.sql` aplicada (6 colunas), `sync-financeiro.ts` atualizado, `Cora.jsx` com 3 sub-tabs de Extrato, PR #432 squash-mergeado, Trigger.dev `20260619.27` deployado (75 tasks). **Corrigido commit de docs travado** da sessão 70/71 — commit `a9d8848` estava em main local mas bloqueado pelo hook de push direto; solução: branch `wandson/tracker-sessao-70-71` criada do HEAD local, PR #433 criado via GitHub MCP e mergeado (SHA `0275da3`). Atualização do Tracker para sessão 71/72 (este commit). **Pendente autônomo próxima sessão:** 9 bugs Respostas Rápidas (3 críticos confirmados no code review sessão 60). **Track: T8/Cora + docs.**)_
 
 _Sessão anterior: 2026-06-19 (VPS — **sessão 70/71: Extrato de Pagamentos Asaas no Dashboard Cora (PR #432 squash-mergeado, versão Trigger.dev `20260619.27`).** **Contexto:** Wandson pediu área de extrato com confirmação de pagamento, forma de pagamento (PIX/Boleto/Cartão) e se o cliente visualizou a fatura (`invoiceViewedDate`), extraindo tudo possível da API Asaas. **Entregues:** **(1) Migration `supabase/migrations/20260619_001_cobrancas_extrato_fields.sql`** — 6 colunas aditivas na tabela `cobrancas`: `payment_date` (date), `net_value` (numeric), `date_created` (date), `invoice_viewed_date` (timestamptz), `description` (text), `confirmed_date` (date). **(2) `trigger/_shared/asaas.ts`** — schema `AsaasCharge` expandido com `invoiceViewedDate` e `confirmedDate` (nullable optional). **(3) `trigger/asaas/sync-financeiro.ts`** — upsert atualizado para salvar os 6 novos campos em colunas dedicadas (antes ficavam só no JSON bruto de `metadata.asaas_raw`). **(4) `src/console/Cora.jsx`** — aba Financeiro expandida com 3 sub-tabs: "Visão Geral" (KPIs), "Extrato de Pagamentos" (KPI bruto/líquido/taxa Asaas, breakdown por forma de pagamento com progress bars coloridas, timeline cronológica reversa com badge 👁 Visualizado + timestamp hover), "Cobranças" (tabela existente movida). Deploy Trigger.dev v`20260619.27` (75 tasks). **Track: T8/Cora.**)_
 
@@ -325,6 +327,20 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 ---
 
 ## 📋 Log de sessões
+
+### 2026-06-20 (sessão 72/73 — 5 bugs Respostas Rápidas follow-up — encerrando os 9 do code review sessão 60 [T9 — chat])
+
+- **Contexto:** sessão de continuação pós-compactação 71/72; único pendente autônomo = bugs QR da sessão 60.
+- **Auditoria:** 9 bugs confirmados no code review da sessão 60 → 3 já corrigidos no PR #418 (sessão 66/67) → 1 reclassificado como já-funcionando → 5 realmente presentes.
+- **Fix 1 — `ChatScreen.jsx` `insertQR`:** MIME hardcoded `image/jpeg` → detecção dinâmica por extensão (`.png`/`.gif`/`.webp`/fallback jpeg) para `file_path` e `media_url`.
+- **Fix 2 — `ChatScreen.jsx` `enviarQrMidia`:** `!resp.ok` throw check + `alert()` no catch (erros eram silenciados).
+- **Fix 3 — `evolution.js` `sendMediaMessage`:** `to.split('@')[0]` adicionado — JID strip idêntico ao `sendAudioMessage` (consistência).
+- **Fix 4/5/6 — `RespostasRapidas.jsx` leaks `URL.createObjectURL`:** revoke nos 3 call-sites (handleFileChange, removerArquivo, recorder.onstop).
+- **Fix 7 — `RespostasRapidas.jsx` orphans no Storage:** `remover()` deleta o arquivo do bucket `public` após DELETE na tabela.
+- **Build:** `npm run build` ✓ 7.99s · **PR #435** squash-mergeado em main (SHA `ad0a974`).
+- **Track:** T9 — chat ao vivo. **Todos 9 bugs da sessão 60 ENCERRADOS** (3 em PR #418 + 5 em PR #435 + 1 already-working).
+
+---
 
 ### 2026-06-19 (sessão 71/72 — Continuação pós-compactação: confirmação de integridade + fix de commit de docs travado [T8/Cora])
 - **Verificado:** todo trabalho técnico da sessão 70/71 estava completo (migration aplicada, sync atualizado, Cora.jsx 3 sub-tabs, PR #432 mergeado, Trigger.dev `20260619.27` deployado — 75 tasks)
