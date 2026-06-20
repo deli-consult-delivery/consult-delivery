@@ -1,5 +1,31 @@
 # Wiki Log
 
+## 2026-06-20 — Sessão 73/74: Dashboard Cora — régua de cobrança interativa + saldo Asaas + gráficos de pizza (PR #437) [T8 — Cora / financeiro]
+
+**Contexto:** Wandson pediu upgrade completo do dashboard Cora: ver a mensagem que seria enviada pela régua de cobrança, botão de envio manual com 1 clique, número de telefone visível, status de envio, teste para número próprio, saldo da conta Asaas, gráficos de pizza, filtros de status, e responsividade mobile completa.
+
+**Entregues:**
+
+- **`bridge-server/routes/asaas-saldo.js`** (novo) — GET `/api/asaas/saldo`: chama Asaas `/v3/finance/balance`, cache de 5 min em módulo, retorna `{ balance, onlineBalance, ... }`. Registrado em `bridge-server/index.js` com `requireJwt`.
+- **`bridge-server/routes/cora-aprovacao.js`** — adicionado suporte a `?test_phone=` (redireciona envio para número de teste, mantendo autenticação JWT obrigatória). Combinado com `assertTenantMember()` do main para segurança IDOR.
+- **`src/console/Cora.jsx`** — grandes adições:
+  - **`PieChartSimple`**: SVG donut puro (sem dependência externa), cálculo trigonométrico de arcos `polar()/slicePath()`, tooltip nativo.
+  - **KPIs expandidos**: 6 cards em `repeat(auto-fit, minmax(160px, 1fr))` — Saldo Asaas, Recebido este mês, Confirmadas, Aguardando, Inadimplência, Taxa %.
+  - **Toggle gráficos**: botão "Versão gráfico" alterna cards ↔ 2 donuts (distribuição por status + por tipo de pagamento).
+  - **Régua de Cobrança**: seção interativa com filtros (Todas / Vencidas / Próx. 7 dias), lista de elegíveis (overdue + pending ≤7d), telefone visível, badge de status (Pendente/Gerado/Enviado), botão contextual por cobrança.
+  - **Fluxo gerar → preview → enviar**: `gerarMensagem(cob)` → POST Bridge → aguarda draft via realtime Supabase → auto-expande preview → `enviarDraft(draft, testPhone)` → badge "✓ Enviado".
+  - **Auto-clear spinner**: `useEffect` observa `drafts` (realtime) e limpa `loadingMsgMap` quando draft aparece para aquela cobrança.
+  - **"Enviar para meu número"**: `prompt()` coleta número → `enviarDraft(draft, phone)` → `?test_phone=` no endpoint.
+  - **Mobile-first**: grids `repeat(auto-fit, ...)` para KPIs e pies; régua em coluna no mobile.
+
+**Conflito de merge resolvido:** PRs #430 e #432 tinham chegado em main. `git merge origin/main` no worktree, `git checkout --theirs` nos arquivos trigger (não nossos), resolução manual do bridge, `git checkout --theirs` do Cora.jsx (tomou main 1544 linhas) + reaplicação manual das features novas.
+
+**Deploy:** PR #437 squash-mergeado em main (SHA `e368cdb`). Bridge reiniciado: `git reset --hard origin/main && pm2 restart bridge-server` na VPS. `ASAAS_API_KEY: ✓` confirmado no env do bridge. Features `Régua de Cobrança` e `Saldo Asaas` confirmadas no bundle live `index-DsZ8t_2j.js` via grep.
+
+**Track: T8/Cora.** Próximas ações pendentes (do Wandson): DELI motor — religar 2 triggers no banco; VendaERP GATE 0 + rotação token; Oracle E2E; OpenRouter recarga de créditos; T9: 1º cliente real.
+
+---
+
 ## 2026-06-20 — Sessão 72/73: 5 bugs follow-up Respostas Rápidas — encerrando os 9 do code review sessão 60 (PR #435) [T9 — chat ao vivo]
 
 **Contexto:** Sessão de continuação pós-compactação 71/72. O único pendente autônomo era fechar os 9 bugs do code review da sessão 60 (Respostas Rápidas / QR). 3 já foram corrigidos no PR #418 (sessão 66/67). A sessão auditou os arquivos reais e encontrou 5 bugs presentes (1 reclassificado como já-funcionando).
