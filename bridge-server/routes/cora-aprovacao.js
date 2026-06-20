@@ -52,14 +52,14 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
 
       // 1. Buscar draft pendente
       const drafts = await sbFetch(
-        `agent_drafts?id=eq.${encodeURIComponent(draft_id)}&tenant_id=eq.${encodeURIComponent(tenant_id)}&status=eq.pending&select=id,body,metadata&limit=1`
+        `agent_drafts?id=eq.${encodeURIComponent(draft_id)}&tenant_id=eq.${encodeURIComponent(tenant_id)}&status=eq.pending&select=id,content,metadata&limit=1`
       );
       if (!drafts?.length) {
         return res.status(404).json({ error: 'Draft não encontrado ou já processado' });
       }
       const draft = drafts[0];
       const meta = draft.metadata || {};
-      const mensagem = draft.body;
+      const mensagem = draft.content;
       const phone = meta.customer_phone;
       const cobrancaV2Id = meta.cobranca_v2_id ?? null;
 
