@@ -1,5 +1,27 @@
 # Wiki Log
 
+## 2026-06-20 — Sessão 74/75: Debug cora-gerar-mensagem-asaas — 3 bugs root-cause corrigidos + migration nullable (PR #442) [T8 — Cora / financeiro]
+
+**Contexto:** Fluxo "Gerar mensagem → Preview → Aprovar → Enviar WhatsApp" travava: spinner ficava ~20s e voltava sem draft em `agent_drafts`. Trigger.dev não mostrava erro porque o task dispara async (Bridge retorna 202 imediatamente). Investigação top-down revelou 3 bugs simultâneos no caminho de persistência.
+
+**Bugs corrigidos (`trigger/cora/gerar-mensagem-asaas.ts`):**
+
+- **Bug 1 — campo errado no insert:** `agent_drafts` tem coluna `content` (não `body`). O insert usava `body: parsed.mensagem` → Supabase retornava erro silencioso (PostgREST ignora campos desconhecidos); corrigido para `content: parsed.mensagem`.
+- **Bug 2 — violação CHECK constraint em `autonomy_level`:** O insert passava `autonomy_level: modo` (literal `"hibrido"/"humano"/"ia"`) mas a coluna tem `CHECK (autonomy_level IN ('verde','amarelo','vermelho'))`. Inserção falhava com `check_violation`. Corrigido com mapeamento: `modo === "ia" ? "verde" : modo === "humano" ? "vermelho" : "amarelo"`.
+- **Bug 3 — violação NOT NULL em `cora_acoes.cobranca_id`:** O insert em `cora_acoes` incluía `cobranca_id: null` para registros V2 (que usam `cobranca_v2_id`). A FK é `NOT NULL REFERENCES cora_cobrancas(id)` (tabela V1). Corrigido omitindo o campo completamente do insert V2.
+
+**Migration aplicada (`supabase/migrations/20260620_004_cora_acoes_cobranca_id_nullable.sql`):** `ALTER TABLE public.cora_acoes ALTER COLUMN cobranca_id DROP NOT NULL` — permite inserção de registros V2 sem entrada em `cora_cobrancas`. Risco baixo: ALTER sem dados alterados, reversível.
+
+**Conflitos de merge resolvidos em PR #442 (branch `claude/agitated-cray-5d3b5e` vs main após PRs #438-441):**
+- `Cora.jsx` — 6 conflitos: sempre aceito `origin/main` (melhorias novas: `rejeitarMap`, `useMemo`, `rejeitarDraft`, spinner timeout 30s)
+- `bridge-server/routes/cora-aprovacao.js` — 1 conflito: aceito `origin/main` (validação regex `test_phone`)
+
+**Deploy:** PR #442 squash-mergeado (`56eba91` em main). Trigger.dev v20260620.18 (75 tasks) deployado. Bridge reiniciado: online, 0 unstable restarts. **Smoke test confirmado:** insert `agent_drafts` com `autonomy_level=amarelo` OK + draft removido. Todos os 3 bugs provados resolvidos.
+
+**Track: T8/Cora.** Próxima ação: teste E2E no browser (Gerar → Preview → Aprovar → WhatsApp).
+
+---
+
 ## 2026-06-20 — Sessão 73/74: Dashboard Cora — régua de cobrança interativa + saldo Asaas + gráficos de pizza (PR #437) [T8 — Cora / financeiro]
 
 **Contexto:** Wandson pediu upgrade completo do dashboard Cora: ver a mensagem que seria enviada pela régua de cobrança, botão de envio manual com 1 clique, número de telefone visível, status de envio, teste para número próprio, saldo da conta Asaas, gráficos de pizza, filtros de status, e responsividade mobile completa.
