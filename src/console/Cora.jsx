@@ -1063,7 +1063,7 @@ export default function Cora({ tenantDbId, userId }) {
   const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
 
   const recebidoMes = cobrancasV2
-    .filter(c => c.status === 'received' && c.vencimento?.slice(0, 7) === mesAtual)
+    .filter(c => c.status === 'received' && (c.payment_date || c.confirmed_date)?.slice(0, 7) === mesAtual)
     .reduce((s, c) => s + Number(c.valor), 0);
 
   const aReceber = cobrancasV2
@@ -1112,7 +1112,7 @@ export default function Cora({ tenantDbId, userId }) {
   }
   const chartData = chartMonths.map(m => ({
     label: new Date(m + '-01').toLocaleDateString('pt-BR', { month: 'short' }),
-    valor: cobrancasV2.filter(c => c.status === 'received' && c.vencimento?.slice(0, 7) === m).reduce((s, c) => s + Number(c.valor), 0),
+    valor: cobrancasV2.filter(c => c.status === 'received' && (c.payment_date || c.confirmed_date)?.slice(0, 7) === m).reduce((s, c) => s + Number(c.valor), 0),
   }));
   const chartMax = Math.max(...chartData.map(d => d.valor), 1);
 
@@ -1288,6 +1288,45 @@ export default function Cora({ tenantDbId, userId }) {
               <div className="cv2-kpi v" style={{ marginTop: 8, color: Number(taxaInad) > 10 ? 'var(--red)' : 'var(--g-900)' }}>{taxaInad}%</div>
               <div className="kpi-delta neutral" style={{ marginTop: 10 }}><Icon name="info" size={11} /> Do total emitido</div>
             </div>
+          </div>
+
+          {/* ── Dois blocos de período lado a lado ─────────── */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 16 }}>
+            {(() => {
+              const t30 = new Date(hoje); t30.setDate(hoje.getDate() - 30);
+              const t30s = t30.toISOString().slice(0, 10);
+              const rec30  = cobrancasV2.filter(c => c.status === 'received' && (c.payment_date || c.confirmed_date) >= t30s);
+              const pend30 = cobrancasV2.filter(c => c.status === 'pending'  && c.vencimento >= t30s);
+              const over30 = cobrancasV2.filter(c => c.status === 'overdue'  && c.vencimento >= t30s);
+              return (
+                <div className="cv2-card" style={{ padding: 16 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--g-700)', marginBottom: 12, borderBottom: '1px solid var(--g-100)', paddingBottom: 8 }}>Últimos 30 dias</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>Recebido</div><div style={{ fontWeight: 700, color: 'var(--success)', fontSize: 15 }}>{fmtBRL(rec30.reduce((s, c) => s + Number(c.valor), 0))}</div></div>
+                    <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>Confirmados</div><div style={{ fontWeight: 700, color: '#0ea5e9', fontSize: 15 }}>{rec30.filter(c => c.confirmed_date).length} cobranças</div></div>
+                    <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>A receber</div><div style={{ fontWeight: 700, color: '#D97706', fontSize: 15 }}>{fmtBRL(pend30.reduce((s, c) => s + Number(c.valor), 0))}</div></div>
+                    <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>Inadimplência</div><div style={{ fontWeight: 700, color: 'var(--red)', fontSize: 15 }}>{fmtBRL(over30.reduce((s, c) => s + Number(c.valor), 0))}</div></div>
+                  </div>
+                </div>
+              );
+            })()}
+            {(() => {
+              const recMes  = cobrancasV2.filter(c => c.status === 'received' && (c.payment_date || c.confirmed_date)?.slice(0, 7) === mesAtual);
+              const pendMes = cobrancasV2.filter(c => c.status === 'pending'  && c.vencimento?.slice(0, 7) === mesAtual);
+              const overMes = cobrancasV2.filter(c => c.status === 'overdue'  && c.vencimento?.slice(0, 7) === mesAtual);
+              const mesLabel = new Date(mesAtual + '-02').toLocaleDateString('pt-BR', { month: 'long' });
+              return (
+                <div className="cv2-card" style={{ padding: 16 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--g-700)', marginBottom: 12, borderBottom: '1px solid var(--g-100)', paddingBottom: 8 }}>Mês atual ({mesLabel.charAt(0).toUpperCase() + mesLabel.slice(1)})</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>Recebido</div><div style={{ fontWeight: 700, color: 'var(--success)', fontSize: 15 }}>{fmtBRL(recMes.reduce((s, c) => s + Number(c.valor), 0))}</div></div>
+                    <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>Confirmados</div><div style={{ fontWeight: 700, color: '#0ea5e9', fontSize: 15 }}>{recMes.filter(c => c.confirmed_date).length} cobranças</div></div>
+                    <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>A receber</div><div style={{ fontWeight: 700, color: '#D97706', fontSize: 15 }}>{fmtBRL(pendMes.reduce((s, c) => s + Number(c.valor), 0))}</div></div>
+                    <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>Inadimplência</div><div style={{ fontWeight: 700, color: 'var(--red)', fontSize: 15 }}>{fmtBRL(overMes.reduce((s, c) => s + Number(c.valor), 0))}</div></div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Toggle cards ↔ gráficos */}
@@ -1507,12 +1546,21 @@ export default function Cora({ tenantDbId, userId }) {
                       <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Faturas</th>
                       <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>Total</th>
                       <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Maior atraso</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Forma</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Fatura</th>
                       <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Ação</th>
                     </tr>
                   </thead>
                   <tbody>
                     {vencidasPorCliente.map((cli, i) => {
                       const tom = cli.maxDias <= 7 ? 'neutro' : cli.maxDias <= 14 ? 'formal' : 'urgente';
+                      const cobData = cobrancasV2.find(c => c.id === cli.cobId);
+                      const bt = cobData?.billing_type;
+                      const linkFatura = cobData?.invoice_url || cobData?.bank_slip_url || null;
+                      const billingBadge = bt === 'PIX' ? { bg: '#dcfce7', color: '#15803d', label: 'PIX' }
+                        : bt === 'BOLETO' ? { bg: '#dbeafe', color: '#1d4ed8', label: 'Boleto' }
+                        : bt === 'CREDIT_CARD' ? { bg: '#f3e8ff', color: '#7c3aed', label: 'Cartão' }
+                        : null;
                       return (
                         <tr key={i} style={{ borderTop: '1px solid var(--g-100)' }}>
                           <td style={{ padding: '8px 16px' }}>{cli.name}</td>
@@ -1520,6 +1568,16 @@ export default function Cora({ tenantDbId, userId }) {
                           <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--red)', fontWeight: 600 }}>{fmtBRL(cli.total)}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'center' }}>
                             <span style={{ background: cli.maxDias > 30 ? '#fee2e2' : '#fef3c7', color: cli.maxDias > 30 ? 'var(--red)' : '#92400e', borderRadius: 10, padding: '2px 8px', fontWeight: 600, fontSize: 12 }}>{cli.maxDias}d</span>
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                            {billingBadge
+                              ? <span style={{ background: billingBadge.bg, color: billingBadge.color, borderRadius: 8, padding: '2px 7px', fontSize: 11, fontWeight: 600 }}>{billingBadge.label}</span>
+                              : <span style={{ color: 'var(--tx-3)' }}>—</span>}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                            {linkFatura
+                              ? <a href={linkFatura} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: 12, textDecoration: 'none', fontWeight: 500 }}>Ver ↗</a>
+                              : <span style={{ color: 'var(--tx-3)' }}>—</span>}
                           </td>
                           <td style={{ padding: '8px 12px', textAlign: 'center' }}>
                             <button
@@ -1555,12 +1613,20 @@ export default function Cora({ tenantDbId, userId }) {
                       <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>Valor</th>
                       <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Vencimento</th>
                       <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Faltam</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Forma</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Fatura</th>
                       <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Ação</th>
                     </tr>
                   </thead>
                   <tbody>
                     {venceEm7Dias.map((c, i) => {
                       const faltam = Math.ceil((new Date(c.vencimento + 'T00:00:00') - hoje) / 86400000);
+                      const bt7 = c.billing_type;
+                      const link7 = c.invoice_url || c.bank_slip_url || null;
+                      const badge7 = bt7 === 'PIX' ? { bg: '#dcfce7', color: '#15803d', label: 'PIX' }
+                        : bt7 === 'BOLETO' ? { bg: '#dbeafe', color: '#1d4ed8', label: 'Boleto' }
+                        : bt7 === 'CREDIT_CARD' ? { bg: '#f3e8ff', color: '#7c3aed', label: 'Cartão' }
+                        : null;
                       return (
                         <tr key={i} style={{ borderTop: '1px solid var(--g-100)' }}>
                           <td style={{ padding: '8px 16px' }}>{c.customer_name || '—'}</td>
@@ -1568,6 +1634,16 @@ export default function Cora({ tenantDbId, userId }) {
                           <td style={{ padding: '8px 12px', textAlign: 'center' }}>{c.vencimento.split('-').reverse().join('/')}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'center' }}>
                             <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: 10, padding: '2px 8px', fontWeight: 600, fontSize: 12 }}>{faltam}d</span>
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                            {badge7
+                              ? <span style={{ background: badge7.bg, color: badge7.color, borderRadius: 8, padding: '2px 7px', fontSize: 11, fontWeight: 600 }}>{badge7.label}</span>
+                              : <span style={{ color: 'var(--tx-3)' }}>—</span>}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                            {link7
+                              ? <a href={link7} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: 12, textDecoration: 'none', fontWeight: 500 }}>Ver ↗</a>
+                              : <span style={{ color: 'var(--tx-3)' }}>—</span>}
                           </td>
                           <td style={{ padding: '8px 12px', textAlign: 'center' }}>
                             <button

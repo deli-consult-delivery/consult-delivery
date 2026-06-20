@@ -1,6 +1,6 @@
 import { task } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
-import Anthropic from "@anthropic-ai/sdk";
+import { chat } from "../agents/llm-client";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 
@@ -25,7 +25,6 @@ export const coraGerarMensagemAsaas = task({
     const start = Date.now();
     const input = InputSchema.parse(payload);
     const sb = getSupabase();
-    const anthropic = new Anthropic();
 
     const { data: agentCfg } = await sb
       .from("tenant_agent_config")
@@ -38,7 +37,7 @@ export const coraGerarMensagemAsaas = task({
 
     const { data: cob, error } = await sb
       .from("cobrancas")
-      .select("id, customer_name, customer_phone, valor, vencimento, status")
+      .select("id, customer_name, customer_phone, valor, vencimento, status, invoice_url, bank_slip_url, pix_qr_code, billing_type")
       .eq("id", input.cobranca_v2_id)
       .eq("tenant_id", input.tenant_id)
       .single();
@@ -57,6 +56,8 @@ export const coraGerarMensagemAsaas = task({
     );
 
     const valor = `R$ ${Number(cob.valor).toFixed(2).replace(".", ",")}`;
+    const linkPagamento = cob.invoice_url ?? cob.bank_slip_url ?? null;
+    const pixCopiaECola = cob.billing_type === "PIX" && cob.pix_qr_code ? cob.pix_qr_code : null;
 
     const tomInstrucoes: Record<string, string> = {
       amigavel: "Tom caloroso, empático. Use emoji com moderação (1-2 no máximo). Mencione que está aqui para ajudar.",
@@ -76,8 +77,12 @@ export const coraGerarMensagemAsaas = task({
 - Valor: ${valor}
 - Situação: ${contexto}
 - Tom: ${tomFinal} — ${tomInstrucoes[tomFinal]}
+${linkPagamento ? `- Link de pagamento: ${linkPagamento}` : ""}
+${pixCopiaECola ? `- Código PIX copia-e-cola: ${pixCopiaECola}` : ""}
 
 **Formato WhatsApp:** Curto (máx 3 parágrafos pequenos). Use negrito (*texto*) com moderação. Português brasileiro natural. Linguagem para pequenos empresários de delivery.
+${linkPagamento ? "Inclua o link de pagamento de forma natural ao final da mensagem." : ""}
+${pixCopiaECola ? "Inclua o código PIX copia-e-cola ao final." : ""}
 
 Retorne APENAS JSON válido (sem markdown):
 {
@@ -86,17 +91,11 @@ Retorne APENAS JSON válido (sem markdown):
   "dica_envio": "dica de quando/como enviar"
 }`;
 
-    const response = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 800,
-      system: "Você é CORA, especialista em cobrança amigável. Responda SEMPRE em JSON válido sem markdown.",
-      messages: [{ role: "user", content: prompt }],
-    });
-
-    const rawText = response.content
-      .filter((b) => b.type === "text")
-      .map((b) => (b as Anthropic.TextBlock).text)
-      .join("");
+    const llmResult = await chat([
+      { role: "system", content: "Você é CORA, especialista em cobrança amigável. Responda SEMPRE em JSON válido sem markdown." },
+      { role: "user", content: prompt },
+    ]);
+    const rawText = llmResult.content;
 
     let parsed: { mensagem: string; tom_usado: string; dica_envio: string };
     try {
@@ -128,6 +127,7 @@ Retorne APENAS JSON válido (sem markdown):
           dias_atraso:       diasAtraso,
           tom:               parsed.tom_usado,
           dica_envio:        parsed.dica_envio,
+          link_pagamento:    linkPagamento,
           requires_approval: modo !== "ia",
           modo,
         },

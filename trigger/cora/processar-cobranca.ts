@@ -1,6 +1,6 @@
 import { task, logger } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
-import Anthropic from "@anthropic-ai/sdk";
+import { chat } from "../agents/llm-client";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 
@@ -109,18 +109,11 @@ Retorne APENAS JSON válido:
 
 NÃO use markdown ao redor do JSON. Responda SOMENTE o JSON.`;
 
-    const anthropic = new Anthropic();
-    const response = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 800,
-      system: "Você é CORA. Responda SOMENTE em JSON válido sem markdown.",
-      messages: [{ role: "user", content: prompt }],
-    });
-
-    const rawText = response.content
-      .filter((b) => b.type === "text")
-      .map((b) => (b as Anthropic.TextBlock).text)
-      .join("");
+    const llmResult = await chat([
+      { role: "system", content: "Você é CORA. Responda SOMENTE em JSON válido sem markdown." },
+      { role: "user", content: prompt },
+    ]);
+    const rawText = llmResult.content;
 
     let mensagem: string;
     let dicaEnvio: string = "Enviar entre 10h-11h ou 19h-20h";
