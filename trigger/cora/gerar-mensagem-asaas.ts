@@ -34,6 +34,7 @@ export const coraGerarMensagemAsaas = task({
       .eq("agent_id", "cora")
       .maybeSingle();
     const modo = (agentCfg?.mode as "humano" | "hibrido" | "ia") ?? "hibrido";
+    const autonomyLevel = modo === "ia" ? "verde" : modo === "humano" ? "vermelho" : "amarelo";
 
     const { data: cob, error } = await sb
       .from("cobrancas")
@@ -118,7 +119,7 @@ Retorne APENAS JSON válido (sem markdown):
         subject:        `${isLembrete ? "Lembrete" : "Cobrança"} — ${cob.customer_name ?? "Cliente"}`,
         content:        parsed.mensagem,
         status:         "pending",
-        autonomy_level: modo,
+        autonomy_level: autonomyLevel,
         metadata: {
           cobranca_v2_id:    input.cobranca_v2_id,
           customer_name:     cob.customer_name,
@@ -139,7 +140,6 @@ Retorne APENAS JSON válido (sem markdown):
     await sb.from("cora_acoes").insert({
       tenant_id:        input.tenant_id,
       cobranca_v2_id:   input.cobranca_v2_id,
-      cobranca_id:      null,
       tipo:             "draft_criado",
       acao:             "draft_criado",
       canal:            "whatsapp",

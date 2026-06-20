@@ -113,7 +113,6 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
       await supabaseInsert('cora_acoes', {
         tenant_id,
         cobranca_v2_id:   cobrancaV2Id,
-        cobranca_id:      null,
         tipo:             'mensagem_enviada',
         acao:             'aprovado_e_enviado',
         canal:            'whatsapp',
@@ -170,7 +169,6 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
       await supabaseInsert('cora_acoes', {
         tenant_id,
         cobranca_v2_id:   meta.cobranca_v2_id ?? null,
-        cobranca_id:      null,
         tipo:             'draft_rejeitado',
         acao:             'draft_rejeitado',
         canal:            'whatsapp',

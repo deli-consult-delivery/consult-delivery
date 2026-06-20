@@ -1005,6 +1005,7 @@ export default function Cora({ tenantDbId, userId }) {
     }
   };
 
+
   const gerarMensagemRapida = async (cobrancaId, tom) => {
     setLoadingMsg(prev => ({ ...prev, [cobrancaId]: true }));
     try {
