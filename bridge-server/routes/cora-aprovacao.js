@@ -52,19 +52,23 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
 
       // 1. Buscar draft pendente
       const drafts = await sbFetch(
-        `agent_drafts?id=eq.${encodeURIComponent(draft_id)}&tenant_id=eq.${encodeURIComponent(tenant_id)}&status=eq.pending&select=id,body,metadata&limit=1`
+        `agent_drafts?id=eq.${encodeURIComponent(draft_id)}&tenant_id=eq.${encodeURIComponent(tenant_id)}&status=eq.pending&select=id,content,metadata&limit=1`
       );
       if (!drafts?.length) {
         return res.status(404).json({ error: 'Draft não encontrado ou já processado' });
       }
       const draft = drafts[0];
       const meta = draft.metadata || {};
-      const mensagem = draft.body;
+      const mensagem = draft.content;
       const phone = meta.customer_phone;
       const cobrancaV2Id = meta.cobranca_v2_id ?? null;
 
       // ?test_phone=5511999999999 redireciona para número de teste (apenas usuários autenticados)
-      const targetPhone = req.query.test_phone || phone;
+      const rawTestPhone = req.query.test_phone;
+      if (rawTestPhone !== undefined && !/^\d{10,15}$/.test(rawTestPhone)) {
+        return res.status(400).json({ error: 'test_phone inválido — use apenas dígitos (10-15 caracteres, ex: 5511999999999)' });
+      }
+      const targetPhone = rawTestPhone || phone;
 
       if (!targetPhone) {
         return res.status(400).json({ error: 'customer_phone não está no metadata do draft' });
