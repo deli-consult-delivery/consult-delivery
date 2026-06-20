@@ -1543,6 +1543,7 @@ app.use('/api', requireJwt, require('./routes/cora-aprovacao')({ sbFetch, supaba
 // Asaas — saldo da conta (cache 5 min)
 app.use('/api', requireJwt, require('./routes/asaas-saldo')());
 
+
 // ════════════════════════════════════════════════════════════════════════════
 // BRENO Off-Hours — smoke routes
 // ════════════════════════════════════════════════════════════════════════════

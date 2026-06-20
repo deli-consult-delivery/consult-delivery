@@ -119,7 +119,7 @@ function FormQR({ tenantDbId, userId, initial, onSaved, onCancel }) {
     const file = e.target.files?.[0];
     if (!file) return;
     setErro(null);
-    setFilePreview(URL.createObjectURL(file));
+    setFilePreview(prev => { if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev); return URL.createObjectURL(file); });
     setUploading(true);
     const ext = file.name.split('.').pop() || 'jpg';
     const path = `quick-replies/${tenantDbId}/${crypto.randomUUID()}.${ext}`;
@@ -130,8 +130,8 @@ function FormQR({ tenantDbId, userId, initial, onSaved, onCancel }) {
   }
 
   function removerArquivo() {
+    setFilePreview(prev => { if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev); return null; });
     setFilePath(null);
-    setFilePreview(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
@@ -149,7 +149,7 @@ function FormQR({ tenantDbId, userId, initial, onSaved, onCancel }) {
         stream.getTracks().forEach(t => t.stop());
         if (uploadCancelledRef.current) { uploadCancelledRef.current = false; return; }
         const blob = new Blob(chunks, { type: mimeType });
-        setFilePreview(URL.createObjectURL(blob));
+        setFilePreview(prev => { if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev); return URL.createObjectURL(blob); });
         setUploading(true);
         const ext = mimeType.includes('webm') ? 'webm' : 'ogg';
         const path = `quick-replies/${tenantDbId}/${crypto.randomUUID()}.${ext}`;
@@ -405,10 +405,14 @@ export default function RespostasRapidas({ tenantDbId, userId }) {
 
   async function remover(id) {
     setRemovendo(true);
+    const item = rows.find(r => r.id === id);
     const { error, count } = await supabase.from('quick_replies').delete({ count: 'exact' }).eq('id', id);
     setRemovendo(false);
     if (error) { setErro(error.message); return; }
     if (count === 0) { setErro('Sem permissão para apagar este item.'); return; }
+    if (item?.file_path) {
+      await supabase.storage.from('public').remove([item.file_path]);
+    }
     setConfirmaId(null);
     await carregar();
   }

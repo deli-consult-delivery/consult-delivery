@@ -46,7 +46,8 @@ export async function sendTextMessage(instanceName, to, text, quoted = null, evo
 
 // Enviar mídia (imagem, vídeo, documento) — media pode ser URL ou base64 puro
 export async function sendMediaMessage(instanceName, to, media, mediaType, mimeType = '', caption = '', fileName = '') {
-  const body = { number: to, mediatype: mediaType, media, caption };
+  const number = to.split('@')[0];
+  const body = { number, mediatype: mediaType, media, caption };
   if (mimeType)  body.mimetype  = mimeType;
   if (fileName)  body.fileName  = fileName;
   console.log('[EVO] sendMedia →', instanceName, to, mediaType, `${media.length} chars b64`, `caption: "${caption}"`);

@@ -686,8 +686,7 @@ function CobrancaV2Drawer({ cobranca, tenantDbId, userId, onClose, onRefresh }) 
   );
 }
 
-// ── Aging helper ──────────────────────────────────────────────────────────────
-// ── Pie chart (SVG, sem dependência externa) ──────────────────────────────────
+// ── SVG Donut Pie Chart (sem dependência externa) ─────────────────────────────
 function PieChartSimple({ data, size = 140 }) {
   const total = data.reduce((s, d) => s + (d.value || 0), 0);
   if (total === 0) return (
@@ -721,6 +720,7 @@ function PieChartSimple({ data, size = 140 }) {
   );
 }
 
+// ── Aging helper ──────────────────────────────────────────────────────────────
 function agingBucket(dias) {
   if (dias <= 30) return '1–30';
   if (dias <= 60) return '31–60';
@@ -814,6 +814,7 @@ function DraftCard({ draft, tenantDbId, onDone }) {
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function Cora({ tenantDbId, userId }) {
   const [activeTab, setActiveTab] = useState('financeiro');
+  const [finSubTab, setFinSubTab] = useState('visao-geral');
 
   // V2 (Asaas) state
   const [cobrancasV2, setCobrancasV2] = useState([]);
@@ -837,6 +838,9 @@ export default function Cora({ tenantDbId, userId }) {
   const [modo, setModo] = useState('humano');
   const [savingModo, setSavingModo] = useState(false);
 
+  // Loading por cobrança (gerar mensagem rápida)
+  const [loadingMsg, setLoadingMsg] = useState({});
+
   // Saldo Asaas
   const [saldoAsaas, setSaldoAsaas] = useState(null);
   const [loadingSaldo, setLoadingSaldo] = useState(false);
@@ -845,7 +849,7 @@ export default function Cora({ tenantDbId, userId }) {
   const [showPie, setShowPie] = useState(false);
   const [reguaFilter, setReguaFilter] = useState('todas');
 
-  // Per-charge loading + expanded draft state
+  // Per-charge loading + expanded draft state (régua interativa)
   const [loadingMsgMap, setLoadingMsgMap] = useState({});
   const [expandedDraftMap, setExpandedDraftMap] = useState({});
   const [sendingMap, setSendingMap] = useState({});
@@ -911,17 +915,6 @@ export default function Cora({ tenantDbId, userId }) {
     if (data?.mode) setModo(data.mode);
   }, [tenantDbId]);
 
-  const saveModo = async (novoModo) => {
-    if (!tenantDbId) return;
-    setSavingModo(true);
-    await supabase.from('tenant_agent_config').upsert(
-      { tenant_id: tenantDbId, agent_id: 'cora', mode: novoModo },
-      { onConflict: 'tenant_id,agent_id' }
-    );
-    setModo(novoModo);
-    setSavingModo(false);
-  };
-
   const loadSaldo = useCallback(async () => {
     if (!tenantDbId) return;
     setLoadingSaldo(true);
@@ -934,9 +927,75 @@ export default function Cora({ tenantDbId, userId }) {
         const json = await r.json();
         setSaldoAsaas(json.balance ?? json.totalBalance ?? null);
       }
-    } catch (_) { /* silent — saldo não é crítico */ }
+    } catch (_) { /* silent */ }
     setLoadingSaldo(false);
   }, [tenantDbId]);
+
+  const saveModo = async (novoModo) => {
+    if (!tenantDbId) return;
+    setSavingModo(true);
+    await supabase.from('tenant_agent_config').upsert(
+      { tenant_id: tenantDbId, agent_id: 'cora', mode: novoModo },
+      { onConflict: 'tenant_id,agent_id' }
+    );
+    setModo(novoModo);
+    setSavingModo(false);
+  };
+
+  const gerarMensagem = async (cob) => {
+    setLoadingMsgMap(prev => ({ ...prev, [cob.id]: true }));
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch(`${BRIDGE}/agents/cora-gerar-mensagem-asaas/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ tenant_id: tenantDbId, cobranca_v2_id: cob.id }),
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Erro ao gerar'); }
+    } catch (e) {
+      alert(e.message);
+      setLoadingMsgMap(prev => { const n = { ...prev }; delete n[cob.id]; return n; });
+    }
+  };
+
+  const enviarDraft = async (draft, testPhone = null) => {
+    const key = draft.metadata?.cobranca_v2_id || draft.id;
+    setSendingMap(prev => ({ ...prev, [key]: true }));
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const url = `${BRIDGE}/api/cora/aprovar/${draft.id}${testPhone ? `?test_phone=${testPhone}` : ''}`;
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ tenant_id: tenantDbId }),
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Erro ao enviar'); }
+      loadDrafts(); loadAcoes();
+      const cobId = draft.metadata?.cobranca_v2_id;
+      if (cobId) setExpandedDraftMap(prev => { const n = { ...prev }; delete n[cobId]; return n; });
+    } catch (e) { alert(e.message); }
+    setSendingMap(prev => { const n = { ...prev }; delete n[key]; return n; });
+  };
+
+  const gerarMensagemRapida = async (cobrancaId, tom) => {
+    setLoadingMsg(prev => ({ ...prev, [cobrancaId]: true }));
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${BRIDGE}/agents/cora-gerar-mensagem-asaas/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ tenant_id: tenantDbId, cobranca_v2_id: cobrancaId, tom }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao gerar mensagem');
+      await loadDrafts();
+      setActiveTab('agente');
+    } catch (e) {
+      alert(e.message || 'Erro ao gerar mensagem');
+    } finally {
+      setLoadingMsg(prev => ({ ...prev, [cobrancaId]: false }));
+    }
+  };
 
   useEffect(() => { loadCobrancasV2(); loadCobrancas(); loadDrafts(); loadAcoes(); loadModo(); loadSaldo(); },
     [loadCobrancasV2, loadCobrancas, loadDrafts, loadAcoes, loadModo, loadSaldo]);
@@ -959,7 +1018,7 @@ export default function Cora({ tenantDbId, userId }) {
     return () => supabase.removeChannel(ch);
   }, [tenantDbId, loadDrafts, loadAcoes]);
 
-  // Auto-clear spinner quando draft aparecer para uma cobrança em loading
+  // Auto-clear loadingMsgMap quando draft aparece via realtime
   useEffect(() => {
     if (!Object.keys(loadingMsgMap).length) return;
     const draftIds = new Set(drafts.map(d => d.metadata?.cobranca_v2_id).filter(Boolean));
@@ -967,7 +1026,7 @@ export default function Cora({ tenantDbId, userId }) {
     if (!ready.length) return;
     setLoadingMsgMap(prev => { const n = { ...prev }; ready.forEach(id => delete n[id]); return n; });
     setExpandedDraftMap(prev => { const n = { ...prev }; ready.forEach(id => { n[id] = true; }); return n; });
-  }, [drafts]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [drafts]);
 
   // ── Derived data ──────────────────────────────────────────────────────────
 
@@ -988,6 +1047,24 @@ export default function Cora({ tenantDbId, userId }) {
 
   const totalEmitido = cobrancasV2.reduce((s, c) => s + Number(c.valor), 0);
   const taxaInad = totalEmitido > 0 ? ((totalInad / totalEmitido) * 100).toFixed(1) : '0.0';
+
+  // Vencidas agrupadas por cliente (pior primeiro)
+  const vencidasMap = {};
+  cobrancasV2.filter(c => c.status === 'overdue').forEach(c => {
+    const key = c.customer_name || c.customer_phone || c.id;
+    if (!vencidasMap[key]) vencidasMap[key] = { name: c.customer_name || 'Cliente', phone: c.customer_phone, cobId: c.id, items: [], total: 0, maxDias: 0 };
+    vencidasMap[key].items.push(c);
+    vencidasMap[key].total += Number(c.valor);
+    const d = diasAtraso(c.vencimento);
+    if (d > vencidasMap[key].maxDias) { vencidasMap[key].maxDias = d; vencidasMap[key].cobId = c.id; }
+  });
+  const vencidasPorCliente = Object.values(vencidasMap).sort((a, b) => b.maxDias - a.maxDias);
+
+  // Cobranças que vencem nos próximos 7 dias
+  const em7Dias = new Date(hoje); em7Dias.setDate(em7Dias.getDate() + 7);
+  const venceEm7Dias = cobrancasV2
+    .filter(c => { if (c.status !== 'pending') return false; const v = new Date(c.vencimento + 'T00:00:00'); return v >= hoje && v <= em7Dias; })
+    .sort((a, b) => a.vencimento.localeCompare(b.vencimento));
 
   // Aging (overdue only)
   const aging = { '1–30': { qtd: 0, valor: 0 }, '31–60': { qtd: 0, valor: 0 }, '61–90': { qtd: 0, valor: 0 }, '90+': { qtd: 0, valor: 0 } };
@@ -1010,6 +1087,29 @@ export default function Cora({ tenantDbId, userId }) {
   }));
   const chartMax = Math.max(...chartData.map(d => d.valor), 1);
 
+  // Dados extras para régua e gráficos de pizza
+  const confirmadas = cobrancasV2.filter(c => c.status === 'received' && c.confirmed_date);
+  const aguardando = cobrancasV2.filter(c => c.status === 'pending' && c.vencimento >= hoje.toISOString().slice(0, 10));
+  const elegiveisRegua = cobrancasV2.filter(c => {
+    if (c.status === 'overdue') return true;
+    if (c.status === 'pending') { const v = new Date(c.vencimento + 'T00:00:00'); return v >= hoje && v <= em7Dias; }
+    return false;
+  });
+  const elegiveisFiltered = reguaFilter === 'vencidas' ? elegiveisRegua.filter(c => c.status === 'overdue')
+    : reguaFilter === 'proximas7d' ? elegiveisRegua.filter(c => c.status === 'pending')
+    : elegiveisRegua;
+  const pieStatus = [
+    { label: 'Recebidas', value: cobrancasV2.filter(c => c.status === 'received').reduce((s, c) => s + Number(c.valor), 0), color: '#16a34a' },
+    { label: 'Aguardando', value: cobrancasV2.filter(c => c.status === 'pending').reduce((s, c) => s + Number(c.valor), 0), color: '#D97706' },
+    { label: 'Vencidas', value: cobrancasV2.filter(c => c.status === 'overdue').reduce((s, c) => s + Number(c.valor), 0), color: '#B70C00' },
+    { label: 'Canceladas', value: cobrancasV2.filter(c => ['canceled', 'refunded'].includes(c.status)).reduce((s, c) => s + Number(c.valor), 0), color: '#6b7280' },
+  ];
+  const pieBilling = [
+    { label: 'PIX', value: cobrancasV2.filter(c => c.billing_type === 'PIX').reduce((s, c) => s + Number(c.valor), 0), color: '#16a34a' },
+    { label: 'Boleto', value: cobrancasV2.filter(c => c.billing_type === 'BOLETO').reduce((s, c) => s + Number(c.valor), 0), color: '#2563eb' },
+    { label: 'Cartão', value: cobrancasV2.filter(c => c.billing_type === 'CREDIT_CARD').reduce((s, c) => s + Number(c.valor), 0), color: '#7c3aed' },
+  ];
+
   // Filtered charge table
   const filteredV2 = cobrancasV2.filter(c => {
     if (statusFilter !== 'todos' && c.status !== statusFilter) return false;
@@ -1017,85 +1117,32 @@ export default function Cora({ tenantDbId, userId }) {
     return true;
   });
 
+  // Extrato — pagamentos recebidos com dados ricos
+  const extrato = cobrancasV2
+    .filter(c => c.status === 'received' && (c.payment_date || c.confirmed_date || c.vencimento))
+    .sort((a, b) => {
+      const da = a.payment_date || a.confirmed_date || a.vencimento;
+      const db = b.payment_date || b.confirmed_date || b.vencimento;
+      return db.localeCompare(da);
+    });
+
+  const totalRecebidoBruto = extrato.reduce((s, c) => s + Number(c.valor), 0);
+  const totalRecebidoLiquido = extrato.reduce((s, c) => s + Number(c.net_value ?? c.valor), 0);
+  const totalTaxaAsaas = totalRecebidoBruto - totalRecebidoLiquido;
+
+  const billingBreakdown = {};
+  cobrancasV2.forEach(c => {
+    const bt = c.billing_type || 'UNDEFINED';
+    if (!billingBreakdown[bt]) billingBreakdown[bt] = { qtd: 0, valor: 0 };
+    billingBreakdown[bt].qtd++;
+    billingBreakdown[bt].valor += Number(c.valor);
+  });
+  const billingLabel = { BOLETO: 'Boleto', PIX: 'PIX', CREDIT_CARD: 'Cartão', UNDEFINED: 'Indefinido' };
+  const billingColor = { BOLETO: '#2563eb', PIX: '#16a34a', CREDIT_CARD: '#7c3aed', UNDEFINED: '#6b7280' };
+
   const selected = cobrancas.find(c => c.id === selectedId);
   const selectedV2 = cobrancasV2.find(c => c.id === selectedV2Id);
   const overdueCount = cobrancasV2.filter(c => c.status === 'overdue').length;
-
-  // KPIs extras
-  const confirmadas = cobrancasV2
-    .filter(c => c.status === 'received' && c.confirmed_date)
-    .reduce((s, c) => s + Number(c.valor), 0);
-  const aguardando = cobrancasV2
-    .filter(c => c.status === 'pending' && new Date(c.vencimento) >= hoje)
-    .reduce((s, c) => s + Number(c.valor), 0);
-
-  // Régua — elegíveis: vencidas + pending vencendo em até 7 dias
-  const seteDiasAFrente = new Date(hoje); seteDiasAFrente.setDate(seteDiasAFrente.getDate() + 7);
-  const elegiveisRegua = cobrancasV2.filter(c => {
-    if (c.status === 'overdue') return true;
-    if (c.status === 'pending') { const v = new Date(c.vencimento); return v >= hoje && v <= seteDiasAFrente; }
-    return false;
-  });
-  const elegiveisFiltered = reguaFilter === 'vencidas' ? elegiveisRegua.filter(c => c.status === 'overdue')
-    : reguaFilter === 'proximas7d' ? elegiveisRegua.filter(c => c.status === 'pending')
-    : elegiveisRegua;
-
-  // Pie data
-  const pieStatus = [
-    { label: 'Recebido',  value: cobrancasV2.filter(c => c.status === 'received').reduce((s,c) => s + Number(c.valor), 0), color: '#16a34a' },
-    { label: 'Pendente',  value: cobrancasV2.filter(c => c.status === 'pending').reduce((s,c) => s + Number(c.valor), 0),  color: '#D97706' },
-    { label: 'Vencido',   value: cobrancasV2.filter(c => c.status === 'overdue').reduce((s,c) => s + Number(c.valor), 0),  color: '#dc2626' },
-    { label: 'Outros',    value: cobrancasV2.filter(c => ['canceled','refunded'].includes(c.status)).reduce((s,c) => s + Number(c.valor), 0), color: '#6b7280' },
-  ];
-  const pieBilling = [
-    { label: 'PIX',    value: cobrancasV2.filter(c => c.billing_type === 'PIX').reduce((s,c) => s + Number(c.valor), 0),         color: '#2563eb' },
-    { label: 'Boleto', value: cobrancasV2.filter(c => c.billing_type === 'BOLETO').reduce((s,c) => s + Number(c.valor), 0),      color: '#D97706' },
-    { label: 'Cartão', value: cobrancasV2.filter(c => c.billing_type === 'CREDIT_CARD').reduce((s,c) => s + Number(c.valor), 0), color: '#16a34a' },
-  ];
-
-  // Ações da régua
-  const gerarMensagem = async (cob) => {
-    setLoadingMsgMap(prev => ({ ...prev, [cob.id]: true }));
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const r = await fetch(`${BRIDGE}/agents/cora-gerar-mensagem/run`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-        body: JSON.stringify({
-          tenant_id: tenantDbId, cobranca_v2_id: cob.id,
-          customer_name: cob.customer_name, customer_phone: cob.customer_phone,
-          valor: cob.valor, vencimento: cob.vencimento, status: cob.status,
-        }),
-      });
-      if (!r.ok) {
-        const e = await r.json().catch(() => ({}));
-        alert(e.error || 'Erro ao gerar mensagem');
-        setLoadingMsgMap(prev => { const n = { ...prev }; delete n[cob.id]; return n; });
-      }
-    } catch (e) {
-      alert(e.message);
-      setLoadingMsgMap(prev => { const n = { ...prev }; delete n[cob.id]; return n; });
-    }
-  };
-
-  const enviarDraft = async (draft, testPhone = null) => {
-    const key = draft.metadata?.cobranca_v2_id || draft.id;
-    setSendingMap(prev => ({ ...prev, [key]: true }));
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const url = testPhone
-        ? `${BRIDGE}/api/cora/aprovar/${draft.id}?test_phone=${encodeURIComponent(testPhone)}`
-        : `${BRIDGE}/api/cora/aprovar/${draft.id}`;
-      const r = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ tenant_id: tenantDbId }),
-      });
-      if (!r.ok) { const e = await r.json().catch(() => ({})); alert(e.error || 'Erro ao enviar'); }
-      else { loadDrafts(); loadAcoes(); setExpandedDraftMap(prev => { const n = { ...prev }; delete n[key]; return n; }); }
-    } catch (e) { alert(e.message); }
-    setSendingMap(prev => { const n = { ...prev }; delete n[key]; return n; });
-  };
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -1147,86 +1194,98 @@ export default function Cora({ tenantDbId, userId }) {
       {/* ── TAB: FINANCEIRO ─────────────────────────────────────────────────── */}
       {activeTab === 'financeiro' && (
         <>
-          {/* Toggle cards ↔ gráfico */}
+          {/* Sub-tabs */}
+          <div style={{ display: 'flex', gap: 2, marginBottom: 20, borderBottom: '1px solid var(--g-100)' }}>
+            {[
+              { id: 'visao-geral', label: 'Visão Geral' },
+              { id: 'extrato',     label: 'Extrato de Pagamentos' },
+              { id: 'cobrancas',  label: 'Cobranças' },
+            ].map(t => (
+              <button key={t.id} onClick={() => setFinSubTab(t.id)} style={{
+                padding: '8px 16px', fontSize: 13, fontWeight: finSubTab === t.id ? 700 : 500,
+                color: finSubTab === t.id ? 'var(--red)' : 'var(--g-500)',
+                borderBottom: finSubTab === t.id ? '2px solid var(--red)' : '2px solid transparent',
+                marginBottom: -1, background: 'none', border: 'none', cursor: 'pointer',
+              }}>{t.label}</button>
+            ))}
+          </div>
+
+          {/* ── Sub-tab: Visão Geral ─────────────────────── */}
+          {finSubTab === 'visao-geral' && <>
+          {/* KPIs — linha 1: saldo + recebido + confirmadas + aguardando */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 12 }}>
+            <div className="cv2-kpi" style={{ borderLeft: '3px solid #2563eb' }}>
+              <div className="cv2-kpi l">Saldo Asaas</div>
+              <div className="cv2-kpi v" style={{ marginTop: 8, color: '#2563eb', fontSize: 20 }}>
+                {loadingSaldo ? '…' : saldoAsaas !== null ? fmtBRL(saldoAsaas) : '—'}
+              </div>
+              <div className="kpi-delta neutral" style={{ marginTop: 10 }}><Icon name="info" size={11} /> Conta Asaas</div>
+            </div>
+            <div className="cv2-kpi" style={{ borderLeft: '3px solid var(--success)' }}>
+              <div className="cv2-kpi l">Recebido este mês</div>
+              <div className="cv2-kpi v" style={{ marginTop: 8, color: 'var(--success)' }}>{fmtBRL(recebidoMes)}</div>
+              <div className="kpi-delta up" style={{ marginTop: 10 }}><Icon name="arrowup" size={11} /> Asaas confirmado</div>
+            </div>
+            <div className="cv2-kpi" style={{ borderLeft: '3px solid #0ea5e9' }}>
+              <div className="cv2-kpi l">Confirmadas</div>
+              <div className="cv2-kpi v" style={{ marginTop: 8, color: '#0ea5e9' }}>{fmtBRL(confirmadas.reduce((s, c) => s + Number(c.valor), 0))}</div>
+              <div className="kpi-delta neutral" style={{ marginTop: 10 }}><Icon name="info" size={11} /> {confirmadas.length} cobranças</div>
+            </div>
+            <div className="cv2-kpi" style={{ borderLeft: '3px solid #D97706' }}>
+              <div className="cv2-kpi l">Aguardando pagamento</div>
+              <div className="cv2-kpi v accent" style={{ marginTop: 8, color: '#D97706' }}>{fmtBRL(aguardando.reduce((s, c) => s + Number(c.valor), 0))}</div>
+              <div className="kpi-delta neutral" style={{ marginTop: 10 }}><Icon name="info" size={11} /> {aguardando.length} cobranças</div>
+            </div>
+            <div className="cv2-kpi" style={{ borderLeft: '3px solid var(--red)' }}>
+              <div className="cv2-kpi l">Inadimplência</div>
+              <div className="cv2-kpi v" style={{ marginTop: 8, color: totalInad > 0 ? 'var(--red)' : 'var(--g-900)' }}>{fmtBRL(totalInad)}</div>
+              <div className="kpi-delta down" style={{ marginTop: 10 }}><Icon name="info" size={11} /> {overdueCount} vencidas</div>
+            </div>
+            <div className="cv2-kpi">
+              <div className="cv2-kpi l">Taxa inadimplência</div>
+              <div className="cv2-kpi v" style={{ marginTop: 8, color: Number(taxaInad) > 10 ? 'var(--red)' : 'var(--g-900)' }}>{taxaInad}%</div>
+              <div className="kpi-delta neutral" style={{ marginTop: 10 }}><Icon name="info" size={11} /> Do total emitido</div>
+            </div>
+          </div>
+
+          {/* Toggle cards ↔ gráficos */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-            <button
-              onClick={() => setShowPie(v => !v)}
-              style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid var(--g-200)', background: 'var(--bg)', color: 'var(--tx)', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
-            >
-              {showPie ? '📋 Versão cards' : '🥧 Versão gráfico'}
+            <button onClick={() => setShowPie(v => !v)} style={{ padding: '6px 14px', borderRadius: 20, border: '1px solid var(--g-200)', background: showPie ? 'var(--red)' : 'var(--g-100)', color: showPie ? '#fff' : 'var(--g-600)', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+              {showPie ? '◉ Versão gráfico' : '◎ Versão gráfico'}
             </button>
           </div>
 
-          {showPie ? (
-            /* ── Gráficos de pizza ──────────────────────────────────── */
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16, marginBottom: 24 }}>
-              {/* Pie 1 — Por status */}
+          {showPie && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 24 }}>
               <div className="cv2-card" style={{ padding: 20 }}>
                 <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--g-700)', marginBottom: 16 }}>Distribuição por status</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
-                  <PieChartSimple data={pieStatus} size={140} />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 120 }}>
-                    {pieStatus.filter(d => d.value > 0).map(d => (
-                      <div key={d.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: 2, background: d.color, flexShrink: 0 }} />
-                        <span style={{ fontSize: 12, color: 'var(--g-600)', flex: 1 }}>{d.label}</span>
-                        <span style={{ fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtBRL(d.value)}</span>
+                  <PieChartSimple data={pieStatus} size={130} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {pieStatus.map(d => (
+                      <div key={d.label} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: d.color, flexShrink: 0 }} />
+                        <span style={{ color: 'var(--g-600)' }}>{d.label}</span>
+                        <span style={{ marginLeft: 'auto', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{fmtBRL(d.value)}</span>
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
-              {/* Pie 2 — Por tipo de pagamento */}
               <div className="cv2-card" style={{ padding: 20 }}>
-                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--g-700)', marginBottom: 16 }}>Distribuição por pagamento</div>
+                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--g-700)', marginBottom: 16 }}>Distribuição por tipo</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
-                  <PieChartSimple data={pieBilling} size={140} />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 120 }}>
-                    {pieBilling.filter(d => d.value > 0).map(d => (
-                      <div key={d.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: 2, background: d.color, flexShrink: 0 }} />
-                        <span style={{ fontSize: 12, color: 'var(--g-600)', flex: 1 }}>{d.label}</span>
-                        <span style={{ fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtBRL(d.value)}</span>
+                  <PieChartSimple data={pieBilling} size={130} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {pieBilling.map(d => (
+                      <div key={d.label} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: d.color, flexShrink: 0 }} />
+                        <span style={{ color: 'var(--g-600)' }}>{d.label}</span>
+                        <span style={{ marginLeft: 'auto', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{fmtBRL(d.value)}</span>
                       </div>
                     ))}
                   </div>
                 </div>
-              </div>
-            </div>
-          ) : (
-            /* ── KPIs cards ─────────────────────────────────────────── */
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
-              <div className="cv2-kpi">
-                <div className="cv2-kpi l">Saldo na conta</div>
-                <div className="cv2-kpi v" style={{ marginTop: 8, color: 'var(--success)' }}>
-                  {loadingSaldo ? '…' : saldoAsaas !== null ? fmtBRL(saldoAsaas) : '—'}
-                </div>
-                <div className="kpi-delta up" style={{ marginTop: 10 }}><Icon name="arrowup" size={11} /> Asaas saldo atual</div>
-              </div>
-              <div className="cv2-kpi">
-                <div className="cv2-kpi l">Recebido este mês</div>
-                <div className="cv2-kpi v" style={{ marginTop: 8, color: 'var(--success)' }}>{fmtBRL(recebidoMes)}</div>
-                <div className="kpi-delta up" style={{ marginTop: 10 }}><Icon name="arrowup" size={11} /> Confirmados Asaas</div>
-              </div>
-              <div className="cv2-kpi">
-                <div className="cv2-kpi l">Confirmadas</div>
-                <div className="cv2-kpi v accent" style={{ marginTop: 8 }}>{fmtBRL(confirmadas)}</div>
-                <div className="kpi-delta neutral" style={{ marginTop: 10 }}><Icon name="info" size={11} /> Com data de confirmação</div>
-              </div>
-              <div className="cv2-kpi">
-                <div className="cv2-kpi l">Aguardando pagamento</div>
-                <div className="cv2-kpi v" style={{ marginTop: 8, color: '#D97706' }}>{fmtBRL(aguardando)}</div>
-                <div className="kpi-delta neutral" style={{ marginTop: 10 }}><Icon name="info" size={11} /> Pendentes a vencer</div>
-              </div>
-              <div className="cv2-kpi">
-                <div className="cv2-kpi l">Inadimplência</div>
-                <div className="cv2-kpi v" style={{ marginTop: 8, color: totalInad > 0 ? 'var(--red)' : 'var(--g-900)' }}>{fmtBRL(totalInad)}</div>
-                <div className="kpi-delta down" style={{ marginTop: 10 }}><Icon name="info" size={11} /> {overdueCount} cobranças vencidas</div>
-              </div>
-              <div className="cv2-kpi">
-                <div className="cv2-kpi l">Taxa inadimplência</div>
-                <div className="cv2-kpi v" style={{ marginTop: 8, color: Number(taxaInad) > 10 ? 'var(--red)' : 'var(--g-900)' }}>{taxaInad}%</div>
-                <div className="kpi-delta neutral" style={{ marginTop: 10 }}><Icon name="info" size={11} /> Do total emitido</div>
               </div>
             </div>
           )}
@@ -1293,7 +1352,7 @@ export default function Cora({ tenantDbId, userId }) {
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {[['todas','Todas'],['vencidas','Vencidas'],['proximas7d','Próx. 7 dias']].map(([v, l]) => (
+                {[['todas', 'Todas'], ['vencidas', 'Vencidas'], ['proximas7d', 'Próx. 7 dias']].map(([v, l]) => (
                   <button key={v} onClick={() => setReguaFilter(v)} style={{
                     padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
                     background: reguaFilter === v ? 'var(--red, #B70C00)' : 'var(--g-100)',
@@ -1312,116 +1371,70 @@ export default function Cora({ tenantDbId, userId }) {
                 {elegiveisFiltered.map(cob => {
                   const dias = diasAtraso(cob.vencimento);
                   const isLoading = loadingMsgMap[cob.id];
-                  const draftForCob = drafts.find(d => d.metadata?.cobranca_v2_id === cob.id);
+                  const draftForCob = drafts.find(d => d.metadata?.cobranca_v2_id === cob.id && d.status === 'pending');
                   const isExpanded = expandedDraftMap[cob.id];
                   const isSending = sendingMap[draftForCob?.metadata?.cobranca_v2_id || draftForCob?.id];
                   const sentAcao = acoes.find(a => a.metadata?.cobranca_v2_id === cob.id && a.tipo === 'mensagem_enviada');
                   return (
                     <div key={cob.id} style={{ borderBottom: '1px solid var(--g-100)' }}>
-                      {/* Linha principal */}
                       <div style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                        {/* Avatar */}
-                        <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#B70C00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#fff', fontSize: 12, flexShrink: 0 }}>
+                        <div style={{ width: 34, height: 34, borderRadius: '50%', background: cob.status === 'overdue' ? '#B70C00' : '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#fff', fontSize: 12, flexShrink: 0 }}>
                           {(cob.customer_name || '??').slice(0, 2).toUpperCase()}
                         </div>
-                        {/* Nome + telefone */}
                         <div style={{ flex: 1, minWidth: 120 }}>
                           <div style={{ fontWeight: 600, fontSize: 14 }}>{cob.customer_name || '—'}</div>
-                          {cob.customer_phone && (
-                            <div style={{ fontSize: 11, color: 'var(--g-500)', marginTop: 1 }}>{cob.customer_phone}</div>
-                          )}
+                          {cob.customer_phone && <div style={{ fontSize: 11, color: 'var(--g-500)', marginTop: 1 }}>{cob.customer_phone}</div>}
                         </div>
-                        {/* Valor */}
                         <div style={{ fontWeight: 700, fontSize: 15, color: cob.status === 'overdue' ? 'var(--red)' : 'var(--g-900)', fontVariantNumeric: 'tabular-nums', minWidth: 80 }}>
-                          {fmtBRL(cob.valor)}
+                          {fmtBRL(Number(cob.valor))}
                         </div>
-                        {/* Badge dias */}
                         <div style={{ minWidth: 90 }}>
                           {cob.status === 'overdue' ? (
-                            <span style={{ fontSize: 11, fontWeight: 700, color: dias > 30 ? '#7f1d1d' : 'var(--red)', background: dias > 30 ? '#7f1d1d22' : '#dc262622', padding: '3px 9px', borderRadius: 12 }}>
-                              {dias}d vencida
-                            </span>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--red)', background: '#dc262622', padding: '3px 9px', borderRadius: 12 }}>{dias}d vencida</span>
                           ) : (
-                            <span style={{ fontSize: 11, fontWeight: 700, color: '#D97706', background: '#D9770622', padding: '3px 9px', borderRadius: 12 }}>
-                              vence em {Math.ceil((new Date(cob.vencimento) - hoje) / 86400000)}d
-                            </span>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#D97706', background: '#D9770622', padding: '3px 9px', borderRadius: 12 }}>vence em {Math.ceil((new Date(cob.vencimento + 'T00:00:00') - hoje) / 86400000)}d</span>
                           )}
                         </div>
-                        {/* Status envio */}
                         <div style={{ minWidth: 80 }}>
-                          {sentAcao ? (
-                            <span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a', background: '#16a34a22', padding: '3px 9px', borderRadius: 12 }}>✓ Enviado</span>
-                          ) : draftForCob ? (
-                            <span style={{ fontSize: 11, fontWeight: 600, color: '#2563eb', background: '#2563eb22', padding: '3px 9px', borderRadius: 12 }}>Msg pronta</span>
-                          ) : (
-                            <span style={{ fontSize: 11, color: 'var(--g-400)' }}>Sem mensagem</span>
-                          )}
+                          {sentAcao ? <span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a', background: '#16a34a22', padding: '3px 9px', borderRadius: 12 }}>✓ Enviado</span>
+                            : draftForCob ? <span style={{ fontSize: 11, fontWeight: 600, color: '#2563eb', background: '#2563eb22', padding: '3px 9px', borderRadius: 12 }}>Msg pronta</span>
+                            : <span style={{ fontSize: 11, color: 'var(--g-400)' }}>Sem mensagem</span>}
                         </div>
-                        {/* Ação */}
                         <div>
                           {sentAcao ? null : draftForCob ? (
-                            <button
-                              onClick={() => setExpandedDraftMap(prev => ({ ...prev, [cob.id]: !prev[cob.id] }))}
-                              style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #2563eb', background: 'transparent', color: '#2563eb', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-                            >
+                            <button onClick={() => setExpandedDraftMap(prev => ({ ...prev, [cob.id]: !prev[cob.id] }))}
+                              style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #2563eb', background: 'transparent', color: '#2563eb', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                               {isExpanded ? 'Fechar ▲' : 'Ver preview ▼'}
                             </button>
                           ) : (
-                            <button
-                              disabled={isLoading}
-                              onClick={() => gerarMensagem(cob)}
-                              style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: 'var(--red, #B70C00)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: isLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: isLoading ? 0.7 : 1 }}
-                            >
+                            <button disabled={!!isLoading} onClick={() => gerarMensagem(cob)}
+                              style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: 'var(--red, #B70C00)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: isLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: isLoading ? 0.7 : 1 }}>
                               {isLoading ? <><Spinner /> Gerando…</> : '✉ Gerar mensagem'}
                             </button>
                           )}
                         </div>
                       </div>
-                      {/* Preview expandido */}
                       {isExpanded && draftForCob && (
-                        <div style={{ margin: '0 20px 14px', background: 'var(--panel)', borderRadius: 10, padding: 16, border: '1px solid var(--g-200)' }}>
-                          {/* Cabeçalho do preview */}
+                        <div style={{ margin: '0 20px 14px', background: 'var(--panel, #f9fafb)', borderRadius: 10, padding: 16, border: '1px solid var(--g-200)' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
                             <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--g-600)' }}>Para:</span>
                             <span style={{ fontSize: 12, fontWeight: 700 }}>{draftForCob.metadata?.customer_phone || cob.customer_phone || '—'}</span>
                             {draftForCob.metadata?.tom && <TomBadge tom={draftForCob.metadata.tom} />}
                           </div>
-                          {/* Texto da mensagem */}
-                          <div style={{ fontSize: 13, color: 'var(--g-700)', lineHeight: 1.6, whiteSpace: 'pre-wrap', background: 'var(--bg)', borderRadius: 8, padding: 12, marginBottom: 12 }}>
+                          <div style={{ fontSize: 13, color: 'var(--g-700)', lineHeight: 1.6, whiteSpace: 'pre-wrap', background: 'var(--bg, #fff)', borderRadius: 8, padding: 12, marginBottom: 12 }}>
                             {draftForCob.body}
                           </div>
-                          {/* Botões */}
                           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                            <button
-                              disabled={isSending}
-                              onClick={() => enviarDraft(draftForCob)}
-                              style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#16a34a', color: '#fff', fontSize: 13, fontWeight: 600, cursor: isSending ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
-                            >
+                            <button disabled={!!isSending} onClick={() => enviarDraft(draftForCob)}
+                              style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#16a34a', color: '#fff', fontSize: 13, fontWeight: 600, cursor: isSending ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
                               {isSending ? <><Spinner /> Enviando…</> : '✓ Enviar agora'}
                             </button>
-                            <button
-                              disabled={isSending}
-                              onClick={async () => {
-                                const num = prompt('Número para teste (somente dígitos, ex: 5511999999999):');
-                                if (num) await enviarDraft(draftForCob, num.replace(/\D/g, ''));
-                              }}
-                              style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid var(--g-200)', background: 'transparent', color: 'var(--g-600)', fontSize: 13, cursor: isSending ? 'not-allowed' : 'pointer' }}
-                            >
+                            <button disabled={!!isSending} onClick={async () => { const num = prompt('Número para teste (somente dígitos, ex: 5511999999999):'); if (num) await enviarDraft(draftForCob, num.replace(/\D/g, '')); }}
+                              style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid var(--g-200)', background: 'transparent', color: 'var(--g-600)', fontSize: 13, cursor: isSending ? 'not-allowed' : 'pointer' }}>
                               🧪 Enviar para meu número
                             </button>
-                            <button
-                              onClick={async () => {
-                                const { data: { session } } = await supabase.auth.getSession();
-                                await fetch(`${BRIDGE}/api/cora/rejeitar/${draftForCob.id}`, {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-                                  body: JSON.stringify({ tenant_id: tenantDbId }),
-                                });
-                                loadDrafts();
-                                setExpandedDraftMap(prev => { const n = { ...prev }; delete n[cob.id]; return n; });
-                              }}
-                              style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid var(--g-200)', background: 'transparent', color: 'var(--red)', fontSize: 13, cursor: 'pointer' }}
-                            >
+                            <button onClick={async () => { const { data: { session } } = await supabase.auth.getSession(); await fetch(`${BRIDGE}/api/cora/rejeitar/${draftForCob.id}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` }, body: JSON.stringify({ tenant_id: tenantDbId }) }); loadDrafts(); setExpandedDraftMap(prev => { const n = { ...prev }; delete n[cob.id]; return n; }); }}
+                              style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid var(--g-200)', background: 'transparent', color: 'var(--red)', fontSize: 13, cursor: 'pointer' }}>
                               ✕ Cancelar
                             </button>
                           </div>
@@ -1434,6 +1447,223 @@ export default function Cora({ tenantDbId, userId }) {
             )}
           </div>
 
+          {/* Cobranças vencidas por cliente */}
+          {vencidasPorCliente.length > 0 && (
+            <div className="cv2-card" style={{ overflow: 'hidden' }}>
+              <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--g-100)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: 'var(--red)', animation: 'pulse 1.5s infinite' }} />
+                <span style={{ fontWeight: 700, fontSize: 14 }}>Cobranças vencidas por cliente</span>
+                <span style={{ marginLeft: 4, fontSize: 12, color: 'var(--tx-2)', background: 'var(--g-100)', borderRadius: 10, padding: '1px 8px' }}>{vencidasPorCliente.length}</span>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--g-50)' }}>
+                      <th style={{ padding: '8px 16px', textAlign: 'left', fontWeight: 600 }}>Cliente</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Faturas</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>Total</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Maior atraso</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vencidasPorCliente.map((cli, i) => {
+                      const tom = cli.maxDias <= 7 ? 'neutro' : cli.maxDias <= 14 ? 'formal' : 'urgente';
+                      return (
+                        <tr key={i} style={{ borderTop: '1px solid var(--g-100)' }}>
+                          <td style={{ padding: '8px 16px' }}>{cli.name}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>{cli.items.length}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--red)', fontWeight: 600 }}>{fmtBRL(cli.total)}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                            <span style={{ background: cli.maxDias > 30 ? '#fee2e2' : '#fef3c7', color: cli.maxDias > 30 ? 'var(--red)' : '#92400e', borderRadius: 10, padding: '2px 8px', fontWeight: 600, fontSize: 12 }}>{cli.maxDias}d</span>
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                            <button
+                              onClick={() => gerarMensagemRapida(cli.cobId, tom)}
+                              disabled={!!loadingMsg[cli.cobId]}
+                              style={{ padding: '5px 12px', borderRadius: 6, border: 'none', background: 'var(--red)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: loadingMsg[cli.cobId] ? 'wait' : 'pointer', opacity: loadingMsg[cli.cobId] ? 0.7 : 1 }}
+                            >
+                              {loadingMsg[cli.cobId] ? '…' : 'Gerar cobrança'}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Vence em 7 dias */}
+          {venceEm7Dias.length > 0 && (
+            <div className="cv2-card" style={{ overflow: 'hidden' }}>
+              <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--g-100)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#f59e0b', animation: 'pulse 1.5s infinite' }} />
+                <span style={{ fontWeight: 700, fontSize: 14 }}>Vencem nos próximos 7 dias</span>
+                <span style={{ marginLeft: 4, fontSize: 12, color: 'var(--tx-2)', background: 'var(--g-100)', borderRadius: 10, padding: '1px 8px' }}>{venceEm7Dias.length}</span>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--g-50)' }}>
+                      <th style={{ padding: '8px 16px', textAlign: 'left', fontWeight: 600 }}>Cliente</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>Valor</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Vencimento</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Faltam</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {venceEm7Dias.map((c, i) => {
+                      const faltam = Math.ceil((new Date(c.vencimento + 'T00:00:00') - hoje) / 86400000);
+                      return (
+                        <tr key={i} style={{ borderTop: '1px solid var(--g-100)' }}>
+                          <td style={{ padding: '8px 16px' }}>{c.customer_name || '—'}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>{fmtBRL(Number(c.valor))}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>{c.vencimento.split('-').reverse().join('/')}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                            <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: 10, padding: '2px 8px', fontWeight: 600, fontSize: 12 }}>{faltam}d</span>
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                            <button
+                              onClick={() => gerarMensagemRapida(c.id, 'amigavel')}
+                              disabled={!!loadingMsg[c.id]}
+                              style={{ padding: '5px 12px', borderRadius: 6, border: 'none', background: '#f59e0b', color: '#fff', fontSize: 12, fontWeight: 600, cursor: loadingMsg[c.id] ? 'wait' : 'pointer', opacity: loadingMsg[c.id] ? 0.7 : 1 }}
+                            >
+                              {loadingMsg[c.id] ? '…' : 'Gerar lembrete'}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          </>}{/* fim visao-geral */}
+
+          {/* ── Sub-tab: Extrato de Pagamentos ───────────── */}
+          {finSubTab === 'extrato' && (
+            <>
+              {/* KPIs do extrato */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
+                <div className="cv2-kpi">
+                  <div className="cv2-kpi l">Total recebido (bruto)</div>
+                  <div className="cv2-kpi v" style={{ marginTop: 8, color: 'var(--success)' }}>{fmtBRL(totalRecebidoBruto)}</div>
+                  <div className="kpi-delta neutral" style={{ marginTop: 10 }}>{extrato.length} pagamentos confirmados</div>
+                </div>
+                <div className="cv2-kpi">
+                  <div className="cv2-kpi l">Total líquido (após taxa)</div>
+                  <div className="cv2-kpi v accent" style={{ marginTop: 8 }}>{fmtBRL(totalRecebidoLiquido)}</div>
+                  <div className="kpi-delta down" style={{ marginTop: 10 }}>−{fmtBRL(totalTaxaAsaas)} em taxas Asaas</div>
+                </div>
+                <div className="cv2-kpi">
+                  <div className="cv2-kpi l">Taxa média Asaas</div>
+                  <div className="cv2-kpi v" style={{ marginTop: 8 }}>
+                    {totalRecebidoBruto > 0 ? `${((totalTaxaAsaas / totalRecebidoBruto) * 100).toFixed(2)}%` : '—'}
+                  </div>
+                  <div className="kpi-delta neutral" style={{ marginTop: 10 }}>Bruto − Líquido</div>
+                </div>
+              </div>
+
+              {/* Breakdown por forma de pagamento */}
+              <div className="cv2-card" style={{ padding: 20, marginBottom: 20 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--g-700)', marginBottom: 16 }}>Breakdown por forma de pagamento</div>
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                  {Object.entries(billingBreakdown).map(([bt, d]) => {
+                    const pct = cobrancasV2.length > 0 ? ((d.qtd / cobrancasV2.length) * 100).toFixed(1) : 0;
+                    const color = billingColor[bt] || '#6b7280';
+                    return (
+                      <div key={bt} style={{ flex: 1, minWidth: 140, padding: '12px 16px', borderRadius: 10, border: `1px solid ${color}33`, background: `${color}11` }}>
+                        <div style={{ fontSize: 12, color: color, fontWeight: 700, marginBottom: 6 }}>{billingLabel[bt] || bt}</div>
+                        <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--tx)', marginBottom: 2 }}>{pct}%</div>
+                        <div style={{ fontSize: 12, color: 'var(--g-500)' }}>{d.qtd} cobranças · {fmtBRL(d.valor)}</div>
+                        <div style={{ marginTop: 8, height: 4, borderRadius: 2, background: 'var(--g-100)', overflow: 'hidden' }}>
+                          <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 2, transition: 'width 0.5s ease' }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Timeline de pagamentos */}
+              <div className="cv2-card" style={{ overflow: 'hidden' }}>
+                <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--g-100)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontWeight: 700, fontSize: 14 }}>Histórico de confirmações</span>
+                  <span style={{ fontSize: 12, color: 'var(--tx-2)', background: 'var(--g-100)', borderRadius: 10, padding: '1px 8px' }}>{extrato.length}</span>
+                </div>
+                {extrato.length === 0 ? (
+                  <div style={{ padding: 48, textAlign: 'center', color: 'var(--g-400)' }}>
+                    Nenhum pagamento confirmado ainda. Rode o sync Asaas para atualizar.
+                  </div>
+                ) : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="tbl">
+                      <thead>
+                        <tr>
+                          <th>Cliente</th>
+                          <th>Descrição</th>
+                          <th>Forma</th>
+                          <th style={{ textAlign: 'right' }}>Bruto</th>
+                          <th style={{ textAlign: 'right' }}>Taxa</th>
+                          <th style={{ textAlign: 'right' }}>Líquido</th>
+                          <th>Data pagamento</th>
+                          <th>Fatura</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {extrato.map(c => {
+                          const taxa = c.net_value != null ? Number(c.valor) - Number(c.net_value) : null;
+                          const dataExibir = c.payment_date || c.confirmed_date || c.vencimento;
+                          const btColor = billingColor[c.billing_type] || '#6b7280';
+                          return (
+                            <tr key={c.id} onClick={() => setSelectedV2Id(c.id)} style={{ cursor: 'pointer' }}>
+                              <td style={{ fontWeight: 600 }}>{c.customer_name || '—'}</td>
+                              <td style={{ fontSize: 12, color: 'var(--g-600)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {c.description || '—'}
+                              </td>
+                              <td>
+                                <span style={{ background: `${btColor}22`, color: btColor, border: `1px solid ${btColor}44`, borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>
+                                  {billingLabel[c.billing_type] || c.billing_type || '—'}
+                                </span>
+                              </td>
+                              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmtBRL(c.valor)}</td>
+                              <td style={{ textAlign: 'right', fontSize: 12, color: taxa != null ? '#dc2626' : 'var(--g-400)', fontVariantNumeric: 'tabular-nums' }}>
+                                {taxa != null ? `−${fmtBRL(taxa)}` : '—'}
+                              </td>
+                              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: 'var(--success)' }}>
+                                {c.net_value != null ? fmtBRL(c.net_value) : fmtBRL(c.valor)}
+                              </td>
+                              <td style={{ fontSize: 12, color: 'var(--g-600)', whiteSpace: 'nowrap' }}>
+                                {dataExibir ? new Date(dataExibir).toLocaleDateString('pt-BR') : '—'}
+                              </td>
+                              <td>
+                                {c.invoice_viewed_date ? (
+                                  <span title={`Visualizado em ${new Date(c.invoice_viewed_date).toLocaleString('pt-BR')}`}
+                                    style={{ background: '#d1fae5', color: '#065f46', border: '1px solid #6ee7b7', borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 600, cursor: 'default' }}>
+                                    👁 Visualizado
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize: 11, color: 'var(--g-400)' }}>Não visto</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* ── Sub-tab: Cobranças ───────────────────────── */}
+          {finSubTab === 'cobrancas' && <>
           {/* Charge table */}
           <div className="cv2-card" style={{ overflow: 'hidden' }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--g-100)', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1500,6 +1730,7 @@ export default function Cora({ tenantDbId, userId }) {
               </table>
             )}
           </div>
+          </>}
         </>
       )}
 

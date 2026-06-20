@@ -1,5 +1,107 @@
 # Wiki Log
 
+## 2026-06-20 — Sessão 72/73: 5 bugs follow-up Respostas Rápidas — encerrando os 9 do code review sessão 60 (PR #435) [T9 — chat ao vivo]
+
+**Contexto:** Sessão de continuação pós-compactação 71/72. O único pendente autônomo era fechar os 9 bugs do code review da sessão 60 (Respostas Rápidas / QR). 3 já foram corrigidos no PR #418 (sessão 66/67). A sessão auditou os arquivos reais e encontrou 5 bugs presentes (1 reclassificado como já-funcionando).
+
+**Bugs corrigidos:**
+- **MIME dinâmico em `ChatScreen.jsx` `insertQR`:** detection por extensão do arquivo (png/gif/webp/jpeg) para `file_path` e `media_url` — antes hardcoded `image/jpeg` para todas as imagens.
+- **Feedback de erro em `ChatScreen.jsx` `enviarQrMidia`:** `!resp.ok` throw + `alert()` no catch — erros eram silenciados (usuário não sabia que a mídia não foi enviada).
+- **JID strip em `evolution.js` `sendMediaMessage`:** `to.split('@')[0]` adicionado para consistência com `sendAudioMessage` (antes o `@s.whatsapp.net` era passado na chamada de mídia, causando falha potencial).
+- **Memory leaks `URL.createObjectURL` em `RespostasRapidas.jsx`:** `URL.revokeObjectURL` adicionado em 3 call-sites: `handleFileChange` (revoga URL anterior antes de criar nova), `removerArquivo` (revoga ao limpar), `recorder.onstop` (revoga áudio anterior ao salvar novo).
+- **Orphans no Storage em `RespostasRapidas.jsx` `remover`:** após DELETE na tabela `quick_replies`, agora deleta o arquivo correspondente do bucket `public` via `supabase.storage.from('public').remove([item.file_path])`.
+
+**Verificação:** `npm run build` ✓ 7.99s (sem novos erros). **PR #435** squash-mergeado em main (SHA `ad0a974`).
+
+**Resultado:** Todos 9 bugs do code review da sessão 60 encerrados — 3 no PR #418 (sessão 66/67) + 5 no PR #435 (esta sessão) + 1 reclassificado como já-funcionando.
+
+**Próximas ações pendentes (do Wandson):**
+- DELI motor: religar 2 triggers (`cliente_sumiu_7d`, `metrica_caiu_20pct`) no banco
+- VendaERP GATE 0: E2E Telegram + rotação do token vazado
+- Oracle: E2E autenticado no console
+- OpenRouter: recarga de créditos (saldo $2.81 < $5)
+- T9: 1º cliente real
+
+---
+
+## 2026-06-19 — Sessão 71/72: Continuação pós-compactação — confirmação de integridade + fix commit docs travado (PR #433) [T8/Cora + docs]
+
+**Contexto:** Sessão de continuação após compactação de contexto da 70/71. Não havia trabalho técnico novo — objetivo era confirmar integridade e corrigir uma pendência de docs.
+
+**Decisões/ações:**
+- **Verificação:** migration `20260619_001` aplicada, `sync-financeiro.ts` mapeando 6 colunas, `Cora.jsx` com 3 sub-tabs, PR #432 mergeado, Trigger.dev `20260619.27` deployado (75 tasks) — tudo confirmado com leitura dos arquivos reais.
+- **Fix de commit travado:** commit `a9d8848` (`docs(tracker): sessão 70/71`) estava em main local mas o hook bloqueou push direto. Solução: branch `wandson/tracker-sessao-70-71` criada do HEAD local, PR #433 criado via GitHub MCP e mergeado (SHA `0275da3`).
+- **Tracker atualizado:** entradas formais para sessões 70/71 e 71/72 adicionadas ao log de sessões; "Onde parou" atualizado para sessão 71/72.
+
+**Pendente autônomo (próxima sessão):** 9 bugs Respostas Rápidas identificados no code review da sessão 60 — 3 críticos (mic leak ao trocar tipo, media_url zerando em QRs legados, insertQR silenciando QRs com media_url), 4 médios, 2 baixos. Arquivos: `src/console/RespostasRapidas.jsx` + `src/screens/ChatScreen.jsx`.
+
+---
+
+## 2026-06-19 — Sessão 69/70: Dashboard Financeiro — seções "Vencidas por cliente" + "Vencem em 7 dias" + task `cora-gerar-mensagem-asaas` (PR #430) [T8 — Cora / financeiro]
+
+**Contexto:** Continuação da sessão 68/69. O dashboard financeiro da Cora precisava de dois blocos de ação rápida: (1) cobranças já vencidas agrupadas por cliente com botão de geração de mensagem com tom automático; (2) cobranças que vencem nos próximos 7 dias com lembrete preventivo. Além disso, havia um gap V1/V2: a task `cora-gerar-mensagem` original lia da tabela `cora_cobrancas` (V1) e não preenchia `metadata.customer_phone` nem `metadata.cobranca_v2_id` — campos obrigatórios para o `cora-aprovacao.js` enviar via WhatsApp.
+
+**Decisões tomadas:**
+- Nova task dedicada `cora-gerar-mensagem-asaas` lendo de `cobrancas` (V2/Asaas) em vez de reutilizar a V1
+- Auto-seleção de tom: `isLembrete` (dias<0) → amigavel, ≤7d → neutro, ≤14d → formal, 15+d → urgente
+- `metadata` salvo com `customer_phone` + `cobranca_v2_id` para `cora-aprovacao.js` funcionar
+- Geração via `claude-haiku-4-5-20251001` (mais barato para volume de cobranças)
+- UI: grupos "vencidas por cliente" por `customer_name || customer_phone || id`, ordenado por `maxDias DESC`
+
+**Arquivos criados:**
+- `trigger/cora/gerar-mensagem-asaas.ts` — task `cora-gerar-mensagem-asaas` com leitura de `cobrancas` V2, auto-tom, Haiku, draft + `cora_acoes`
+
+**Arquivos modificados:**
+- `src/console/Cora.jsx` — dois novos blocos na aba Financeiro entre o aging e a tabela de cobranças: "Cobranças vencidas por cliente" (badge vermelho pulsante, tabela cliente/qtd/total/dias/botão auto-tom) + "Vencem nos próximos 7 dias" (badge âmbar pulsante, tabela cliente/valor/vencimento/faltam/botão lembrete); novo estado `loadingMsg`; nova função `gerarMensagemRapida(cobId, tom)` via Bridge `/agents/cora-gerar-mensagem-asaas/run`
+
+**Verificação:**
+- PR #430 squash-mergeado em main — SHA `9af365dc00f9d848b4cb4effd878b351ce15b04f`
+- Trigger.dev deployado versão `20260619.21` com 75 tasks (inclui `cora-gerar-mensagem-asaas`)
+
+**Próxima ação:**
+- Teste E2E ponta-a-ponta: aba Financeiro → "Cobranças vencidas por cliente" → botão "Gerar cobrança" → verificar draft na aba "Agente Cora" → aprovar → mensagem chega no WhatsApp do cliente
+
+---
+
+## 2026-06-19 — Sessão 68/69: Integração Asaas completa — Dashboard Financeiro + Agente Cora ativado (PR #423) [T8 — Cora / financeiro]
+
+**Contexto:** Wandson pediu integração completa do Asaas em uma sessão: sync de cobranças → dashboard financeiro → régua diária de cobrança → aprovação com 1 clique via WhatsApp.
+
+**Decisões tomadas:**
+- Modo Cora = Híbrido (draft → aprovação humana → Evolution API envia)
+- Cora.jsx reformulada: 2 abas (Financeiro + Agente Cora)
+- Tabela `cobrancas` = fonte primária (Supabase); Asaas = origem dos dados via cron
+- `autonomy_level` mapeado: humano→vermelho, hibrido→amarelo, ia→verde (constraint DB)
+- `tenant_agent_config` usa coluna `agent_id` (não `agent`)
+- CSS flex bars para gráfico (sem biblioteca de charting instalada)
+- `MAIN_TENANT_ID` via Infisical (lazy getter)
+
+**Arquivos criados:**
+- `trigger/asaas/sync-financeiro.ts` — cron a cada 30 min, upsert completo Asaas → `cobrancas` via `asaas_charge_id`
+- `trigger/cora/regua-diaria.ts` — cron 09h BRT (12h UTC), janela T-7 a T+90, skip se já houve ação hoje
+- `trigger/cora/processar-cobranca.ts` — subtask: lê V2, chama claude-haiku-4-5-20251001, insere `agent_drafts` + `cora_acoes`
+- `bridge-server/routes/cora-aprovacao.js` — `POST /api/cora/aprovar/:id` (Evolution API) + `POST /api/cora/rejeitar/:id`
+
+**Arquivos modificados:**
+- `trigger/_shared/asaas.ts` — adicionado `listChargesAll()` com paginação completa (offset/limit)
+- `bridge-server/index.js` — montagem da rota `cora-aprovacao` com `requireJwt`
+- `src/console/Cora.jsx` — reescrita do componente principal: 2 abas, KPIs V2, CSS bar chart receita 6m, aging, tabela filtrada, fila de drafts com Aprovar/Rejeitar, histórico `cora_acoes`, ModoToggle
+
+**Bug corrigido:**
+- V1/V2 mismatch: régua original importava `coraEscalonar` (lê `cora_cobrancas` V1); refatorado para `coraProcessarCobranca` direto (V2)
+
+**Verificação:**
+- PR #423 squash-mergeado → SHA `d2f13fb635f7270b45e9dee9c912b7c5dd599722` em main
+- `trigger.config.ts` usa `dirs: ["./trigger"]` — auto-descobre tasks novas sem registro manual
+
+**Pendente (requer Wandson):**
+- Fase 0: chave de produção Asaas → Infisical (`ASAAS_API_KEY` + `ASAAS_ENVIRONMENT=production`)
+- Adicionar `MAIN_TENANT_ID` (UUID do tenant) ao Infisical
+- `pm2 restart bridge-server` após atualizar Infisical
+- `npx trigger.dev@4.4.6 deploy` para registrar as 3 novas tasks no Trigger.dev cloud
+
+---
+
 ## 2026-06-18 — Sessão 67/68: Painel Agentes reescrito com identidade Console v2 (PR #420) [Console v2 — hub]
 
 **Contexto:** Wandson pediu para refazer o Painel Agentes com identidade visual do Console v2, e verificar conformidade em produção.
@@ -619,3 +721,18 @@ Touched: none
 - **Deploy:** Edge function `evolution-webhook` versão 55 deployada via Supabase MCP (projeto `czyanilrverorwenikqw`).
 - **Migration:** aplicada com sucesso via Supabase MCP antes do deploy.
 - **PR #421** criado: `feat(bot): resposta automática em grupos via toggle por tenant`.
+
+## 2026-06-19 — Sessão 70/71: Extrato de Pagamentos Asaas no Dashboard Cora (PR #432) [T8 — Cora]
+
+- **Contexto:** Wandson pediu: área de extrato com confirmação de pagamento, forma de pagamento (PIX/Boleto/Cartão), se o cliente visualizou a fatura (`invoiceViewedDate`) e extrair tudo possível da API Asaas.
+- **Migration `20260619_001_cobrancas_extrato_fields.sql`** (APLICADA): 6 colunas aditivas em `cobrancas` — `payment_date` (date), `net_value` (numeric), `date_created` (date), `invoice_viewed_date` (timestamptz), `description` (text), `confirmed_date` (date). Antes esses campos existiam só no JSON bruto de `metadata.asaas_raw`.
+- **`trigger/_shared/asaas.ts`:** schema `AsaasCharge` expandido com `invoiceViewedDate` e `confirmedDate` (nullable optional) — para que o Zod os valide/passe ao mapper.
+- **`trigger/asaas/sync-financeiro.ts`:** upsert atualizado — os 6 campos agora salvos em colunas dedicadas para query eficiente no frontend (sem ter que fazer `->>'invoiceViewedDate'` no JSON).
+- **`src/console/Cora.jsx`:** aba Financeiro reestruturada com estado `finSubTab` e 3 sub-tabs:
+  - **Visão Geral:** KPIs existentes (total, overdue, pendente, taxa inadimplência).
+  - **Extrato de Pagamentos:** KPI bruto/líquido/taxa Asaas %; breakdown por forma de pagamento (PIX, Boleto, Cartão, Indefinido) com cards coloridos + barra de progresso percentual; timeline cronológica reversa (mais recente no topo) — Cliente, Descrição, Forma (badge colorido), Bruto, Taxa (−R$X.XX), Líquido, Data pagamento, Fatura (👁 badge "Visualizado" com hover mostrando timestamp, ou "Não visto").
+  - **Cobranças:** tabela filtrada existente (movida do sub-tab de Visão Geral).
+- **Build:** `vite build` ✓ antes do commit.
+- **PR #432** squash-mergeado em main (SHA `577da6fb`).
+- **Deploy Trigger.dev:** versão `20260619.27` (75 tasks detectadas) — sync passará a popular `invoice_viewed_date` e `confirmed_date` a partir do próximo ciclo de 30 min.
+- **Próxima ação:** nenhuma pendente nesta feature. Aguardar próximo sync do Asaas para as novas colunas preencherem; Extrato sub-tab então mostrará taxa real e badges "👁 Visualizado" para clientes que abriram a fatura.

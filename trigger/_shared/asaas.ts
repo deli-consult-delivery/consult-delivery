@@ -19,6 +19,7 @@ export const AsaasChargeStatus = z.enum([
   "REFUNDED",
   "REMOVED",
   "RESTORED",
+  "RECEIVED_IN_CASH",
   "CHARGEBACK_REQUESTED",
   "CHARGEBACK_DISPUTE",
   "AWAITING_CHARGEBACK_REVERSAL",
@@ -58,6 +59,8 @@ export const AsaasCharge = z.object({
     .optional(),
   dateCreated: z.string().optional(),
   paymentDate: z.string().nullable().optional(),
+  invoiceViewedDate: z.string().nullable().optional(),
+  confirmedDate: z.string().nullable().optional(),
 });
 
 export const AsaasListResponse = z.object({
@@ -69,12 +72,22 @@ export const AsaasListResponse = z.object({
   data: z.array(AsaasCharge),
 });
 
+export const AsaasCustomer = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  mobilePhone: z.string().nullable().optional(),
+  cpfCnpj: z.string().nullable().optional(),
+});
+
 // Tipos inferidos
 export type AsaasBillingTypeValue = z.infer<typeof AsaasBillingType>;
 export type AsaasChargeStatusValue = z.infer<typeof AsaasChargeStatus>;
 export type CreateChargeInputType = z.infer<typeof CreateChargeInput>;
 export type AsaasChargeType = z.infer<typeof AsaasCharge>;
 export type AsaasListResponseType = z.infer<typeof AsaasListResponse>;
+export type AsaasCustomerType = z.infer<typeof AsaasCustomer>;
 
 // ---------------------------------------------------------------------------
 // Erro customizado
@@ -113,7 +126,7 @@ function getAsaasConfig(): AsaasConfig {
   const baseUrl =
     env === "sandbox"
       ? "https://sandbox.asaas.com/api/v3"
-      : "https://api.asaas.com/api/v3";
+      : "https://www.asaas.com/api/v3";
 
   return { baseUrl, apiKey };
 }
@@ -295,6 +308,50 @@ export async function listChargesAll(filters?: {
   }
 
   return all;
+}
+
+const AsaasCustomerListResponse = z.object({
+  object: z.literal("list"),
+  hasMore: z.boolean(),
+  totalCount: z.number(),
+  limit: z.number(),
+  offset: z.number(),
+  data: z.array(AsaasCustomer),
+});
+
+/**
+ * GET /customers/:id — busca dados de um cliente Asaas.
+ */
+export async function getCustomer(id: string): Promise<AsaasCustomerType> {
+  if (!id) throw new Error("getCustomer: id é obrigatório");
+  return withRetry(async () => {
+    const raw = await asaasFetch(`/customers/${encodeURIComponent(id)}`);
+    return AsaasCustomer.parse(raw);
+  });
+}
+
+/**
+ * GET /customers — lista TODOS os clientes, iterando páginas até hasMore=false.
+ * Retorna Map<asaasCustomerId, AsaasCustomerType> para lookup O(1).
+ */
+export async function listCustomersMap(): Promise<Map<string, AsaasCustomerType>> {
+  const map = new Map<string, AsaasCustomerType>();
+  const PAGE = 100;
+  let offset = 0;
+
+  while (true) {
+    const raw = await withRetry(() =>
+      asaasFetch(`/customers?limit=${PAGE}&offset=${offset}`)
+    );
+    const page = AsaasCustomerListResponse.parse(raw);
+    for (const c of page.data) {
+      map.set(c.id, c);
+    }
+    if (!page.hasMore) break;
+    offset += PAGE;
+  }
+
+  return map;
 }
 
 /**

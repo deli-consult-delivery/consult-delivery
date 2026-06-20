@@ -3870,14 +3870,24 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
     setShowQR(false);
     if (qr.file_path) {
       const { data } = supabase.storage.from('public').getPublicUrl(qr.file_path);
-      const mimeType = qr.media_type === 'audio'
-        ? (qr.file_path.endsWith('.ogg') ? 'audio/ogg' : 'audio/webm')
-        : 'image/jpeg';
+      let mimeType;
+      if (qr.media_type === 'audio') {
+        mimeType = qr.file_path.endsWith('.ogg') ? 'audio/ogg' : 'audio/webm';
+      } else {
+        const ext = qr.file_path.split('.').pop().toLowerCase();
+        mimeType = { png: 'image/png', gif: 'image/gif', webp: 'image/webp' }[ext] || 'image/jpeg';
+      }
       setQrConfirm({ qr, publicUrl: data.publicUrl, mimeType });
       return;
     }
     if (qr.media_url && qr.media_type !== 'text') {
-      const mimeType = qr.media_type === 'audio' ? 'audio/ogg' : 'image/jpeg';
+      let mimeType;
+      if (qr.media_type === 'audio') {
+        mimeType = qr.media_url.includes('.ogg') ? 'audio/ogg' : 'audio/webm';
+      } else {
+        const ext = qr.media_url.split('.').pop().split('?')[0].toLowerCase();
+        mimeType = { png: 'image/png', gif: 'image/gif', webp: 'image/webp' }[ext] || 'image/jpeg';
+      }
       setQrConfirm({ qr, publicUrl: qr.media_url, mimeType });
       return;
     }
@@ -3891,6 +3901,7 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
     if (!instance || !chatId) return;
     try {
       const resp = await fetch(publicUrl);
+      if (!resp.ok) throw new Error(`Falha ao buscar mídia: ${resp.status}`);
       const blob = await resp.blob();
       const base64 = await new Promise(res => {
         const reader = new FileReader();
@@ -3907,6 +3918,7 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
       }
     } catch (err) {
       console.error('[QR] enviarQrMidia:', err);
+      alert('Erro ao enviar mídia: ' + err.message);
     }
   };
 

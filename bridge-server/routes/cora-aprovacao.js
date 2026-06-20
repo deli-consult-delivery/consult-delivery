@@ -3,12 +3,26 @@
 // POST /api/cora/aprovar/:draft_id   — aprova draft da Cora e envia via WhatsApp
 // POST /api/cora/rejeitar/:draft_id  — rejeita draft da Cora
 //
-// Ambos autenticados via requireJwt. tenant_id vem do body.
+// Ambos autenticados via requireJwt. tenant_id vem do body e é validado
+// contra tenant_members para evitar IDOR cross-tenant.
 
 const express = require('express');
 
 module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) {
   const router = express.Router();
+
+  // ── Helper: verifica se o usuário pertence ao tenant ─────────────────────────
+  async function assertTenantMember(userId, tenantId) {
+    if (!userId || userId === 'dev') return; // dev mode sem validação
+    const rows = await sbFetch(
+      `tenant_members?user_id=eq.${encodeURIComponent(userId)}&tenant_id=eq.${encodeURIComponent(tenantId)}&select=role&limit=1`
+    );
+    if (!rows?.length) {
+      const err = new Error('forbidden');
+      err.status = 403;
+      throw err;
+    }
+  }
 
   // ── Helper: busca instância Evolution (tenant-specific ou fallback global) ────
   async function getEvolutionInst(tenantId) {
@@ -33,6 +47,9 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
     if (!tenant_id) return res.status(400).json({ error: 'tenant_id obrigatório no body' });
 
     try {
+      // 0. Verificar que o usuário autenticado pertence ao tenant
+      await assertTenantMember(req.user?.id, tenant_id);
+
       // 1. Buscar draft pendente
       const drafts = await sbFetch(
         `agent_drafts?id=eq.${encodeURIComponent(draft_id)}&tenant_id=eq.${encodeURIComponent(tenant_id)}&status=eq.pending&select=id,body,metadata&limit=1`
@@ -104,6 +121,7 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
       console.log(`[cora-aprovacao] draft=${draft_id} aprovado e enviado`);
       return res.json({ ok: true, enviado_para: targetPhone, test_mode: !!req.query.test_phone });
     } catch (err) {
+      if (err.status === 403) return res.status(403).json({ error: 'forbidden' });
       console.error('[cora-aprovacao/aprovar]', err.message);
       return res.status(500).json({ error: err.message });
     }
@@ -119,6 +137,9 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
     if (!tenant_id) return res.status(400).json({ error: 'tenant_id obrigatório no body' });
 
     try {
+      // 0. Verificar que o usuário autenticado pertence ao tenant
+      await assertTenantMember(req.user?.id, tenant_id);
+
       // 1. Buscar draft pendente
       const drafts = await sbFetch(
         `agent_drafts?id=eq.${encodeURIComponent(draft_id)}&tenant_id=eq.${encodeURIComponent(tenant_id)}&status=eq.pending&select=id,metadata&limit=1`
@@ -157,6 +178,7 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
       console.log(`[cora-aprovacao] draft=${draft_id} rejeitado`);
       return res.json({ ok: true });
     } catch (err) {
+      if (err.status === 403) return res.status(403).json({ error: 'forbidden' });
       console.error('[cora-aprovacao/rejeitar]', err.message);
       return res.status(500).json({ error: err.message });
     }
