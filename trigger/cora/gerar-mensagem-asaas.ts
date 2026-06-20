@@ -116,7 +116,7 @@ Retorne APENAS JSON válido (sem markdown):
         agent_name:     "cora",
         channel:        "whatsapp",
         subject:        `${isLembrete ? "Lembrete" : "Cobrança"} — ${cob.customer_name ?? "Cliente"}`,
-        body:           parsed.mensagem,
+        content:        parsed.mensagem,
         status:         "pending",
         autonomy_level: modo,
         metadata: {
