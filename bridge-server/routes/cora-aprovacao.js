@@ -63,7 +63,10 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
       const phone = meta.customer_phone;
       const cobrancaV2Id = meta.cobranca_v2_id ?? null;
 
-      if (!phone) {
+      // ?test_phone=5511999999999 redireciona para número de teste (apenas usuários autenticados)
+      const targetPhone = req.query.test_phone || phone;
+
+      if (!targetPhone) {
         return res.status(400).json({ error: 'customer_phone não está no metadata do draft' });
       }
 
@@ -79,7 +82,7 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', apikey: inst.api_key },
-          body: JSON.stringify({ number: phone, text: mensagem }),
+          body: JSON.stringify({ number: targetPhone, text: mensagem }),
         }
       );
       if (!ew.ok) {
@@ -87,7 +90,8 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
         console.warn(`[cora-aprovacao] Evolution ${ew.status}: ${detail}`);
         return res.status(502).json({ error: 'Falha ao enviar via Evolution API', detail });
       }
-      console.log(`[cora-aprovacao] mensagem enviada → ${phone}`);
+      const isTest = req.query.test_phone ? ` (TESTE → ${targetPhone})` : '';
+      console.log(`[cora-aprovacao] mensagem enviada → ${targetPhone}${isTest}`);
 
       // 4. Atualizar draft → sent
       await sbFetch(
@@ -115,7 +119,7 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
       });
 
       console.log(`[cora-aprovacao] draft=${draft_id} aprovado e enviado`);
-      return res.json({ ok: true, enviado_para: phone });
+      return res.json({ ok: true, enviado_para: targetPhone, test_mode: !!req.query.test_phone });
     } catch (err) {
       if (err.status === 403) return res.status(403).json({ error: 'forbidden' });
       console.error('[cora-aprovacao/aprovar]', err.message);
