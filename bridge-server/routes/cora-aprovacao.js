@@ -64,7 +64,11 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
       const cobrancaV2Id = meta.cobranca_v2_id ?? null;
 
       // ?test_phone=5511999999999 redireciona para número de teste (apenas usuários autenticados)
-      const targetPhone = req.query.test_phone || phone;
+      const rawTestPhone = req.query.test_phone;
+      if (rawTestPhone !== undefined && !/^\d{10,15}$/.test(rawTestPhone)) {
+        return res.status(400).json({ error: 'test_phone inválido — use apenas dígitos (10-15 caracteres, ex: 5511999999999)' });
+      }
+      const targetPhone = rawTestPhone || phone;
 
       if (!targetPhone) {
         return res.status(400).json({ error: 'customer_phone não está no metadata do draft' });

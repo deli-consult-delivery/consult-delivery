@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Icon from '../components/Icon.jsx';
 import { supabase } from '../lib/supabase.js';
 
@@ -853,6 +853,7 @@ export default function Cora({ tenantDbId, userId }) {
   const [loadingMsgMap, setLoadingMsgMap] = useState({});
   const [expandedDraftMap, setExpandedDraftMap] = useState({});
   const [sendingMap, setSendingMap] = useState({});
+  const [rejeitarMap, setRejeitarMap] = useState({});
 
   // ── Loaders ────────────────────────────────────────────────────────────────
 
@@ -944,6 +945,10 @@ export default function Cora({ tenantDbId, userId }) {
 
   const gerarMensagem = async (cob) => {
     setLoadingMsgMap(prev => ({ ...prev, [cob.id]: true }));
+    // Fallback: se o draft não chegar via realtime em 30s, limpar o spinner
+    const timeout = setTimeout(() => {
+      setLoadingMsgMap(prev => { const n = { ...prev }; delete n[cob.id]; return n; });
+    }, 30_000);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const r = await fetch(`${BRIDGE}/agents/cora-gerar-mensagem-asaas/run`, {
@@ -951,8 +956,12 @@ export default function Cora({ tenantDbId, userId }) {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
         body: JSON.stringify({ tenant_id: tenantDbId, cobranca_v2_id: cob.id }),
       });
-      if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Erro ao gerar'); }
+      if (!r.ok) {
+        const e = await r.json();
+        throw new Error(e.error || 'Erro ao gerar');
+      }
     } catch (e) {
+      clearTimeout(timeout);
       alert(e.message);
       setLoadingMsgMap(prev => { const n = { ...prev }; delete n[cob.id]; return n; });
     }
@@ -975,6 +984,25 @@ export default function Cora({ tenantDbId, userId }) {
       if (cobId) setExpandedDraftMap(prev => { const n = { ...prev }; delete n[cobId]; return n; });
     } catch (e) { alert(e.message); }
     setSendingMap(prev => { const n = { ...prev }; delete n[key]; return n; });
+  };
+
+  const rejeitarDraft = async (draft, cobId) => {
+    setRejeitarMap(prev => ({ ...prev, [draft.id]: true }));
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch(`${BRIDGE}/api/cora/rejeitar/${draft.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ tenant_id: tenantDbId }),
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Erro ao rejeitar'); }
+      loadDrafts();
+      setExpandedDraftMap(prev => { const n = { ...prev }; delete n[cobId]; return n; });
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setRejeitarMap(prev => { const n = { ...prev }; delete n[draft.id]; return n; });
+    }
   };
 
   const gerarMensagemRapida = async (cobrancaId, tom) => {
@@ -1087,28 +1115,41 @@ export default function Cora({ tenantDbId, userId }) {
   }));
   const chartMax = Math.max(...chartData.map(d => d.valor), 1);
 
-  // Dados extras para régua e gráficos de pizza
-  const confirmadas = cobrancasV2.filter(c => c.status === 'received' && c.confirmed_date);
-  const aguardando = cobrancasV2.filter(c => c.status === 'pending' && c.vencimento >= hoje.toISOString().slice(0, 10));
-  const elegiveisRegua = cobrancasV2.filter(c => {
+  // Dados extras para régua e gráficos de pizza (memoizados para evitar re-cálculo a cada render)
+  const hoje10 = hoje.toISOString().slice(0, 10);
+  const confirmadas = useMemo(() => cobrancasV2.filter(c => c.status === 'received' && c.confirmed_date), [cobrancasV2]);
+  const aguardando = useMemo(() => cobrancasV2.filter(c => c.status === 'pending' && c.vencimento >= hoje10), [cobrancasV2, hoje10]);
+  const elegiveisRegua = useMemo(() => cobrancasV2.filter(c => {
     if (c.status === 'overdue') return true;
     if (c.status === 'pending') { const v = new Date(c.vencimento + 'T00:00:00'); return v >= hoje && v <= em7Dias; }
     return false;
-  });
-  const elegiveisFiltered = reguaFilter === 'vencidas' ? elegiveisRegua.filter(c => c.status === 'overdue')
+  }), [cobrancasV2]);
+  const elegiveisFiltered = useMemo(() => reguaFilter === 'vencidas' ? elegiveisRegua.filter(c => c.status === 'overdue')
     : reguaFilter === 'proximas7d' ? elegiveisRegua.filter(c => c.status === 'pending')
-    : elegiveisRegua;
-  const pieStatus = [
-    { label: 'Recebidas', value: cobrancasV2.filter(c => c.status === 'received').reduce((s, c) => s + Number(c.valor), 0), color: '#16a34a' },
-    { label: 'Aguardando', value: cobrancasV2.filter(c => c.status === 'pending').reduce((s, c) => s + Number(c.valor), 0), color: '#D97706' },
-    { label: 'Vencidas', value: cobrancasV2.filter(c => c.status === 'overdue').reduce((s, c) => s + Number(c.valor), 0), color: '#B70C00' },
-    { label: 'Canceladas', value: cobrancasV2.filter(c => ['canceled', 'refunded'].includes(c.status)).reduce((s, c) => s + Number(c.valor), 0), color: '#6b7280' },
-  ];
-  const pieBilling = [
-    { label: 'PIX', value: cobrancasV2.filter(c => c.billing_type === 'PIX').reduce((s, c) => s + Number(c.valor), 0), color: '#16a34a' },
-    { label: 'Boleto', value: cobrancasV2.filter(c => c.billing_type === 'BOLETO').reduce((s, c) => s + Number(c.valor), 0), color: '#2563eb' },
-    { label: 'Cartão', value: cobrancasV2.filter(c => c.billing_type === 'CREDIT_CARD').reduce((s, c) => s + Number(c.valor), 0), color: '#7c3aed' },
-  ];
+    : elegiveisRegua, [elegiveisRegua, reguaFilter]);
+  const pieStatus = useMemo(() => {
+    const totais = cobrancasV2.reduce((acc, c) => {
+      acc[c.status] = (acc[c.status] || 0) + Number(c.valor);
+      return acc;
+    }, {});
+    return [
+      { label: 'Recebidas', value: totais['received'] || 0, color: '#16a34a' },
+      { label: 'Aguardando', value: totais['pending'] || 0, color: '#D97706' },
+      { label: 'Vencidas', value: totais['overdue'] || 0, color: '#B70C00' },
+      { label: 'Canceladas', value: (totais['canceled'] || 0) + (totais['refunded'] || 0), color: '#6b7280' },
+    ];
+  }, [cobrancasV2]);
+  const pieBilling = useMemo(() => {
+    const totais = cobrancasV2.reduce((acc, c) => {
+      acc[c.billing_type] = (acc[c.billing_type] || 0) + Number(c.valor);
+      return acc;
+    }, {});
+    return [
+      { label: 'PIX', value: totais['PIX'] || 0, color: '#16a34a' },
+      { label: 'Boleto', value: totais['BOLETO'] || 0, color: '#2563eb' },
+      { label: 'Cartão', value: totais['CREDIT_CARD'] || 0, color: '#7c3aed' },
+    ];
+  }, [cobrancasV2]);
 
   // Filtered charge table
   const filteredV2 = cobrancasV2.filter(c => {
@@ -1433,9 +1474,11 @@ export default function Cora({ tenantDbId, userId }) {
                               style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid var(--g-200)', background: 'transparent', color: 'var(--g-600)', fontSize: 13, cursor: isSending ? 'not-allowed' : 'pointer' }}>
                               🧪 Enviar para meu número
                             </button>
-                            <button onClick={async () => { const { data: { session } } = await supabase.auth.getSession(); await fetch(`${BRIDGE}/api/cora/rejeitar/${draftForCob.id}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` }, body: JSON.stringify({ tenant_id: tenantDbId }) }); loadDrafts(); setExpandedDraftMap(prev => { const n = { ...prev }; delete n[cob.id]; return n; }); }}
-                              style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid var(--g-200)', background: 'transparent', color: 'var(--red)', fontSize: 13, cursor: 'pointer' }}>
-                              ✕ Cancelar
+                            <button
+                              disabled={!!isSending || !!rejeitarMap[draftForCob.id]}
+                              onClick={() => rejeitarDraft(draftForCob, cob.id)}
+                              style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid var(--g-200)', background: 'transparent', color: 'var(--red)', fontSize: 13, cursor: (isSending || rejeitarMap[draftForCob.id]) ? 'not-allowed' : 'pointer', opacity: (isSending || rejeitarMap[draftForCob.id]) ? 0.6 : 1 }}>
+                              {rejeitarMap[draftForCob.id] ? <><Spinner /> Cancelando…</> : '✕ Cancelar'}
                             </button>
                           </div>
                         </div>
