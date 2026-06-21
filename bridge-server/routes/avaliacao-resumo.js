@@ -5,7 +5,7 @@
 //
 // Endpoints:
 //   POST /api/avaliacao/resumo
-//     Busca comentários de avaliação do tenant, chama Claude Haiku,
+//     Busca comentários de avaliação do tenant, chama Ollama/Kimi K2.6,
 //     retorna resumo + temas + ação sugerida.
 //     Requer JWT Supabase + membership no tenant.
 // ════════════════════════════════════════════════════════════════════════════
@@ -13,21 +13,23 @@
 const express = require('express');
 const fetch   = require('node-fetch');
 
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-const HAIKU_MODEL       = 'claude-haiku-4-5-20251001';
-const MAX_COMENTARIOS   = 300;
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL;
+const OLLAMA_API_KEY  = process.env.OLLAMA_API_KEY;
+const OLLAMA_MODEL    = process.env.LLM_MODEL || process.env.OLLAMA_MODEL || 'kimi-k2.6:cloud';
+const TIMEOUT_MS      = 120_000;
+const MAX_COMENTARIOS = 300;
 
 module.exports = function buildAvaliacaoResumoRouter({ requireJwt, sbFetch, assertTenantMember }) {
   const router = express.Router();
 
   // ════════════════════════════════════════════════════════════════════════════
   // POST /api/avaliacao/resumo
-  //   Body: { tenant_id: uuid }  (opcional — usa tenant do JWT se omitido)
-  //   401 sem JWT | 400 sem tenant_id | 503 sem ANTHROPIC_API_KEY
+  //   Body: { tenant_id: uuid }
+  //   401 sem JWT | 400 sem tenant_id | 503 sem OLLAMA_BASE_URL
   // ════════════════════════════════════════════════════════════════════════════
   router.post('/avaliacao/resumo', requireJwt, async (req, res) => {
-    if (!ANTHROPIC_API_KEY) {
-      return res.status(503).json({ error: 'ANTHROPIC_API_KEY não configurado' });
+    if (!OLLAMA_BASE_URL) {
+      return res.status(503).json({ error: 'OLLAMA_BASE_URL não configurado' });
     }
 
     const { tenant_id } = req.body;
@@ -71,28 +73,38 @@ ${blocos}
 
 Regras: português brasileiro, objetivo, baseado apenas nos comentários fornecidos, sem inventar dados.`;
 
-      const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key':         ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-          'content-type':      'application/json',
-        },
-        body: JSON.stringify({
-          model:      HAIKU_MODEL,
-          max_tokens: 1024,
-          messages:   [{ role: 'user', content: prompt }],
-        }),
-      });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-      if (!anthropicRes.ok) {
-        const detail = await anthropicRes.text().catch(() => '');
-        console.error('[avaliacao/resumo] Anthropic error', anthropicRes.status, detail);
-        return res.status(502).json({ error: `Anthropic error ${anthropicRes.status}` });
+      let ollamaRes;
+      try {
+        ollamaRes = await fetch(`${OLLAMA_BASE_URL.replace(/\/$/, '')}/api/chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(OLLAMA_API_KEY ? { Authorization: `Bearer ${OLLAMA_API_KEY}` } : {}),
+          },
+          body: JSON.stringify({
+            model:    OLLAMA_MODEL,
+            messages: [{ role: 'user', content: prompt }],
+            stream:   false,
+            format:   'json',
+            options:  { temperature: 0.1, num_predict: 8192 },
+          }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timer);
       }
 
-      const data    = await anthropicRes.json();
-      const rawText = data.content?.[0]?.text ?? '';
+      if (!ollamaRes.ok) {
+        const detail = await ollamaRes.text().catch(() => '');
+        console.error('[avaliacao/resumo] Ollama error', ollamaRes.status, detail);
+        return res.status(502).json({ error: `Ollama error ${ollamaRes.status}` });
+      }
+
+      const data    = await ollamaRes.json();
+      const rawText = data.message?.content ?? '';
 
       // Extrair JSON da resposta
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);
@@ -108,6 +120,10 @@ Regras: português brasileiro, objetivo, baseado apenas nos comentários forneci
         total_analisados: rows.length,
       });
     } catch (err) {
+      if (err.name === 'AbortError') {
+        console.error('[avaliacao/resumo] Timeout após', TIMEOUT_MS / 1000, 's');
+        return res.status(504).json({ error: 'Timeout ao gerar resumo' });
+      }
       console.error('[avaliacao/resumo POST]', err.message);
       return res.status(500).json({ error: err.message });
     }
