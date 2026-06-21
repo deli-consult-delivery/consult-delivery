@@ -382,7 +382,7 @@ async function generateImage(prompt: string, format: "group" | "portrait"): Prom
           size,
           n:        1,
         }),
-        signal: AbortSignal.timeout(90_000),
+        signal: AbortSignal.timeout(180_000),
       });
 
       if (!r.ok) {
