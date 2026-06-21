@@ -890,6 +890,11 @@ export default function Cora({ tenantDbId, userId }) {
   const [showPie, setShowPie] = useState(false);
   const [reguaFilter, setReguaFilter] = useState('todas');
 
+  // Filtro de período da aba Extrato: 'tudo' | 'mes' | '30d' | 'custom'
+  const [extratoPeriodo, setExtratoPeriodo] = useState('tudo');
+  const [extratoDe, setExtratoDe] = useState('');
+  const [extratoAte, setExtratoAte] = useState('');
+
   // Per-charge loading + expanded draft state (régua interativa)
   const [loadingMsgMap, setLoadingMsgMap] = useState({});
   const [expandedDraftMap, setExpandedDraftMap] = useState({});
@@ -1019,7 +1024,17 @@ export default function Cora({ tenantDbId, userId }) {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
         body: JSON.stringify({ tenant_id: tenantDbId }),
       });
-      if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Erro ao enviar'); }
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        if (r.status === 409) {
+          const prox = e.proximaJanela ? `\n\nPróxima janela permitida: ${e.proximaJanela}.` : '';
+          throw new Error(
+            `⏰ Fora do horário legal de cobrança.\n\n${e.motivo || ''}` +
+            `\n\nHorário permitido: Seg–Sex 8h–21h · Sáb 8h–12h · Domingos e feriados não.${prox}`
+          );
+        }
+        throw new Error(e.error || 'Erro ao enviar');
+      }
       loadDrafts(); loadAcoes();
       const cobId = draft.metadata?.cobranca_v2_id;
       if (cobId) setExpandedDraftMap(prev => { const n = { ...prev }; delete n[cobId]; return n; });
@@ -1179,18 +1194,62 @@ export default function Cora({ tenantDbId, userId }) {
     return true;
   });
 
-  // Extrato — pagamentos recebidos com dados ricos
+  // Extrato — pagamentos recebidos com dados ricos, filtrados por período
+  const dataPagamento = (c) => c.payment_date || c.confirmed_date || c.vencimento;
+
+  // Janela de datas (YYYY-MM-DD) conforme o período selecionado.
+  const janelaExtrato = (() => {
+    const hoje = new Date();
+    // Constrói YYYY-MM-DD no fuso LOCAL (toISOString usa UTC e, à noite no BRT,
+    // adianta um dia — quebraria o filtro "este mês"/"últimos 30 dias").
+    const ymd = (d) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    if (extratoPeriodo === 'mes') {
+      const ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+      return { de: ymd(ini), ate: ymd(hoje) };
+    }
+    if (extratoPeriodo === '30d') {
+      const ini = new Date(hoje);
+      ini.setDate(ini.getDate() - 30);
+      return { de: ymd(ini), ate: ymd(hoje) };
+    }
+    if (extratoPeriodo === 'custom') {
+      return { de: extratoDe || null, ate: extratoAte || null };
+    }
+    return { de: null, ate: null }; // 'tudo'
+  })();
+
   const extrato = cobrancasV2
-    .filter(c => c.status === 'received' && (c.payment_date || c.confirmed_date || c.vencimento))
-    .sort((a, b) => {
-      const da = a.payment_date || a.confirmed_date || a.vencimento;
-      const db = b.payment_date || b.confirmed_date || b.vencimento;
-      return db.localeCompare(da);
-    });
+    .filter(c => c.status === 'received' && dataPagamento(c))
+    .filter(c => {
+      const dia = dataPagamento(c).slice(0, 10);
+      if (janelaExtrato.de && dia < janelaExtrato.de) return false;
+      if (janelaExtrato.ate && dia > janelaExtrato.ate) return false;
+      return true;
+    })
+    .sort((a, b) => dataPagamento(b).slice(0, 10).localeCompare(dataPagamento(a).slice(0, 10)));
 
   const totalRecebidoBruto = extrato.reduce((s, c) => s + Number(c.valor), 0);
   const totalRecebidoLiquido = extrato.reduce((s, c) => s + Number(c.net_value ?? c.valor), 0);
   const totalTaxaAsaas = totalRecebidoBruto - totalRecebidoLiquido;
+
+  // Rótulo legível do período selecionado (mostra de quando são os dados).
+  const fmtDiaBR = (ymd) => {
+    if (!ymd) return null;
+    const [a, m, d] = ymd.split('-');
+    return `${d}/${m}/${a}`;
+  };
+  const rotuloPeriodoExtrato = (() => {
+    if (extratoPeriodo === 'tudo') return 'Todo o histórico';
+    if (extratoPeriodo === 'mes') return 'Este mês';
+    if (extratoPeriodo === '30d') return 'Últimos 30 dias';
+    const de = fmtDiaBR(janelaExtrato.de);
+    const ate = fmtDiaBR(janelaExtrato.ate);
+    if (de && ate) return `De ${de} a ${ate}`;
+    if (de) return `A partir de ${de}`;
+    if (ate) return `Até ${ate}`;
+    return 'Período personalizado';
+  })();
 
   const billingBreakdown = {};
   cobrancasV2.forEach(c => {
@@ -1324,8 +1383,8 @@ export default function Cora({ tenantDbId, userId }) {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                     <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>Recebido</div><div style={{ fontWeight: 700, color: 'var(--success)', fontSize: 15 }}>{fmtBRL(rec30.reduce((s, c) => s + Number(c.valor), 0))}</div></div>
                     <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>Confirmados</div><div style={{ fontWeight: 700, color: '#0ea5e9', fontSize: 15 }}>{rec30.filter(c => c.confirmed_date).length} cobranças</div></div>
-                    <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>A receber</div><div style={{ fontWeight: 700, color: '#D97706', fontSize: 15 }}>{fmtBRL(pend30.reduce((s, c) => s + Number(c.valor), 0))}</div></div>
-                    <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>Inadimplência</div><div style={{ fontWeight: 700, color: 'var(--red)', fontSize: 15 }}>{fmtBRL(over30.reduce((s, c) => s + Number(c.valor), 0))}</div></div>
+                    <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>A receber</div><div style={{ fontWeight: 700, color: '#D97706', fontSize: 15 }}>{fmtBRL(pend30.reduce((s, c) => s + Number(c.valor), 0))}</div><div style={{ fontSize: 11, color: '#D97706', marginTop: 2 }}>{pend30.length === 0 ? 'nada a receber' : `faltam ${pend30.length} cobr.`}</div></div>
+                    <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>Inadimplência</div><div style={{ fontWeight: 700, color: 'var(--red)', fontSize: 15 }}>{fmtBRL(over30.reduce((s, c) => s + Number(c.valor), 0))}</div>{over30.length > 0 && <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 2 }}>{over30.length} vencida{over30.length > 1 ? 's' : ''}</div>}</div>
                   </div>
                 </div>
               );
@@ -1341,8 +1400,8 @@ export default function Cora({ tenantDbId, userId }) {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                     <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>Recebido</div><div style={{ fontWeight: 700, color: 'var(--success)', fontSize: 15 }}>{fmtBRL(recMes.reduce((s, c) => s + Number(c.valor), 0))}</div></div>
                     <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>Confirmados</div><div style={{ fontWeight: 700, color: '#0ea5e9', fontSize: 15 }}>{recMes.filter(c => c.confirmed_date).length} cobranças</div></div>
-                    <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>A receber</div><div style={{ fontWeight: 700, color: '#D97706', fontSize: 15 }}>{fmtBRL(pendMes.reduce((s, c) => s + Number(c.valor), 0))}</div></div>
-                    <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>Inadimplência</div><div style={{ fontWeight: 700, color: 'var(--red)', fontSize: 15 }}>{fmtBRL(overMes.reduce((s, c) => s + Number(c.valor), 0))}</div></div>
+                    <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>A receber</div><div style={{ fontWeight: 700, color: '#D97706', fontSize: 15 }}>{fmtBRL(pendMes.reduce((s, c) => s + Number(c.valor), 0))}</div><div style={{ fontSize: 11, color: '#D97706', marginTop: 2 }}>{pendMes.length === 0 ? 'nada a receber' : `faltam ${pendMes.length} cobr.`}</div></div>
+                    <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>Inadimplência</div><div style={{ fontWeight: 700, color: 'var(--red)', fontSize: 15 }}>{fmtBRL(overMes.reduce((s, c) => s + Number(c.valor), 0))}</div>{overMes.length > 0 && <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 2 }}>{overMes.length} vencida{overMes.length > 1 ? 's' : ''}</div>}</div>
                   </div>
                 </div>
               );
@@ -1739,19 +1798,82 @@ export default function Cora({ tenantDbId, userId }) {
           {/* ── Sub-tab: Extrato de Pagamentos ───────────── */}
           {finSubTab === 'extrato' && (
             <>
+              {/* Seletor de período + rótulo (mostra de quando são os dados) */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {[
+                    { id: 'tudo', label: 'Tudo' },
+                    { id: 'mes', label: 'Este mês' },
+                    { id: '30d', label: 'Últimos 30 dias' },
+                    { id: 'custom', label: 'Personalizado' },
+                  ].map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => setExtratoPeriodo(p.id)}
+                      className="cv2-btn"
+                      aria-pressed={extratoPeriodo === p.id}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        borderRadius: 8,
+                        border: '1px solid var(--g-200)',
+                        background: extratoPeriodo === p.id ? 'var(--accent)' : 'var(--g-50)',
+                        color: extratoPeriodo === p.id ? '#fff' : 'var(--tx-2)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                {extratoPeriodo === 'custom' && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+                    <input
+                      type="date"
+                      aria-label="Data de início"
+                      value={extratoDe}
+                      max={extratoAte || undefined}
+                      onChange={e => setExtratoDe(e.target.value)}
+                      style={{ padding: '5px 8px', fontSize: 12, borderRadius: 8, border: '1px solid var(--g-200)' }}
+                    />
+                    <span style={{ fontSize: 12, color: 'var(--g-400)' }}>até</span>
+                    <input
+                      type="date"
+                      aria-label="Data de fim"
+                      value={extratoAte}
+                      min={extratoDe || undefined}
+                      onChange={e => setExtratoAte(e.target.value)}
+                      style={{ padding: '5px 8px', fontSize: 12, borderRadius: 8, border: '1px solid var(--g-200)' }}
+                    />
+                    {(extratoDe || extratoAte) && (
+                      <button
+                        onClick={() => { setExtratoDe(''); setExtratoAte(''); }}
+                        style={{ padding: '5px 8px', fontSize: 12, borderRadius: 8, border: '1px solid var(--g-200)', background: 'var(--g-50)', color: 'var(--tx-2)', cursor: 'pointer' }}
+                      >
+                        🔄 Limpar
+                      </button>
+                    )}
+                  </div>
+                )}
+                <span style={{ fontSize: 12, color: 'var(--g-500)', fontWeight: 600, marginLeft: 'auto' }}>
+                  📅 {rotuloPeriodoExtrato}
+                </span>
+              </div>
+
               {/* KPIs do extrato */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
-                <div className="cv2-kpi">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 24 }}>
+                <div className="cv2-kpi" style={{ minWidth: 0 }}>
                   <div className="cv2-kpi l">Total recebido (bruto)</div>
                   <div className="cv2-kpi v" style={{ marginTop: 8, color: 'var(--success)' }}>{fmtBRL(totalRecebidoBruto)}</div>
                   <div className="kpi-delta neutral" style={{ marginTop: 10 }}>{extrato.length} pagamentos confirmados</div>
                 </div>
-                <div className="cv2-kpi">
+                <div className="cv2-kpi" style={{ minWidth: 0 }}>
                   <div className="cv2-kpi l">Total líquido (após taxa)</div>
                   <div className="cv2-kpi v accent" style={{ marginTop: 8 }}>{fmtBRL(totalRecebidoLiquido)}</div>
                   <div className="kpi-delta down" style={{ marginTop: 10 }}>−{fmtBRL(totalTaxaAsaas)} em taxas Asaas</div>
                 </div>
-                <div className="cv2-kpi">
+                <div className="cv2-kpi" style={{ minWidth: 0 }}>
                   <div className="cv2-kpi l">Taxa média Asaas</div>
                   <div className="cv2-kpi v" style={{ marginTop: 8 }}>
                     {totalRecebidoBruto > 0 ? `${((totalTaxaAsaas / totalRecebidoBruto) * 100).toFixed(2)}%` : '—'}

@@ -4,15 +4,15 @@
  * Carnaval e Corpus Christi facultativo NÃO listados: empresa trabalha nesses dias.
  */
 
-// 2026: Páscoa 04-20, Corpus Christi 06-11
-// 2027: Páscoa 04-05, Corpus Christi 06-03
+// Datas móveis derivam do domingo de Páscoa: 2026 → 05-abr (Sexta-feira Santa 03-abr);
+// 2027 → 28-mar (Sexta-feira Santa 26-mar). Tiradentes é data FIXA (21-abr todo ano).
+// Domingo de Páscoa não entra na lista: domingo já é bloqueado pela regra de horário.
 export const FERIADOS_NACIONAIS_POR_ANO: Record<number, string[]> = {
   2026: [
     "01-01", // Confraternização Universal
-    "04-20", // Páscoa
+    "04-03", // Sexta-feira Santa (Paixão de Cristo)
     "04-21", // Tiradentes
     "05-01", // Dia do Trabalho
-    "06-11", // Corpus Christi
     "09-07", // Independência
     "10-12", // Nossa Senhora Aparecida
     "11-02", // Finados
@@ -22,10 +22,9 @@ export const FERIADOS_NACIONAIS_POR_ANO: Record<number, string[]> = {
   ],
   2027: [
     "01-01", // Confraternização Universal
-    "04-05", // Páscoa
-    "04-06", // Tiradentes (terça após Páscoa — verificar decreto)
+    "03-26", // Sexta-feira Santa (Paixão de Cristo)
+    "04-21", // Tiradentes
     "05-01", // Dia do Trabalho
-    "06-03", // Corpus Christi
     "09-07", // Independência
     "10-12", // Nossa Senhora Aparecida
     "11-02", // Finados

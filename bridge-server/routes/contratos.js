@@ -128,7 +128,7 @@ module.exports = function contratosRouter({
   // ── Helper: buscar instância Evolution ─────────────────────────────────────
   async function fetchEvolutionInst(tenantId) {
     const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/evolution_instances?tenant_id=eq.${encodeURIComponent(tenantId)}&ativo=eq.true&limit=1`,
+      `${SUPABASE_URL}/rest/v1/evolution_instances?tenant_id=eq.${encodeURIComponent(tenantId)}&status=eq.connected&limit=1`,
       { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }
     );
     if (!r.ok) return null;
@@ -136,7 +136,7 @@ module.exports = function contratosRouter({
     if (rows?.[0]) return rows[0];
     // fallback: qualquer instância ativa
     const r2 = await fetch(
-      `${SUPABASE_URL}/rest/v1/evolution_instances?ativo=eq.true&limit=1`,
+      `${SUPABASE_URL}/rest/v1/evolution_instances?status=eq.connected&limit=1`,
       { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }
     );
     const rows2 = await r2.json();
