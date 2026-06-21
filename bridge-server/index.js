@@ -1393,6 +1393,10 @@ app.use('/api/publico', require('./routes/publico-avaliacao')({ sbFetch }));
 app.use('/api', require('./routes/avaliacao-link')({ requireJwt, sbFetch, assertTenantMember }));
 app.use('/api', require('./routes/avaliacao-resumo')({ requireJwt, sbFetch, assertTenantMember }));
 
+// ── NPS de Marca: página pública + link autenticado ───────────────────────────
+app.use('/api/publico', require('./routes/publico-nps')({ sbFetch }));
+app.use('/api', require('./routes/nps-link')({ requireJwt, sbFetch, assertTenantMember }));
+
 // ── S2-G05 — DELI Semáforo: aprovações pendentes ─────────────────────────────
 app.use('/api', require('./routes/deli-approvals')({
   requireJwt,
