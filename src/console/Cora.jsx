@@ -995,7 +995,7 @@ export default function Cora({ tenantDbId, userId }) {
       const r = await fetch(`${BRIDGE}/agents/cora-gerar-mensagem-asaas/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ tenant_id: tenantDbId, cobranca_v2_id: cob.id }),
+        body: JSON.stringify({ tenant_id: tenantDbId, payload: { cobranca_v2_id: cob.id } }),
       });
       if (!r.ok) {
         const e = await r.json();
@@ -1545,12 +1545,12 @@ export default function Cora({ tenantDbId, userId }) {
                 <span style={{ marginLeft: 4, fontSize: 12, color: 'var(--tx-2)', background: 'var(--g-100)', borderRadius: 10, padding: '1px 8px' }}>{vencidasPorCliente.length}</span>
               </div>
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed' }}>
                   <thead>
                     <tr style={{ background: 'var(--g-50)' }}>
-                      <th style={{ padding: '8px 16px', textAlign: 'left', fontWeight: 600 }}>Cliente</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Telefone</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Faturas</th>
+                      <th style={{ padding: '8px 16px', textAlign: 'left', fontWeight: 600, width: '22%' }}>Cliente</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, width: '14%' }}>Telefone</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, width: '7%' }}>Faturas</th>
                       <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>Total</th>
                       <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Maior atraso</th>
                       <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Forma</th>
@@ -1576,8 +1576,8 @@ export default function Cora({ tenantDbId, userId }) {
                       return (
                         <Fragment key={i}>
                         <tr style={{ borderTop: '1px solid var(--g-100)' }}>
-                          <td style={{ padding: '8px 16px' }}>{cli.name}</td>
-                          <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>{cli.phone || <span style={{ color: 'var(--tx-3)' }}>—</span>}</td>
+                          <td style={{ padding: '8px 16px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={cli.name}>{cli.name}</td>
+                          <td style={{ padding: '8px 12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cli.phone || <span style={{ color: 'var(--tx-3)' }}>—</span>}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'center' }}>{cli.items.length}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--red)', fontWeight: 600 }}>{fmtBRL(cli.total)}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'center' }}>
@@ -1644,18 +1644,18 @@ export default function Cora({ tenantDbId, userId }) {
                 <span style={{ marginLeft: 4, fontSize: 12, color: 'var(--tx-2)', background: 'var(--g-100)', borderRadius: 10, padding: '1px 8px' }}>{venceEm7Dias.length}</span>
               </div>
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed' }}>
                   <thead>
                     <tr style={{ background: 'var(--g-50)' }}>
-                      <th style={{ padding: '8px 16px', textAlign: 'left', fontWeight: 600 }}>Cliente</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Telefone</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>Valor</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Vencimento</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Faltam</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Forma</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Fatura</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Status</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Ação</th>
+                      <th style={{ padding: '8px 16px', textAlign: 'left', fontWeight: 600, width: '20%' }}>Cliente</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, width: '13%' }}>Telefone</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600, width: '10%' }}>Valor</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, width: '10%' }}>Vencimento</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, width: '8%' }}>Faltam</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, width: '8%' }}>Forma</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, width: '8%' }}>Fatura</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, width: '9%' }}>Status</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, width: '14%' }}>Ação</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1675,8 +1675,8 @@ export default function Cora({ tenantDbId, userId }) {
                       return (
                         <Fragment key={i}>
                         <tr style={{ borderTop: '1px solid var(--g-100)' }}>
-                          <td style={{ padding: '8px 16px' }}>{c.customer_name || '—'}</td>
-                          <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>{c.customer_phone || <span style={{ color: 'var(--tx-3)' }}>—</span>}</td>
+                          <td style={{ padding: '8px 16px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.customer_name || ''}>{c.customer_name || '—'}</td>
+                          <td style={{ padding: '8px 12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.customer_phone || <span style={{ color: 'var(--tx-3)' }}>—</span>}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>{fmtBRL(Number(c.valor))}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'center' }}>{c.vencimento.split('-').reverse().join('/')}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'center' }}>
