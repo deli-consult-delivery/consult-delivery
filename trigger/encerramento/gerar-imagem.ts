@@ -529,8 +529,9 @@ Retorne: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme":"..
 // ─── Task on-demand ───────────────────────────────────────────────────────────
 
 export const encerramentoGerarImagem = task({
-  id:    "encerramento-gerar-imagem",
-  retry: { maxAttempts: 2, minTimeoutInMs: 5000 },
+  id:         "encerramento-gerar-imagem",
+  maxDuration: 600, // LLM ~120s + 2 imagens ~180s cada
+  retry:      { maxAttempts: 2, minTimeoutInMs: 5000 },
 
   run: async (payload: unknown, { ctx }) => {
     const input = InputSchema.parse(payload ?? {});

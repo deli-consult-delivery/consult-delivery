@@ -23,7 +23,7 @@ export interface ChatResponse {
   tokens_out?: number;
 }
 
-const TIMEOUT_MS = 60_000;
+const TIMEOUT_MS = 120_000;
 
 // ─── Ollama Cloud ─────────────────────────────────────────────────────────────
 async function chatOllamaCloud(messages: ChatMessage[]): Promise<ChatResponse> {
