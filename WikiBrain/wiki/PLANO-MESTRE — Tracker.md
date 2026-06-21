@@ -43,7 +43,7 @@ A sessão **Cowork** (desktop) parou aqui e passou o bastão para a **sessão Cl
 
 ## 🔴 Onde parou
 
-_Última sessão: 2026-06-21 (VPS — **sessão 78/79: Feature CSAT — avaliação de atendimento pós-fechamento end-to-end ([PR #452](https://github.com/deli-consult-delivery/consult-delivery/pull/452)).** **Contexto:** Implementação completa do sistema CSAT conforme `docs/features/csat-avaliacao-atendimento-PLANO-FINAL.md`. Migration `20260621_001_atendimento_avaliacoes.sql` aplicada: tabela com RLS multi-tenant, trigger `AFTER UPDATE OF status_v2 ON conversations WHEN NEW.status_v2='closed'` (SECURITY DEFINER, idempotente via ON CONFLICT DO NOTHING), token público UUID TTL 60d. Bridge: 3 routers — `publico-avaliacao.js` (GET/POST /api/publico/avaliacao/:token, rate-limit 60/min, anti-dupla atômica), `avaliacao-link.js` (GET /api/avaliacao/link, JWT), `avaliacao-resumo.js` (POST /api/avaliacao/resumo, JWT, Claude Haiku). Frontend público `AvaliacaoPublica.jsx` roteada em /avaliacao/:token (typeform-style, mobile-first, LGPD). Console v2 `AtendimentoAvaliacoes.jsx`: KPIs CSAT%/média/respondidas/taxa, distribuição 1-5, ranking por atendente, comentários, bloco detratores (nota ≤ 2 + tratativas), link copiável, QR via qrcode.react, card Resumo IA. Build: `✓ built in 6.51s`. **⚠️ Pendente: merge do PR #452 pelo Wandson + deploy do bridge (pm2 restart) + validação no browser.** **Track: T8/novas features.**)_
+_Última sessão: 2026-06-21 (VPS — **sessão 79/80: CSAT — Resumo IA migrado de Claude Haiku para Ollama/Kimi K2.6 + PR #452 mergeado.** **Contexto:** Wandson pediu trocar o endpoint `POST /api/avaliacao/resumo` de Claude Haiku (Anthropic direto) para o mesmo Kimi K2.6 usado por bom-dia e breno via Ollama. Como `llm-client.ts` é TypeScript/Trigger.dev e não pode ser `require()`d pelo bridge, replicamos o padrão em JS puro: `OLLAMA_BASE_URL/api/chat`, `stream:false, format:'json'`, `data.message?.content`, AbortController 120s. **Entregue:** `bridge-server/routes/avaliacao-resumo.js` reescrito (commit `ac102c4`, branch `wandson/csat-avaliacao-atendimento`). **PR #452** squash-mergeado em main (SHA `aa642ff6`). **⚠️ Pendente do Wandson:** `pm2 restart bridge-server` na VPS (3 novos routers só carregam após restart) + validação no browser (`AtendimentoAvaliacoes.jsx` + formulário público `/avaliacao/:token`). **Track: T8/novas features.**)_
 
 _Sessão anterior: 2026-06-21 (VPS — **sessão 77/78: Layout tabelas CORA + Gerar lembrete corrigido (PR #450 squash-mergeado, SHA `c1ecbe8`).** **Contexto:** Wandson reportou 2 bugs visuais: (1) "informações saindo fora do bloco" — coluna CLIENTE nas tabelas Vencidas e 7 dias sem truncação expandia as colunas; (2) "Gerar lembrete não faz nada" — bridge extrai `const { tenant_id, payload = {} } = req.body`; como o frontend enviava `cobranca_v2_id` na raiz do body, era descartado; Zod parse falhava silenciosamente. **Fix (19 linhas, 1 arquivo):** `tableLayout: 'fixed'` + `width%` em todas as colunas das duas tabelas; `overflow:hidden` + `textOverflow:ellipsis` + `whiteSpace:nowrap` em CLIENTE/TELEFONE; `cobranca_v2_id` movido para `payload: { cobranca_v2_id }`. **⚠️ Pendente de validação visual do Wandson.** **Track: T8/Cora.**)_
 
@@ -342,16 +342,23 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 
 ## 📋 Log de sessões
 
-### 2026-06-21 (sessão 78/79 — CSAT avaliação de atendimento end-to-end — PR #452)
+### 2026-06-21 (sessão 79/80 — CSAT Resumo IA: Claude Haiku → Ollama/Kimi K2.6 + merge PR #452)
+
+- **Mudança:** `bridge-server/routes/avaliacao-resumo.js` reescrito — remove Anthropic direct API, usa Ollama `/api/chat` com `kimi-k2.6:cloud` (mesmo provider de bom-dia/breno)
+- **Padrão Ollama (JS puro, não TypeScript):** `OLLAMA_BASE_URL/api/chat`, `stream:false, format:'json'`, `data.message?.content`, AbortController 120s
+- **Commit:** `ac102c4` na branch `wandson/csat-avaliacao-atendimento`
+- **PR #452** squash-mergeado em main (SHA `aa642ff6`) via GitHub MCP
+- **Pendente do Wandson:** `pm2 restart bridge-server` na VPS + validação visual no browser
+
+### 2026-06-21 (sessão 78/79 — CSAT avaliação de atendimento end-to-end — PR #452 ✅ mergeado)
 
 - **Feature:** `atendimento_avaliacoes` — coleta de satisfação (1-5 estrelas) via link tokenizado após fechamento de conversa
 - **Migration aplicada:** tabela + RLS + trigger automático ao fechar + 5 índices
-- **Bridge (3 endpoints):** GET/POST público por token (rate-limited, anti-dupla atômica), GET link autenticado, POST resumo IA (Claude Haiku)
+- **Bridge (3 endpoints):** GET/POST público por token (rate-limited, anti-dupla atômica), GET link autenticado, POST resumo IA
 - **Frontend público:** `AvaliacaoPublica.jsx` — typeform-style, LGPD, roteada em `/avaliacao/:token`
 - **Console v2:** `AtendimentoAvaliacoes.jsx` — KPIs CSAT%, distribuição, ranking atendente, detratores + tratativas, QR, Resumo IA
 - **Build:** `✓ 6.51s`, zero erros
-- **PR:** [#452](https://github.com/deli-consult-delivery/consult-delivery/pull/452) — aguardando merge
-- **Pendente:** merge + `pm2 restart bridge-server` na VPS + validação visual no browser
+- **PR:** [#452](https://github.com/deli-consult-delivery/consult-delivery/pull/452) — ✅ squash-mergeado (SHA `aa642ff6`)
 
 ---
 
