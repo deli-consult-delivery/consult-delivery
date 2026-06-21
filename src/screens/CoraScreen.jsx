@@ -152,7 +152,7 @@ function NovaCobrancaModal({ tenantDbId, onClose, onCreated }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={onClose}>
-      <div style={{ background: 'var(--surface, #1a1a1a)', borderRadius: 12, padding: 24, width: 440, maxWidth: '95vw' }}
+      <div className="modal-mobile" style={{ background: 'var(--surface, #1a1a1a)', borderRadius: 12, padding: 24, width: 440, maxWidth: '95vw' }}
         onClick={e => e.stopPropagation()}>
         <h3 style={{ margin: '0 0 20px', fontSize: 16, fontWeight: 700 }}>Nova Cobrança</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -239,7 +239,7 @@ function NovaCobrancaAsaasModal({ tenantDbId, userId, onClose, onCreated }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={onClose}>
-      <div style={{ background: 'var(--surface, #1a1a1a)', borderRadius: 12, padding: 24, width: 480, maxWidth: '95vw' }}
+      <div className="modal-mobile" style={{ background: 'var(--surface, #1a1a1a)', borderRadius: 12, padding: 24, width: 480, maxWidth: '95vw' }}
         onClick={e => e.stopPropagation()}>
         <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700 }}>Nova Cobrança Asaas</h3>
         <p style={{ margin: '0 0 20px', fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>Cria cobrança via Asaas (Trigger.dev)</p>
@@ -813,7 +813,7 @@ export default function CoraScreen({ tenant, tenantDbId, userId }) {
   const selectedV2 = cobrancasV2.find(c => c.id === selectedV2Id);
 
   return (
-    <div className="route-enter" style={{ padding: 32, maxWidth: 1400, margin: '0 auto' }}>
+    <div className="route-enter cora-screen" style={{ maxWidth: 1400, margin: '0 auto' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -864,7 +864,7 @@ export default function CoraScreen({ tenant, tenantDbId, userId }) {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 2, marginBottom: 16, borderBottom: '1px solid var(--g-200)' }}>
+      <div className="tabs-scroll" style={{ display: 'flex', gap: 2, marginBottom: 16, borderBottom: '1px solid var(--g-200)' }}>
         {[
           { id: 'inad', label: 'Em aberto', count: emAberto.length },
           { id: 'escalonados', label: 'Escalonados', count: escalonados.length },
@@ -892,105 +892,109 @@ export default function CoraScreen({ tenant, tenantDbId, userId }) {
           <div style={{ padding: 60, textAlign: 'center', color: 'var(--g-500)' }}>
             {tab === 'inad' ? '🎉 Nenhuma cobrança em aberto!' : tab === 'escalonados' ? '✅ Sem escalonamentos pendentes.' : tab === 'asaas' ? '📭 Nenhuma cobrança Asaas registrada.' : '💰 Nenhum pagamento registrado ainda.'}
           </div>
-        ) : tab === 'asaas' ? (
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Cliente</th>
-                <th>Tipo</th>
-                <th>Valor</th>
-                <th>Atraso</th>
-                <th>Vencimento</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tabCobrancas.map(c => {
-                const dias = diasAtraso(c.vencimento);
-                return (
-                  <tr key={c.id} onClick={() => setSelectedV2Id(c.id)} style={{ cursor: 'pointer' }}>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <UserAvatar name={c.customer_name.slice(0, 2).toUpperCase()} size={32} />
-                        <div style={{ fontWeight: 600 }}>{c.customer_name}</div>
-                      </div>
-                    </td>
-                    <td style={{ fontSize: 12, color: 'var(--g-600)' }}>{c.billing_type}</td>
-                    <td style={{ fontWeight: 700, color: c.status === 'overdue' ? 'var(--red)' : 'var(--g-900)', fontVariantNumeric: 'tabular-nums' }}>
-                      {fmtBRL(c.valor)}
-                    </td>
-                    <td>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: dias > 30 ? 'var(--red)' : dias > 10 ? 'var(--warn)' : 'var(--g-700)' }}>
-                        {dias > 0 ? `${dias} ${dias === 1 ? 'dia' : 'dias'}` : '—'}
-                      </span>
-                    </td>
-                    <td style={{ fontSize: 12, color: 'var(--g-600)' }}>
-                      {new Date(c.vencimento).toLocaleDateString('pt-BR')}
-                    </td>
-                    <td><StatusBadgeV2 status={c.status} /></td>
-                    <td style={{ textAlign: 'right' }}>
-                      <button className="btn-ghost" style={{ fontSize: 12 }}
-                        onClick={(e) => { e.stopPropagation(); setSelectedV2Id(c.id); }}>
-                        <Icon name="eye" size={12} /> Ver
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
         ) : (
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Cliente</th>
-                <th>Valor</th>
-                <th>Atraso</th>
-                <th>Vencimento</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tabCobrancas.map(c => {
-                const dias = diasAtraso(c.data_vencimento);
-                return (
-                  <tr key={c.id} onClick={() => setSelectedId(c.id)} style={{ cursor: 'pointer' }}>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <UserAvatar name={c.customer_name.slice(0, 2).toUpperCase()} size={32} />
-                        <div>
-                          <div style={{ fontWeight: 600 }}>{c.customer_name}</div>
-                          {c.cora_analise?.nivel_risco && (
-                            <NivelRiscoBadge nivel={c.cora_analise.nivel_risco} />
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td style={{ fontWeight: 700, color: c.status === 'escalonado' ? 'var(--red)' : 'var(--g-900)', fontVariantNumeric: 'tabular-nums' }}>
-                      {fmtBRL(c.valor_atual)}
-                    </td>
-                    <td>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: dias > 30 ? 'var(--red)' : dias > 10 ? 'var(--warn)' : 'var(--g-700)' }}>
-                        {dias} {dias === 1 ? 'dia' : 'dias'}
-                      </span>
-                    </td>
-                    <td style={{ fontSize: 12, color: 'var(--g-600)' }}>
-                      {new Date(c.data_vencimento).toLocaleDateString('pt-BR')}
-                    </td>
-                    <td><StatusBadge status={c.status} /></td>
-                    <td style={{ textAlign: 'right' }}>
-                      <button className="btn-ghost" style={{ fontSize: 12 }}
-                        onClick={(e) => { e.stopPropagation(); setSelectedId(c.id); }}>
-                        <Icon name="eye" size={12} /> Ver
-                      </button>
-                    </td>
+          <div className="tbl-wrap">
+            {tab === 'asaas' ? (
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Cliente</th>
+                    <th>Tipo</th>
+                    <th>Valor</th>
+                    <th>Atraso</th>
+                    <th>Vencimento</th>
+                    <th>Status</th>
+                    <th style={{ textAlign: 'right' }}>Ações</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {tabCobrancas.map(c => {
+                    const dias = diasAtraso(c.vencimento);
+                    return (
+                      <tr key={c.id} onClick={() => setSelectedV2Id(c.id)} style={{ cursor: 'pointer' }}>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <UserAvatar name={c.customer_name.slice(0, 2).toUpperCase()} size={32} />
+                            <div style={{ fontWeight: 600 }}>{c.customer_name}</div>
+                          </div>
+                        </td>
+                        <td style={{ fontSize: 12, color: 'var(--g-600)' }}>{c.billing_type}</td>
+                        <td style={{ fontWeight: 700, color: c.status === 'overdue' ? 'var(--red)' : 'var(--g-900)', fontVariantNumeric: 'tabular-nums' }}>
+                          {fmtBRL(c.valor)}
+                        </td>
+                        <td>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: dias > 30 ? 'var(--red)' : dias > 10 ? 'var(--warn)' : 'var(--g-700)' }}>
+                            {dias > 0 ? `${dias} ${dias === 1 ? 'dia' : 'dias'}` : '—'}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: 12, color: 'var(--g-600)' }}>
+                          {new Date(c.vencimento).toLocaleDateString('pt-BR')}
+                        </td>
+                        <td><StatusBadgeV2 status={c.status} /></td>
+                        <td style={{ textAlign: 'right' }}>
+                          <button className="btn-ghost" style={{ fontSize: 12 }}
+                            onClick={(e) => { e.stopPropagation(); setSelectedV2Id(c.id); }}>
+                            <Icon name="eye" size={12} /> Ver
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            ) : (
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Cliente</th>
+                    <th>Valor</th>
+                    <th>Atraso</th>
+                    <th>Vencimento</th>
+                    <th>Status</th>
+                    <th style={{ textAlign: 'right' }}>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tabCobrancas.map(c => {
+                    const dias = diasAtraso(c.data_vencimento);
+                    return (
+                      <tr key={c.id} onClick={() => setSelectedId(c.id)} style={{ cursor: 'pointer' }}>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <UserAvatar name={c.customer_name.slice(0, 2).toUpperCase()} size={32} />
+                            <div>
+                              <div style={{ fontWeight: 600 }}>{c.customer_name}</div>
+                              {c.cora_analise?.nivel_risco && (
+                                <NivelRiscoBadge nivel={c.cora_analise.nivel_risco} />
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ fontWeight: 700, color: c.status === 'escalonado' ? 'var(--red)' : 'var(--g-900)', fontVariantNumeric: 'tabular-nums' }}>
+                          {fmtBRL(c.valor_atual)}
+                        </td>
+                        <td>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: dias > 30 ? 'var(--red)' : dias > 10 ? 'var(--warn)' : 'var(--g-700)' }}>
+                            {dias} {dias === 1 ? 'dia' : 'dias'}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: 12, color: 'var(--g-600)' }}>
+                          {new Date(c.data_vencimento).toLocaleDateString('pt-BR')}
+                        </td>
+                        <td><StatusBadge status={c.status} /></td>
+                        <td style={{ textAlign: 'right' }}>
+                          <button className="btn-ghost" style={{ fontSize: 12 }}
+                            onClick={(e) => { e.stopPropagation(); setSelectedId(c.id); }}>
+                            <Icon name="eye" size={12} /> Ver
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
         )}
       </div>
 
