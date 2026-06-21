@@ -1334,10 +1334,21 @@ export default function Cora({ tenantDbId, userId }) {
           {/* ── Sub-tab: Visão Geral ─────────────────────── */}
           {finSubTab === 'visao-geral' && <>
           {/* KPIs — linha 1: saldo + recebido + confirmadas + aguardando */}
+          {cobrancasV2.length > 0 && (() => {
+            const vencimentos = cobrancasV2.map(c => c.vencimento).filter(Boolean).sort();
+            const ini = new Date(vencimentos[0] + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
+            const fim = new Date(vencimentos[vencimentos.length - 1] + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
+            return (
+              <div style={{ fontSize: 11, color: 'var(--tx2)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+                <Icon name="info" size={11} />
+                <span>Dados históricos de <strong style={{ color: 'var(--g-700)' }}>{ini}</strong> a <strong style={{ color: 'var(--g-700)' }}>{fim}</strong> · {cobrancasV2.length} cobranças carregadas</span>
+              </div>
+            );
+          })()}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 12 }}>
             <div className="cv2-kpi" style={{ borderLeft: '3px solid #2563eb' }}>
               <div className="cv2-kpi l">Saldo Asaas</div>
-              <div className="cv2-kpi v" style={{ marginTop: 8, color: '#2563eb', fontSize: 20 }}>
+              <div className="cv2-kpi v" style={{ marginTop: 8, color: '#2563eb' }}>
                 {loadingSaldo ? '…' : saldoAsaas !== null ? fmtBRL(saldoAsaas) : '—'}
               </div>
               <div className="kpi-delta neutral" style={{ marginTop: 10 }}><Icon name="info" size={11} /> Conta Asaas</div>
