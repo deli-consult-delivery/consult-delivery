@@ -1,5 +1,24 @@
 # Wiki Log
 
+## 2026-06-21 — Sessão 75/76: Fit Cobrança da CORA — 6 bugs corrigidos (PR #444) [T8 — Cora / financeiro]
+
+**Contexto:** Wandson identificou 6 problemas no dashboard da CORA após teste no browser. Sessão resolveu todos de forma completa.
+
+**Bugs corrigidos:**
+
+- **Bug 1 — LLM errado:** Tasks Cora usavam Anthropic Haiku via `anthropic.messages.create()`. Migradas para `chat()` do `trigger/agents/llm-client.ts` que roteia para Kimi K2.6 via Ollama (`LLM_PROVIDER=ollama-cloud`). Arquivos: `gerar-mensagem.ts`, `gerar-mensagem-asaas.ts`, `processar-cobranca.ts`. Padrão: remover `import Anthropic + new Anthropic()`, substituir chamada por `await chat([{role:"system",...},{role:"user",...}])`, usar `result.content`.
+- **Bug 2 — KPI cards overflow em CoraScreen.jsx:** `gridTemplateColumns: 'repeat(4, 1fr)'` não quebrava em telas menores. Fix: `repeat(auto-fit, minmax(160px, 1fr))` com `minWidth: 0` nos cards.
+- **Bug 3 — "Recebido este mês" usando data errada:** filtrava por `vencimento` (data de vencimento) em vez de `payment_date || confirmed_date` (data real do pagamento). Corrigido no bar chart dos 6 meses (chartData) em `Cora.jsx`.
+- **Bug 4 — Dois blocos de período:** adicionados side-by-side ("Últimos 30 dias" + "Mês atual") com 4 KPIs cada (Recebido/Confirmados/A receber/Inadimplência). Recebidos calculados com `payment_date || confirmed_date`.
+- **Bug 5 — Tabelas incompletas:** "Vencidas" e "Próx. 7 dias" ganharam colunas Forma (badge PIX/Boleto/Cartão colorido com cores específicas) e Fatura (link clicável via `invoice_url || bank_slip_url`).
+- **Bug 6 — Mensagem sem link de pagamento:** `gerar-mensagem-asaas.ts` não buscava `invoice_url`, `bank_slip_url`, `pix_qr_code`, `billing_type`. Select expandido + variáveis `linkPagamento`/`pixCopiaECola` + prompt inclui os links + `metadata.link_pagamento` no draft.
+
+**Deploy:** PR #444 squash-mergeado (`dab7d3c` em main). Trigger.dev v20260621.3 (75 tasks) deployado com sucesso.
+
+**Track: T8/Cora.** Próxima ação: abrir browser, ir em Cora → Financeiro → Visão Geral e verificar (1) dois blocos de período side-by-side, (2) badges e links nas tabelas, (3) "Recebido" bate com dados reais Asaas, (4) gerar mensagem inclui link de pagamento.
+
+---
+
 ## 2026-06-20 — Sessão 74/75: Debug cora-gerar-mensagem-asaas — 3 bugs root-cause corrigidos + migration nullable (PR #442) [T8 — Cora / financeiro]
 
 **Contexto:** Fluxo "Gerar mensagem → Preview → Aprovar → Enviar WhatsApp" travava: spinner ficava ~20s e voltava sem draft em `agent_drafts`. Trigger.dev não mostrava erro porque o task dispara async (Bridge retorna 202 imediatamente). Investigação top-down revelou 3 bugs simultâneos no caminho de persistência.
