@@ -11,7 +11,8 @@
 // ════════════════════════════════════════════════════════════════════════════
 
 const express = require('express');
-const fetch   = require('node-fetch');
+// Node 22 expõe `fetch` global nativo — sem dependência de node-fetch (ESM-only,
+// não é `require`-ável). Mesmo padrão dos demais routers do bridge.
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL;
 const OLLAMA_API_KEY  = process.env.OLLAMA_API_KEY;
