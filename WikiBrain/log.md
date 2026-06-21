@@ -1,5 +1,20 @@
 # Wiki Log
 
+## 2026-06-21 — Sessão 77/78: Layout tabelas CORA + Gerar lembrete corrigido (PR #450) [T8 — Cora / financeiro]
+
+**Contexto:** Wandson reportou 2 bugs no dashboard CORA após o PR #448: (1) "informações saindo fora do bloco" — coluna CLIENTE sem truncação expandia as tabelas; (2) "Gerar lembrete não faz nada" — botão chamava o bridge mas `cobranca_v2_id` era enviado na raiz do body e descartado silenciosamente.
+
+**Correções (`src/console/Cora.jsx`, 19 linhas):**
+
+- **Layout:** `tableLayout: 'fixed'` + `width%` em todas as colunas das duas tabelas (Vencidas por cliente + Vencem em 7 dias). CLIENTE e TELEFONE receberam `overflow: hidden` + `textOverflow: ellipsis` + `whiteSpace: nowrap` + `title` para ver o nome completo no hover.
+- **Gerar lembrete:** root cause — bridge extrai `const { tenant_id, payload = {} } = req.body`, então `cobranca_v2_id` enviado na raiz do body nunca chegava ao Trigger.dev (Zod parse falhava silenciosamente no task). Fix: `body: JSON.stringify({ tenant_id, payload: { cobranca_v2_id: cob.id } })`.
+
+**Deploy:** PR #450 squash-mergeado (SHA `c1ecbe8`). Frontend em build pelo GitHub Actions (~3 min).
+
+**Track: T8/Cora.** Próxima ação: validação visual do Wandson — clicar Gerar lembrete e confirmar que o draft aparece com texto, e que as tabelas ficam dentro do bloco.
+
+---
+
 ## 2026-06-21 — Sessão 76/77: Revisão completa do dashboard CORA — 8 reclamações do Wandson (PR #448) [T8 — Cora / financeiro]
 
 **Contexto:** Wandson revisou o dashboard da CORA (cobrança via WhatsApp, em desenvolvimento) e listou 8 problemas: (1) "Gerar mensagem" não gera; (2) "Gerar lembrete" não gera; (3) sem opção de enviar manualmente ao cliente; (4) não vê o texto da mensagem; (5) sem data de vencimento na Régua; (6) sem telefone na tabela "Vencem nos próximos 7 dias"; (7) sem visibilidade de enviado/visualizado no WhatsApp; (8) layout bagunçado com informação vazando dos blocos.
