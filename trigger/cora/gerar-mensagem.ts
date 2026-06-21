@@ -120,7 +120,7 @@ A mensagem deve ser em português brasileiro natural, adequada ao relacionamento
       agent_name:     "cora",
       channel:        input.canal,
       subject:        `Cobrança — ${cob.customer_name}`,
-      body:           result.mensagem,
+      content:        result.mensagem,
       status:         "pending",
       autonomy_level: modo,
       metadata: {
