@@ -139,7 +139,7 @@ NÃO use markdown ao redor do JSON. Responda SOMENTE o JSON.`;
         agent_name:     "cora",
         channel:        "whatsapp",
         subject:        `Cobrança — ${cob.customer_name}`,
-        body:           mensagem,
+        content:        mensagem,
         status:         "pending",
         autonomy_level: autonomyLevel,
         metadata: {
