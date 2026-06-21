@@ -1,6 +1,6 @@
 import { task } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
-import Anthropic from "@anthropic-ai/sdk";
+import { chat } from "../agents/llm-client";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 
@@ -27,9 +27,6 @@ export const coraGerarMensagem = task({
     const start = Date.now();
     const input = InputSchema.parse(payload);
     const sb = getSupabase();
-
-    // Instanciado dentro do run() para evitar throw no topo de módulo (anti-padrão #4)
-    const anthropic = new Anthropic();
 
     // Lê modo do tenant em tenant_agent_config
     const { data: agentCfg } = await sb
@@ -96,17 +93,11 @@ Retorne APENAS JSON válido:
 NÃO inclua o JSON dentro de markdown. Retorne APENAS o JSON bruto.
 A mensagem deve ser em português brasileiro natural, adequada ao relacionamento com pequenos empresários de delivery.`;
 
-    const response = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 1000,
-      system: "Você é CORA, especialista em cobrança amigável. Responda SEMPRE em JSON válido sem markdown.",
-      messages: [{ role: "user", content: prompt }],
-    });
-
-    const rawText = response.content
-      .filter((b) => b.type === "text")
-      .map((b) => (b as Anthropic.TextBlock).text)
-      .join("");
+    const llmResult = await chat([
+      { role: "system", content: "Você é CORA, especialista em cobrança amigável. Responda SEMPRE em JSON válido sem markdown." },
+      { role: "user", content: prompt },
+    ]);
+    const rawText = llmResult.content;
 
     let result: z.infer<typeof OutputSchema>;
     try {

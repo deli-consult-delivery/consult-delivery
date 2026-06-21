@@ -813,7 +813,7 @@ export default function CoraScreen({ tenant, tenantDbId, userId }) {
       </div>
 
       {/* KPIs */}
-      <div className="cora-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+      <div className="cora-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginBottom: 24 }}>
         <div className="kpi">
           <div className="kpi-label">Total a receber</div>
           <div className="kpi-value accent" style={{ marginTop: 8 }}>{fmtBRL(totalAberto)}</div>
