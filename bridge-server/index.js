@@ -1388,6 +1388,11 @@ app.use('/api', require('./routes/publico-aprovacao')({
   supabaseInsert,
 }));
 
+// ── CSAT — Avaliação de Atendimento: link autenticado + dashboard público ─────
+app.use('/api/publico', require('./routes/publico-avaliacao')({ sbFetch }));
+app.use('/api', require('./routes/avaliacao-link')({ requireJwt, sbFetch, assertTenantMember }));
+app.use('/api', require('./routes/avaliacao-resumo')({ requireJwt, sbFetch, assertTenantMember }));
+
 // ── S2-G05 — DELI Semáforo: aprovações pendentes ─────────────────────────────
 app.use('/api', require('./routes/deli-approvals')({
   requireJwt,
