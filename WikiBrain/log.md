@@ -1,5 +1,29 @@
 # Wiki Log
 
+## 2026-06-21 — Sessão 81/82: NPS de Marca — módulo completo fim-a-fim (PR #458) [T8 — novas features]
+
+**Contexto:** Implementação do módulo NPS de Marca (fidelidade à marca, separado do CSAT de atendimento 1-5). Escala 0-10. NPS = %Promotores(9-10) − %Detratores(0-6). Passivos = 7-8. Cooldown 30 dias por contato (`whatsapp_chat_id`). Token público com 60 dias de expiração. Constraint de segurança permanente: endpoint público usa service-role via Bridge (sem anon key, sem policy permissiva para anon), NUNCA retorna PII (telefone, conversation_id, tenant_id, UUID do atendente, nenhum campo tratativa_*).
+
+**Entregues (8 arquivos + 1 migration aplicada):**
+
+- **Migration `20260621_002_nps_avaliacoes` (`{"success":true}`):** tabela `nps_avaliacoes` (id, tenant_id, contact_identifier, contact_nome, origin_conversation_id, public_token UUID UNIQUE, public_token_expires_at 60d, nota 0-10 nullable, comentario, status pendente/respondida/expirada, responded_at, tratativa_status na/pendente/em_andamento/resolvido, tratativa_obs/by/at, timestamps). 5 índices. RLS: membros do tenant podem SELECT/INSERT/UPDATE — sem policy anon. Trigger SECURITY DEFINER `trg_fn_conv_gen_nps_token`: dispara AFTER UPDATE OF status_v2 ON conversations WHEN fechado, verifica cooldown 30d via NOT EXISTS, insere registro com token UUID e expiração 60 dias.
+- **`bridge-server/routes/publico-nps.js`:** GET/POST `/api/publico/nps/:token`. Rate-limiter in-memory 60 req/min/IP. GET: `{nome_loja, status}` ou `{ja_respondida:true, nota}` (sem PII). POST atômico: PATCH `status=eq.pendente + Prefer:return=representation` (array vazio → 409 anti-dupla-submissão). Nota ≤6 → `tratativa_status='pendente'`. Usa service-role via sbFetch (bypassa RLS).
+- **`bridge-server/routes/nps-link.js`:** GET `/api/nps/link` autenticado por JWT. Retorna `{public_token, url, expires_at, status}` se pendente; `{disponivel:false}` em cooldown; 204 se sem NPS prévio.
+- **`bridge-server/routes/avaliacao-resumo.js`:** generalizado para `fonte:'csat'|'nps'`. Tabela, colunas select e prompt de IA (contexto de indicação vs. satisfação) diferem por fonte. Node 22 native fetch (sem node-fetch ESM-only).
+- **`bridge-server/index.js`:** ambas as rotas NPS registradas (`/api/publico` + `/api`).
+- **`src/screens/publico/NpsPublico.jsx`:** página pública. 11 botões 0–10 com cores (≥9=verde/#10B981, ≥7=âmbar/#F59E0B, ≤6=vermelho/#EF4444). Estados LOADING/ERRO/JA_RESPONDIDA/FORMULARIO/SUCESSO. Sucesso mostra categoria Promotor 🥳/Passivo 😊/Detrator 😔 com nota/10 badge. Pergunta de indicação de marca.
+- **`src/console/NpsResultados.jsx`:** painel Console v2. KPIs: NPS score (-100..100), %Promotor, %Detrator, total respondidas. Distribuição 0–10 com barras. Lista detratores pendentes (`nota≤6 + tratativa pendente/em_andamento`). Resumo IA via `/api/avaliacao/resumo` com `fonte:'nps'`. Tratativas inline por linha (save em `nps_avaliacoes`). `<RequireRole roles={['admin','gestor']}/>`.
+- **`src/console/ConsoleV2.jsx`:** import NpsResultados + item de menu "NPS — Marca" (após csat) + render case.
+- **`src/main.jsx`:** rota `/nps/:token` pública via `_isPublicNps = _path.startsWith('/nps/')`.
+
+**Deploy:** PR #458 squash-mergeado em main (SHA `0d51dee`). Frontend em produção via GitHub Pages (~3 min pós-merge).
+
+**⚠️ Pendente do Wandson:** `pm2 restart bridge-server` na VPS (3 novos routers só carregam após restart) + validação visual no browser + teste real da página `/nps/:token`.
+
+**Track: T8/novas features.**
+
+---
+
 ## 2026-06-21 — Sessão 77/78: Layout tabelas CORA + Gerar lembrete corrigido (PR #450) [T8 — Cora / financeiro]
 
 **Contexto:** Wandson reportou 2 bugs no dashboard CORA após o PR #448: (1) "informações saindo fora do bloco" — coluna CLIENTE sem truncação expandia as tabelas; (2) "Gerar lembrete não faz nada" — botão chamava o bridge mas `cobranca_v2_id` era enviado na raiz do body e descartado silenciosamente.
