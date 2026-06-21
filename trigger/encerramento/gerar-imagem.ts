@@ -330,8 +330,8 @@ async function executar(input: Input, runId: string): Promise<Output> {
     }
   }
 
-  // Domingo não está no calendário
-  if (weekday === 0 && !input.custom_theme) {
+  // Domingo não está no calendário (exceto geração manual)
+  if (weekday === 0 && !isManual) {
     throw new Error("Domingo não está no calendário do Encerramento (seg–sáb)");
   }
 
