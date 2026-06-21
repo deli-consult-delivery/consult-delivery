@@ -238,3 +238,13 @@
 }
 .cv2-main .lc-ham-embedded       { color: #555; }
 .cv2-main .lc-ham-embedded:hover { color: #1a1a1a; background: rgba(0,0,0,0.05); }
+
+/* grid de 2 colunas dos charts da Cora: vira 1 coluna no celular.
+   inline style não aceita @media — classe obrigatória. */
+.cv2-charts-grid{grid-template-columns:1fr 1fr}
+@media (max-width:767px){
+  .cv2-charts-grid{grid-template-columns:1fr !important}
+  .draft-row{flex-wrap:wrap !important}
+  .draft-btns{flex-direction:row !important;width:100%;min-width:0 !important}
+  .draft-btns button{flex:1}
+}
