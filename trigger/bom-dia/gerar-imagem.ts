@@ -382,7 +382,7 @@ async function generateImage(prompt: string, format: "group" | "portrait"): Prom
           size,
           n:        1,
         }),
-        signal: AbortSignal.timeout(90_000),
+        signal: AbortSignal.timeout(180_000),
       });
 
       if (!r.ok) {
@@ -835,8 +835,9 @@ Retorne: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme":"..
 // ─── Task on-demand ───────────────────────────────────────────────────────────
 
 export const bomDiaGerarImagem = task({
-  id:    "bom-dia-gerar-imagem",
-  retry: { maxAttempts: 2, minTimeoutInMs: 5000 },
+  id:         "bom-dia-gerar-imagem",
+  maxDuration: 600, // LLM ~120s + 2 imagens ~180s cada
+  retry:      { maxAttempts: 2, minTimeoutInMs: 5000 },
 
   run: async (payload: unknown, { ctx }) => {
     const input = InputSchema.parse(payload ?? {});

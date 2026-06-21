@@ -1,5 +1,46 @@
 # Wiki Log
 
+## 2026-06-21 — Sessão 77/78: Layout tabelas CORA + Gerar lembrete corrigido (PR #450) [T8 — Cora / financeiro]
+
+**Contexto:** Wandson reportou 2 bugs no dashboard CORA após o PR #448: (1) "informações saindo fora do bloco" — coluna CLIENTE sem truncação expandia as tabelas; (2) "Gerar lembrete não faz nada" — botão chamava o bridge mas `cobranca_v2_id` era enviado na raiz do body e descartado silenciosamente.
+
+**Correções (`src/console/Cora.jsx`, 19 linhas):**
+
+- **Layout:** `tableLayout: 'fixed'` + `width%` em todas as colunas das duas tabelas (Vencidas por cliente + Vencem em 7 dias). CLIENTE e TELEFONE receberam `overflow: hidden` + `textOverflow: ellipsis` + `whiteSpace: nowrap` + `title` para ver o nome completo no hover.
+- **Gerar lembrete:** root cause — bridge extrai `const { tenant_id, payload = {} } = req.body`, então `cobranca_v2_id` enviado na raiz do body nunca chegava ao Trigger.dev (Zod parse falhava silenciosamente no task). Fix: `body: JSON.stringify({ tenant_id, payload: { cobranca_v2_id: cob.id } })`.
+
+**Deploy:** PR #450 squash-mergeado (SHA `c1ecbe8`). Frontend em build pelo GitHub Actions (~3 min).
+
+**Track: T8/Cora.** Próxima ação: validação visual do Wandson — clicar Gerar lembrete e confirmar que o draft aparece com texto, e que as tabelas ficam dentro do bloco.
+
+---
+
+## 2026-06-21 — Sessão 76/77: Revisão completa do dashboard CORA — 8 reclamações do Wandson (PR #448) [T8 — Cora / financeiro]
+
+**Contexto:** Wandson revisou o dashboard da CORA (cobrança via WhatsApp, em desenvolvimento) e listou 8 problemas: (1) "Gerar mensagem" não gera; (2) "Gerar lembrete" não gera; (3) sem opção de enviar manualmente ao cliente; (4) não vê o texto da mensagem; (5) sem data de vencimento na Régua; (6) sem telefone na tabela "Vencem nos próximos 7 dias"; (7) sem visibilidade de enviado/visualizado no WhatsApp; (8) layout bagunçado com informação vazando dos blocos.
+
+**Causa-raiz nº 1 — coluna `body` → `content`:** a migration `20260504_006_align_schemas_with_restructuring_revised.sql:231` renomeou `agent_drafts.body` → `content`. O frontend ainda lia `draft.body` (4 lugares em `Cora.jsx`) e dois tasks Trigger ainda gravavam `body:` no insert (`gerar-mensagem.ts:123`, `processar-cobranca.ts:142`). Efeito: o draft até era criado pelo task correto (`gerar-mensagem-asaas`, que já usava `content`), mas o texto renderizava em branco → percebido como "não gera" + "não vejo o texto"; e os botões de envio manual ficavam escondidos atrás do preview vazio.
+
+**Correções (`src/console/Cora.jsx` +225 linhas, 2 tasks Trigger):**
+
+- **A — `body`→`content`:** frontend (`draft.content` nas leituras) + `trigger/cora/gerar-mensagem.ts` e `trigger/cora/processar-cobranca.ts` (insert usa `content:`).
+- **B — falha de geração não mente mais:** `gerarMensagem(cob)` checa erro do Bridge/run; em falha, limpa o loading e mostra `alert()` em vez de spinner infinito de 30s.
+- **C — data de vencimento na Régua (#5):** badge relativo + data `DD/MM` via `cob.vencimento.split('-').reverse().join('/')`.
+- **D — coluna Telefone (#6):** adicionada nas tabelas "Vencidas" e "Vencem em 7 dias" (`customer_phone`).
+- **E — status enviado/visualizado (#7):** componente `StatusEnvioCell({ enviado, viewedDate })` (badge "Enviado" de `cora_acoes` + "Visto" de `invoice_viewed_date` do Asaas) nas duas tabelas + preview inline do draft.
+- **F — layout (#8):** linha-flex da Régua convertida para grid (`gridTemplateColumns: 'auto minmax(0,1fr) auto auto auto auto'`) com `min-width:0` nos blocos de texto — nada mais vaza do card.
+- **Envio manual (#3):** os botões "✓ Enviar agora" / "🧪 Enviar para meu número" já existiam na Régua; passaram a aparecer com o preview visível (`enviarDraft(draft, testPhone)` → `POST /api/cora/aprovar/:draft_id[?test_phone=]`).
+
+**Deploy:** PR #448 squash-mergeado (`74f1eb3` em main). Trigger.dev v20260621.14 (75 tasks) deployado.
+
+**Verificação ponta-a-ponta (output bruto):** disparei o task real `cora-gerar-mensagem-asaas` (o que o botão chama) com cobrança real "Café Container" via Trigger REST API (chave `tr_prod_` de `bridge-server/.env`) → run `cmqn7e3e73fjk0jlq68nwny46` COMPLETED → output `{ok:true, draft_id:"d5ef7fd4-…", mensagem:"Oi! Tudo bem…", tom_usado:"amigavel"}` → DB confirmou draft com `content_len=460`, `status=pending`, telefone presente (antes vinha vazio e o INSERT falhava). Schema confirmado: coluna `content` existe, `body` não existe. Draft de teste `d5ef7fd4` DELETADO (linha única que criei) para não poluir o painel nem arriscar envio a cliente real. Bundle frontend em prod (`index-CPhTeOaP.js`) com as strings da feature ("Enviar agora", "Enviar para meu número", "Visto", "venc.").
+
+**⚠️ Pendente de validação visual:** o teste no browser logado do Wandson NÃO foi feito (sessão noturna, sem ele presente); a prova foi via disparo real do task + DB. Wandson deve abrir Cora → Régua/Financeiro e confirmar visualmente: gerar mensagem mostra o texto, data de vencimento, telefone nas tabelas, badges enviado/visto e layout sem vazamento.
+
+**Track: T8/Cora.** Próxima ação: validação visual do Wandson no dashboard CORA.
+
+---
+
 ## 2026-06-21 — Sessão 75/76: Fit Cobrança da CORA — 6 bugs corrigidos (PR #444) [T8 — Cora / financeiro]
 
 **Contexto:** Wandson identificou 6 problemas no dashboard da CORA após teste no browser. Sessão resolveu todos de forma completa.

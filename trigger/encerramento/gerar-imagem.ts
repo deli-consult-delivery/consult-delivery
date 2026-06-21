@@ -171,7 +171,7 @@ async function generateImage(prompt: string, format: "group" | "portrait"): Prom
           size,
           n:        1,
         }),
-        signal: AbortSignal.timeout(90_000),
+        signal: AbortSignal.timeout(180_000),
       });
 
       if (!r.ok) {
@@ -330,8 +330,8 @@ async function executar(input: Input, runId: string): Promise<Output> {
     }
   }
 
-  // Domingo não está no calendário
-  if (weekday === 0 && !input.custom_theme) {
+  // Domingo não está no calendário (exceto geração manual)
+  if (weekday === 0 && !isManual) {
     throw new Error("Domingo não está no calendário do Encerramento (seg–sáb)");
   }
 
@@ -529,8 +529,9 @@ Retorne: {"dalle_prompt":"...","text_on_image":"...","caption":"...","theme":"..
 // ─── Task on-demand ───────────────────────────────────────────────────────────
 
 export const encerramentoGerarImagem = task({
-  id:    "encerramento-gerar-imagem",
-  retry: { maxAttempts: 2, minTimeoutInMs: 5000 },
+  id:         "encerramento-gerar-imagem",
+  maxDuration: 600, // LLM ~120s + 2 imagens ~180s cada
+  retry:      { maxAttempts: 2, minTimeoutInMs: 5000 },
 
   run: async (payload: unknown, { ctx }) => {
     const input = InputSchema.parse(payload ?? {});
