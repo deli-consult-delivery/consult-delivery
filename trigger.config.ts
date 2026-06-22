@@ -5,7 +5,7 @@ export default defineConfig({
   project: "proj_slexhoelcjwgbopmbzzr",
   runtime: "node",
   dirs: ["./trigger"],
-  maxDuration: 300, // 5 minutos
+  maxDuration: 600, // 10 minutos — permite gerar-imagem (LLM ~120s + 2 imagens ~180s cada)
   build: {
     extensions: [
       additionalFiles({
