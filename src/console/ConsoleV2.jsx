@@ -51,6 +51,7 @@ import CRM from './CRM.jsx';
 import Lojas from './Lojas.jsx';
 import Inadimplentes from './Inadimplentes.jsx';
 import AtendimentoAvaliacoes from './AtendimentoAvaliacoes.jsx';
+import NpsResultados from './NpsResultados.jsx';
 // telas reusadas do console clássico (funcionais — visual convertido nas ondas 2-3)
 import TarefasClientesScreen from '../screens/TarefasClientesScreen.jsx';
 import ChatScreen from '../screens/ChatScreen.jsx';
@@ -87,6 +88,7 @@ const GRUPOS = [
     { id: 'radar', ic: 'i-radio', label: 'Dashboard iFood' },
     { id: 'avaliacoes', ic: 'i-chart', label: 'Avaliações' },
     { id: 'csat', ic: 'i-chart', label: 'CSAT — Atendimento' },
+    { id: 'nps', ic: 'i-chart', label: 'NPS — Marca' },
     { id: 'espacos', ic: 'i-layers', label: 'Espaços' },
     { id: 'ativar', ic: 'i-plug', label: 'Ativar loja' },
     { id: 'campanhas', ic: 'i-flag', label: 'Campanhas' },
@@ -659,6 +661,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       case 'radar': return <RadarReal tenantNome={tenantNome} tenantDbId={tenantDbId} />;
       case 'avaliacoes': return <Avaliacoes tenantDbId={tenantDbId} userId={userId} />;
       case 'csat': return <AtendimentoAvaliacoes tenantDbId={tenantDbId} userId={userId} />;
+      case 'nps': return <NpsResultados tenantDbId={tenantDbId} userId={userId} />;
       case 'espacos': return <TarefasClientesScreen tenantDbId={tenantDbId} userId={userId} deepLinkCustomerId={deepLinkCustomerId} />;
       case 'ativar': return <AtivarLoja tenantDbId={tenantDbId} />;
       case 'hub': return <DeliHub tenantDbId={tenantDbId} userId={userId} />;

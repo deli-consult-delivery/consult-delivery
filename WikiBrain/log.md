@@ -1,5 +1,64 @@
 # Wiki Log
 
+## 2026-06-22 — Sessão 83/84: CORA R3 — assinatura *Cora* negrito + log de erro retry (PR #463) [T8 — Cora]
+
+**Contexto:** Wandson pediu 3 ajustes pós-R2: (1) assinatura com nome "Cora" em negrito WhatsApp; (2) remover palavra "equipe" dos textos de cobrança (grep nos tasks Trigger.dev → nenhuma ocorrência encontrada); (3) registrar erro quando envio WhatsApp falha, para que o agente possa retentar.
+
+**Entregues:**
+
+- **`bridge-server/routes/cora-aprovacao.js` (PR #463):**
+  - `ASSINATURA_CORA = '*Cora* | Financeiro, Consult Delivery'` (negrito `*...*` WhatsApp). Idempotência via `ASSINATURA_MARKER = '| Financeiro, Consult Delivery'` (resiliente a mudanças de prefixo).
+  - Bloco `if (!ew.ok)`: além do `console.warn` anterior, agora registra `last_error / last_error_at / last_error_status` em `agent_drafts.metadata` (draft permanece `pending` para retry manual) **e** insere row em `cora_acoes(tipo='erro_envio', acao='falha_whatsapp')` para rastreio e retry pelo agente.
+
+**Deploy:**
+- PR #463 squash-mergeado → `git reset --hard origin/main && pm2 restart bridge-server` VPS → online (0 unstable restarts, uptime 19s).
+
+**Nota:** "equipe" não aparece em nenhum prompt dos tasks `trigger/cora/*.ts` — sem mudança necessária no Trigger.dev.
+
+---
+
+## 2026-06-22 — Sessão 82/83: CORA — overflow KPI + rótulo período + assinatura fixa (PRs #457 e #461) [T8 — Cora]
+
+**Contexto:** Wandson reportou 3 problemas: (1) valor longo "R$ 247.888,40" estourando fora do card KPI no dashboard CORA; (2) cards KPI sem indicar de quando são os dados; (3) assinatura da CORA nas mensagens WhatsApp deveria ser `— Financeiro, Consult Delivery` (sem nome da equipe/loja).
+
+**Entregues:**
+
+- **`src/console/console.css` (PR #457):** `.cv2-kpi` recebeu `min-width:0;overflow:hidden`. `.cv2-kpi .v` font-size 23→19px + `word-break:break-word;overflow-wrap:break-word`. Resolve overflow de valores monetários longos.
+- **`src/console/Cora.jsx` (PR #457):** Rótulo de período calculado de `min/max(cobrancasV2[*].vencimento)`, exibido acima dos KPIs como "Dados históricos de {mês ini} a {mês fim} · N cobranças carregadas".
+- **`bridge-server/routes/cora-aprovacao.js` (PR #461):** Remove `getNomeLoja` (lookup async do nome da loja) e simplifica `anexarAssinatura(mensagem)` para usar `ASSINATURA_CORA = '— Financeiro, Consult Delivery'` fixo, idempotente. Sem nome de equipe/loja.
+
+**Deploy:**
+- PR #457 squash-mergeado → GitHub Actions → Pages.
+- PR #461 squash-mergeado → `git reset --hard origin/main && pm2 restart bridge-server` VPS → bridge online (boot clean, 0 unstable restarts).
+
+**Pendente do Wandson:** validação visual no browser + teste real "Enviar para meu número" (confirmar assinatura no WhatsApp).
+
+---
+
+## 2026-06-21 — Sessão 81/82: NPS de Marca — módulo completo fim-a-fim (PR #458) [T8 — novas features]
+
+**Contexto:** Implementação do módulo NPS de Marca (fidelidade à marca, separado do CSAT de atendimento 1-5). Escala 0-10. NPS = %Promotores(9-10) − %Detratores(0-6). Passivos = 7-8. Cooldown 30 dias por contato (`whatsapp_chat_id`). Token público com 60 dias de expiração. Constraint de segurança permanente: endpoint público usa service-role via Bridge (sem anon key, sem policy permissiva para anon), NUNCA retorna PII (telefone, conversation_id, tenant_id, UUID do atendente, nenhum campo tratativa_*).
+
+**Entregues (8 arquivos + 1 migration aplicada):**
+
+- **Migration `20260621_002_nps_avaliacoes` (`{"success":true}`):** tabela `nps_avaliacoes` (id, tenant_id, contact_identifier, contact_nome, origin_conversation_id, public_token UUID UNIQUE, public_token_expires_at 60d, nota 0-10 nullable, comentario, status pendente/respondida/expirada, responded_at, tratativa_status na/pendente/em_andamento/resolvido, tratativa_obs/by/at, timestamps). 5 índices. RLS: membros do tenant podem SELECT/INSERT/UPDATE — sem policy anon. Trigger SECURITY DEFINER `trg_fn_conv_gen_nps_token`: dispara AFTER UPDATE OF status_v2 ON conversations WHEN fechado, verifica cooldown 30d via NOT EXISTS, insere registro com token UUID e expiração 60 dias.
+- **`bridge-server/routes/publico-nps.js`:** GET/POST `/api/publico/nps/:token`. Rate-limiter in-memory 60 req/min/IP. GET: `{nome_loja, status}` ou `{ja_respondida:true, nota}` (sem PII). POST atômico: PATCH `status=eq.pendente + Prefer:return=representation` (array vazio → 409 anti-dupla-submissão). Nota ≤6 → `tratativa_status='pendente'`. Usa service-role via sbFetch (bypassa RLS).
+- **`bridge-server/routes/nps-link.js`:** GET `/api/nps/link` autenticado por JWT. Retorna `{public_token, url, expires_at, status}` se pendente; `{disponivel:false}` em cooldown; 204 se sem NPS prévio.
+- **`bridge-server/routes/avaliacao-resumo.js`:** generalizado para `fonte:'csat'|'nps'`. Tabela, colunas select e prompt de IA (contexto de indicação vs. satisfação) diferem por fonte. Node 22 native fetch (sem node-fetch ESM-only).
+- **`bridge-server/index.js`:** ambas as rotas NPS registradas (`/api/publico` + `/api`).
+- **`src/screens/publico/NpsPublico.jsx`:** página pública. 11 botões 0–10 com cores (≥9=verde/#10B981, ≥7=âmbar/#F59E0B, ≤6=vermelho/#EF4444). Estados LOADING/ERRO/JA_RESPONDIDA/FORMULARIO/SUCESSO. Sucesso mostra categoria Promotor 🥳/Passivo 😊/Detrator 😔 com nota/10 badge. Pergunta de indicação de marca.
+- **`src/console/NpsResultados.jsx`:** painel Console v2. KPIs: NPS score (-100..100), %Promotor, %Detrator, total respondidas. Distribuição 0–10 com barras. Lista detratores pendentes (`nota≤6 + tratativa pendente/em_andamento`). Resumo IA via `/api/avaliacao/resumo` com `fonte:'nps'`. Tratativas inline por linha (save em `nps_avaliacoes`). `<RequireRole roles={['admin','gestor']}/>`.
+- **`src/console/ConsoleV2.jsx`:** import NpsResultados + item de menu "NPS — Marca" (após csat) + render case.
+- **`src/main.jsx`:** rota `/nps/:token` pública via `_isPublicNps = _path.startsWith('/nps/')`.
+
+**Deploy:** PR #458 squash-mergeado em main (SHA `0d51dee`). Frontend em produção via GitHub Pages (~3 min pós-merge).
+
+**⚠️ Pendente do Wandson:** `pm2 restart bridge-server` na VPS (3 novos routers só carregam após restart) + validação visual no browser + teste real da página `/nps/:token`.
+
+**Track: T8/novas features.**
+
+---
+
 ## 2026-06-21 — Sessão 77/78: Layout tabelas CORA + Gerar lembrete corrigido (PR #450) [T8 — Cora / financeiro]
 
 **Contexto:** Wandson reportou 2 bugs no dashboard CORA após o PR #448: (1) "informações saindo fora do bloco" — coluna CLIENTE sem truncação expandia as tabelas; (2) "Gerar lembrete não faz nada" — botão chamava o bridge mas `cobranca_v2_id` era enviado na raiz do body e descartado silenciosamente.
@@ -844,3 +903,16 @@ Touched: none
 - **PR #432** squash-mergeado em main (SHA `577da6fb`).
 - **Deploy Trigger.dev:** versão `20260619.27` (75 tasks detectadas) — sync passará a popular `invoice_viewed_date` e `confirmed_date` a partir do próximo ciclo de 30 min.
 - **Próxima ação:** nenhuma pendente nesta feature. Aguardar próximo sync do Asaas para as novas colunas preencherem; Extrato sub-tab então mostrará taxa real e badges "👁 Visualizado" para clientes que abriram a fatura.
+
+## 2026-06-21 — Sessão 80/81: CORA revisão rodada 2 — envio de teste desbloqueado + horário legal + assinatura + extrato filtrável (PR #454 + hotfix #455) [T8 — Cora]
+
+- **Contexto:** Wandson trouxe 6 itens novos com prints sobre o dashboard CORA (rodada 2 do feedback). Sessão de continuação fechando verificação/deploy/docs do plano A–F.
+- **Causa-raiz nº 1 (envio de teste quebrado):** bridge filtrava `evolution_instances` por `&ativo=eq.true`, mas a tabela **não tem coluna `ativo`** — a real é `status` (`connected`/`disconnected`/`connecting`, `supabase/migrations/20260426_evolution_chat.sql:8-19`). Copy-paste de `whatsapp_groups(ativo)`. Erro `42703` no browser bloqueava todo envio manual.
+- **(A) Bridge — `&ativo=eq.true`→`&status=eq.connected`** em `bridge-server/routes/cora-aprovacao.js` + demais routers que tocam `evolution_instances` (bom-dia/encerramento em `index.js`, `contratos.js`). NÃO tocado `contratos.js:76` (é `err.body` de HTTP, não a coluna).
+- **(B) Bridge — guarda de horário legal + assinatura:** novo helper `bridge-server/lib/horario-cobranca.js` — `dentroHorarioLegal(date)` via `Intl.DateTimeFormat` TZ `America/Sao_Paulo` + feriados nacionais 2026–27. Regra: Seg–Sex 8h–21h · Sáb 8h–12h · Dom+feriados PROIBIDO. Guarda `409 { motivo, proximaJanela }` no `POST /api/cora/aprovar/:draft_id` ANTES do envio Evolution; envio de teste para número próprio é isento (passar o telefone do cliente como `test_phone` NÃO contorna — validação `/^\d{10,15}$/` + `isTestSend = rawTestPhone !== undefined && rawTestPhone !== phone`). Assinatura dinâmica `— CORA, assistente de cobrança da {lojas.nome}` (fallback genérico `— CORA, assistente de cobrança`), idempotente. **Boleto/PIX automático do Asaas NÃO passa por aqui → segue sem restrição** (requisito legal).
+- **(C/D/E/F) Frontend `src/console/Cora.jsx`:** 409 tratado com motivo + próxima janela (alerta claro, não erro cru); aba Extrato com seletor de período (pills + datas personalizadas) e rótulo de período; KPIs do Extrato passam a refletir o período; card "Mês atual" com "faltam N cobr."; grades de KPI responsivas (`auto-fit minmax`) + `minWidth:0`/`wordBreak` sem vazamento.
+- **Hotfix (#455):** `bridge-server/routes/avaliacao-resumo.js` — removido `require('node-fetch')` (ESM-only no v3, não é `require`-ável; derrubava o boot do bridge) → `fetch` global nativo do Node 22.
+- **Verificação (output bruto):** bridge online/estável (0 unstable restarts, sem erro de boot); smoke do `dentroHorarioLegal` 6/6 (Seg 10h ok · Sex 21:30 bloqueia · Sáb 11h ok · Sáb 13h bloqueia · Dom 10h bloqueia · próxima janela "amanhã 08h"); `cora-aprovacao.js` lido na íntegra confirmando A+B+IDOR (`assertTenantMember`)+validação `test_phone`; bundle prod `index-CMpTGpqm.js` com grep de C/D/E ("Fora do horário legal", "proximaJanela", "Todo o histórico", "Últimos 30 dias", "faltam").
+- **⚠️ Decisão de segurança:** NÃO cliquei "Aprovar e Enviar" em draft de cliente real (domingo 21/06 + guarda sob teste). Verificação feita de forma determinística (código deployado + smoke do helper + grep do bundle) sem tocar cliente real.
+- **PRs:** [#454](https://github.com/deli-consult-delivery/consult-delivery/pull/454) (SHA `61455b5`) + hotfix [#455](https://github.com/deli-consult-delivery/consult-delivery/pull/455) (SHA `3506cef`) — ambos squash-mergeados em main.
+- **Pendente do Wandson:** validação visual no browser em horário útil + 1 teste real "🧪 Enviar para meu número" (deve chegar com assinatura, sem o erro `ativo does not exist`).

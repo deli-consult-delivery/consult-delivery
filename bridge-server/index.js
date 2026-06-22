@@ -790,7 +790,7 @@ app.post('/agents/bom-dia/send-groups', requireJwtOrInternal, async (req, res) =
     // Fallback: buscar qualquer instância ativa (agente global)
     try {
       const r = await fetch(
-        `${SUPABASE_URL}/rest/v1/evolution_instances?ativo=eq.true&select=evolution_url,api_key,instance_name&limit=1`,
+        `${SUPABASE_URL}/rest/v1/evolution_instances?status=eq.connected&select=evolution_url,api_key,instance_name&limit=1`,
         { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }
       );
       const rows = await r.json();
@@ -854,7 +854,7 @@ app.post('/agents/encerramento/send-groups', requireJwtOrInternal, async (req, r
   if (!inst) {
     try {
       const r = await fetch(
-        `${SUPABASE_URL}/rest/v1/evolution_instances?ativo=eq.true&select=evolution_url,api_key,instance_name&limit=1`,
+        `${SUPABASE_URL}/rest/v1/evolution_instances?status=eq.connected&select=evolution_url,api_key,instance_name&limit=1`,
         { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }
       );
       const rows = await r.json();
@@ -952,7 +952,7 @@ app.post('/agents/recontratacao/:customer_id/enviar', requireJwtOrInternal, asyn
       inst = await supabaseSelect('evolution_instances', { tenant_id });
       if (!inst) {
         const ri = await fetch(
-          `${SUPABASE_URL}/rest/v1/evolution_instances?ativo=eq.true&select=evolution_url,api_key,instance_name&limit=1`,
+          `${SUPABASE_URL}/rest/v1/evolution_instances?status=eq.connected&select=evolution_url,api_key,instance_name&limit=1`,
           { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }
         );
         const rows = await ri.json();
@@ -1020,7 +1020,7 @@ app.get('/whatsapp/groups', requireJwt, async (req, res) => {
   if (!inst) {
     try {
       const r = await fetch(
-        `${SUPABASE_URL}/rest/v1/evolution_instances?ativo=eq.true&select=evolution_url,api_key,instance_name&limit=1`,
+        `${SUPABASE_URL}/rest/v1/evolution_instances?status=eq.connected&select=evolution_url,api_key,instance_name&limit=1`,
         { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }
       );
       const rows = await r.json();
@@ -1391,9 +1391,14 @@ app.use('/api', require('./routes/publico-aprovacao')({
 // ── CSAT — Avaliação de Atendimento: link autenticado + dashboard público ─────
 app.use('/api/publico', require('./routes/publico-avaliacao')({ sbFetch }));
 app.use('/api', require('./routes/avaliacao-link')({ requireJwt, sbFetch, assertTenantMember }));
+app.use('/api', require('./routes/avaliacao-resumo')({ requireJwt, sbFetch, assertTenantMember }));
 
 // ── CSAT — Webhook inbound do CRM externo (atendimento finalizado) ───────────
 app.use('/webhooks', require('./routes/crm-atendimento-webhook')({ sbFetch }));
+
+// ── NPS de Marca: página pública + link autenticado ───────────────────────────
+app.use('/api/publico', require('./routes/publico-nps')({ sbFetch }));
+app.use('/api', require('./routes/nps-link')({ requireJwt, sbFetch, assertTenantMember }));
 
 // ── S2-G05 — DELI Semáforo: aprovações pendentes ─────────────────────────────
 app.use('/api', require('./routes/deli-approvals')({
