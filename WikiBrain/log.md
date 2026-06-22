@@ -1,5 +1,25 @@
 # Wiki Log
 
+## 2026-06-22 — Sessão 89: Tela preta "Nenhum workspace" — causa-raiz de banco resolvida em prod (#482 + #485) + Front 1 (loop 404 evolution-webhook)
+
+**Sintoma:** Wandson não acessava `app.consultdelivery.com.br` — a plataforma carregava e caía numa tela preta **"Nenhum workspace encontrado para este usuário."**. Duas tentativas anteriores no frontend (#473 race-condition, #476 `getUser→getSession`) trataram o sintoma, não a causa.
+
+**Root cause (prova `pg_stat_statements`, em 2 camadas):**
+1. **Saturação do Postgres/PostgREST.** A query `SELECT cobrancas.* … WHERE tenant_id=$1 ORDER BY vencimento` acumulou **153.627 chamadas / 38.700s de tempo total / 251,9ms média = 81,1% de TODO o tempo de banco**. O `SELECT *` arrastava a coluna pesada `metadata jsonb` (guarda `asaas_raw` = a cobrança Asaas inteira por linha). #2 consumidor (13,5%) = decode de WAL do Realtime. Amplificado pelo cron `asaas-sync-financeiro` (UPSERT de ~2000 cobranças a cada 30 min, disparando eventos Realtime em todas as abas) e por subscriptions Realtime **sem debounce** que recarregavam a tabela inteira a cada evento. Isso esgotava o pool → `statement timeout` → PostgREST 503 → a query de `tenant_members` do `App.jsx` não pegava conexão.
+2. **Frontend mentia.** Mesmo com o banco só lento/503, o `App.jsx` caía no safety-timer e mostrava "Nenhum workspace" como se o usuário não tivesse tenant (o `error` da query era descartado, `catch` mudo).
+
+**Correções aplicadas (EM PROD, 2 camadas):**
+- **CAMADA A — aliviar o banco (#482):** colunas explícitas no lugar de `SELECT *` em `loadCobrancasV2` (`src/screens/CoraScreen.jsx` + `src/console/Cora.jsx`), **omitindo `metadata`** + demais colunas não usadas pela UI; debounce 2s (`DEBOUNCE_REALTIME_MS`) nas subscriptions Realtime, padrão de `src/components/chat/LeadNotesSection.jsx` (const de módulo + `useRef` do timer + clearTimeout/setTimeout + cleanup limpando o timer ANTES do `removeChannel`). **#485** estendeu o debounce ao canal `cora-drafts` (`console/Cora.jsx`) e a `subscribeToDrafts` (`src/lib/api.js`, `DEBOUNCE_DRAFTS_MS`, cobre `DraftsPendentesScreen.jsx` + `Disparos.jsx`).
+- **CAMADA B — frontend honesto (#482, `src/App.jsx`):** captura o `error`/timeout da query (antes descartado); retry com backoff 1s/2s/4s; render honesto "Servidor temporariamente indisponível, reconectando…" + botão "Tentar novamente"; "Nenhum workspace" só com resultado de zero-tenant REAL; usa a `session` já presente no estado em vez de novo `getUser()` no caminho saturado.
+
+**Verificação (output bruto):** a query de `cobrancas` colapsou de **153.627 calls / 251,9ms mean / 81,1% do DB → 2 calls / 31ms total / 15,3ms mean** (colunas explícitas confirmadas no `query_head`). Browser: tela de **login limpa, sem "Nenhum workspace"/tela preta**. Índice composto `(tenant_id, vencimento)` já existia (`20260514_017_cobrancas.sql`) — o custo NÃO era índice faltando, era o `SELECT *`; nenhuma migration nova.
+
+**Front 1 — loop de 404 do `evolution-webhook` (read-only, config Evolution NÃO tocada):** `get_logs` service `edge-function` mostra invocações recentes **100% `POST | 200`** (exec 142–671ms); os `404 instance_not_found` são todos ANTIGOS (~1,6h antes), com exec_time anormal (6.250–59.385ms, coerente com a janela de saturação do banco) — eram 404s de instância órfã durante o pico. **O loop CESSOU.** Hardening defensivo da edge function (logar `instance_name` + responder 200 a instância desconhecida em vez de 404) OFERECIDO ao Wandson, **NÃO aplicado** (aguarda `ok`; mexer em config externa exige aviso).
+
+**PRs:** [#482](https://github.com/deli-consult-delivery/consult-delivery/pull/482) (camadas A+B) + [#485](https://github.com/deli-consult-delivery/consult-delivery/pull/485) (debounce estendido) — ambos mergeados, deploy GitHub Pages. **Tracks:** T8/Infra + T8/Cora. **⚠️ Pendente do Wandson:** validação visual logado em dia útil.
+
+---
+
 ## 2026-06-22 — Sessão 88b: Fix idempotência cross-day (bom-dia + encerramento)
 
 **Contexto:** Envio compensatório de segunda-feira 22/06 reusou imagem do domingo 21/06 indevidamente.
