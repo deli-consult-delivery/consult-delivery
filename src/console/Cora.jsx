@@ -910,6 +910,7 @@ export default function Cora({ tenantDbId, userId }) {
   const [sendingMap, setSendingMap] = useState({});
   const [rejeitarMap, setRejeitarMap] = useState({});
   const cobrancasV2RealtimeTimer = useRef(null);
+  const draftsRealtimeTimer = useRef(null);
 
   // ── Loaders ────────────────────────────────────────────────────────────────
 
@@ -1090,13 +1091,20 @@ export default function Cora({ tenantDbId, userId }) {
     };
   }, [tenantDbId, loadCobrancasV2]);
 
-  // Realtime — drafts CORA
+  // Realtime — drafts CORA (com debounce: coalesce burst de drafts do asaas-sync em 1 reload)
   useEffect(() => {
     if (!tenantDbId) return;
+    const scheduleReload = () => {
+      if (draftsRealtimeTimer.current) clearTimeout(draftsRealtimeTimer.current);
+      draftsRealtimeTimer.current = setTimeout(() => { loadDrafts(); loadAcoes(); }, DEBOUNCE_REALTIME_MS);
+    };
     const ch = supabase.channel('cora-drafts')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'agent_drafts', filter: `tenant_id=eq.${tenantDbId}` }, () => { loadDrafts(); loadAcoes(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'agent_drafts', filter: `tenant_id=eq.${tenantDbId}` }, scheduleReload)
       .subscribe();
-    return () => supabase.removeChannel(ch);
+    return () => {
+      if (draftsRealtimeTimer.current) clearTimeout(draftsRealtimeTimer.current);
+      supabase.removeChannel(ch);
+    };
   }, [tenantDbId, loadDrafts, loadAcoes]);
 
   // Auto-clear loadingMsgMap quando draft aparece via realtime
