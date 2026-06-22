@@ -1,5 +1,19 @@
 # Wiki Log
 
+## 2026-06-22 — Sessão 87: CSAT — security findings resolvidos [T8/CSAT]
+
+**Contexto:** 6 findings de segurança flagged na sessão 84/85 (não auto-aplicados em prod por protocolo) foram todos resolvidos pelo Wandson.
+
+**Resolvidos:**
+- HIGH: rate limiter in-memory por `x-forwarded-for` (spoofável; não durável em multi-worker)
+- HIGH: `public_token` visível a qualquer membro do tenant sem segmentação por usuário
+- MEDIUM: sem validação de tamanho/charset em `contact_identifier`/`nome_cliente`
+- MEDIUM: CORS wildcard global no Bridge (pré-existente)
+- LOW: Zod error details expostos em respostas 400
+- LOW: sem CSP na página pública `/avaliacao/`
+
+---
+
 ## 2026-06-22 — Sessão 86/87: CORA — dedup diário (PR #471) [T8/Cora]
 
 **Problema:** Fila de aprovação exibia múltiplos drafts para o mesmo número de telefone (ex: Mikelly Container + MIKELLY & CIA para 94991857808). Wandson podia aprovar duas vezes e enviar 2 mensagens para o mesmo cliente no mesmo dia.
