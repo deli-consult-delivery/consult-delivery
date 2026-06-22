@@ -1028,3 +1028,12 @@ Touched: none
 - **Auditoria de duplicatas (output bruto):** 0 duplicatas reais — ECC tem 271 skills + 67 agents com nomes únicos (os "repetidos" no `find` eram cópias de tradução `docs/ja-JP`/`docs/zh-CN` + scaffold `.agents`/`.kiro`). 0 colisão ECC × claude-plugins-official, ECC × thedotmack, ECC × agents `cd-*` do repo. Sobreposições de nome resolvidas por namespace (sem shadowing): comando `pr` (`/pr` repo vs `/ecc:pr`) e skill `benchmark` (gstack user-level vs `ecc:benchmark`). Gstack mantido (fora do escopo "só ECC").
 - **Conflito fantasma (#155) resolvido:** branch carregava o commit GSD já squash-mergeado (#474); absorvido com `git merge origin/main` (não rebase), deixando o diff líquido só com a mudança ECC.
 - **Próxima ação:** validar em outra máquina (notebook) — `git pull` + abrir Claude Code no repo → `claude plugin list ecc@ecc` deve mostrar ECC ativo sem instalação manual.
+
+## Sessão 86b — 2026-06-22 — Subagents cd-* desativados (só agentes do ECC ativos)
+
+- **Pedido do Wandson:** *"quero que esses agentes que são do Repo, o CD, eles não fiquem mais ativando. Eu quero que ative os agentes do ECC e os recursos do ECC."*
+- **Feito (PR #480, SHA `aa68d2e`, squash em main):** `git rm` dos 14 arquivos `.claude/agents/*.md` (README + `cd-apex`, `cd-bolt`, `cd-compass`, `cd-echo`, `cd-endpoint-builder`, `cd-frontend-component`, `cd-helper-writer`, `cd-lens`, `cd-migration-creator`, `cd-oath`, `cd-raven`, `cd-task-creator`, `cd-validator`, `cd-validator-strict`). Diretório `.claude/agents/` agora vazio em main. Reversível pelo histórico do git.
+- **No lugar:** os agentes do ECC (architect, code-reviewer, typescript-reviewer, database-reviewer, react-reviewer, security-reviewer, build-error-resolver, e2e-runner, planner, refactor-cleaner etc.) passam a ser o conjunto ativo.
+- **Não tocado (de propósito):** hooks (`typecheck.cjs`, `typecheck-stop.cjs`) e comandos (`/dev-status`, `/onboard`, `/pr`, `/release-notes`, `/supabase-query`, `/vps-health`) do repo — são hooks/commands, não agentes. Referências textuais a `cd-*` em docs (PARALLEL-DEV.md, V2-*, PILOTO-*, Tracker, td-index) ficaram como estão: documentação, não ativam agente.
+- **Efeito:** vale no próximo reload do Claude Code (a lista de subagents é lida no início da sessão).
+- **Próxima ação:** ao abrir nova sessão, confirmar que os `cd-*` não aparecem mais na lista de agent types e usar os agentes do ECC.
