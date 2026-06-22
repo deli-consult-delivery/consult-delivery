@@ -1,5 +1,19 @@
 # Wiki Log
 
+## 2026-06-22 — Sessão 88b: Fix idempotência cross-day (bom-dia + encerramento)
+
+**Contexto:** Envio compensatório de segunda-feira 22/06 reusou imagem do domingo 21/06 indevidamente.
+
+**Root cause:** Janela de idempotência de 26h em `gerar-imagem.ts` (ambos os agentes) permitia reuso de imagem do dia anterior. `envio-agendado.ts` também não verificava se `output.date` coincidia com o dia SP atual.
+
+**Correções aplicadas (4 arquivos):**
+- `trigger/bom-dia/gerar-imagem.ts` + `trigger/encerramento/gerar-imagem.ts`: janela 26h substituída por `${dateStr}T03:00:00.000Z` (meia-noite SP em UTC)
+- `trigger/bom-dia/envio-agendado.ts` + `trigger/encerramento/envio-agendado.ts`: adicionada verificação `out.date === dateStr` antes de reusar imagem existente; divergência → loga warn e força nova geração
+
+**Deploy:** PR [#486](https://github.com/deli-consult-delivery/consult-delivery/pull/486) mergeado → Trigger.dev versão `20260622.54`
+
+---
+
 ## 2026-06-22 — Sessão 88: Encerramento — debug + fix timeout + envio manual
 
 **Contexto:** Agente de encerramento não enviou mensagem no sábado 21/06. Investigação e correção.
