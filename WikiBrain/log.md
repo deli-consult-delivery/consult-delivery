@@ -1007,3 +1007,10 @@ Touched: none
 - **⚠️ Decisão de segurança:** NÃO cliquei "Aprovar e Enviar" em draft de cliente real (domingo 21/06 + guarda sob teste). Verificação feita de forma determinística (código deployado + smoke do helper + grep do bundle) sem tocar cliente real.
 - **PRs:** [#454](https://github.com/deli-consult-delivery/consult-delivery/pull/454) (SHA `61455b5`) + hotfix [#455](https://github.com/deli-consult-delivery/consult-delivery/pull/455) (SHA `3506cef`) — ambos squash-mergeados em main.
 - **Pendente do Wandson:** validação visual no browser em horário útil + 1 teste real "🧪 Enviar para meu número" (deve chegar com assinatura, sem o erro `ativo does not exist`).
+
+## Sessão 86 — 2026-06-22 — ECC versionado no repo + auditoria de duplicatas
+
+- **ECC versionado (PR #477, SHA `e666a0a`, squash em main):** adicionado `ecc` em `extraKnownMarketplaces` (git source affaan-m/everything-claude-code), `ecc@ecc` em `enabledPlugins` e `env.ECC_HOOK_PROFILE=minimal` no `.claude/settings.json`. Antes o ECC só vivia em `~/.claude` (escopo de usuário/VPS); agora skills/agents/hooks/MCP do ECC auto-carregam em qualquer máquina que clone o repo (VPS + notebook).
+- **Auditoria de duplicatas (output bruto):** 0 duplicatas reais — ECC tem 271 skills + 67 agents com nomes únicos (os "repetidos" no `find` eram cópias de tradução `docs/ja-JP`/`docs/zh-CN` + scaffold `.agents`/`.kiro`). 0 colisão ECC × claude-plugins-official, ECC × thedotmack, ECC × agents `cd-*` do repo. Sobreposições de nome resolvidas por namespace (sem shadowing): comando `pr` (`/pr` repo vs `/ecc:pr`) e skill `benchmark` (gstack user-level vs `ecc:benchmark`). Gstack mantido (fora do escopo "só ECC").
+- **Conflito fantasma (#155) resolvido:** branch carregava o commit GSD já squash-mergeado (#474); absorvido com `git merge origin/main` (não rebase), deixando o diff líquido só com a mudança ECC.
+- **Próxima ação:** validar em outra máquina (notebook) — `git pull` + abrir Claude Code no repo → `claude plugin list ecc@ecc` deve mostrar ECC ativo sem instalação manual.
