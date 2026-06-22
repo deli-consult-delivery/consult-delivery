@@ -1,5 +1,25 @@
 # Wiki Log
 
+## 2026-06-22 — Sessão 85/86: CORA — fix "Failed to fetch" ao Aprovar e Enviar + 422 para número sem WhatsApp (PR #467) [T8/Cora]
+
+**Problema reportado:** Wandson clicou em "Aprovar e Enviar" no dashboard CORA → alerta genérico "Failed to fetch", mensagem não enviada.
+
+**Causa raiz (2 pontos):**
+1. `call()` em `Cora.jsx` usava `await r.json()` sem `.catch()` — se o parse falhasse, exceção subia ao `catch(e)` externo → `alert(e.message)` = "Failed to fetch"
+2. Bridge: PATCH e INSERT sem try/catch dentro do bloco `!ew.ok` podiam lançar exceção e bloquear a resposta de erro ao frontend
+
+**Entregue (PR #467, squash-mergeado, bridge deployado):**
+- `src/console/Cora.jsx`: `call()` → `r.json().catch(()=>({}))` — parse falho retorna objeto vazio, sem exception
+- `bridge-server/routes/cora-aprovacao.js`: detecta `exists:false` na resposta Evolution → retorna **422** com mensagem "Número X não está cadastrado no WhatsApp. Verifique o contato." (em vez de 502 genérico); PATCH + INSERT em try/catch independentes; Evolution 400 foi confirmado nos logs como causa dos erros anteriores da Villas Caldos da 14
+
+**Verificação (output bruto):** `pm2 restart bridge-server` → bridge online, `pm2 logs` mostra boot clean + entry de erro anterior `[cora-aprovacao] Evolution 400: exists:false` confirmando que o novo código já processou corretamente.
+
+**⚠️ Pendente do Wandson:** validação visual no browser — clicar "Aprovar e Enviar" em draft válido (número com WhatsApp) e confirmar que não aparece mais "Failed to fetch".
+
+**Branch:** `wandson/cora-r3-error-ux` (squash → main).
+
+---
+
 ## 2026-06-22 — Sessão 84/85: CSAT de Atendimento — integração CRM externo, atendente, expiração 7d e branding [T8 — novas features]
 
 **Contexto:** Wandson pediu 5 evoluções no CSAT de Atendimento, conectadas a um fato novo de produto: as empresas-clientes **fecham o atendimento dentro do CRM delas e usam a API oficial do WhatsApp** — logo nós NÃO enviamos a mensagem pela Evolution. O CRM dispara um webhook ao finalizar, criamos a avaliação e devolvemos o link na resposta síncrona, e o **próprio CRM envia o link pelo WhatsApp oficial dele**.
