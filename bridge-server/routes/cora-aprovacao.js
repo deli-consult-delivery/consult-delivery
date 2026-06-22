@@ -38,6 +38,16 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
     return rows?.[0] ?? null;
   }
 
+  // ── Helper: garante prefixo 55 para números brasileiros sem DDI ─────────────────────
+  // Asaas salva números sem DDI (ex: 94992995662). Evolution espera DDI (5594992995662).
+  function normalizePhone(num) {
+    if (!num) return num;
+    const digits = String(num).replace(/\D/g, '');
+    if (digits.startsWith('55') && digits.length >= 12) return digits;
+    if (digits.length >= 10 && digits.length <= 11) return `55${digits}`;
+    return digits;
+  }
+
   // ── Helper: anexa a assinatura fixa ao final da mensagem (idempotente) ─────────────
   const ASSINATURA_CORA = '*Cora* | Financeiro, Consult Delivery';
   const ASSINATURA_MARKER = '| Financeiro, Consult Delivery';
@@ -77,7 +87,7 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
       if (rawTestPhone !== undefined && !/^\d{10,15}$/.test(rawTestPhone)) {
         return res.status(400).json({ error: 'test_phone inválido — use apenas dígitos (10-15 caracteres, ex: 5511999999999)' });
       }
-      const targetPhone = rawTestPhone || phone;
+      const targetPhone = normalizePhone(rawTestPhone || phone);
 
       if (!targetPhone) {
         return res.status(400).json({ error: 'customer_phone não está no metadata do draft' });
