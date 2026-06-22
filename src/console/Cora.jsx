@@ -802,7 +802,7 @@ function DraftCard({ draft, tenantDbId, onDone }) {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
         body: JSON.stringify({ tenant_id: tenantDbId }),
       });
-      if (!r.ok) { const e = await r.json(); alert(e.error || 'Erro'); }
+      if (!r.ok) { const e = await r.json().catch(() => ({})); alert(e.error || `Erro ${r.status}`); }
       else onDone();
     } catch (e) { alert(e.message); }
     setLoading(false);
