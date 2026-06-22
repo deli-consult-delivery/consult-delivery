@@ -1,5 +1,36 @@
 # Wiki Log
 
+## 2026-06-22 — Sessão 84/85: CSAT de Atendimento — integração CRM externo, atendente, expiração 7d e branding [T8 — novas features]
+
+**Contexto:** Wandson pediu 5 evoluções no CSAT de Atendimento, conectadas a um fato novo de produto: as empresas-clientes **fecham o atendimento dentro do CRM delas e usam a API oficial do WhatsApp** — logo nós NÃO enviamos a mensagem pela Evolution. O CRM dispara um webhook ao finalizar, criamos a avaliação e devolvemos o link na resposta síncrona, e o **próprio CRM envia o link pelo WhatsApp oficial dele**.
+
+**Requisitos (verbatim):**
+1. Identificar/registrar o atendente que fez o atendimento.
+2. CRM fecha pelo chat ao vivo → enviar o link automaticamente no momento da finalização.
+3. Cliente tem só **7 dias** para avaliar (antes 60).
+4. Link/página precisa estar **personalizado com as cores da marca**.
+5. CRM usa **API oficial do WhatsApp** → a mensagem sai do CRM dele, não da nossa Evolution.
+
+**Decisões travadas (AskUserQuestion):** (Q1) CRM dispara webhook HTTP na finalização; (Q2) webhook inbound autenticado com **resposta síncrona** (CRM faz POST ao fechar → criamos avaliação → devolvemos o link no JSON → CRM envia pelo WhatsApp oficial dele; sem Evolution/outbound nosso); (Q3) conversas vivem **100% no CRM externo** (não usar nossa tabela `conversations`); (Q4) expiração de 7 dias vale para **CSAT e NPS**.
+
+**Entregue:**
+- **Migration `20260622_001_csat_origem_crm_e_expiracao.sql`** (APLICADA) — `atendimento_avaliacoes`: `conversation_id` DROP NOT NULL; UNIQUE vira **parcial** `WHERE conversation_id IS NOT NULL`; novas colunas `contact_identifier text`, `origem text NOT NULL DEFAULT 'interno' CHECK in ('interno','crm_externo')`, `external_ref text`; unique parcial `(tenant_id, external_ref) WHERE external_ref IS NOT NULL` (idempotência); `public_token_expires_at` DEFAULT `now()+7d` em **ambas** `atendimento_avaliacoes` e `nps_avaliacoes`.
+- **Migration `20260622_002_crm_webhook_tokens.sql`** (APLICADA, RLS verificada) — tabela `crm_webhook_tokens` (tenant_id FK, `token_hash` SHA-256 — nunca plaintext, `ativo`, `last_used_at`), RLS por membro do tenant; Bridge usa service-role.
+- **`bridge-server/routes/crm-atendimento-webhook.js`** (novo) — `POST /webhooks/crm/atendimento-finalizado`; auth `x-crm-token` → SHA-256 → `timingSafeEqual` vs `crm_webhook_tokens`, `ativo=true`; body Zod; idempotência por `(tenant_id, external_ref)`; cria `origem='crm_externo'`, `conversation_id=null`; resposta síncrona `{url, public_token, expires_at}`; rate limit 120/min; cap de 256 chars no token.
+- **`bridge-server/routes/publico-avaliacao.js`** — GET passa a devolver `brand {name,color,theme_color,logo_url}` do tenant (`safeLogoUrl` só https); mantém a regra de NUNCA expor telefone/conversation_id/tenant_id/UUID atendente/tratativa_*.
+- **`bridge-server/routes/avaliacao-link.js`** (novo) — GET `/api/avaliacao/link?conversation_id=` autenticado (requireJwt + assertTenantMember).
+- **`src/screens/publico/AvaliacaoPublica.jsx`** (novo) — página pública branded (cores da marca, logo, 1–5 estrelas + comentário), `fetch` ao Bridge SEM anon key.
+- **`src/main.jsx`** — branch de rota `/avaliacao/`.
+- **`src/console/AtendimentoAvaliacoes.jsx`** — badge de origem (interno/crm_externo) + `contact_identifier` quando sem `nome_cliente`.
+
+**Segurança (flag-only, NÃO aplicado em prod):** token público retornado a qualquer membro do tenant em avaliacao-link.js (decisão de design pendente); rate limiter in-memory por x-forwarded-for (spoofável / não durável em multi-worker); sem validação de formato em contact_identifier/nome_cliente; CORS wildcard pré-existente no index.js; `detalhes` Zod expostos em 400 público; sem CSP na página pública.
+
+**Pendente do Wandson:** validação visual no browser da página `/avaliacao/<token>` + teste real do webhook com token do CRM (plaintext via Infisical, nunca no git).
+
+**Branch:** `claude/gracious-kapitsa-b2daad`.
+
+---
+
 ## 2026-06-22 — Sessão 83/84: CORA R3 — assinatura *Cora* negrito + log de erro retry (PR #463) [T8 — Cora]
 
 **Contexto:** Wandson pediu 3 ajustes pós-R2: (1) assinatura com nome "Cora" em negrito WhatsApp; (2) remover palavra "equipe" dos textos de cobrança (grep nos tasks Trigger.dev → nenhuma ocorrência encontrada); (3) registrar erro quando envio WhatsApp falha, para que o agente possa retentar.

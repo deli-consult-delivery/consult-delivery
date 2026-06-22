@@ -61,6 +61,38 @@ module.exports = function buildPublicoAvaliacaoRouter({ sbFetch }) {
     return rows?.[0] ?? null;
   }
 
+  // ── Helper: só aceita logo via https:// (bloqueia javascript:/data:/http inseguro) ─
+  function safeLogoUrl(url) {
+    if (typeof url !== 'string' || !url) return null;
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'https:' ? url : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // ── Helper: busca branding público do tenant ─────────────────────────────────
+  // Só dados de marca (nome, cores, logo) — nada sensível.
+  async function getBrandByTenant(tenantId) {
+    try {
+      const rows = await sbFetch(
+        `tenants?id=eq.${encodeURIComponent(tenantId)}&select=name,color,theme_color,logo_url&limit=1`
+      );
+      const t = rows?.[0];
+      if (!t) return null;
+      return {
+        name:        t.name        ?? null,
+        color:       t.color       ?? null,
+        theme_color: t.theme_color ?? null,
+        logo_url:    safeLogoUrl(t.logo_url),
+      };
+    } catch (err) {
+      console.error('[publico/avaliacao getBrand]', err.message);
+      return null; // branding é cosmético — falha não derruba a tela
+    }
+  }
+
   // ── Helper: verifica e marca expiração ───────────────────────────────────────
   async function checkExpired(avaliacao, sbFetch) {
     const expiresAt = avaliacao.public_token_expires_at;
@@ -100,14 +132,16 @@ module.exports = function buildPublicoAvaliacaoRouter({ sbFetch }) {
       }
 
       // status === 'pendente'
+      const brand = await getBrandByTenant(avaliacao.tenant_id);
       return res.status(200).json({
         atendente_nome: avaliacao.atendente_nome,
         status:         avaliacao.status,
         nome_cliente:   avaliacao.nome_cliente,
+        brand,
       });
     } catch (err) {
       console.error('[publico/avaliacao GET]', err.message);
-      return res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: 'erro_interno' });
     }
   });
 
@@ -172,7 +206,7 @@ module.exports = function buildPublicoAvaliacaoRouter({ sbFetch }) {
       return res.status(200).json({ ok: true });
     } catch (err) {
       console.error('[publico/avaliacao POST]', err.message);
-      return res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: 'erro_interno' });
     }
   });
 

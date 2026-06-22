@@ -74,6 +74,21 @@ function urlAvaliacao(token) {
   return `${PUBLIC_URL}/avaliacao/${token}`;
 }
 
+// Nome a exibir: nome_cliente quando houver, senão o identificador vindo do CRM
+function nomeExibicao(item) {
+  return item.nome_cliente || item.contact_identifier || null;
+}
+
+// Badge de origem (crm_externo = avaliação criada via webhook do CRM do cliente)
+function BadgeOrigem({ origem }) {
+  if (origem !== 'crm_externo') return null;
+  return (
+    <span className="cv2-bdg" style={{ fontSize: 10, padding: '2px 7px', background: 'var(--blue-soft, #eff6ff)', color: 'var(--blue, #2563eb)' }}>
+      CRM
+    </span>
+  );
+}
+
 function copiarParaClipboard(texto) {
   try { navigator.clipboard?.writeText(texto); } catch { /* ignora */ }
 }
@@ -170,6 +185,10 @@ function ItemComentario({ item }) {
         {item.nota != null && (
           <span className={`cv2-bdg ${notaCls}`} style={{ fontSize: 11 }}>★ {item.nota}</span>
         )}
+        <BadgeOrigem origem={item.origem} />
+        {nomeExibicao(item) && (
+          <span style={{ fontSize: 11, color: 'var(--ink)', fontWeight: 600 }}>{nomeExibicao(item)}</span>
+        )}
         {item.atendente_nome && (
           <span className="cv2-bdg mut" style={{ fontSize: 11 }}>{item.atendente_nome}</span>
         )}
@@ -214,6 +233,10 @@ function CardDetrator({ item, onSalvar, salvando }) {
     <div className="cv2-card" style={{ marginBottom: 10, borderLeft: '3px solid var(--red)', padding: '10px 14px' }}>
       <div className="flex items-center gap-2 flex-wrap mb-2">
         <span className="cv2-bdg err" style={{ fontSize: 12 }}>★ {item.nota}</span>
+        <BadgeOrigem origem={item.origem} />
+        {nomeExibicao(item) && (
+          <span style={{ fontSize: 11, color: 'var(--ink)', fontWeight: 600 }}>{nomeExibicao(item)}</span>
+        )}
         {item.atendente_nome && <span className="cv2-bdg mut" style={{ fontSize: 11 }}>{item.atendente_nome}</span>}
         <span style={{ fontSize: 11, color: 'var(--tx2)' }}>
           {new Date(item.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
@@ -571,7 +594,7 @@ function AtendimentoAvaliacoesContent({ tenantDbId, userId }) {
 
 export default function AtendimentoAvaliacoes({ tenantDbId, userId }) {
   return (
-    <RequireRole roles={['admin', 'gestor']} userId={userId}>
+    <RequireRole roles={['admin', 'consultor']} userId={userId}>
       <AtendimentoAvaliacoesContent tenantDbId={tenantDbId} userId={userId} />
     </RequireRole>
   );
