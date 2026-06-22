@@ -115,13 +115,29 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
       // 3. Montar mensagem com assinatura fixa da CORA.
       const mensagem = anexarAssinatura(draft.content);
 
-      // 4. Buscar instância Evolution
+      // 4. Dedup diário: bloqueia se já foi enviado uma cobrança para este número hoje
+      if (phone && !isTestSend) {
+        const todayBRT = new Date();
+        todayBRT.setUTCHours(3, 0, 0, 0); // meia-noite BRT = 03:00 UTC
+        const sentToday = await sbFetch(
+          `agent_drafts?tenant_id=eq.${encodeURIComponent(tenant_id)}&status=eq.sent&metadata->>customer_phone=eq.${encodeURIComponent(phone)}&created_at=gte.${encodeURIComponent(todayBRT.toISOString())}&limit=1&select=id`
+        );
+        if (sentToday?.length) {
+          console.warn(`[cora-aprovacao] dedup diário: já enviado para ${phone} hoje — bloqueando`);
+          return res.status(409).json({
+            error: 'Já foi enviada uma cobrança para este número hoje. Aprove outro cliente ou tente novamente amanhã.',
+            code:  'DUPLICATE_SEND_TODAY',
+          });
+        }
+      }
+
+      // 5. Buscar instância Evolution
       const inst = await getEvolutionInst(tenant_id);
       if (!inst?.evolution_url || !inst?.api_key || !inst?.instance_name) {
         return res.status(503).json({ error: 'Nenhuma instância Evolution configurada' });
       }
 
-      // 5. Enviar via Evolution API
+      // 6. Enviar via Evolution API
       const ew = await fetch(
         `${inst.evolution_url}/message/sendText/${inst.instance_name}`,
         {
@@ -190,7 +206,7 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
       const isTest = req.query.test_phone ? ` (TESTE → ${targetPhone})` : '';
       console.log(`[cora-aprovacao] mensagem enviada → ${targetPhone}${isTest}`);
 
-      // 6. Atualizar draft → sent (filtra por tenant_id p/ não cruzar tenants)
+      // 7. Atualizar draft → sent (filtra por tenant_id p/ não cruzar tenants)
       await sbFetch(
         `agent_drafts?id=eq.${encodeURIComponent(draft_id)}&tenant_id=eq.${encodeURIComponent(tenant_id)}`,
         {
@@ -202,7 +218,7 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
         }
       );
 
-      // 7. Registrar em cora_acoes
+      // 8. Registrar em cora_acoes
       await supabaseInsert('cora_acoes', {
         tenant_id,
         cobranca_v2_id:   cobrancaV2Id,
