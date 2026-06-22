@@ -86,12 +86,13 @@ export default function App() {
       setTenantLoadAttempted(true);
     }, 8000);
     try {
-      // Busca tenant real do usuário via tenant_members
-      const { data: { user } } = await supabase.auth.getUser();
+      // Usa session do estado (localStorage, sem chamada de rede) para evitar timeout no /user
+      const userId = session?.user?.id;
+      if (!userId) throw new Error('no session');
       const { data: memberData } = await supabase
         .from('tenant_members')
         .select('tenant_id, role, tenants(id, name, slug, emoji, color)')
-        .eq('user_id', user?.id)
+        .eq('user_id', userId)
         .maybeSingle();
 
       if (memberData?.tenant_id) {
