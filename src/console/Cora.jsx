@@ -2086,11 +2086,29 @@ export default function Cora({ tenantDbId, userId }) {
               <div className="cv2-card" style={{ padding: 40, textAlign: 'center', color: 'var(--g-500)' }}>
                 ✅ Nenhum draft aguardando aprovação.
               </div>
-            ) : (
-              drafts.map(d => (
-                <DraftCard key={d.id} draft={d} tenantDbId={tenantDbId} onDone={() => { loadDrafts(); loadAcoes(); }} />
-              ))
-            )}
+            ) : (() => {
+              const seenPhones = new Set();
+              const dedupedDrafts = drafts.filter(d => {
+                const phone = d.metadata?.customer_phone;
+                if (!phone) return true;
+                if (seenPhones.has(phone)) return false;
+                seenPhones.add(phone);
+                return true;
+              });
+              const hiddenCount = drafts.length - dedupedDrafts.length;
+              return (
+                <>
+                  {hiddenCount > 0 && (
+                    <div style={{ padding: '8px 12px', marginBottom: 8, background: 'var(--g-100)', borderRadius: 6, fontSize: 12, color: 'var(--g-600)' }}>
+                      ℹ️ {hiddenCount} cobrança{hiddenCount > 1 ? 's' : ''} oculta{hiddenCount > 1 ? 's' : ''} — mesmo número já aparece na fila. Apenas 1 envio por número por dia é permitido.
+                    </div>
+                  )}
+                  {dedupedDrafts.map(d => (
+                    <DraftCard key={d.id} draft={d} tenantDbId={tenantDbId} onDone={() => { loadDrafts(); loadAcoes(); }} />
+                  ))}
+                </>
+              );
+            })()}
           </div>
 
           {/* Histórico */}

@@ -131,6 +131,25 @@ NÃO use markdown ao redor do JSON. Responda SOMENTE o JSON.`;
       return { ok: false, draft_id: null, tom, skipped: true, reason: "empty_message" };
     }
 
+    // Dedup diário: evita 2 drafts para o mesmo telefone no mesmo dia
+    if (cob.customer_phone) {
+      const todayStart = new Date();
+      todayStart.setUTCHours(3, 0, 0, 0); // meia-noite BRT (UTC-3)
+      const { data: dup } = await sb
+        .from("agent_drafts")
+        .select("id")
+        .eq("tenant_id", input.tenant_id)
+        .in("status", ["pending", "sent"])
+        .filter("metadata->>customer_phone", "eq", cob.customer_phone)
+        .gte("created_at", todayStart.toISOString())
+        .limit(1)
+        .maybeSingle();
+      if (dup) {
+        logger.info("cora-processar-cobranca: draft/envio já existe para este número hoje — pulando", { phone: cob.customer_phone });
+        return { ok: false, draft_id: null, tom, skipped: true, reason: "draft_duplicado_hoje" };
+      }
+    }
+
     // Insere draft para aprovação humana
     const { data: draft, error: draftErr } = await sb
       .from("agent_drafts")
