@@ -1388,6 +1388,13 @@ app.use('/api', require('./routes/publico-aprovacao')({
   supabaseInsert,
 }));
 
+// ── CSAT — Avaliação de Atendimento: link autenticado + dashboard público ─────
+app.use('/api/publico', require('./routes/publico-avaliacao')({ sbFetch }));
+app.use('/api', require('./routes/avaliacao-link')({ requireJwt, sbFetch, assertTenantMember }));
+
+// ── CSAT — Webhook inbound do CRM externo (atendimento finalizado) ───────────
+app.use('/webhooks', require('./routes/crm-atendimento-webhook')({ sbFetch }));
+
 // ── S2-G05 — DELI Semáforo: aprovações pendentes ─────────────────────────────
 app.use('/api', require('./routes/deli-approvals')({
   requireJwt,

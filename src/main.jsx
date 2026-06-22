@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App.jsx';
 import AprovacaoPublica from './screens/publico/AprovacaoPublica.jsx';
+import AvaliacaoPublica from './screens/publico/AvaliacaoPublica.jsx';
 import OnboardingWizard from './screens/publico/OnboardingWizard.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 
@@ -15,12 +16,14 @@ if (_rp) {
 
 const _path = window.location.pathname;
 const _isPublicAprovacao = _path.startsWith('/aprovacao/');
+const _isPublicAvaliacao = _path.startsWith('/avaliacao/');
 const _isPublicWizard    = _path === '/comecar' || _path === '/comecar/';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ErrorBoundary>
       {_isPublicAprovacao ? <AprovacaoPublica />
+        : _isPublicAvaliacao ? <AvaliacaoPublica />
         : _isPublicWizard ? <OnboardingWizard />
         : <App />}
     </ErrorBoundary>
