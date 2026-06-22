@@ -1088,3 +1088,17 @@ Touched: none
 - **Não tocado (de propósito):** hooks (`typecheck.cjs`, `typecheck-stop.cjs`) e comandos (`/dev-status`, `/onboard`, `/pr`, `/release-notes`, `/supabase-query`, `/vps-health`) do repo — são hooks/commands, não agentes. Referências textuais a `cd-*` em docs (PARALLEL-DEV.md, V2-*, PILOTO-*, Tracker, td-index) ficaram como estão: documentação, não ativam agente.
 - **Efeito:** vale no próximo reload do Claude Code (a lista de subagents é lida no início da sessão).
 - **Próxima ação:** ao abrir nova sessão, confirmar que os `cd-*` não aparecem mais na lista de agent types e usar os agentes do ECC.
+
+## Sessão 90 — 2026-06-22 — Faxina aditiva: 4 índices de FK das tabelas CORA
+
+- **Origem:** follow-up de manutenção da investigação da tela preta "Nenhum workspace" (#482/#485, sessão 89). Durante aquela investigação o advisor do Supabase (`get_advisors → unindexed_foreign_keys`) listou **134 FKs sem índice no projeto inteiro**. Decisão com o Wandson (*"Aceito sua recomendação"*): mexer **só nas 4 das tabelas CORA** como faxina aditiva/reversível — escopo mínimo, nada das outras 130.
+- **Feito (PR [#489](https://github.com/deli-consult-delivery/consult-delivery/pull/489), SHA `567b8d6`, squash em main):** migration `supabase/migrations/20260622_003_cora_fk_indexes.sql` — 4 `CREATE INDEX IF NOT EXISTS`:
+  - `idx_agent_drafts_reviewer_id` ON `agent_drafts (reviewer_id)`
+  - `idx_cora_acoes_agent_run_id` ON `cora_acoes (agent_run_id)`
+  - `idx_cora_cobrancas_regua_id` ON `cora_cobrancas (regua_id)`
+  - `idx_internal_notifications_recipient_user_id` ON `internal_notifications (recipient_user_id)`
+- **Correção não-óbvia:** a constraint `agent_drafts_approved_by_fkey` indexa a coluna **`reviewer_id`**, NÃO `approved_by` — nome real confirmado no `pg_catalog` antes de criar o índice (anti-padrão: nunca deduzir coluna pelo nome da constraint).
+- **Por que aditivo e seguro:** tabelas pequenas hoje (33 / 58 / 1 / 245 linhas) → lock `ACCESS EXCLUSIVE` de ~1ms, plain `CREATE INDEX` (não `CONCURRENTLY`), migration transacional, idempotente (`IF NOT EXISTS`). Reversão = `DROP INDEX` dos 4 nomes. Verificado em `pg_indexes` que **nenhum índice existente tem a coluna da FK como líder** → 0 duplicatas.
+- **Benefício:** (a) zera o lint do advisor para essas 4 FKs; (b) acelera a checagem de integridade da FK quando a linha-pai é deletada/atualizada (antes seq scan no filho); (c) future-proofing conforme as tabelas crescem.
+- **Verificação (output bruto):** `apply_migration` retornou `{"success":true}`; query em `pg_indexes` confirmou os 4 índices presentes em prod com `btree` correto. NÃO houve mudança de frontend/bridge → sem deploy de Pages/bridge necessário.
+- **Pendente:** nenhum (escopo fechado). As outras 130 FKs sem índice do advisor ficaram **intencionalmente fora de escopo**.
