@@ -20,6 +20,35 @@
 
 ---
 
+## 2026-06-22 — Sessão 85: CSAT — fix 500→404 para token não-UUID + browser-test completo (PR #466) [T8]
+
+**Problema:** `GET /api/publico/avaliacao/<token-malformado>` retornava HTTP 500. Causa: coluna `public_token` é `uuid` no PostgreSQL; string não-UUID na query fazia o Supabase retornar `400/22P02 (invalid input syntax for type uuid)` → `sbFetch` lançava exceção → caia no `catch` → 500.
+
+**Fix (`bridge-server/routes/publico-avaliacao.js`):** UUID regex antes de consultar o banco:
+```js
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+if (!UUID_RE.test(token)) return null; // → 404 link_invalido
+```
+
+**Verificação smoke (output bruto):**
+- Token inválido `token-invalido-teste` → `{"error":"link_invalido"}` 404 ✓
+- UUID não-cadastrado `00000000-0000-0000-0000-000000000000` → `{"error":"link_invalido"}` 404 ✓
+
+**Browser-test completo via javascript_tool (tab V15/Chrome):**
+- DOM: logo CD, nome cliente "João Teste Browser", atendente "Lorena (Atendente Teste)", ★★★★★, botão ✓
+- Header background `rgb(183, 12, 0)` = `#B70C00` (brand color do tenant) ✓
+- POST nota 5 → `status=respondida, tratativa_status=na` no banco ✓
+- Anti-dupla-submissão: segundo POST → 409 `ja_respondida` ✓
+- Detrator nota 2 → `tratativa_status=pendente` no banco ✓
+- Bundle confirmado: `index-B27iXOsz.js` contém `theme_color`, `crm_externo`, bridge URL ✓
+- Cleanup: 2 registros de teste removidos do banco ✓
+
+**PR #466** (branch `wandson/fix-csat-uuid-404`) — squash-mergeado (SHA `c58fa4b`) — bridge re-deployado (PID 84701).
+
+**Segurança (flags-only, NÃO aplicado em prod):** HIGH — `public_token` acessível a qualquer membro do tenant (RLS não segmenta por usuário); HIGH — rate limiter in-memory por `x-forwarded-for` (spoofável); MEDIUM — sem validação de formato em `contact_identifier`/`nome_cliente`; MEDIUM — CORS wildcard global; LOW — Zod error details em 400; LOW — sem CSP na página pública.
+
+---
+
 ## 2026-06-22 — Sessão 84/85: CSAT de Atendimento — integração CRM externo, atendente, expiração 7d e branding [T8 — novas features]
 
 **Contexto:** Wandson pediu 5 evoluções no CSAT de Atendimento, conectadas a um fato novo de produto: as empresas-clientes **fecham o atendimento dentro do CRM delas e usam a API oficial do WhatsApp** — logo nós NÃO enviamos a mensagem pela Evolution. O CRM dispara um webhook ao finalizar, criamos a avaliação e devolvemos o link na resposta síncrona, e o **próprio CRM envia o link pelo WhatsApp oficial dele**.
