@@ -59,6 +59,7 @@ export default function App() {
   const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [isInvite, setIsInvite] = useState(false);
   const [tenantLoading, setTenantLoading] = useState(false);
+  const [tenantLoadAttempted, setTenantLoadAttempted] = useState(false);
   const [tenants, setTenants] = useState(TENANTS);
   const [_deepLinkConvId] = useState(() => new URLSearchParams(window.location.search).get('chat'));
   const [_confirmedAcao]  = useState(() => new URLSearchParams(window.location.search).get('breno_confirmado'));
@@ -80,7 +81,10 @@ export default function App() {
   // Carrega tenants do banco (usado no mount e quando um workspace novo é criado)
   async function reloadTenants(preferSlug) {
     if (!hasLoadedTenantsOnce.current) setTenantLoading(true);
-    const safetyTimer = setTimeout(() => setTenantLoading(false), 8000);
+    const safetyTimer = setTimeout(() => {
+      setTenantLoading(false);
+      setTenantLoadAttempted(true);
+    }, 8000);
     try {
       // Busca tenant real do usuário via tenant_members
       const { data: { user } } = await supabase.auth.getUser();
@@ -107,6 +111,7 @@ export default function App() {
         hasLoadedTenantsOnce.current = true;
         clearTimeout(safetyTimer);
         setTenantLoading(false);
+        setTenantLoadAttempted(true);
         return;
       }
     } catch (_) { /* continua para fallback */ }
@@ -130,6 +135,7 @@ export default function App() {
         hasLoadedTenantsOnce.current = true;
         clearTimeout(safetyTimer);
         setTenantLoading(false);
+        setTenantLoadAttempted(true);
         return;
       }
     } catch (_) { /* silencioso */ }
@@ -137,6 +143,7 @@ export default function App() {
     // Sem tenant encontrado
     clearTimeout(safetyTimer);
     setTenantLoading(false);
+    setTenantLoadAttempted(true);
   }
 
   useEffect(() => {
@@ -311,7 +318,7 @@ export default function App() {
     return <LoginScreen onLogin={setSession} />;
   }
 
-  if (tenantLoading) {
+  if (tenantLoading || !tenantLoadAttempted) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, height: '100vh', background: '#0D0D0D' }}>
         <svg width="48" height="48" viewBox="0 0 24 24" style={{ animation: 'spin 0.8s linear infinite' }}>
@@ -322,10 +329,13 @@ export default function App() {
     );
   }
 
-  if (!tenantDbId && !tenantLoading) {
+  if (!tenantDbId) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, height: '100vh', background: '#0D0D0D' }}>
         <span style={{ fontSize: 15, color: 'rgba(255,255,255,0.7)', fontFamily: 'sans-serif' }}>Nenhum workspace encontrado para este usuário.</span>
+        <button onClick={() => reloadTenants()} style={{ padding: '8px 20px', background: '#444', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, marginBottom: 4 }}>
+          Tentar novamente
+        </button>
         <button onClick={() => supabase.auth.signOut()} style={{ padding: '8px 20px', background: '#B70C00', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>
           Sair
         </button>
