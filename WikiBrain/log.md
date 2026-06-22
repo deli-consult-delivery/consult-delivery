@@ -1,5 +1,23 @@
 # Wiki Log
 
+## 2026-06-22 — Sessão 82/83: CORA — overflow KPI + rótulo período + assinatura fixa (PRs #457 e #461) [T8 — Cora]
+
+**Contexto:** Wandson reportou 3 problemas: (1) valor longo "R$ 247.888,40" estourando fora do card KPI no dashboard CORA; (2) cards KPI sem indicar de quando são os dados; (3) assinatura da CORA nas mensagens WhatsApp deveria ser `— Financeiro, Consult Delivery` (sem nome da equipe/loja).
+
+**Entregues:**
+
+- **`src/console/console.css` (PR #457):** `.cv2-kpi` recebeu `min-width:0;overflow:hidden`. `.cv2-kpi .v` font-size 23→19px + `word-break:break-word;overflow-wrap:break-word`. Resolve overflow de valores monetários longos.
+- **`src/console/Cora.jsx` (PR #457):** Rótulo de período calculado de `min/max(cobrancasV2[*].vencimento)`, exibido acima dos KPIs como "Dados históricos de {mês ini} a {mês fim} · N cobranças carregadas".
+- **`bridge-server/routes/cora-aprovacao.js` (PR #461):** Remove `getNomeLoja` (lookup async do nome da loja) e simplifica `anexarAssinatura(mensagem)` para usar `ASSINATURA_CORA = '— Financeiro, Consult Delivery'` fixo, idempotente. Sem nome de equipe/loja.
+
+**Deploy:**
+- PR #457 squash-mergeado → GitHub Actions → Pages.
+- PR #461 squash-mergeado → `git reset --hard origin/main && pm2 restart bridge-server` VPS → bridge online (boot clean, 0 unstable restarts).
+
+**Pendente do Wandson:** validação visual no browser + teste real "Enviar para meu número" (confirmar assinatura no WhatsApp).
+
+---
+
 ## 2026-06-21 — Sessão 81/82: NPS de Marca — módulo completo fim-a-fim (PR #458) [T8 — novas features]
 
 **Contexto:** Implementação do módulo NPS de Marca (fidelidade à marca, separado do CSAT de atendimento 1-5). Escala 0-10. NPS = %Promotores(9-10) − %Detratores(0-6). Passivos = 7-8. Cooldown 30 dias por contato (`whatsapp_chat_id`). Token público com 60 dias de expiração. Constraint de segurança permanente: endpoint público usa service-role via Bridge (sem anon key, sem policy permissiva para anon), NUNCA retorna PII (telefone, conversation_id, tenant_id, UUID do atendente, nenhum campo tratativa_*).
