@@ -1,5 +1,22 @@
 # Wiki Log
 
+## 2026-06-22 — Sessão 88: Encerramento — debug + fix timeout + envio manual
+
+**Contexto:** Agente de encerramento não enviou mensagem no sábado 21/06. Investigação e correção.
+
+**Root causes identificados:**
+- `trigger.config.ts` tinha `maxDuration: 300` global limitando o task `encerramento-gerar-imagem` que tem `maxDuration: 600` — causava abort após ~300s (LLM ~120s + 2 imagens ~180s cada = ~480s necessários)
+- Sexta 20/06: timeout no run de geração → sem imagem no `agent_runs`
+- Sábado 21/06: `envio-agendado` não encontrou imagem do dia, tentou gerar no momento do envio → também falhou
+
+**Ações tomadas:**
+- ✅ Envio manual executado via bridge: 15 grupos receberam a mensagem com a imagem do sábado
+- ✅ Fix: `maxDuration` global aumentado de 300s para 600s em `trigger.config.ts`
+- ✅ PR [#483](https://github.com/deli-consult-delivery/consult-delivery/pull/483) mergeado
+- ✅ Deploy Trigger.dev versão 20260622.47 (75 tasks, schedules re-registrados)
+
+**Próxima verificação:** segunda-feira 23/06 às 21:00 UTC (18:00 BRT) — confirmar que o encerramento rodou sem timeout.
+
 ## 2026-06-22 — Sessão 87: CSAT — security findings resolvidos [T8/CSAT]
 
 **Contexto:** 6 findings de segurança flagged na sessão 84/85 (não auto-aplicados em prod por protocolo) foram todos resolvidos pelo Wandson.
