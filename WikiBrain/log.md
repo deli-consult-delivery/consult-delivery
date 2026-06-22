@@ -1,5 +1,16 @@
 # Wiki Log
 
+## 2026-06-22 — Sessão 86/87: CORA — dedup diário (PR #471) [T8/Cora]
+
+**Problema:** Fila de aprovação exibia múltiplos drafts para o mesmo número de telefone (ex: Mikelly Container + MIKELLY & CIA para 94991857808). Wandson podia aprovar duas vezes e enviar 2 mensagens para o mesmo cliente no mesmo dia.
+
+**Solução (3 camadas):**
+1. **`trigger/cora/processar-cobranca.ts`** — antes de criar draft, verifica `agent_drafts` por `status in (pending, sent)` + `metadata->>customer_phone` + `created_at >= meia-noite BRT`. Retorna `skipped: true, reason: "draft_duplicado_hoje"` se já existe.
+2. **`bridge-server/routes/cora-aprovacao.js`** — novo passo 4 (dedup diário): antes de enviar via Evolution, verifica se já há `status=sent` para o mesmo phone hoje. Retorna HTTP 409 com `code: DUPLICATE_SEND_TODAY`.
+3. **`src/console/Cora.jsx`** — fila de aprovação deduplica por `metadata.customer_phone` antes de renderizar. Exibe aviso "N cobranças ocultas — mesmo número já aparece na fila".
+
+**Resultado:** PR #471 mergeado · Bridge reiniciado (online, 0 unstable restarts) · Trigger.dev version 20260622.22 deployada (75 tasks).
+
 ## 2026-06-22 — Sessão 85/86: CORA — fix "Failed to fetch" ao Aprovar e Enviar + 422 para número sem WhatsApp (PR #467) [T8/Cora]
 
 **Problema reportado:** Wandson clicou em "Aprovar e Enviar" no dashboard CORA → alerta genérico "Failed to fetch", mensagem não enviada.
