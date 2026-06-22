@@ -54,7 +54,10 @@ module.exports = function buildPublicoAvaliacaoRouter({ sbFetch }) {
   const router = express.Router();
 
   // ── Helper: busca avaliação pelo public_token ────────────────────────────────
+  // Valida UUID antes de consultar — Supabase retorna 400/22P02 com strings inválidas
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   async function getAvaliacaoByToken(token) {
+    if (!UUID_RE.test(token)) return null;
     const rows = await sbFetch(
       `atendimento_avaliacoes?public_token=eq.${encodeURIComponent(token)}&select=id,tenant_id,status,nota,atendente_nome,nome_cliente,public_token_expires_at&limit=1`
     );
