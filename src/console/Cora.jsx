@@ -1670,7 +1670,7 @@ export default function Cora({ tenantDbId, userId }) {
                   const isPagando = !!pagandoMap[cob.id];
                   return (
                     <div key={cob.id} style={{ borderBottom: '1px solid var(--g-100)' }}>
-                      <div style={{ padding: '12px 20px', display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr) auto auto auto auto', alignItems: 'center', gap: 12 }}>
+                      <div className="cv2-regua-row" style={{ padding: '12px 20px', display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr) auto auto auto auto', alignItems: 'center', gap: 12 }}>
                         <div style={{ width: 34, height: 34, borderRadius: '50%', background: cob.status === 'overdue' ? '#B70C00' : '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#fff', fontSize: 12, flexShrink: 0 }}>
                           {(cob.customer_name || '??').slice(0, 2).toUpperCase()}
                         </div>
