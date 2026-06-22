@@ -121,37 +121,60 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
         }
       );
       if (!ew.ok) {
-        const detail = (await ew.text()).slice(0, 200);
+        const detail = (await ew.text()).slice(0, 400);
         console.warn(`[cora-aprovacao] Evolution ${ew.status}: ${detail}`);
 
-        // Registrar erro no metadata do draft (mantém pending para permitir retry manual)
-        await sbFetch(
-          `agent_drafts?id=eq.${encodeURIComponent(draft_id)}&tenant_id=eq.${encodeURIComponent(tenant_id)}`,
-          {
-            method: 'PATCH',
-            body: {
-              metadata: {
-                ...meta,
-                last_error: detail,
-                last_error_at: new Date().toISOString(),
-                last_error_status: ew.status,
+        // Detectar número sem WhatsApp (Evolution retorna exists:false)
+        let numeroSemWhatsapp = false;
+        try {
+          const parsed = JSON.parse(detail);
+          const msgs = parsed?.response?.message ?? [];
+          numeroSemWhatsapp = msgs.some(m => m.exists === false);
+        } catch (_) {}
+
+        // Registrar erro no metadata do draft (mantém pending para retry manual)
+        try {
+          await sbFetch(
+            `agent_drafts?id=eq.${encodeURIComponent(draft_id)}&tenant_id=eq.${encodeURIComponent(tenant_id)}`,
+            {
+              method: 'PATCH',
+              body: {
+                metadata: {
+                  ...meta,
+                  last_error: detail,
+                  last_error_at: new Date().toISOString(),
+                  last_error_status: ew.status,
+                  numero_sem_whatsapp: numeroSemWhatsapp,
+                },
               },
-            },
-          }
-        );
+            }
+          );
+        } catch (patchErr) {
+          console.error('[cora-aprovacao] falha ao salvar erro no draft:', patchErr.message);
+        }
 
         // Registrar em cora_acoes para rastreio e retry pelo agente
-        await supabaseInsert('cora_acoes', {
-          tenant_id,
-          cobranca_v2_id: cobrancaV2Id,
-          tipo:           'erro_envio',
-          acao:           'falha_whatsapp',
-          canal:          'whatsapp',
-          agente:         'cora',
-          conteudo:       `Evolution ${ew.status}: ${detail}`,
-          mensagem_enviada: null,
-        });
+        try {
+          await supabaseInsert('cora_acoes', {
+            tenant_id,
+            cobranca_v2_id: cobrancaV2Id,
+            tipo:           'erro_envio',
+            acao:           numeroSemWhatsapp ? 'numero_sem_whatsapp' : 'falha_whatsapp',
+            canal:          'whatsapp',
+            agente:         'cora',
+            conteudo:       `Evolution ${ew.status}: ${detail}`,
+            mensagem_enviada: null,
+          });
+        } catch (insErr) {
+          console.error('[cora-aprovacao] falha ao registrar em cora_acoes:', insErr.message);
+        }
 
+        if (numeroSemWhatsapp) {
+          return res.status(422).json({
+            error: `Número ${targetPhone} não está cadastrado no WhatsApp. Verifique o contato.`,
+            code:  'WHATSAPP_NUMBER_NOT_FOUND',
+          });
+        }
         return res.status(502).json({ error: 'Falha ao enviar via Evolution API' });
       }
       const isTest = req.query.test_phone ? ` (TESTE → ${targetPhone})` : '';
