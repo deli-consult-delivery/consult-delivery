@@ -61,6 +61,17 @@ module.exports = function buildPublicoAvaliacaoRouter({ sbFetch }) {
     return rows?.[0] ?? null;
   }
 
+  // ── Helper: só aceita logo via https:// (bloqueia javascript:/data:/http inseguro) ─
+  function safeLogoUrl(url) {
+    if (typeof url !== 'string' || !url) return null;
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'https:' ? url : null;
+    } catch {
+      return null;
+    }
+  }
+
   // ── Helper: busca branding público do tenant ─────────────────────────────────
   // Só dados de marca (nome, cores, logo) — nada sensível.
   async function getBrandByTenant(tenantId) {
@@ -74,7 +85,7 @@ module.exports = function buildPublicoAvaliacaoRouter({ sbFetch }) {
         name:        t.name        ?? null,
         color:       t.color       ?? null,
         theme_color: t.theme_color ?? null,
-        logo_url:    t.logo_url     ?? null,
+        logo_url:    safeLogoUrl(t.logo_url),
       };
     } catch (err) {
       console.error('[publico/avaliacao getBrand]', err.message);

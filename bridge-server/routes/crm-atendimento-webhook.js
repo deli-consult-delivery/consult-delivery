@@ -96,7 +96,9 @@ module.exports = function buildCrmAtendimentoWebhookRouter({ sbFetch }) {
   // ════════════════════════════════════════════════════════════════════════════
   router.post('/crm/atendimento-finalizado', rateLimit, async (req, res) => {
     const plainToken = req.headers['x-crm-token'];
-    if (!plainToken || typeof plainToken !== 'string') {
+    // Cap de tamanho: tokens legítimos são curtos (UUID/hex ~36-64 chars).
+    // Evita hashear payloads gigantes vindos de header malicioso.
+    if (!plainToken || typeof plainToken !== 'string' || plainToken.length > 256) {
       return res.status(401).json({ error: 'token_ausente' });
     }
 
