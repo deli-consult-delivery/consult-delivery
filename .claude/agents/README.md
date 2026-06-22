@@ -1,12 +1,11 @@
 # Subagents — Consult Delivery
 
-Subagents customizados específicos da plataforma Consult Delivery. Complementares aos 33 agents GSD globais (que ficam em `~\.claude\agents\`).
+Subagents customizados específicos da plataforma Consult Delivery, usados pelo pipeline ECC.
 
 ## Convenção de prefixo
 
 | Prefixo | Onde fica | Propósito |
 |---|---|---|
-| `gsd-*` | Global (`~\.claude\agents\`) | Metodologia GSD genérica, multi-projeto |
 | `cd-*` | Repo (`consult-delivery\.claude\agents\`) | Específico da Consult Delivery (Trigger.dev, Supabase, RESTRUCTURE.md) |
 
 Quando aparecer alucinação, você sabe na hora qual subagent corrigir.
@@ -307,17 +306,14 @@ Para mudanças pequenas (1-2 arquivos):
 2. @cd-validator → audita (7 camadas)
 ```
 
-## Coexistência com os 33 GSD
+## Encadeamento típico (pipeline ECC)
 
-Você pode chamar AMBOS na mesma sessão:
+Você pode encadear os `cd-*` na mesma sessão:
 
 ```
-@gsd-planner faz o plano de implementação do CORA
 @cd-task-creator implementa cada task do plano
 @cd-validator audita o resultado
 ```
-
-Os GSD planejam de forma genérica; os `cd-*` executam seguindo padrões específicos da plataforma.
 
 ## Princípios que TODOS os subagents `cd-*` respeitam
 
