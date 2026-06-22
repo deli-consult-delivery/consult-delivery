@@ -6,6 +6,15 @@ import { supabase } from '../lib/supabase.js';
 
 const BRIDGE = import.meta.env.VITE_BRIDGE_URL || 'http://localhost:3001';
 
+// Colunas explícitas de `cobrancas` — TUDO menos `metadata` (jsonb pesado com o
+// payload bruto do Asaas, nunca lido na UI). Evita arrastar o blob a cada SELECT,
+// que era 81% do tempo total de banco (pg_stat_statements). Não usar `select('*')`.
+const COBRANCAS_COLUMNS = 'id, tenant_id, cliente_id, asaas_charge_id, valor, vencimento, status, billing_type, invoice_url, bank_slip_url, pix_qr_code, customer_name, customer_phone, notas, created_at, updated_at, payment_date, net_value, date_created, invoice_viewed_date, description, confirmed_date';
+
+// Debounce dos reloads disparados por Realtime: um batch do asaas-sync (~2000 linhas)
+// gera 2000 eventos → sem debounce, 2000 reloads da tabela inteira. Com 2s, vira 1.
+const DEBOUNCE_REALTIME_MS = 2000;
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmtBRL(v) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
@@ -704,6 +713,10 @@ export default function CoraScreen({ tenant, tenantDbId, userId }) {
   const [modo, setModo] = useState('humano');
   const [savingModo, setSavingModo] = useState(false);
 
+  // Timers de debounce dos reloads Realtime (um por subscription)
+  const cobrancasV1RealtimeTimer = useRef(null);
+  const cobrancasV2RealtimeTimer = useRef(null);
+
   const loadCobrancas = useCallback(async () => {
     if (!tenantDbId) return;
     setLoading(true);
@@ -721,7 +734,7 @@ export default function CoraScreen({ tenant, tenantDbId, userId }) {
     setLoadingV2(true);
     const { data } = await supabase
       .from('cobrancas')
-      .select('*')
+      .select(COBRANCAS_COLUMNS)
       .eq('tenant_id', tenantDbId)
       .order('vencimento', { ascending: true });
     setCobrancasV2(data || []);
@@ -754,22 +767,36 @@ export default function CoraScreen({ tenant, tenantDbId, userId }) {
   useEffect(() => { loadCobrancasV2(); }, [loadCobrancasV2]);
   useEffect(() => { loadModo(); }, [loadModo]);
 
-  // Realtime — V1
+  // Realtime — V1 (com debounce: coalesce burst de eventos em 1 reload)
   useEffect(() => {
     if (!tenantDbId) return;
+    const scheduleReload = () => {
+      if (cobrancasV1RealtimeTimer.current) clearTimeout(cobrancasV1RealtimeTimer.current);
+      cobrancasV1RealtimeTimer.current = setTimeout(() => loadCobrancas(), DEBOUNCE_REALTIME_MS);
+    };
     const ch = supabase.channel('cora-cobrancas-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cora_cobrancas', filter: `tenant_id=eq.${tenantDbId}` }, () => loadCobrancas())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cora_cobrancas', filter: `tenant_id=eq.${tenantDbId}` }, scheduleReload)
       .subscribe();
-    return () => supabase.removeChannel(ch);
+    return () => {
+      if (cobrancasV1RealtimeTimer.current) clearTimeout(cobrancasV1RealtimeTimer.current);
+      supabase.removeChannel(ch);
+    };
   }, [tenantDbId, loadCobrancas]);
 
-  // Realtime — V2
+  // Realtime — V2 (com debounce: coalesce burst do asaas-sync em 1 reload)
   useEffect(() => {
     if (!tenantDbId) return;
+    const scheduleReload = () => {
+      if (cobrancasV2RealtimeTimer.current) clearTimeout(cobrancasV2RealtimeTimer.current);
+      cobrancasV2RealtimeTimer.current = setTimeout(() => loadCobrancasV2(), DEBOUNCE_REALTIME_MS);
+    };
     const ch = supabase.channel('cora-cobrancas-v2-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cobrancas', filter: `tenant_id=eq.${tenantDbId}` }, () => loadCobrancasV2())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cobrancas', filter: `tenant_id=eq.${tenantDbId}` }, scheduleReload)
       .subscribe();
-    return () => supabase.removeChannel(ch);
+    return () => {
+      if (cobrancasV2RealtimeTimer.current) clearTimeout(cobrancasV2RealtimeTimer.current);
+      supabase.removeChannel(ch);
+    };
   }, [tenantDbId, loadCobrancasV2]);
 
   const emAberto = cobrancas.filter(c => c.status === 'aberto' || c.status === 'negociando');
