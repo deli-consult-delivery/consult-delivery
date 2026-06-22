@@ -39,10 +39,11 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
   }
 
   // ── Helper: anexa a assinatura fixa ao final da mensagem (idempotente) ─────────────
-  const ASSINATURA_CORA = '— Financeiro, Consult Delivery';
+  const ASSINATURA_CORA = '*Cora* | Financeiro, Consult Delivery';
+  const ASSINATURA_MARKER = '| Financeiro, Consult Delivery';
   function anexarAssinatura(mensagem) {
     const texto = (mensagem || '').trimEnd();
-    if (texto.includes(ASSINATURA_CORA)) return texto;
+    if (texto.includes(ASSINATURA_MARKER)) return texto;
     return `${texto}\n\n${ASSINATURA_CORA}`;
   }
 
@@ -120,9 +121,37 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
         }
       );
       if (!ew.ok) {
-        // Loga o detalhe no servidor, mas não devolve ao cliente (evita vazar infra/Evolution).
         const detail = (await ew.text()).slice(0, 200);
         console.warn(`[cora-aprovacao] Evolution ${ew.status}: ${detail}`);
+
+        // Registrar erro no metadata do draft (mantém pending para permitir retry manual)
+        await sbFetch(
+          `agent_drafts?id=eq.${encodeURIComponent(draft_id)}&tenant_id=eq.${encodeURIComponent(tenant_id)}`,
+          {
+            method: 'PATCH',
+            body: {
+              metadata: {
+                ...meta,
+                last_error: detail,
+                last_error_at: new Date().toISOString(),
+                last_error_status: ew.status,
+              },
+            },
+          }
+        );
+
+        // Registrar em cora_acoes para rastreio e retry pelo agente
+        await supabaseInsert('cora_acoes', {
+          tenant_id,
+          cobranca_v2_id: cobrancaV2Id,
+          tipo:           'erro_envio',
+          acao:           'falha_whatsapp',
+          canal:          'whatsapp',
+          agente:         'cora',
+          conteudo:       `Evolution ${ew.status}: ${detail}`,
+          mensagem_enviada: null,
+        });
+
         return res.status(502).json({ error: 'Falha ao enviar via Evolution API' });
       }
       const isTest = req.query.test_phone ? ` (TESTE → ${targetPhone})` : '';
