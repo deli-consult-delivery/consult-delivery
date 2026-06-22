@@ -1,5 +1,22 @@
 # Wiki Log
 
+## 2026-06-22 — Sessão 83/84: CORA R3 — assinatura *Cora* negrito + log de erro retry (PR #463) [T8 — Cora]
+
+**Contexto:** Wandson pediu 3 ajustes pós-R2: (1) assinatura com nome "Cora" em negrito WhatsApp; (2) remover palavra "equipe" dos textos de cobrança (grep nos tasks Trigger.dev → nenhuma ocorrência encontrada); (3) registrar erro quando envio WhatsApp falha, para que o agente possa retentar.
+
+**Entregues:**
+
+- **`bridge-server/routes/cora-aprovacao.js` (PR #463):**
+  - `ASSINATURA_CORA = '*Cora* | Financeiro, Consult Delivery'` (negrito `*...*` WhatsApp). Idempotência via `ASSINATURA_MARKER = '| Financeiro, Consult Delivery'` (resiliente a mudanças de prefixo).
+  - Bloco `if (!ew.ok)`: além do `console.warn` anterior, agora registra `last_error / last_error_at / last_error_status` em `agent_drafts.metadata` (draft permanece `pending` para retry manual) **e** insere row em `cora_acoes(tipo='erro_envio', acao='falha_whatsapp')` para rastreio e retry pelo agente.
+
+**Deploy:**
+- PR #463 squash-mergeado → `git reset --hard origin/main && pm2 restart bridge-server` VPS → online (0 unstable restarts, uptime 19s).
+
+**Nota:** "equipe" não aparece em nenhum prompt dos tasks `trigger/cora/*.ts` — sem mudança necessária no Trigger.dev.
+
+---
+
 ## 2026-06-22 — Sessão 82/83: CORA — overflow KPI + rótulo período + assinatura fixa (PRs #457 e #461) [T8 — Cora]
 
 **Contexto:** Wandson reportou 3 problemas: (1) valor longo "R$ 247.888,40" estourando fora do card KPI no dashboard CORA; (2) cards KPI sem indicar de quando são os dados; (3) assinatura da CORA nas mensagens WhatsApp deveria ser `— Financeiro, Consult Delivery` (sem nome da equipe/loja).
