@@ -141,9 +141,18 @@ async function enviarBomDia(runId: string, weekdayLabel: string): Promise<Output
 
       if (existingRun?.output) {
         const out = existingRun.output as Record<string, unknown>;
-        imgGroupUrl = out.img_group_url as string | undefined;
-        caption     = out.caption     as string | undefined;
-        logger.info("bom-dia-envio-agendado: usando imagem já gerada hoje", { tenantId, imgGroupUrl });
+        // Garantir que o run é do dia correto (SP) antes de reusar a imagem
+        if (out.date === dateStr) {
+          imgGroupUrl = out.img_group_url as string | undefined;
+          caption     = out.caption     as string | undefined;
+          logger.info("bom-dia-envio-agendado: usando imagem já gerada hoje", { tenantId, imgGroupUrl });
+        } else {
+          logger.warn("bom-dia-envio-agendado: run encontrado mas data diverge — ignorando cache", {
+            tenantId,
+            runDate:  out.date,
+            expected: dateStr,
+          });
+        }
       }
 
       // Se não existe run de hoje, dispara gerar-imagem e espera resultado

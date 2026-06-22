@@ -540,12 +540,14 @@ async function executar(input: Input, runId: string): Promise<Output> {
 
   // 1. Idempotência — pula se for geração manual (force_new, tema ou brief customizados)
   if (!isManual) {
+    // Meia-noite SP em UTC: SP = UTC-3, portanto meia-noite SP = 03:00 UTC
+    const todayStartSP = `${dateStr}T03:00:00.000Z`;
     const { data: existing } = await sb
       .from("agent_runs")
       .select("output")
       .eq("agent_id", "bom-dia")
       .eq("status", "success")
-      .gte("created_at", new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString())
+      .gte("created_at", todayStartSP)
       .limit(1)
       .maybeSingle();
 
