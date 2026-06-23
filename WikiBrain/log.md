@@ -1,5 +1,21 @@
 # Wiki Log
 
+## 2026-06-23 — Sessão webhook-hardening: `evolution-webhook` hardening defensivo deployado em prod (PR #491, Edge Function v56)
+
+**Contexto:** offshoot da investigação da tela preta / "Nenhum workspace" (saturação de banco, sessão 89). Naquela sessão, o hardening defensivo da edge function `evolution-webhook` ficou apenas **OFERECIDO ao Wandson, não aplicado**. Esta sessão fechou o ciclo: CODOU + MERGEOU + DEPLOYOU.
+
+**Comportamento entregue:** o webhook agora **loga o `instance_name` recebido** e responde **HTTP 200 a uma instância Evolution órfã/desconhecida em vez de 404**, para que a instância externa pare o loop de retry. Um **erro transitório de lookup** (timeout/conexão de banco sob carga — `instErr.code !== 'PGRST116'`) **ainda retorna 404 de propósito**, para o Evolution re-entregar o evento depois. "Zero linhas" genuíno (PGRST116) ou resultado vazio → 200, evento ignorado de propósito.
+
+**Correções aplicadas (EM PROD):** código em `main` via **PR #491** (commit `2e25735`, "fix(webhook): hardening defensivo — 200 a instância órfã, 404 só em erro transitório"). Deploy via **Supabase MCP `deploy_edge_function`** — o CI **NÃO publica edge functions** (é frontend-only). A função está agora em **Edge Function v56, ACTIVE, `verify_jwt: false`**.
+
+**Verificação (output bruto):** fidelidade byte-a-byte — md5 do deployado `eac6a1be4655ed3e79f4a1c0b6237bd0` **== local**, diff limpo, **62675 bytes / 1503 linhas**. Logs de runtime mostram a função servindo 200s sem erro de boot/sintaxe.
+
+**Branch:** a feature original `wandson/webhook-hardening-instancia-orfa` foi squash-merged via #491 e **NÃO deve ser reusada** (conflito fantasma — caso #155). Esta atualização de docs foi feita na branch `wandson/webhook-hardening-docs`.
+
+**Tracks:** T8/Infra (+ T8/Cora — destrava o "Front 1" da sessão 89, o loop de 404 do `evolution-webhook`).
+
+---
+
 ## 2026-06-23 — Sessão 91: BLUEPRINT AI-First — plano-mestre escrito, aguardando 🛑 CHECKPOINT do Wandson
 
 **Contexto (visão do Wandson, mensagem de voz):** transformar a Consult Delivery numa operação **AI-First** (~100% operada por agentes). Um cérebro/memória dentro da plataforma; **agentes especialistas** atendem clientes que chegam por **live chat**; o que o especialista não resolve vira **tarefa num pipeline com visão em tempo real**, onde ele resolve no sistema externo necessário (ERP/Asaas/sistema do cliente), atualiza a tarefa, e o atendente **responde ao cliente** com a conclusão — ou resolve direto. Reusar tudo que já existe; replicar o **paradigma EvoNexus** (chat interno com um **Oráculo** que aciona outros agentes e cria coisas na plataforma).
