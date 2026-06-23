@@ -54,6 +54,8 @@
 
 **Pendente do Wandson:** rodar o runbook para o 1º cliente real + validação visual.
 
+**Encerramento (sessão de continuidade, 2026-06-23):** merge do `f63c025` resolvido contra `origin/main` (conflito do Tracker resolvido mantendo T8 webhook-hardening de origin + T9 gating do HEAD), merge commit `eb414db`; **PR [#493](https://github.com/deli-consult-delivery/consult-delivery/pull/493) squash-mergeado em `main` (`e0576e9`)**. **Deploy em prod VERIFICADO (output bruto):** GitHub Pages publicou o bundle novo `assets/index-FZTJqS2d.js` e o `grep tenant_modules` no bundle deployado retornou **1 ocorrência** (validação por string, não por hash — CI injeta `VITE_*`). Smoke autenticado do cliente restrito segue com o Wandson (depende do runbook + credenciais do cliente, fora do alcance desta sessão).
+
 ---
 
 ## 2026-06-22 — Sessão 89: Tela preta "Nenhum workspace" — causa-raiz de banco resolvida em prod (#482 + #485) + Front 1 (loop 404 evolution-webhook)
