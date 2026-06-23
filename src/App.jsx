@@ -1,49 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { isMuted } from './lib/mutedConvs.js';
-import Sidebar from './components/Sidebar.jsx';
-import Topbar from './components/Topbar.jsx';
-import { TweaksPanel, TweakSection, TweakColor, TweakRadio, TweakToggle, useTweaks } from './components/TweaksPanel.jsx';
+// Console clássico aposentado (D1): só LoginScreen/ResetPasswordScreen e o Console v2 sobrevivem.
+import { useTweaks } from './components/TweaksPanel.jsx';
 import LoginScreen from './screens/LoginScreen.jsx';
-import DashboardScreen from './screens/DashboardScreen.jsx';
-import ChatScreen from './screens/ChatScreen.jsx';
-import TasksScreen from './screens/TasksScreen.jsx';
-import CoraScreen from './screens/CoraScreen.jsx';
-import AnaliseiFoodScreen from './screens/AnaliseiFoodScreen.jsx';
-import TarefasClientesScreen from './screens/TarefasClientesScreen.jsx';
-import CRMScreen from './screens/CRMScreen.jsx';
-import ReportsScreen from './screens/ReportsScreen.jsx';
-import SettingsScreen from './screens/SettingsScreen.jsx';
-import AgentsPage from './screens/AgentsPage.jsx';
-import AutomacoesScreen from './screens/AutomacoesScreen.jsx';
-import CampanhasScreen from './screens/campanhas/CampanhasScreen.jsx';
-import LojasScreen from './screens/lojas/LojasScreen.jsx';
-import LaraScreen from './screens/LaraScreen.jsx';
-import LaraEditorialScreen from './screens/LaraEditorial/LaraEditorialScreen.jsx';
-import DraftsPendentesScreen from './screens/DraftsPendentesScreen.jsx';
-import GruposScreen from './screens/GruposScreen.jsx';
-import DeliScreen from './screens/DeliScreen.jsx';
-import DeliPainel from './screens/DeliPainel.jsx';
-import MaxScreen from './screens/MaxScreen.jsx';
-import NovaScreen from './screens/NovaScreen.jsx';
-import BrenoScreen from './screens/BrenoScreen.jsx';
-import SofiaScreen from './screens/Sofia/SofiaScreen.jsx';
-import VeraScreen from './screens/VeraScreen.jsx';
-import BomDiaScreen from './screens/BomDiaScreen.jsx';
-import EncerramentoScreen from './screens/EncerramentoScreen.jsx';
-import ContratosScreen from './screens/Contratos/ContratosScreen.jsx';
-import RecontratacaoScreen from './screens/Recontratacao/RecontratacaoScreen.jsx';
-import OnboardingScreen from './screens/OnboardingScreen.jsx';
-import RequireRole from './components/auth/RequireRole.jsx';
 import ResetPasswordScreen from './screens/ResetPasswordScreen.jsx';
-import InadimplentesScreen from './screens/InadimplentesScreen.jsx';
-import NotificacoesScreen from './screens/NotificacoesScreen.jsx';
-import WhatsappVinculosScreen from './screens/WhatsappVinculosScreen.jsx';
-import MiaAuditScreen from './screens/MiaAuditScreen.jsx';
 import ConsoleV2 from './console/ConsoleV2.jsx';
 import { TENANTS } from './data.js';
 import { supabase } from './lib/supabase.js';
 import { listTenants, countUnreadNotifications, subscribeToNotifications } from './lib/api.js';
-import { useSidebarCounts } from './screens/hooks/useSidebarCounts.js';
 import { registerPushSubscription } from './lib/pushNotifications.js';
 
 const TWEAK_DEFAULTS = {
@@ -62,20 +26,15 @@ export default function App() {
   const [tenants, setTenants] = useState(TENANTS);
   const [_deepLinkConvId] = useState(() => new URLSearchParams(window.location.search).get('chat'));
   const [_confirmedAcao]  = useState(() => new URLSearchParams(window.location.search).get('breno_confirmado'));
-  const [route, setRoute] = useState(() => _deepLinkConvId ? 'chat' : (localStorage.getItem('cd-route') || 'dashboard'));
+  // Console clássico aposentado (D1): rota só serve a deep-links/notif internos; v2 é o único shell.
+  const [route, setRoute] = useState(() => _deepLinkConvId ? 'chat' : 'console-v2');
   const [confirmToast, setConfirmToast] = useState(_confirmedAcao);
   const [tenant, setTenant] = useState(null);
   const [tenantDbId, setTenantDbId] = useState(null);
   const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [theme, setTheme] = useState(() => localStorage.getItem('cd-theme') || 'claro');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifUnread, setNotifUnread] = useState(0);
   const hasLoadedTenantsOnce = useRef(false);
-
-  // Contadores reais da sidebar (chat = conversas não lidas, cora = cobranças em aberto)
-  const { chat: chatUnread, cora: coraCount } = useSidebarCounts(tenantDbId);
-
-  useEffect(() => { localStorage.setItem('cd-route', route); }, [route]);
 
   // Carrega tenants do banco (usado no mount e quando um workspace novo é criado)
   async function reloadTenants(preferSlug) {
@@ -333,262 +292,13 @@ export default function App() {
     );
   }
 
-  // Console v2 (F1 · D6) — shell próprio em tela cheia, rota isolada
-  if (route === 'console-v2') {
-    return (
-      <ConsoleV2
-        tenantInfo={tenants.find(t => t.id === tenant)}
-        tenantDbId={tenantDbId}
-        userId={session?.user?.id}
-        onExit={() => setRoute('dashboard')}
-      />
-    );
-  }
-
-  const counts = { chat: chatUnread || undefined, cora: coraCount || undefined, notificacoes: notifUnread || undefined };
-
+  // Console v2 — único console (D1): todo usuário autenticado com tenant cai aqui.
+  // Console clássico aposentado nesta sessão (Sidebar/Topbar/rotas legadas removidos).
   return (
-    <div className={`app-shell${route === 'chat' ? ' app-shell--notopbar' : ''}`}>
-      {confirmToast && (
-        <div style={{
-          position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)',
-          zIndex: 9999, background: '#166534', color: '#fff',
-          padding: '10px 20px', borderRadius: 8, fontWeight: 600,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.4)', whiteSpace: 'nowrap',
-        }}>
-          {confirmToast === 'suporte' && '✓ Confirmado — Darei o suporte'}
-          {confirmToast === 'amanha'  && '✓ Confirmado — Tratarei amanhã'}
-          {confirmToast === 'ignorar' && '✓ Ignorado'}
-        </div>
-      )}
-      {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
-      <Sidebar
-        route={route}
-        setRoute={r => { setRoute(r); setSidebarOpen(false); }}
-        counts={counts}
-        isOpen={sidebarOpen}
-        userId={session?.user?.id}
-        onClose={() => setSidebarOpen(false)}
-      />
-      <Topbar
-        route={route}
-        tenant={tenant}
-        setTenant={setTenant}
-        tenants={tenants}
-        theme={theme}
-        setTheme={setTheme}
-        onMenuToggle={() => setSidebarOpen(v => !v)}
-        tenantId={tenantDbId}
-        userId={session?.user?.id}
-        onNavigate={setRoute}
-      />
-      <main className="main scroll" key={route + tenant}>
-        {/* Rotas públicas (sem RequireRole) */}
-        {route === 'dashboard' && <DashboardScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={setRoute} />}
-        {route === 'notificacoes' && <NotificacoesScreen tenantDbId={tenantDbId} userId={session?.user?.id} onNavigate={setRoute} />}
-
-        {/* admin + atendimento + marketing */}
-        {route === 'lojas' && (
-          <RequireRole roles={['admin', 'atendimento', 'marketing']} screenId="lojas" userId={session?.user?.id}>
-            <LojasScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
-          </RequireRole>
-        )}
-        {route === 'chat' && (
-          <RequireRole roles={['admin', 'atendimento', 'marketing']} screenId="chat" userId={session?.user?.id}>
-            <ChatScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} onNavigate={setRoute} deepLinkConvId={_deepLinkConvId} />
-          </RequireRole>
-        )}
-        {route === 'onboarding' && (
-          <RequireRole roles={['admin', 'atendimento', 'marketing']} screenId="onboarding" userId={session?.user?.id}>
-            <OnboardingScreen tenantDbId={tenantDbId} />
-          </RequireRole>
-        )}
-
-        {/* admin + marketing */}
-        {route === 'crm' && (
-          <RequireRole roles={['admin', 'marketing']} screenId="crm" userId={session?.user?.id}>
-            <CRMScreen tenant={tenant} tenantDbId={tenantDbId} onNavigate={nav => setRoute(nav)} />
-          </RequireRole>
-        )}
-        {route === 'reports' && (
-          <RequireRole roles={['admin', 'marketing']} screenId="reports" userId={session?.user?.id}>
-            <ReportsScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />
-          </RequireRole>
-        )}
-        {route === 'lara' && (
-          <RequireRole roles={['admin', 'marketing']} userId={session?.user?.id}>
-            <LaraScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
-          </RequireRole>
-        )}
-        {route === 'lara-editorial' && (
-          <RequireRole roles={['admin', 'marketing']} userId={session?.user?.id}>
-            <LaraEditorialScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
-          </RequireRole>
-        )}
-        {route === 'sofia' && (
-          <RequireRole roles={['admin', 'marketing']} userId={session?.user?.id}>
-            <SofiaScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
-          </RequireRole>
-        )}
-        {route === 'tarefas-clientes' && (
-          <RequireRole roles={['admin', 'marketing']} screenId="tarefas-clientes" userId={session?.user?.id}>
-            <TarefasClientesScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />
-          </RequireRole>
-        )}
-        {route === 'campanhas' && (
-          <RequireRole roles={['admin', 'marketing']} screenId="campanhas" userId={session?.user?.id}>
-            <CampanhasScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
-          </RequireRole>
-        )}
-        {route === 'drafts-pendentes' && (
-          <RequireRole roles={['admin', 'marketing']} screenId="drafts-pendentes" userId={session?.user?.id}>
-            <DraftsPendentesScreen tenantId={tenantDbId} userId={session?.user?.id} />
-          </RequireRole>
-        )}
-
-        {/* admin only */}
-        {route === 'tarefas' && (
-          <RequireRole roles={['admin']} screenId="tarefas" userId={session?.user?.id}>
-            <TasksScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />
-          </RequireRole>
-        )}
-        {route === 'contratos' && (
-          <RequireRole roles={['admin']} screenId="contratos" userId={session?.user?.id}>
-            <ContratosScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
-          </RequireRole>
-        )}
-        {route === 'recontratacao' && (
-          <RequireRole roles={['admin']} screenId="recontratacao" userId={session?.user?.id}>
-            <RecontratacaoScreen tenantDbId={tenantDbId} />
-          </RequireRole>
-        )}
-        {route === 'agents' && (
-          <RequireRole roles={['admin']} screenId="agents" userId={session?.user?.id}>
-            <AgentsPage tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />
-          </RequireRole>
-        )}
-        {route === 'automacoes' && (
-          <RequireRole roles={['admin']} userId={session?.user?.id}>
-            <AutomacoesScreen tenantDbId={tenantDbId} onNavigate={setRoute} />
-          </RequireRole>
-        )}
-        {route === 'settings' && (
-          <RequireRole roles={['admin']} screenId="settings" userId={session?.user?.id}>
-            <SettingsScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} onTenantChange={async (newSlug) => {
-              if (newSlug) {
-                setTenant(newSlug);
-              } else {
-                await reloadTenants();
-              }
-            }} />
-          </RequireRole>
-        )}
-        {route === 'max' && (
-          <RequireRole roles={['admin']} userId={session?.user?.id}>
-            <MaxScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
-          </RequireRole>
-        )}
-        {route === 'nova' && (
-          <RequireRole roles={['admin']} userId={session?.user?.id}>
-            <NovaScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
-          </RequireRole>
-        )}
-        {route === 'breno' && (
-          <RequireRole roles={['admin']} userId={session?.user?.id}>
-            <BrenoScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
-          </RequireRole>
-        )}
-        {route === 'vera' && (
-          <RequireRole roles={['admin']} userId={session?.user?.id}>
-            <VeraScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
-          </RequireRole>
-        )}
-
-        {/* admin + deli_owner */}
-        {route === 'deli' && (
-          <RequireRole roles={['admin', 'deli_owner']} screenId="deli" userId={session?.user?.id}>
-            <DeliScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
-          </RequireRole>
-        )}
-        {route === 'deli-painel' && (
-          <RequireRole roles={['admin', 'deli_owner']} userId={session?.user?.id}>
-            <DeliPainel tenantDbId={tenantDbId} userId={session?.user?.id} />
-          </RequireRole>
-        )}
-
-        {/* admin + atendimento */}
-        {route === 'analise-ifood' && (
-          <RequireRole roles={['admin', 'atendimento']} userId={session?.user?.id}>
-            <AnaliseiFoodScreen tenant={tenant} tenantDbId={tenantDbId} />
-          </RequireRole>
-        )}
-        {route === 'grupos' && (
-          <RequireRole roles={['admin', 'atendimento']} screenId="grupos" userId={session?.user?.id}>
-            <GruposScreen tenant={tenant} tenantDbId={tenantDbId} />
-          </RequireRole>
-        )}
-        {route === 'bom-dia' && (
-          <RequireRole roles={['admin', 'atendimento']} userId={session?.user?.id}>
-            <BomDiaScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
-          </RequireRole>
-        )}
-        {route === 'encerramento' && (
-          <RequireRole roles={['admin', 'atendimento']} userId={session?.user?.id}>
-            <EncerramentoScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
-          </RequireRole>
-        )}
-
-        {/* MIA — config vínculos (admin + atendimento) */}
-        {route === 'config-whatsapp-vinculos' && (
-          <RequireRole roles={['admin', 'atendimento']} userId={session?.user?.id}>
-            <WhatsappVinculosScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
-          </RequireRole>
-        )}
-        {/* MIA — audit (admin) */}
-        {route === 'mia-audit' && (
-          <RequireRole roles={['admin']} userId={session?.user?.id}>
-            <MiaAuditScreen tenantDbId={tenantDbId} />
-          </RequireRole>
-        )}
-
-        {/* admin + financeiro */}
-        {route === 'cora' && (
-          <RequireRole roles={['admin', 'financeiro']} userId={session?.user?.id}>
-            <CoraScreen tenant={tenant} tenantDbId={tenantDbId} userId={session?.user?.id} />
-          </RequireRole>
-        )}
-        {route === 'inadimplentes' && (
-          <RequireRole roles={['admin', 'financeiro']} userId={session?.user?.id}>
-            <InadimplentesScreen tenantDbId={tenantDbId} userId={session?.user?.id} />
-          </RequireRole>
-        )}
-      </main>
-      <TweaksPanel title="Tweaks">
-        <TweakSection title="Marca">
-          <TweakColor
-            label="Cor primária"
-            value={tweaks.primaryColor}
-            onChange={v => setTweak('primaryColor', v)}
-            presets={['#B70C00', '#EA580C', '#2563EB', '#059669', '#7C3AED', '#0D0D0D']}
-          />
-        </TweakSection>
-        <TweakSection title="Layout">
-          <TweakRadio
-            label="Densidade"
-            value={tweaks.density}
-            onChange={v => setTweak('density', v)}
-            options={[
-              { value: 'compact', label: 'Compacta' },
-              { value: 'medium', label: 'Média' },
-              { value: 'comfy', label: 'Conforto' },
-            ]}
-          />
-        </TweakSection>
-        <TweakSection title="Recursos">
-          <TweakToggle label="Banner de agentes IA" value={tweaks.showAgentsBanner} onChange={v => setTweak('showAgentsBanner', v)} />
-          <TweakToggle label="Simulação em tempo real" value={tweaks.liveSim} onChange={v => setTweak('liveSim', v)} />
-        </TweakSection>
-      </TweaksPanel>
-    </div>
+    <ConsoleV2
+      tenantInfo={tenants.find(t => t.id === tenant)}
+      tenantDbId={tenantDbId}
+      userId={session?.user?.id}
+    />
   );
 }
