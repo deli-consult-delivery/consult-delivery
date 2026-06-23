@@ -1160,3 +1160,12 @@ Touched: none
 - **Benefício:** (a) zera o lint do advisor para essas 4 FKs; (b) acelera a checagem de integridade da FK quando a linha-pai é deletada/atualizada (antes seq scan no filho); (c) future-proofing conforme as tabelas crescem.
 - **Verificação (output bruto):** `apply_migration` retornou `{"success":true}`; query em `pg_indexes` confirmou os 4 índices presentes em prod com `btree` correto. NÃO houve mudança de frontend/bridge → sem deploy de Pages/bridge necessário.
 - **Pendente:** nenhum (escopo fechado). As outras 130 FKs sem índice do advisor ficaram **intencionalmente fora de escopo**.
+
+## Sessão 92 — 2026-06-23 — CORA: isenção de cobrança, baixa manual PIX e régua flexível
+
+- **Migration `20260623_001_cora_ignorar_cobranca.sql` (APLICADA):** ADD COLUMN `ignorar_cobranca BOOLEAN NOT NULL DEFAULT FALSE` + `ignorar_motivo TEXT` na tabela `cobrancas`; índice parcial `idx_cobrancas_ignorar` filtra rapidamente os não-isentos.
+- **Bridge `cora-gestao.js` (novo):** `PATCH /api/cora/cobrancas/:id/ignorar` (marca/desmarca isenção com auditoria em `cora_acoes`) + `POST /api/cora/cobrancas/:id/marcar-pago` (set `status='received'`, insere `cobranca_eventos`, rejeita todos os `agent_drafts` pending da cobrança, auditoria). Ambos validam tenant membership (anti-IDOR).
+- **Trigger `regua-diaria.ts`:** filtro `.eq("ignorar_cobranca", false)` na query de elegíveis + dedup com janela de tempo dinâmica: pré-vencimento (`dias < 0`) = 48h mínimo entre mensagens; pós-vencimento (`dias >= 0`) = 24h. Substitui o dedup de meia-noite que enviava todo dia.
+- **Frontend `Cora.jsx`:** `elegiveisRegua` filtra `ignorar_cobranca=true`; botões "✓ Já pagou (PIX)" (verde, baixa manual) e "🚫 Não cobrar" (cinza, isenta) adicionados à coluna de ações de cada card da fila de aprovação.
+- **PR [#497](https://github.com/deli-consult-delivery/consult-delivery/pull/497), squash-mergeado em main.**
+- **Próximas ações:** (1) `pm2 restart bridge-server` na VPS; (2) `npx trigger.dev@4.4.6 deploy` para a nova régua; (3) validação visual no browser.

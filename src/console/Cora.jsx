@@ -909,6 +909,8 @@ export default function Cora({ tenantDbId, userId }) {
   const [expandedDraftMap, setExpandedDraftMap] = useState({});
   const [sendingMap, setSendingMap] = useState({});
   const [rejeitarMap, setRejeitarMap] = useState({});
+  const [ignorandoMap, setIgnorandoMap] = useState({});
+  const [pagandoMap, setPagandoMap] = useState({});
   const cobrancasV2RealtimeTimer = useRef(null);
   const draftsRealtimeTimer = useRef(null);
 
@@ -998,6 +1000,37 @@ export default function Cora({ tenantDbId, userId }) {
     );
     setModo(novoModo);
     setSavingModo(false);
+  };
+
+  const ignorarCobranca = async (cob, ignorar) => {
+    setIgnorandoMap(prev => ({ ...prev, [cob.id]: true }));
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch(`${BRIDGE}/api/cora/cobrancas/${cob.id}/ignorar`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ tenant_id: tenantDbId, ignorar, motivo: ignorar ? 'pix_externo' : null }),
+      });
+      if (!r.ok) { const e = await r.json(); alert(e.error || 'Erro ao atualizar isenção'); }
+      else await loadCobrancasV2();
+    } catch (e) { alert(e.message); }
+    setIgnorandoMap(prev => { const n = { ...prev }; delete n[cob.id]; return n; });
+  };
+
+  const marcarPago = async (cob) => {
+    if (!window.confirm(`Confirmar que ${cob.customer_name || 'este cliente'} já pagou via PIX?\nIsso encerrará a cobrança e rejeitará mensagens pendentes.`)) return;
+    setPagandoMap(prev => ({ ...prev, [cob.id]: true }));
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch(`${BRIDGE}/api/cora/cobrancas/${cob.id}/marcar-pago`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ tenant_id: tenantDbId, observacao: 'PIX externo confirmado pelo operador' }),
+      });
+      if (!r.ok) { const e = await r.json(); alert(e.error || 'Erro ao marcar pagamento'); }
+      else { await loadCobrancasV2(); await loadDrafts(); }
+    } catch (e) { alert(e.message); }
+    setPagandoMap(prev => { const n = { ...prev }; delete n[cob.id]; return n; });
   };
 
   const gerarMensagem = async (cob) => {
@@ -1181,6 +1214,7 @@ export default function Cora({ tenantDbId, userId }) {
   const confirmadas = useMemo(() => cobrancasV2.filter(c => c.status === 'received' && c.confirmed_date), [cobrancasV2]);
   const aguardando = useMemo(() => cobrancasV2.filter(c => c.status === 'pending' && c.vencimento >= hoje10), [cobrancasV2, hoje10]);
   const elegiveisRegua = useMemo(() => cobrancasV2.filter(c => {
+    if (c.ignorar_cobranca) return false;
     if (c.status === 'overdue') return true;
     if (c.status === 'pending') { const v = new Date(c.vencimento + 'T00:00:00'); return v >= hoje && v <= em7Dias; }
     return false;
@@ -1571,6 +1605,8 @@ export default function Cora({ tenantDbId, userId }) {
                   const isExpanded = expandedDraftMap[cob.id];
                   const isSending = sendingMap[draftForCob?.metadata?.cobranca_v2_id || draftForCob?.id];
                   const sentAcao = acoes.find(a => a.metadata?.cobranca_v2_id === cob.id && a.tipo === 'mensagem_enviada');
+                  const isIgnorando = !!ignorandoMap[cob.id];
+                  const isPagando = !!pagandoMap[cob.id];
                   return (
                     <div key={cob.id} style={{ borderBottom: '1px solid var(--g-100)' }}>
                       <div style={{ padding: '12px 20px', display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr) auto auto auto auto', alignItems: 'center', gap: 12 }}>
@@ -1597,7 +1633,7 @@ export default function Cora({ tenantDbId, userId }) {
                             : draftForCob ? <span style={{ fontSize: 11, fontWeight: 600, color: '#2563eb', background: '#2563eb22', padding: '3px 9px', borderRadius: 12 }}>Msg pronta</span>
                             : <span style={{ fontSize: 11, color: 'var(--g-400)' }}>Sem mensagem</span>}
                         </div>
-                        <div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end' }}>
                           {sentAcao ? null : draftForCob ? (
                             <button onClick={() => setExpandedDraftMap(prev => ({ ...prev, [cob.id]: !prev[cob.id] }))}
                               style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #2563eb', background: 'transparent', color: '#2563eb', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
@@ -1609,6 +1645,20 @@ export default function Cora({ tenantDbId, userId }) {
                               {isLoading ? <><Spinner /> Gerando…</> : '✉ Gerar mensagem'}
                             </button>
                           )}
+                          <button
+                            disabled={isPagando}
+                            onClick={() => marcarPago(cob)}
+                            title="Registrar pagamento manual (PIX externo)"
+                            style={{ padding: '4px 10px', borderRadius: 7, border: '1px solid #16a34a', background: 'transparent', color: '#16a34a', fontSize: 11, fontWeight: 600, cursor: isPagando ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', opacity: isPagando ? 0.6 : 1 }}>
+                            {isPagando ? '…' : '✓ Já pagou (PIX)'}
+                          </button>
+                          <button
+                            disabled={isIgnorando}
+                            onClick={() => ignorarCobranca(cob, true)}
+                            title="Marcar como isento — não gerar mais cobranças para esta fatura"
+                            style={{ padding: '4px 10px', borderRadius: 7, border: '1px solid var(--g-300)', background: 'transparent', color: 'var(--g-500)', fontSize: 11, fontWeight: 500, cursor: isIgnorando ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', opacity: isIgnorando ? 0.6 : 1 }}>
+                            {isIgnorando ? '…' : '🚫 Não cobrar'}
+                          </button>
                         </div>
                       </div>
                       {isExpanded && draftForCob && (
