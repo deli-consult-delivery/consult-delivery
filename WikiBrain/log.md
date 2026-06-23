@@ -1,5 +1,23 @@
 # Wiki Log
 
+## 2026-06-23 — Sessão 86: Onboarding de cliente restrito a Avaliação (CSAT/NPS) + aposentadoria do console clássico [T8/T9] — branch `claude/gracious-kapitsa-b2daad`, commit `f63c025`
+
+**Contexto:** Wandson quer vender só o módulo de Avaliação (CSAT/NPS) para um cliente novo — entrar vendo apenas Visão Geral + CSAT + NPS, com desbloqueio progressivo de mais módulos depois, sem deploy. Junto, aposentar de vez o console clássico (dívida que atrapalha o onboarding restrito).
+
+**Decisões travadas (AskUserQuestion, plano `cozy-skipping-breeze.md`):** **D1** aposentar o console clássico para todos (Console v2 = único; todo login autenticado cai no v2); **D2** gating de módulos via nova tabela `tenant_modules` (flag `enabled` por tenant; o menu do v2 filtra por ela); **D3** provisionamento via runbook SQL + edge `manage-users`; **D4** módulos do 1º cliente = Visão Geral + CSAT + NPS.
+
+**Design central do gating — "allowlist quando há linhas; aberto quando não há":** tenant **sem nenhuma linha** em `tenant_modules` → vê **todos** os módulos (backward-compatible, zero migração dos tenants atuais); tenant **com linhas** → vê **só** os `module_key` com `enabled = true`. `module_key` = o `id` do item de menu em `GRUPOS` (`ConsoleV2.jsx`). Filtro de menu é **defesa de UX, não de dados** — RLS/RBAC permanecem no backend, nenhuma policy relaxada.
+
+**Entregue:**
+- **Migration `20260622_010_tenant_modules.sql`** (APLICADA, version `20260623021358`) — tabela `tenant_modules` (`id` uuid PK, `tenant_id` uuid NOT NULL REFERENCES tenants ON DELETE CASCADE, `module_key` text NOT NULL, `enabled` boolean NOT NULL DEFAULT true, `created_at`). UNIQUE `(tenant_id, module_key)` (idempotência + `ON CONFLICT DO UPDATE`); índice `idx_tenant_modules_tenant`; RLS enabled + 4 policies (SELECT por membro do tenant; INSERT/UPDATE/DELETE por admin/owner; Bridge/edge usam service-role e bypassam RLS). **Teste de isolamento RLS PASSOU** (membro do tenant A vê só linha do A; B filtrado; ROLLBACK). Não-regressão: **0 linhas em produção** → todos os tenants atuais seguem com menu completo.
+- **`src/console/ConsoleV2.jsx`** — fetch de `tenant_modules` espelhando o padrão `defesaOn`/`tenant_agents`; `allowedIds = null` quando vazio (tudo liberado) ou `Set` dos `module_key` habilitados; filtro do render (`GRUPOS.map` + `items.filter(it => !allowedIds || allowedIds.has(it.id))`, descarta grupos vazios); guard de tela ativa (cai pro 1º item permitido); removido botão "Voltar ao console clássico" e a prop `onExit`.
+- **`src/App.jsx`** — console clássico aposentado: sempre renderiza `<ConsoleV2 .../>` para usuário logado com tenant; imports/branch do clássico (`<Sidebar>`, screens, `cd-route` default `dashboard`) removidos.
+- **`docs/runbooks/onboarding-cliente-avaliacao.md`** (novo, ~180 linhas) — runbook de 5 passos: criar tenant → ligar módulos (`visao,csat,nps`) → criar 1º admin via service-role (porque `manage-users` exige caller já owner/admin e o tenant novo não tem membros) → usuários adicionais via `manage-users` → desbloqueio progressivo (`INSERT … ON CONFLICT (tenant_id,module_key) DO UPDATE SET enabled=true;`) sem deploy. Senhas via placeholder/Infisical, nunca em git/chat.
+
+**Verificação (output bruto):** teste de isolamento RLS PASSOU; não-regressão 0 linhas confirmada; `npm run build` exit 0 — vite v5.4.21, 204 modules, `index-Bw5uFfIw.js` 1.691,10 kB, built in 5.30s, só warnings pré-existentes de chunk-size, sem imports órfãos após aposentar o clássico.
+
+**Pendente do Wandson:** rodar o runbook para o 1º cliente real + validação visual (login → Console v2 → ver só Visão Geral/CSAT/NPS; tenant existente segue com menu completo).
+
 ## 2026-06-22 — Sessão 84/85: CSAT de Atendimento — integração CRM externo, atendente, expiração 7d e branding [T8 — novas features]
 
 **Contexto:** Wandson pediu 5 evoluções no CSAT de Atendimento, conectadas a um fato novo de produto: as empresas-clientes **fecham o atendimento dentro do CRM delas e usam a API oficial do WhatsApp** — logo nós NÃO enviamos a mensagem pela Evolution. O CRM dispara um webhook ao finalizar, criamos a avaliação e devolvemos o link na resposta síncrona, e o **próprio CRM envia o link pelo WhatsApp oficial dele**.
