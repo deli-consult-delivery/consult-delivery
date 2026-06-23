@@ -635,16 +635,27 @@ export async function updateDraftContent(draftId, newContent, editsSummary) {
   if (error) throw error;
 }
 
+// Debounce: coalesce burst de drafts (ex.: asaas-sync gera N cobranças CORA de uma vez)
+// em 1 reload por janela. Ambos os callers fazem `() => loadDrafts()` e ignoram o payload.
+const DEBOUNCE_DRAFTS_MS = 2000;
+
 export function subscribeToDrafts(tenantId, callback) {
+  let debounceTimer = null;
   const channel = supabase
     .channel(`drafts-${tenantId}`)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'agent_drafts', filter: `tenant_id=eq.${tenantId}` },
-      payload => callback(payload)
+      payload => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => callback(payload), DEBOUNCE_DRAFTS_MS);
+      }
     )
     .subscribe();
-  return () => supabase.removeChannel(channel);
+  return () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    supabase.removeChannel(channel);
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

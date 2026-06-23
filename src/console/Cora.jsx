@@ -4,6 +4,15 @@ import { supabase } from '../lib/supabase.js';
 
 const BRIDGE = import.meta.env.VITE_BRIDGE_URL || 'https://bridge.consultdelivery.com.br';
 
+// Colunas explícitas de `cobrancas` — TUDO menos `metadata` (jsonb pesado com o
+// payload bruto do Asaas, nunca lido na UI). Evita arrastar o blob a cada SELECT,
+// que era 81% do tempo total de banco (pg_stat_statements). Não usar `select('*')`.
+const COBRANCAS_COLUMNS = 'id, tenant_id, cliente_id, asaas_charge_id, valor, vencimento, status, billing_type, invoice_url, bank_slip_url, pix_qr_code, customer_name, customer_phone, notas, created_at, updated_at, payment_date, net_value, date_created, invoice_viewed_date, description, confirmed_date';
+
+// Debounce dos reloads disparados por Realtime: um batch do asaas-sync (~2000 linhas)
+// gera 2000 eventos → sem debounce, 2000 reloads da tabela inteira. Com 2s, vira 1.
+const DEBOUNCE_REALTIME_MS = 2000;
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmtBRL(v) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
@@ -802,7 +811,7 @@ function DraftCard({ draft, tenantDbId, onDone }) {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
         body: JSON.stringify({ tenant_id: tenantDbId }),
       });
-      if (!r.ok) { const e = await r.json(); alert(e.error || 'Erro'); }
+      if (!r.ok) { const e = await r.json().catch(() => ({})); alert(e.error || `Erro ${r.status}`); }
       else onDone();
     } catch (e) { alert(e.message); }
     setLoading(false);
@@ -900,6 +909,8 @@ export default function Cora({ tenantDbId, userId }) {
   const [expandedDraftMap, setExpandedDraftMap] = useState({});
   const [sendingMap, setSendingMap] = useState({});
   const [rejeitarMap, setRejeitarMap] = useState({});
+  const cobrancasV2RealtimeTimer = useRef(null);
+  const draftsRealtimeTimer = useRef(null);
 
   // ── Loaders ────────────────────────────────────────────────────────────────
 
@@ -908,7 +919,7 @@ export default function Cora({ tenantDbId, userId }) {
     setLoadingV2(true);
     const { data } = await supabase
       .from('cobrancas')
-      .select('*')
+      .select(COBRANCAS_COLUMNS)
       .eq('tenant_id', tenantDbId)
       .order('vencimento', { ascending: false });
     setCobrancasV2(data || []);
@@ -1064,22 +1075,36 @@ export default function Cora({ tenantDbId, userId }) {
   useEffect(() => { loadCobrancasV2(); loadCobrancas(); loadDrafts(); loadAcoes(); loadModo(); loadSaldo(); },
     [loadCobrancasV2, loadCobrancas, loadDrafts, loadAcoes, loadModo, loadSaldo]);
 
-  // Realtime — cobranças V2
+  // Realtime — cobranças V2 (com debounce: coalesce burst do asaas-sync em 1 reload)
   useEffect(() => {
     if (!tenantDbId) return;
+    const scheduleReload = () => {
+      if (cobrancasV2RealtimeTimer.current) clearTimeout(cobrancasV2RealtimeTimer.current);
+      cobrancasV2RealtimeTimer.current = setTimeout(() => loadCobrancasV2(), DEBOUNCE_REALTIME_MS);
+    };
     const ch = supabase.channel('cora-cobrancas-v2')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cobrancas', filter: `tenant_id=eq.${tenantDbId}` }, () => loadCobrancasV2())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cobrancas', filter: `tenant_id=eq.${tenantDbId}` }, scheduleReload)
       .subscribe();
-    return () => supabase.removeChannel(ch);
+    return () => {
+      if (cobrancasV2RealtimeTimer.current) clearTimeout(cobrancasV2RealtimeTimer.current);
+      supabase.removeChannel(ch);
+    };
   }, [tenantDbId, loadCobrancasV2]);
 
-  // Realtime — drafts CORA
+  // Realtime — drafts CORA (com debounce: coalesce burst de drafts do asaas-sync em 1 reload)
   useEffect(() => {
     if (!tenantDbId) return;
+    const scheduleReload = () => {
+      if (draftsRealtimeTimer.current) clearTimeout(draftsRealtimeTimer.current);
+      draftsRealtimeTimer.current = setTimeout(() => { loadDrafts(); loadAcoes(); }, DEBOUNCE_REALTIME_MS);
+    };
     const ch = supabase.channel('cora-drafts')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'agent_drafts', filter: `tenant_id=eq.${tenantDbId}` }, () => { loadDrafts(); loadAcoes(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'agent_drafts', filter: `tenant_id=eq.${tenantDbId}` }, scheduleReload)
       .subscribe();
-    return () => supabase.removeChannel(ch);
+    return () => {
+      if (draftsRealtimeTimer.current) clearTimeout(draftsRealtimeTimer.current);
+      supabase.removeChannel(ch);
+    };
   }, [tenantDbId, loadDrafts, loadAcoes]);
 
   // Auto-clear loadingMsgMap quando draft aparece via realtime
@@ -2086,11 +2111,29 @@ export default function Cora({ tenantDbId, userId }) {
               <div className="cv2-card" style={{ padding: 40, textAlign: 'center', color: 'var(--g-500)' }}>
                 ✅ Nenhum draft aguardando aprovação.
               </div>
-            ) : (
-              drafts.map(d => (
-                <DraftCard key={d.id} draft={d} tenantDbId={tenantDbId} onDone={() => { loadDrafts(); loadAcoes(); }} />
-              ))
-            )}
+            ) : (() => {
+              const seenPhones = new Set();
+              const dedupedDrafts = drafts.filter(d => {
+                const phone = d.metadata?.customer_phone;
+                if (!phone) return true;
+                if (seenPhones.has(phone)) return false;
+                seenPhones.add(phone);
+                return true;
+              });
+              const hiddenCount = drafts.length - dedupedDrafts.length;
+              return (
+                <>
+                  {hiddenCount > 0 && (
+                    <div style={{ padding: '8px 12px', marginBottom: 8, background: 'var(--g-100)', borderRadius: 6, fontSize: 12, color: 'var(--g-600)' }}>
+                      ℹ️ {hiddenCount} cobrança{hiddenCount > 1 ? 's' : ''} oculta{hiddenCount > 1 ? 's' : ''} — mesmo número já aparece na fila. Apenas 1 envio por número por dia é permitido.
+                    </div>
+                  )}
+                  {dedupedDrafts.map(d => (
+                    <DraftCard key={d.id} draft={d} tenantDbId={tenantDbId} onDone={() => { loadDrafts(); loadAcoes(); }} />
+                  ))}
+                </>
+              );
+            })()}
           </div>
 
           {/* Histórico */}

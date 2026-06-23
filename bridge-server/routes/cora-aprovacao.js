@@ -38,6 +38,16 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
     return rows?.[0] ?? null;
   }
 
+  // ── Helper: garante prefixo 55 para números brasileiros sem DDI ─────────────────────
+  // Asaas salva números sem DDI (ex: 94992995662). Evolution espera DDI (5594992995662).
+  function normalizePhone(num) {
+    if (!num) return num;
+    const digits = String(num).replace(/\D/g, '');
+    if (digits.startsWith('55') && digits.length >= 12) return digits;
+    if (digits.length >= 10 && digits.length <= 11) return `55${digits}`;
+    return digits;
+  }
+
   // ── Helper: anexa a assinatura fixa ao final da mensagem (idempotente) ─────────────
   const ASSINATURA_CORA = '*Cora* | Financeiro, Consult Delivery';
   const ASSINATURA_MARKER = '| Financeiro, Consult Delivery';
@@ -77,7 +87,7 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
       if (rawTestPhone !== undefined && !/^\d{10,15}$/.test(rawTestPhone)) {
         return res.status(400).json({ error: 'test_phone inválido — use apenas dígitos (10-15 caracteres, ex: 5511999999999)' });
       }
-      const targetPhone = rawTestPhone || phone;
+      const targetPhone = normalizePhone(rawTestPhone || phone);
 
       if (!targetPhone) {
         return res.status(400).json({ error: 'customer_phone não está no metadata do draft' });
@@ -105,13 +115,29 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
       // 3. Montar mensagem com assinatura fixa da CORA.
       const mensagem = anexarAssinatura(draft.content);
 
-      // 4. Buscar instância Evolution
+      // 4. Dedup diário: bloqueia se já foi enviado uma cobrança para este número hoje
+      if (phone && !isTestSend) {
+        const todayBRT = new Date();
+        todayBRT.setUTCHours(3, 0, 0, 0); // meia-noite BRT = 03:00 UTC
+        const sentToday = await sbFetch(
+          `agent_drafts?tenant_id=eq.${encodeURIComponent(tenant_id)}&status=eq.sent&metadata->>customer_phone=eq.${encodeURIComponent(phone)}&created_at=gte.${encodeURIComponent(todayBRT.toISOString())}&limit=1&select=id`
+        );
+        if (sentToday?.length) {
+          console.warn(`[cora-aprovacao] dedup diário: já enviado para ${phone} hoje — bloqueando`);
+          return res.status(409).json({
+            error: 'Já foi enviada uma cobrança para este número hoje. Aprove outro cliente ou tente novamente amanhã.',
+            code:  'DUPLICATE_SEND_TODAY',
+          });
+        }
+      }
+
+      // 5. Buscar instância Evolution
       const inst = await getEvolutionInst(tenant_id);
       if (!inst?.evolution_url || !inst?.api_key || !inst?.instance_name) {
         return res.status(503).json({ error: 'Nenhuma instância Evolution configurada' });
       }
 
-      // 5. Enviar via Evolution API
+      // 6. Enviar via Evolution API
       const ew = await fetch(
         `${inst.evolution_url}/message/sendText/${inst.instance_name}`,
         {
@@ -121,43 +147,66 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
         }
       );
       if (!ew.ok) {
-        const detail = (await ew.text()).slice(0, 200);
+        const detail = (await ew.text()).slice(0, 400);
         console.warn(`[cora-aprovacao] Evolution ${ew.status}: ${detail}`);
 
-        // Registrar erro no metadata do draft (mantém pending para permitir retry manual)
-        await sbFetch(
-          `agent_drafts?id=eq.${encodeURIComponent(draft_id)}&tenant_id=eq.${encodeURIComponent(tenant_id)}`,
-          {
-            method: 'PATCH',
-            body: {
-              metadata: {
-                ...meta,
-                last_error: detail,
-                last_error_at: new Date().toISOString(),
-                last_error_status: ew.status,
+        // Detectar número sem WhatsApp (Evolution retorna exists:false)
+        let numeroSemWhatsapp = false;
+        try {
+          const parsed = JSON.parse(detail);
+          const msgs = parsed?.response?.message ?? [];
+          numeroSemWhatsapp = msgs.some(m => m.exists === false);
+        } catch (_) {}
+
+        // Registrar erro no metadata do draft (mantém pending para retry manual)
+        try {
+          await sbFetch(
+            `agent_drafts?id=eq.${encodeURIComponent(draft_id)}&tenant_id=eq.${encodeURIComponent(tenant_id)}`,
+            {
+              method: 'PATCH',
+              body: {
+                metadata: {
+                  ...meta,
+                  last_error: detail,
+                  last_error_at: new Date().toISOString(),
+                  last_error_status: ew.status,
+                  numero_sem_whatsapp: numeroSemWhatsapp,
+                },
               },
-            },
-          }
-        );
+            }
+          );
+        } catch (patchErr) {
+          console.error('[cora-aprovacao] falha ao salvar erro no draft:', patchErr.message);
+        }
 
         // Registrar em cora_acoes para rastreio e retry pelo agente
-        await supabaseInsert('cora_acoes', {
-          tenant_id,
-          cobranca_v2_id: cobrancaV2Id,
-          tipo:           'erro_envio',
-          acao:           'falha_whatsapp',
-          canal:          'whatsapp',
-          agente:         'cora',
-          conteudo:       `Evolution ${ew.status}: ${detail}`,
-          mensagem_enviada: null,
-        });
+        try {
+          await supabaseInsert('cora_acoes', {
+            tenant_id,
+            cobranca_v2_id: cobrancaV2Id,
+            tipo:           'erro_envio',
+            acao:           numeroSemWhatsapp ? 'numero_sem_whatsapp' : 'falha_whatsapp',
+            canal:          'whatsapp',
+            agente:         'cora',
+            conteudo:       `Evolution ${ew.status}: ${detail}`,
+            mensagem_enviada: null,
+          });
+        } catch (insErr) {
+          console.error('[cora-aprovacao] falha ao registrar em cora_acoes:', insErr.message);
+        }
 
+        if (numeroSemWhatsapp) {
+          return res.status(422).json({
+            error: `Número ${targetPhone} não está cadastrado no WhatsApp. Verifique o contato.`,
+            code:  'WHATSAPP_NUMBER_NOT_FOUND',
+          });
+        }
         return res.status(502).json({ error: 'Falha ao enviar via Evolution API' });
       }
       const isTest = req.query.test_phone ? ` (TESTE → ${targetPhone})` : '';
       console.log(`[cora-aprovacao] mensagem enviada → ${targetPhone}${isTest}`);
 
-      // 6. Atualizar draft → sent (filtra por tenant_id p/ não cruzar tenants)
+      // 7. Atualizar draft → sent (filtra por tenant_id p/ não cruzar tenants)
       await sbFetch(
         `agent_drafts?id=eq.${encodeURIComponent(draft_id)}&tenant_id=eq.${encodeURIComponent(tenant_id)}`,
         {
@@ -169,7 +218,7 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
         }
       );
 
-      // 7. Registrar em cora_acoes
+      // 8. Registrar em cora_acoes
       await supabaseInsert('cora_acoes', {
         tenant_id,
         cobranca_v2_id:   cobrancaV2Id,

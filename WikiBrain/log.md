@@ -1,5 +1,25 @@
 # Wiki Log
 
+## 2026-06-23 — Sessão 91: BLUEPRINT AI-First — plano-mestre escrito, aguardando 🛑 CHECKPOINT do Wandson
+
+**Contexto (visão do Wandson, mensagem de voz):** transformar a Consult Delivery numa operação **AI-First** (~100% operada por agentes). Um cérebro/memória dentro da plataforma; **agentes especialistas** atendem clientes que chegam por **live chat**; o que o especialista não resolve vira **tarefa num pipeline com visão em tempo real**, onde ele resolve no sistema externo necessário (ERP/Asaas/sistema do cliente), atualiza a tarefa, e o atendente **responde ao cliente** com a conclusão — ou resolve direto. Reusar tudo que já existe; replicar o **paradigma EvoNexus** (chat interno com um **Oráculo** que aciona outros agentes e cria coisas na plataforma).
+
+**4 decisões travadas (via AskUserQuestion, INVIOLÁVEIS):**
+- **AF-1** — "Blueprint completo primeiro": escrever o plano-mestre AI-First completo e faseado, reusando a infra; construir por fases depois.
+- **AF-2** — "Ernesto" = a própria **DELI** (verbatim do Wandson: *"Esse Ernesto, ele não existe. O Ernesto é a mesma Deli. É porque eu errei na hora de escrever. E ela deve iniciar primeiro no telegram mesmo."*). NÃO há agente Ernesto separado; o cérebro/orquestrador/Oráculo É a DELI.
+- **AF-3** — DELI começa no **Telegram** primeiro (não WhatsApp).
+- **AF-4** — Primeira fase a CONSTRUIR = **o Loop** cliente→especialista→tarefa→resolução→resposta.
+
+**Entregue:** `docs/ai-first/BLUEPRINT-AI-FIRST.md` (PT-BR, v1, status PROPOSTA) — §0 como usar · §1 visão + decisões AF-1…AF-6 · §2 inventário do que JÁ existe + gaps · §3 arquitetura do Loop (máquina de estados attending→task_pending→executing→done→replied + mapa modo→semáforo) · §4 plano faseado (FASE 1 Loop · FASE 2 Pipeline tempo-real · FASE 3 DELI Oráculo Telegram · FASE 4 autonomia/heartbeats) · §5 arquivos a criar/estender · §6 guard-rails · §7 próxima ação.
+
+**Inventário confirma** que a plataforma já tem a maioria dos blocos: memória (`client_facts`/`client_timeline`/`loja_metricas`/`agent_memories`), especialistas em `trigger/`, DELI + semáforo, Oracle (agent-builder), Hermes/Telegram + admin-mcp, drafts + aprovação, `client_tasks` + Realtime parcial, Console v2. **Gaps:** loop não cabeado · tela Pipeline · Realtime incompleto · `/agents/deli/notify` · `notifyBridge` comentado.
+
+**Constraint:** motor EvoNexus PROIBIDO em prod (re-implementar só o paradigma); nenhuma mensagem a cliente sem aprovação (drafts).
+
+**Próximo passo (🛑 CHECKPOINT):** Wandson lê o blueprint e aprova a **FASE 1 (o Loop)**. Ao aprovar, 1ª fatia = `supabase/migrations/20260623_001_loop_core.sql` (aditiva/reversível, autônoma) + helper `createLoopTask()` + estender `trigger/breno/responder.ts` (saída discriminada `resolver | criar_tarefa`). Nada de produção/cliente tocado nesta sessão.
+
+---
+
 ## 2026-06-23 — Sessão 86: Onboarding de cliente restrito a Avaliação (CSAT/NPS) + aposentadoria do console clássico [T8/T9] — branch `claude/gracious-kapitsa-b2daad`, commit `f63c025`
 
 **Contexto:** Wandson quer vender só o módulo de Avaliação (CSAT/NPS) para um cliente novo — entrar vendo apenas Visão Geral + CSAT + NPS, com desbloqueio progressivo de mais módulos depois, sem deploy. Junto, aposentar de vez o console clássico (dívida que atrapalha o onboarding restrito).
@@ -9,14 +29,141 @@
 **Design central do gating — "allowlist quando há linhas; aberto quando não há":** tenant **sem nenhuma linha** em `tenant_modules` → vê **todos** os módulos (backward-compatible, zero migração dos tenants atuais); tenant **com linhas** → vê **só** os `module_key` com `enabled = true`. `module_key` = o `id` do item de menu em `GRUPOS` (`ConsoleV2.jsx`). Filtro de menu é **defesa de UX, não de dados** — RLS/RBAC permanecem no backend, nenhuma policy relaxada.
 
 **Entregue:**
-- **Migration `20260622_010_tenant_modules.sql`** (APLICADA, version `20260623021358`) — tabela `tenant_modules` (`id` uuid PK, `tenant_id` uuid NOT NULL REFERENCES tenants ON DELETE CASCADE, `module_key` text NOT NULL, `enabled` boolean NOT NULL DEFAULT true, `created_at`). UNIQUE `(tenant_id, module_key)` (idempotência + `ON CONFLICT DO UPDATE`); índice `idx_tenant_modules_tenant`; RLS enabled + 4 policies (SELECT por membro do tenant; INSERT/UPDATE/DELETE por admin/owner; Bridge/edge usam service-role e bypassam RLS). **Teste de isolamento RLS PASSOU** (membro do tenant A vê só linha do A; B filtrado; ROLLBACK). Não-regressão: **0 linhas em produção** → todos os tenants atuais seguem com menu completo.
-- **`src/console/ConsoleV2.jsx`** — fetch de `tenant_modules` espelhando o padrão `defesaOn`/`tenant_agents`; `allowedIds = null` quando vazio (tudo liberado) ou `Set` dos `module_key` habilitados; filtro do render (`GRUPOS.map` + `items.filter(it => !allowedIds || allowedIds.has(it.id))`, descarta grupos vazios); guard de tela ativa (cai pro 1º item permitido); removido botão "Voltar ao console clássico" e a prop `onExit`.
-- **`src/App.jsx`** — console clássico aposentado: sempre renderiza `<ConsoleV2 .../>` para usuário logado com tenant; imports/branch do clássico (`<Sidebar>`, screens, `cd-route` default `dashboard`) removidos.
-- **`docs/runbooks/onboarding-cliente-avaliacao.md`** (novo, ~180 linhas) — runbook de 5 passos: criar tenant → ligar módulos (`visao,csat,nps`) → criar 1º admin via service-role (porque `manage-users` exige caller já owner/admin e o tenant novo não tem membros) → usuários adicionais via `manage-users` → desbloqueio progressivo (`INSERT … ON CONFLICT (tenant_id,module_key) DO UPDATE SET enabled=true;`) sem deploy. Senhas via placeholder/Infisical, nunca em git/chat.
+- **Migration `20260622_010_tenant_modules.sql`** (APLICADA, version `20260623021358`) — tabela `tenant_modules` (`id` uuid PK, `tenant_id` uuid NOT NULL REFERENCES tenants ON DELETE CASCADE, `module_key` text NOT NULL, `enabled` boolean NOT NULL DEFAULT true, `created_at`). UNIQUE `(tenant_id, module_key)`; índice `idx_tenant_modules_tenant`; RLS enabled + 4 policies. **Teste de isolamento RLS PASSOU**; não-regressão: **0 linhas em produção** → todos os tenants atuais seguem com menu completo.
+- **`src/console/ConsoleV2.jsx`** — fetch de `tenant_modules` espelhando o padrão `defesaOn`/`tenant_agents`; `allowedIds = null` quando vazio (tudo liberado) ou `Set` dos `module_key` habilitados; filtro do render; guard de tela ativa; removido botão "Voltar ao console clássico" e a prop `onExit`.
+- **`src/App.jsx`** — console clássico aposentado: sempre renderiza `<ConsoleV2 .../>` para usuário logado com tenant; branch do clássico (`<Sidebar>`, screens) removido.
+- **`docs/runbooks/onboarding-cliente-avaliacao.md`** (novo) — runbook de 5 passos: criar tenant → ligar módulos (`visao,csat,nps`) → criar 1º admin via service-role → usuários adicionais via `manage-users` → desbloqueio progressivo sem deploy. Senhas via Infisical, nunca em git/chat.
 
-**Verificação (output bruto):** teste de isolamento RLS PASSOU; não-regressão 0 linhas confirmada; `npm run build` exit 0 — vite v5.4.21, 204 modules, `index-Bw5uFfIw.js` 1.691,10 kB, built in 5.30s, só warnings pré-existentes de chunk-size, sem imports órfãos após aposentar o clássico.
+**Verificação (output bruto):** teste de isolamento RLS PASSOU; não-regressão 0 linhas confirmada; `npm run build` exit 0 (vite v5.4.21, sem imports órfãos).
 
-**Pendente do Wandson:** rodar o runbook para o 1º cliente real + validação visual (login → Console v2 → ver só Visão Geral/CSAT/NPS; tenant existente segue com menu completo).
+**Pendente do Wandson:** rodar o runbook para o 1º cliente real + validação visual.
+
+---
+
+## 2026-06-22 — Sessão 89: Tela preta "Nenhum workspace" — causa-raiz de banco resolvida em prod (#482 + #485) + Front 1 (loop 404 evolution-webhook)
+
+**Sintoma:** Wandson não acessava `app.consultdelivery.com.br` — a plataforma carregava e caía numa tela preta **"Nenhum workspace encontrado para este usuário."**. Duas tentativas anteriores no frontend (#473 race-condition, #476 `getUser→getSession`) trataram o sintoma, não a causa.
+
+**Root cause (prova `pg_stat_statements`, em 2 camadas):**
+1. **Saturação do Postgres/PostgREST.** A query `SELECT cobrancas.* … WHERE tenant_id=$1 ORDER BY vencimento` acumulou **153.627 chamadas / 38.700s de tempo total / 251,9ms média = 81,1% de TODO o tempo de banco**. O `SELECT *` arrastava a coluna pesada `metadata jsonb` (guarda `asaas_raw` = a cobrança Asaas inteira por linha). #2 consumidor (13,5%) = decode de WAL do Realtime. Amplificado pelo cron `asaas-sync-financeiro` (UPSERT de ~2000 cobranças a cada 30 min, disparando eventos Realtime em todas as abas) e por subscriptions Realtime **sem debounce** que recarregavam a tabela inteira a cada evento. Isso esgotava o pool → `statement timeout` → PostgREST 503 → a query de `tenant_members` do `App.jsx` não pegava conexão.
+2. **Frontend mentia.** Mesmo com o banco só lento/503, o `App.jsx` caía no safety-timer e mostrava "Nenhum workspace" como se o usuário não tivesse tenant (o `error` da query era descartado, `catch` mudo).
+
+**Correções aplicadas (EM PROD, 2 camadas):**
+- **CAMADA A — aliviar o banco (#482):** colunas explícitas no lugar de `SELECT *` em `loadCobrancasV2` (`src/screens/CoraScreen.jsx` + `src/console/Cora.jsx`), **omitindo `metadata`** + demais colunas não usadas pela UI; debounce 2s (`DEBOUNCE_REALTIME_MS`) nas subscriptions Realtime, padrão de `src/components/chat/LeadNotesSection.jsx` (const de módulo + `useRef` do timer + clearTimeout/setTimeout + cleanup limpando o timer ANTES do `removeChannel`). **#485** estendeu o debounce ao canal `cora-drafts` (`console/Cora.jsx`) e a `subscribeToDrafts` (`src/lib/api.js`, `DEBOUNCE_DRAFTS_MS`, cobre `DraftsPendentesScreen.jsx` + `Disparos.jsx`).
+- **CAMADA B — frontend honesto (#482, `src/App.jsx`):** captura o `error`/timeout da query (antes descartado); retry com backoff 1s/2s/4s; render honesto "Servidor temporariamente indisponível, reconectando…" + botão "Tentar novamente"; "Nenhum workspace" só com resultado de zero-tenant REAL; usa a `session` já presente no estado em vez de novo `getUser()` no caminho saturado.
+
+**Verificação (output bruto):** a query de `cobrancas` colapsou de **153.627 calls / 251,9ms mean / 81,1% do DB → 2 calls / 31ms total / 15,3ms mean** (colunas explícitas confirmadas no `query_head`). Browser: tela de **login limpa, sem "Nenhum workspace"/tela preta**. Índice composto `(tenant_id, vencimento)` já existia (`20260514_017_cobrancas.sql`) — o custo NÃO era índice faltando, era o `SELECT *`; nenhuma migration nova.
+
+**Front 1 — loop de 404 do `evolution-webhook` (read-only, config Evolution NÃO tocada):** `get_logs` service `edge-function` mostra invocações recentes **100% `POST | 200`** (exec 142–671ms); os `404 instance_not_found` são todos ANTIGOS (~1,6h antes), com exec_time anormal (6.250–59.385ms, coerente com a janela de saturação do banco) — eram 404s de instância órfã durante o pico. **O loop CESSOU.** Hardening defensivo da edge function (logar `instance_name` + responder 200 a instância desconhecida em vez de 404) OFERECIDO ao Wandson, **NÃO aplicado** (aguarda `ok`; mexer em config externa exige aviso).
+
+**PRs:** [#482](https://github.com/deli-consult-delivery/consult-delivery/pull/482) (camadas A+B) + [#485](https://github.com/deli-consult-delivery/consult-delivery/pull/485) (debounce estendido) — ambos mergeados, deploy GitHub Pages. **Tracks:** T8/Infra + T8/Cora. **⚠️ Pendente do Wandson:** validação visual logado em dia útil.
+
+---
+
+## 2026-06-22 — Sessão 88b: Fix idempotência cross-day (bom-dia + encerramento)
+
+**Contexto:** Envio compensatório de segunda-feira 22/06 reusou imagem do domingo 21/06 indevidamente.
+
+**Root cause:** Janela de idempotência de 26h em `gerar-imagem.ts` (ambos os agentes) permitia reuso de imagem do dia anterior. `envio-agendado.ts` também não verificava se `output.date` coincidia com o dia SP atual.
+
+**Correções aplicadas (4 arquivos):**
+- `trigger/bom-dia/gerar-imagem.ts` + `trigger/encerramento/gerar-imagem.ts`: janela 26h substituída por `${dateStr}T03:00:00.000Z` (meia-noite SP em UTC)
+- `trigger/bom-dia/envio-agendado.ts` + `trigger/encerramento/envio-agendado.ts`: adicionada verificação `out.date === dateStr` antes de reusar imagem existente; divergência → loga warn e força nova geração
+
+**Deploy:** PR [#486](https://github.com/deli-consult-delivery/consult-delivery/pull/486) mergeado → Trigger.dev versão `20260622.54`
+
+---
+
+## 2026-06-22 — Sessão 88: Encerramento — debug + fix timeout + envio manual
+
+**Contexto:** Agente de encerramento não enviou mensagem no sábado 21/06. Investigação e correção.
+
+**Root causes identificados:**
+- `trigger.config.ts` tinha `maxDuration: 300` global limitando o task `encerramento-gerar-imagem` que tem `maxDuration: 600` — causava abort após ~300s (LLM ~120s + 2 imagens ~180s cada = ~480s necessários)
+- Sexta 20/06: timeout no run de geração → sem imagem no `agent_runs`
+- Sábado 21/06: `envio-agendado` não encontrou imagem do dia, tentou gerar no momento do envio → também falhou
+
+**Ações tomadas:**
+- ✅ Envio manual executado via bridge: 15 grupos receberam a mensagem com a imagem do sábado
+- ✅ Fix: `maxDuration` global aumentado de 300s para 600s em `trigger.config.ts`
+- ✅ PR [#483](https://github.com/deli-consult-delivery/consult-delivery/pull/483) mergeado
+- ✅ Deploy Trigger.dev versão 20260622.47 (75 tasks, schedules re-registrados)
+
+**Próxima verificação:** segunda-feira 23/06 às 21:00 UTC (18:00 BRT) — confirmar que o encerramento rodou sem timeout.
+
+## 2026-06-22 — Sessão 87: CSAT — security findings resolvidos [T8/CSAT]
+
+**Contexto:** 6 findings de segurança flagged na sessão 84/85 (não auto-aplicados em prod por protocolo) foram todos resolvidos pelo Wandson.
+
+**Resolvidos:**
+- HIGH: rate limiter in-memory por `x-forwarded-for` (spoofável; não durável em multi-worker)
+- HIGH: `public_token` visível a qualquer membro do tenant sem segmentação por usuário
+- MEDIUM: sem validação de tamanho/charset em `contact_identifier`/`nome_cliente`
+- MEDIUM: CORS wildcard global no Bridge (pré-existente)
+- LOW: Zod error details expostos em respostas 400
+- LOW: sem CSP na página pública `/avaliacao/`
+
+---
+
+## 2026-06-22 — Sessão 86/87: CORA — dedup diário (PR #471) [T8/Cora]
+
+**Problema:** Fila de aprovação exibia múltiplos drafts para o mesmo número de telefone (ex: Mikelly Container + MIKELLY & CIA para 94991857808). Wandson podia aprovar duas vezes e enviar 2 mensagens para o mesmo cliente no mesmo dia.
+
+**Solução (3 camadas):**
+1. **`trigger/cora/processar-cobranca.ts`** — antes de criar draft, verifica `agent_drafts` por `status in (pending, sent)` + `metadata->>customer_phone` + `created_at >= meia-noite BRT`. Retorna `skipped: true, reason: "draft_duplicado_hoje"` se já existe.
+2. **`bridge-server/routes/cora-aprovacao.js`** — novo passo 4 (dedup diário): antes de enviar via Evolution, verifica se já há `status=sent` para o mesmo phone hoje. Retorna HTTP 409 com `code: DUPLICATE_SEND_TODAY`.
+3. **`src/console/Cora.jsx`** — fila de aprovação deduplica por `metadata.customer_phone` antes de renderizar. Exibe aviso "N cobranças ocultas — mesmo número já aparece na fila".
+
+**Resultado:** PR #471 mergeado · Bridge reiniciado (online, 0 unstable restarts) · Trigger.dev version 20260622.22 deployada (75 tasks).
+
+## 2026-06-22 — Sessão 85/86: CORA — fix "Failed to fetch" ao Aprovar e Enviar + 422 para número sem WhatsApp (PR #467) [T8/Cora]
+
+**Problema reportado:** Wandson clicou em "Aprovar e Enviar" no dashboard CORA → alerta genérico "Failed to fetch", mensagem não enviada.
+
+**Causa raiz (2 pontos):**
+1. `call()` em `Cora.jsx` usava `await r.json()` sem `.catch()` — se o parse falhasse, exceção subia ao `catch(e)` externo → `alert(e.message)` = "Failed to fetch"
+2. Bridge: PATCH e INSERT sem try/catch dentro do bloco `!ew.ok` podiam lançar exceção e bloquear a resposta de erro ao frontend
+
+**Entregue (PR #467, squash-mergeado, bridge deployado):**
+- `src/console/Cora.jsx`: `call()` → `r.json().catch(()=>({}))` — parse falho retorna objeto vazio, sem exception
+- `bridge-server/routes/cora-aprovacao.js`: detecta `exists:false` na resposta Evolution → retorna **422** com mensagem "Número X não está cadastrado no WhatsApp. Verifique o contato." (em vez de 502 genérico); PATCH + INSERT em try/catch independentes; Evolution 400 foi confirmado nos logs como causa dos erros anteriores da Villas Caldos da 14
+
+**Verificação (output bruto):** `pm2 restart bridge-server` → bridge online, `pm2 logs` mostra boot clean + entry de erro anterior `[cora-aprovacao] Evolution 400: exists:false` confirmando que o novo código já processou corretamente.
+
+**⚠️ Pendente do Wandson:** validação visual no browser — clicar "Aprovar e Enviar" em draft válido (número com WhatsApp) e confirmar que não aparece mais "Failed to fetch".
+
+**Branch:** `wandson/cora-r3-error-ux` (squash → main).
+
+---
+
+## 2026-06-22 — Sessão 85: CSAT — fix 500→404 para token não-UUID + browser-test completo (PR #466) [T8]
+
+**Problema:** `GET /api/publico/avaliacao/<token-malformado>` retornava HTTP 500. Causa: coluna `public_token` é `uuid` no PostgreSQL; string não-UUID na query fazia o Supabase retornar `400/22P02 (invalid input syntax for type uuid)` → `sbFetch` lançava exceção → caia no `catch` → 500.
+
+**Fix (`bridge-server/routes/publico-avaliacao.js`):** UUID regex antes de consultar o banco:
+```js
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+if (!UUID_RE.test(token)) return null; // → 404 link_invalido
+```
+
+**Verificação smoke (output bruto):**
+- Token inválido `token-invalido-teste` → `{"error":"link_invalido"}` 404 ✓
+- UUID não-cadastrado `00000000-0000-0000-0000-000000000000` → `{"error":"link_invalido"}` 404 ✓
+
+**Browser-test completo via javascript_tool (tab V15/Chrome):**
+- DOM: logo CD, nome cliente "João Teste Browser", atendente "Lorena (Atendente Teste)", ★★★★★, botão ✓
+- Header background `rgb(183, 12, 0)` = `#B70C00` (brand color do tenant) ✓
+- POST nota 5 → `status=respondida, tratativa_status=na` no banco ✓
+- Anti-dupla-submissão: segundo POST → 409 `ja_respondida` ✓
+- Detrator nota 2 → `tratativa_status=pendente` no banco ✓
+- Bundle confirmado: `index-B27iXOsz.js` contém `theme_color`, `crm_externo`, bridge URL ✓
+- Cleanup: 2 registros de teste removidos do banco ✓
+
+**PR #466** (branch `wandson/fix-csat-uuid-404`) — squash-mergeado (SHA `c58fa4b`) — bridge re-deployado (PID 84701).
+
+**Segurança (flags-only, NÃO aplicado em prod):** HIGH — `public_token` acessível a qualquer membro do tenant (RLS não segmenta por usuário); HIGH — rate limiter in-memory por `x-forwarded-for` (spoofável); MEDIUM — sem validação de formato em `contact_identifier`/`nome_cliente`; MEDIUM — CORS wildcard global; LOW — Zod error details em 400; LOW — sem CSP na página pública.
+
+---
 
 ## 2026-06-22 — Sessão 84/85: CSAT de Atendimento — integração CRM externo, atendente, expiração 7d e branding [T8 — novas features]
 
@@ -965,3 +1112,33 @@ Touched: none
 - **⚠️ Decisão de segurança:** NÃO cliquei "Aprovar e Enviar" em draft de cliente real (domingo 21/06 + guarda sob teste). Verificação feita de forma determinística (código deployado + smoke do helper + grep do bundle) sem tocar cliente real.
 - **PRs:** [#454](https://github.com/deli-consult-delivery/consult-delivery/pull/454) (SHA `61455b5`) + hotfix [#455](https://github.com/deli-consult-delivery/consult-delivery/pull/455) (SHA `3506cef`) — ambos squash-mergeados em main.
 - **Pendente do Wandson:** validação visual no browser em horário útil + 1 teste real "🧪 Enviar para meu número" (deve chegar com assinatura, sem o erro `ativo does not exist`).
+
+## Sessão 86 — 2026-06-22 — ECC versionado no repo + auditoria de duplicatas
+
+- **ECC versionado (PR #477, SHA `e666a0a`, squash em main):** adicionado `ecc` em `extraKnownMarketplaces` (git source affaan-m/everything-claude-code), `ecc@ecc` em `enabledPlugins` e `env.ECC_HOOK_PROFILE=minimal` no `.claude/settings.json`. Antes o ECC só vivia em `~/.claude` (escopo de usuário/VPS); agora skills/agents/hooks/MCP do ECC auto-carregam em qualquer máquina que clone o repo (VPS + notebook).
+- **Auditoria de duplicatas (output bruto):** 0 duplicatas reais — ECC tem 271 skills + 67 agents com nomes únicos (os "repetidos" no `find` eram cópias de tradução `docs/ja-JP`/`docs/zh-CN` + scaffold `.agents`/`.kiro`). 0 colisão ECC × claude-plugins-official, ECC × thedotmack, ECC × agents `cd-*` do repo. Sobreposições de nome resolvidas por namespace (sem shadowing): comando `pr` (`/pr` repo vs `/ecc:pr`) e skill `benchmark` (gstack user-level vs `ecc:benchmark`). Gstack mantido (fora do escopo "só ECC").
+- **Conflito fantasma (#155) resolvido:** branch carregava o commit GSD já squash-mergeado (#474); absorvido com `git merge origin/main` (não rebase), deixando o diff líquido só com a mudança ECC.
+- **Próxima ação:** validar em outra máquina (notebook) — `git pull` + abrir Claude Code no repo → `claude plugin list ecc@ecc` deve mostrar ECC ativo sem instalação manual.
+
+## Sessão 86b — 2026-06-22 — Subagents cd-* desativados (só agentes do ECC ativos)
+
+- **Pedido do Wandson:** *"quero que esses agentes que são do Repo, o CD, eles não fiquem mais ativando. Eu quero que ative os agentes do ECC e os recursos do ECC."*
+- **Feito (PR #480, SHA `aa68d2e`, squash em main):** `git rm` dos 14 arquivos `.claude/agents/*.md` (README + `cd-apex`, `cd-bolt`, `cd-compass`, `cd-echo`, `cd-endpoint-builder`, `cd-frontend-component`, `cd-helper-writer`, `cd-lens`, `cd-migration-creator`, `cd-oath`, `cd-raven`, `cd-task-creator`, `cd-validator`, `cd-validator-strict`). Diretório `.claude/agents/` agora vazio em main. Reversível pelo histórico do git.
+- **No lugar:** os agentes do ECC (architect, code-reviewer, typescript-reviewer, database-reviewer, react-reviewer, security-reviewer, build-error-resolver, e2e-runner, planner, refactor-cleaner etc.) passam a ser o conjunto ativo.
+- **Não tocado (de propósito):** hooks (`typecheck.cjs`, `typecheck-stop.cjs`) e comandos (`/dev-status`, `/onboard`, `/pr`, `/release-notes`, `/supabase-query`, `/vps-health`) do repo — são hooks/commands, não agentes. Referências textuais a `cd-*` em docs (PARALLEL-DEV.md, V2-*, PILOTO-*, Tracker, td-index) ficaram como estão: documentação, não ativam agente.
+- **Efeito:** vale no próximo reload do Claude Code (a lista de subagents é lida no início da sessão).
+- **Próxima ação:** ao abrir nova sessão, confirmar que os `cd-*` não aparecem mais na lista de agent types e usar os agentes do ECC.
+
+## Sessão 90 — 2026-06-22 — Faxina aditiva: 4 índices de FK das tabelas CORA
+
+- **Origem:** follow-up de manutenção da investigação da tela preta "Nenhum workspace" (#482/#485, sessão 89). Durante aquela investigação o advisor do Supabase (`get_advisors → unindexed_foreign_keys`) listou **134 FKs sem índice no projeto inteiro**. Decisão com o Wandson (*"Aceito sua recomendação"*): mexer **só nas 4 das tabelas CORA** como faxina aditiva/reversível — escopo mínimo, nada das outras 130.
+- **Feito (PR [#489](https://github.com/deli-consult-delivery/consult-delivery/pull/489), SHA `567b8d6`, squash em main):** migration `supabase/migrations/20260622_003_cora_fk_indexes.sql` — 4 `CREATE INDEX IF NOT EXISTS`:
+  - `idx_agent_drafts_reviewer_id` ON `agent_drafts (reviewer_id)`
+  - `idx_cora_acoes_agent_run_id` ON `cora_acoes (agent_run_id)`
+  - `idx_cora_cobrancas_regua_id` ON `cora_cobrancas (regua_id)`
+  - `idx_internal_notifications_recipient_user_id` ON `internal_notifications (recipient_user_id)`
+- **Correção não-óbvia:** a constraint `agent_drafts_approved_by_fkey` indexa a coluna **`reviewer_id`**, NÃO `approved_by` — nome real confirmado no `pg_catalog` antes de criar o índice (anti-padrão: nunca deduzir coluna pelo nome da constraint).
+- **Por que aditivo e seguro:** tabelas pequenas hoje (33 / 58 / 1 / 245 linhas) → lock `ACCESS EXCLUSIVE` de ~1ms, plain `CREATE INDEX` (não `CONCURRENTLY`), migration transacional, idempotente (`IF NOT EXISTS`). Reversão = `DROP INDEX` dos 4 nomes. Verificado em `pg_indexes` que **nenhum índice existente tem a coluna da FK como líder** → 0 duplicatas.
+- **Benefício:** (a) zera o lint do advisor para essas 4 FKs; (b) acelera a checagem de integridade da FK quando a linha-pai é deletada/atualizada (antes seq scan no filho); (c) future-proofing conforme as tabelas crescem.
+- **Verificação (output bruto):** `apply_migration` retornou `{"success":true}`; query em `pg_indexes` confirmou os 4 índices presentes em prod com `btree` correto. NÃO houve mudança de frontend/bridge → sem deploy de Pages/bridge necessário.
+- **Pendente:** nenhum (escopo fechado). As outras 130 FKs sem índice do advisor ficaram **intencionalmente fora de escopo**.

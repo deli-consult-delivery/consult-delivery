@@ -17,12 +17,21 @@ const TWEAK_DEFAULTS = {
   liveSim: true,
 };
 
+// Carregamento de tenant resiliente a banco saturado (503/timeout do PostgREST).
+// Tenta até 3× com backoff exponencial (1s, 2s, 4s) antes de desistir; só então
+// mostra "reconectando". Distingue erro/timeout de "usuário realmente sem tenant".
+const MAX_TENANT_RETRIES = 3;
+// Se nada resolver nesse tempo, para o spinner e cai no estado de erro/reconectando.
+const TENANT_SAFETY_TIMEOUT_MS = 15000;
+
 export default function App() {
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [isInvite, setIsInvite] = useState(false);
   const [tenantLoading, setTenantLoading] = useState(false);
+  const [tenantLoadAttempted, setTenantLoadAttempted] = useState(false);
+  const [tenantLoadError, setTenantLoadError] = useState(false);
   const [tenants, setTenants] = useState(TENANTS);
   const [_deepLinkConvId] = useState(() => new URLSearchParams(window.location.search).get('chat'));
   const [_confirmedAcao]  = useState(() => new URLSearchParams(window.location.search).get('breno_confirmado'));
@@ -35,67 +44,130 @@ export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem('cd-theme') || 'claro');
   const [notifUnread, setNotifUnread] = useState(0);
   const hasLoadedTenantsOnce = useRef(false);
+  // Geração monotônica: invalida invocações obsoletas de reloadTenants (após troca
+  // de sessão ou unmount) para que um safetyTimer ou await antigo não chame setState
+  // por cima de um load novo que está dando certo.
+  const reloadGenRef = useRef(0);
 
-  // Carrega tenants do banco (usado no mount e quando um workspace novo é criado)
+  // Carrega tenants do banco (usado no mount e quando um workspace novo é criado).
+  // Resiliente a banco saturado: tenta até MAX_TENANT_RETRIES com backoff antes de
+  // desistir. Distingue erro/timeout (→ "reconectando" + retry) de zero-tenant real.
   async function reloadTenants(preferSlug) {
+    // Marca esta invocação como a corrente; qualquer reload anterior fica obsoleto e
+    // seus callbacks atrasados (safetyTimer, retornos de await) viram no-op.
+    const myGen = ++reloadGenRef.current;
+    const isCurrent = () => reloadGenRef.current === myGen;
+
     if (!hasLoadedTenantsOnce.current) setTenantLoading(true);
-    const safetyTimer = setTimeout(() => setTenantLoading(false), 8000);
-    try {
-      // Busca tenant real do usuário via tenant_members
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data: memberData } = await supabase
-        .from('tenant_members')
-        .select('tenant_id, role, tenants(id, name, slug, emoji, color)')
-        .eq('user_id', user?.id)
-        .maybeSingle();
+    setTenantLoadError(false);
+    // Rede de segurança: se nada resolver no prazo, para o spinner e mostra o estado
+    // honesto de erro (em vez de cair em "Nenhum workspace").
+    const safetyTimer = setTimeout(() => {
+      if (!isCurrent()) return;
+      setTenantLoading(false);
+      setTenantLoadAttempted(true);
+      if (!hasLoadedTenantsOnce.current) setTenantLoadError(true);
+    }, TENANT_SAFETY_TIMEOUT_MS);
 
-      if (memberData?.tenant_id) {
-        const t = memberData.tenants;
-        const mapped = [{
-          id: t.slug,
-          dbId: t.id,
-          name: t.name,
-          emoji: t.emoji || '🏪',
-          color: t.color || '#B70C00',
-          role: memberData.role,
-        }];
-        setTenants(mapped);
-        const slugToUse = preferSlug || t.slug;
-        setTenant(slugToUse);
-        setTenantDbId(t.id);
-        hasLoadedTenantsOnce.current = true;
+    // B4: usa a session já em memória (de getSession) em vez de chamar getUser() de
+    // novo — remove uma ida de rede no caminho que está saturado.
+    const userId = session?.user?.id;
+
+    const finish = () => {
+      clearTimeout(safetyTimer);
+      if (!isCurrent()) return;
+      setTenantLoading(false);
+      setTenantLoadError(false);
+      setTenantLoadAttempted(true);
+      hasLoadedTenantsOnce.current = true;
+    };
+
+    for (let attempt = 0; attempt < MAX_TENANT_RETRIES; attempt++) {
+      let memberErr = null;
+
+      // 1) Caminho principal: tenant_members do usuário logado.
+      // Sem userId numa session presente é anomalia (não zero-tenant): trata como erro
+      // para entrar em retry/"reconectando" em vez de mentir "Nenhum workspace".
+      if (!userId) {
+        memberErr = new Error('session sem userId');
+      } else {
+        const { data: memberData, error } = await supabase
+          .from('tenant_members')
+          .select('tenant_id, role, tenants(id, name, slug, emoji, color)')
+          .eq('user_id', userId)
+          .maybeSingle();
+        memberErr = error;
+
+        if (!memberErr && memberData?.tenant_id) {
+          const t = memberData.tenants;
+          setTenants([{
+            id: t.slug,
+            dbId: t.id,
+            name: t.name,
+            emoji: t.emoji || '🏪',
+            color: t.color || '#B70C00',
+            role: memberData.role,
+          }]);
+          setTenant(preferSlug || t.slug);
+          setTenantDbId(t.id);
+          finish();
+          return;
+        }
+      }
+
+      // 2) Fallback: listTenants via api.js (lança em erro → fallbackErr).
+      let fallbackErr = null;
+      try {
+        const real = await listTenants();
+        if (real?.length) {
+          const mapped = real.map(t => ({
+            id: t.slug,
+            dbId: t.id,
+            name: t.name,
+            emoji: t.emoji || '🏪',
+            color: t.color || '#B70C00',
+          }));
+          setTenants(mapped);
+          const slugToUse = preferSlug || mapped[0].id;
+          setTenant(slugToUse);
+          const selected = mapped.find(t => t.id === slugToUse);
+          setTenantDbId(selected?.dbId ?? mapped[0].dbId);
+          finish();
+          return;
+        }
+      } catch (e) {
+        fallbackErr = e;
+      }
+
+      // Distingue erro real (vale retry) de resposta limpa e vazia (zero-tenant).
+      const hadError = !!memberErr || !!fallbackErr;
+      if (!hadError) {
+        // Banco respondeu e o usuário realmente não tem tenant.
         clearTimeout(safetyTimer);
+        if (!isCurrent()) return;
         setTenantLoading(false);
+        setTenantLoadError(false);
+        setTenantLoadAttempted(true);
         return;
       }
-    } catch (_) { /* continua para fallback */ }
 
-    // Fallback: listTenants via api.js
-    try {
-      const real = await listTenants();
-      if (real?.length) {
-        const mapped = real.map(t => ({
-          id: t.slug,
-          dbId: t.id,
-          name: t.name,
-          emoji: t.emoji || '🏪',
-          color: t.color || '#B70C00',
-        }));
-        setTenants(mapped);
-        const slugToUse = preferSlug || mapped[0].id;
-        setTenant(slugToUse);
-        const selected = mapped.find(t => t.id === slugToUse);
-        setTenantDbId(selected?.dbId ?? mapped[0].dbId);
-        hasLoadedTenantsOnce.current = true;
-        clearTimeout(safetyTimer);
-        setTenantLoading(false);
-        return;
+      if (memberErr) console.warn(`[reloadTenants] tentativa ${attempt + 1} falhou (tenant_members):`, memberErr.message);
+      if (fallbackErr) console.warn(`[reloadTenants] tentativa ${attempt + 1} falhou (listTenants):`, fallbackErr.message);
+
+      // Backoff exponencial antes da próxima tentativa: 1s, 2s, 4s.
+      if (attempt < MAX_TENANT_RETRIES - 1) {
+        await new Promise(r => setTimeout(r, 1000 * 2 ** attempt));
+        // Sessão trocou/unmount durante o backoff → aborta sem mais queries.
+        if (!isCurrent()) { clearTimeout(safetyTimer); return; }
       }
-    } catch (_) { /* silencioso */ }
+    }
 
-    // Sem tenant encontrado
+    // Todas as tentativas falharam por erro/timeout → estado honesto de reconexão.
     clearTimeout(safetyTimer);
+    if (!isCurrent()) return;
     setTenantLoading(false);
+    setTenantLoadAttempted(true);
+    if (!hasLoadedTenantsOnce.current) setTenantLoadError(true);
   }
 
   useEffect(() => {
@@ -135,6 +207,9 @@ export default function App() {
   useEffect(() => {
     if (!session) return;
     reloadTenants();
+    // Ao trocar de sessão ou desmontar, invalida o reload em voo: o guard de geração
+    // faz o safetyTimer e os retornos de await pendentes virarem no-op.
+    return () => { reloadGenRef.current++; };
   }, [session]);
 
   // Registra Service Worker + Web Push subscription após ter session + tenantDbId
@@ -270,7 +345,7 @@ export default function App() {
     return <LoginScreen onLogin={setSession} />;
   }
 
-  if (tenantLoading) {
+  if (tenantLoading || !tenantLoadAttempted) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, height: '100vh', background: '#0D0D0D' }}>
         <svg width="48" height="48" viewBox="0 0 24 24" style={{ animation: 'spin 0.8s linear infinite' }}>
@@ -281,10 +356,31 @@ export default function App() {
     );
   }
 
-  if (!tenantDbId && !tenantLoading) {
+  // Ramo de ERRO primeiro: banco saturado/timeout. Nunca mente "Nenhum workspace"
+  // quando o problema é o servidor — mostra reconexão + retry manual.
+  if (tenantLoadError) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, height: '100vh', background: '#0D0D0D' }}>
+        <svg width="48" height="48" viewBox="0 0 24 24" style={{ animation: 'spin 0.8s linear infinite' }}>
+          <circle cx="12" cy="12" r="10" fill="none" stroke="#B70C00" strokeWidth="2.5" strokeDasharray="60" strokeDashoffset="20" />
+        </svg>
+        <span style={{ fontSize: 15, color: 'rgba(255,255,255,0.7)', fontFamily: 'sans-serif', textAlign: 'center', maxWidth: 320 }}>
+          Servidor temporariamente indisponível, reconectando…
+        </span>
+        <button onClick={() => reloadTenants()} style={{ padding: '8px 20px', background: '#444', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>
+          Tentar novamente
+        </button>
+      </div>
+    );
+  }
+
+  if (!tenantDbId) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, height: '100vh', background: '#0D0D0D' }}>
         <span style={{ fontSize: 15, color: 'rgba(255,255,255,0.7)', fontFamily: 'sans-serif' }}>Nenhum workspace encontrado para este usuário.</span>
+        <button onClick={() => reloadTenants()} style={{ padding: '8px 20px', background: '#444', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, marginBottom: 4 }}>
+          Tentar novamente
+        </button>
         <button onClick={() => supabase.auth.signOut()} style={{ padding: '8px 20px', background: '#B70C00', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>
           Sair
         </button>
