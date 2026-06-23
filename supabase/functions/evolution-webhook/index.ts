@@ -52,8 +52,21 @@ Deno.serve(async (req) => {
       .single();
 
     if (instErr || !inst) {
-      console.warn('[WEBHOOK] instância não encontrada:', instance);
-      return new Response('instance_not_found', { status: 404 });
+      // Erro transitório no lookup (timeout/conexão sob carga) tem código != PGRST116.
+      // `instErr &&` estreita o tipo p/ não-nulo → `.code`/`.message` ficam seguros.
+      const isTransientError = instErr && instErr.code !== 'PGRST116';
+
+      if (isTransientError) {
+        // NÃO engolir o evento: manter resposta não-2xx para o Evolution reentregar depois.
+        console.error('[WEBHOOK] erro no lookup da instância:', instance, '-', instErr.code, '-', instErr.message);
+        return new Response('instance_not_found', { status: 404 });
+      }
+
+      // Instância desconhecida (PGRST116 = zero linhas em evolution_instances, ou
+      // resultado vazio sem erro): responder 200 (em vez de 404) para a instância
+      // externa parar o loop de retry. Ignoramos o evento de propósito.
+      console.warn('[WEBHOOK] instância desconhecida — ignorada (200 defensivo):', instance);
+      return new Response('instance_unknown_ignored', { status: 200 });
     }
 
     const tenantId = inst.tenant_id as string;
