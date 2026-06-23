@@ -16,9 +16,7 @@
       "Bash(npx trigger.dev*)",
       "Bash(npx trigger.dev@latest deploy --skip-typecheck)",
       "Bash(curl -s --connect-timeout *)",
-      "Bash(claude --version)",
-      "Skill(gsd-discuss-phase)",
-      "Skill(gsd-discuss-phase:*)"
+      "Bash(claude --version)"
     ],
     "defaultMode": "default",
     "ask": []
@@ -32,52 +30,6 @@
             "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/typecheck.cjs\"",
             "timeout": 35
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/gsd-commit-hint.cjs\"",
-            "timeout": 3,
-            "async": true
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/gsd-session-start.cjs\"",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "PreCompact": [
-      {
-        "matcher": "auto",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/gsd-pre-compact.cjs\"",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "PostCompact": [
-      {
-        "matcher": "auto",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/gsd-post-compact.cjs\"",
-            "timeout": 10
           }
         ]
       }
@@ -95,16 +47,26 @@
       }
     ]
   },
+  "env": {
+    "ECC_HOOK_PROFILE": "minimal"
+  },
   "extraKnownMarketplaces": {
     "claude-plugins-official": {
       "source": {
         "source": "github",
         "repo": "anthropics/claude-plugins-official"
       }
+    },
+    "ecc": {
+      "source": {
+        "source": "git",
+        "url": "https://github.com/affaan-m/everything-claude-code.git"
+      }
     }
   },
   "enabledPlugins": {
-    "skill-creator@claude-plugins-official": true
+    "skill-creator@claude-plugins-official": true,
+    "ecc@ecc": true
   },
   "autoCompactEnabled": true,
   "worktree": {

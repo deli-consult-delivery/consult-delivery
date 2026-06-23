@@ -57,7 +57,7 @@ module.exports = function buildAvaliacaoLinkRouter({ requireJwt, sbFetch, assert
       });
     } catch (err) {
       console.error('[avaliacao/link GET]', err.message);
-      return res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: 'erro_interno' });
     }
   });
 

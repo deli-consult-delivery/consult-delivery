@@ -1,5 +1,5 @@
 ---
-description: Mostra estado da sessão de dev (branch, git, fase GSD, serviços, processos)
+description: Mostra estado da sessão de dev (branch, git, serviços, processos)
 ---
 
 # /dev-status — Diagnóstico da sessão de dev
@@ -18,23 +18,14 @@ git log -1 --oneline
 git rev-parse --short HEAD
 ```
 
-### 2. Fase GSD ativa
-Procura em `.planning/phases/`:
-```bash
-ls .planning/phases/ 2>/dev/null
-# Fase ativa: marcador definido pelo session-start hook (CLAUDE_PROJECT_DIR/.claude/hooks/gsd-session-start.cjs)
-# Se houver arquivo .planning/phases/_active ou similar, exibir
-cat .planning/phases/_active 2>/dev/null || echo "(sem marcador de fase ativa)"
-```
-
-### 3. Serviço claude-dev.service (local)
+### 2. Serviço claude-dev.service (local)
 A sessão de dev roda na própria VPS, então o serviço é local — não use SSH.
 ```bash
 systemctl is-active claude-dev.service 2>&1 || echo "(service not found)"
 systemctl show claude-dev.service --property=ActiveEnterTimestamp,MainPID,MemoryCurrent --no-pager 2>&1
 ```
 
-### 4. Processos locais relevantes (Node/Python/dev servers)
+### 3. Processos locais relevantes (Node/Python/dev servers)
 ```bash
 ps -eo pid,etime,cmd --no-headers | grep -E '(vite|trigger|node.*bridge|python.*agent)' | grep -v grep | head -10
 ```
@@ -50,9 +41,6 @@ Exiba um bloco markdown assim:
 - Branch: `<branch>`
 - HEAD: `<short-sha>` — <last commit msg>
 - Working tree: <clean | N arquivos modificados>
-
-**GSD**
-- Fase ativa: <nome ou "nenhuma">
 
 **Serviços**
 - claude-dev.service: <active | inactive | not-found>

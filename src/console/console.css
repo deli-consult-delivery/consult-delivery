@@ -36,9 +36,9 @@
 .cv2-rule{height:2px;background:var(--red);width:42px;margin:6px 0 12px;border-radius:1px}
 .cv2-sub{color:var(--tx2);font-size:12.5px;margin-bottom:18px}
 .cv2-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:12px;margin-bottom:16px}
-.cv2-kpi{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px 16px}
+.cv2-kpi{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px 16px;min-width:0;overflow:hidden}
 .cv2-kpi .l{color:var(--tx2);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
-.cv2-kpi .v{font-size:23px;font-weight:800;margin:5px 0 3px;color:var(--ink);letter-spacing:-.5px}
+.cv2-kpi .v{font-size:19px;font-weight:800;margin:5px 0 3px;color:var(--ink);letter-spacing:-.5px;word-break:break-word;overflow-wrap:break-word}
 .cv2-kpi .d{font-size:11.5px;font-weight:700;color:var(--green)}.cv2-kpi .d.neg{color:var(--red)}.cv2-kpi .d.mut{color:var(--tx2);font-weight:500}
 .cv2-card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px;margin-bottom:13px}
 .cv2-card h3{font-size:13.5px;font-weight:700;margin:0 0 11px}
