@@ -25,7 +25,7 @@ type Output           = z.infer<typeof OutputSchema>;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function getSPDate(): { dateStr: string; year: number; monthDay: string } {
+function getSPDate(): { dateStr: string; year: number; monthDay: string; hourSP: number } {
   const SP_OFFSET_MS = -3 * 60 * 60 * 1000;
   const nowSP        = new Date(Date.now() + SP_OFFSET_MS);
   const dateStr      = nowSP.toISOString().split("T")[0];
@@ -34,15 +34,48 @@ function getSPDate(): { dateStr: string; year: number; monthDay: string } {
     dateStr,
     year:     parseInt(yearStr, 10),
     monthDay: `${month}-${day}`,
+    hourSP:   nowSP.getUTCHours(), // hora já ajustada para SP
   };
+}
+
+// Janela permitida: seg-sex 16h-22h BRT | sáb 10h-16h BRT
+// Protege contra triggers manuais acidentais fora do horário de operação.
+function isWithinSendWindow(weekdayLabel: string, hourSP: number): boolean {
+  if (weekdayLabel === "sabado") return hourSP >= 10 && hourSP < 16;
+  return hourSP >= 16 && hourSP < 22;
 }
 
 // ─── Lógica principal ─────────────────────────────────────────────────────────
 
 async function enviarEncerramento(runId: string, weekdayLabel: string): Promise<Output> {
-  const { dateStr, year, monthDay } = getSPDate();
+  const { dateStr, year, monthDay, hourSP } = getSPDate();
 
-  logger.info(`encerramento-envio-agendado: iniciando (${weekdayLabel})`, { dateStr });
+  logger.info(`encerramento-envio-agendado: iniciando (${weekdayLabel})`, { dateStr, hourSP });
+
+  // 0. Guarda de janela horária — bloqueia triggers manuais fora do horário
+  if (!isWithinSendWindow(weekdayLabel, hourSP)) {
+    logger.warn("encerramento-envio-agendado: FORA DA JANELA HORÁRIA — abortando envio", {
+      weekdayLabel, hourSP, dateStr,
+      allowed: weekdayLabel === "sabado" ? "10h-16h BRT" : "16h-22h BRT",
+    });
+
+    const output = OutputSchema.parse({
+      date:              dateStr,
+      is_holiday:        false,
+      tenants_processed: 0,
+      results:           [],
+    });
+
+    await logAgentRun({
+      runId,
+      agentSlug: "encerramento-scheduler",
+      input:     { weekdayLabel, dateStr, hourSP, reason: "fora_da_janela_horaria" },
+      output,
+      status:    "success",
+    });
+
+    return output;
+  }
 
   // 1. Verificar feriado — skip silencioso
   const isHoliday = isFeriadoNacional(year, monthDay);
