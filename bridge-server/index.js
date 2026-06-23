@@ -1545,6 +1545,9 @@ app.use('/api/whisper', requireJwt, require('./routes/whisper'));
 // Cora — aprovação e rejeição de drafts de cobrança (envia via Evolution API)
 app.use('/api', requireJwt, require('./routes/cora-aprovacao')({ sbFetch, supabaseInsert }));
 
+// Cora — gestão manual: isenção e baixa manual de pagamento PIX
+app.use('/api', requireJwt, require('./routes/cora-gestao')({ sbFetch, supabaseInsert }));
+
 // Asaas — saldo da conta (cache 5 min)
 app.use('/api', requireJwt, require('./routes/asaas-saldo')());
 

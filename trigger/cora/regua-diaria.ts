@@ -29,6 +29,7 @@ export const coraReguaDiaria = schedules.task({
       .from("cobrancas")
       .select("id, vencimento, status, customer_name, valor")
       .eq("tenant_id", tenantId)
+      .eq("ignorar_cobranca", false)
       .in("status", ["pending", "overdue"])
       .gte("vencimento", dataMin.toISOString().slice(0, 10))
       .lte("vencimento", dataMax.toISOString().slice(0, 10));
@@ -41,18 +42,22 @@ export const coraReguaDiaria = schedules.task({
 
     logger.info(`cora-regua-diaria: ${cobrancas.length} cobranças elegíveis`);
 
-    const hoje0 = new Date(); hoje0.setHours(0, 0, 0, 0);
+    const hoje0 = new Date();
     let processadas = 0, puladas = 0;
 
     for (const cob of cobrancas) {
-      const dias = Math.floor((hoje0.getTime() - new Date(cob.vencimento).getTime()) / 86400000);
+      const dias = Math.floor((hoje0.getTime() - new Date(cob.vencimento + "T12:00:00").getTime()) / 86400000);
 
-      // Skip se já houve ação CORA hoje nesta cobrança (V2)
+      // Pré-vencimento (dias < 0): intervalo mínimo 48h p/ não spamear.
+      // Pós-vencimento (dias >= 0): 1x por dia (24h).
+      const minIntervalMs = dias < 0 ? 48 * 3_600_000 : 24 * 3_600_000;
+      const desde = new Date(hoje0.getTime() - minIntervalMs).toISOString();
+
       const { count } = await sb
         .from("cora_acoes")
         .select("id", { count: "exact", head: true })
         .eq("cobranca_v2_id", cob.id)
-        .gte("created_at", hoje0.toISOString());
+        .gte("created_at", desde);
 
       if ((count ?? 0) > 0) { puladas++; continue; }
 
