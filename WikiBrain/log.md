@@ -1,5 +1,25 @@
 # Wiki Log
 
+## 2026-06-23 — Sessão 91: BLUEPRINT AI-First — plano-mestre escrito, aguardando 🛑 CHECKPOINT do Wandson
+
+**Contexto (visão do Wandson, mensagem de voz):** transformar a Consult Delivery numa operação **AI-First** (~100% operada por agentes). Um cérebro/memória dentro da plataforma; **agentes especialistas** atendem clientes que chegam por **live chat**; o que o especialista não resolve vira **tarefa num pipeline com visão em tempo real**, onde ele resolve no sistema externo necessário (ERP/Asaas/sistema do cliente), atualiza a tarefa, e o atendente **responde ao cliente** com a conclusão — ou resolve direto. Reusar tudo que já existe; replicar o **paradigma EvoNexus** (chat interno com um **Oráculo** que aciona outros agentes e cria coisas na plataforma).
+
+**4 decisões travadas (via AskUserQuestion, INVIOLÁVEIS):**
+- **AF-1** — "Blueprint completo primeiro": escrever o plano-mestre AI-First completo e faseado, reusando a infra; construir por fases depois.
+- **AF-2** — "Ernesto" = a própria **DELI** (verbatim do Wandson: *"Esse Ernesto, ele não existe. O Ernesto é a mesma Deli. É porque eu errei na hora de escrever. E ela deve iniciar primeiro no telegram mesmo."*). NÃO há agente Ernesto separado; o cérebro/orquestrador/Oráculo É a DELI.
+- **AF-3** — DELI começa no **Telegram** primeiro (não WhatsApp).
+- **AF-4** — Primeira fase a CONSTRUIR = **o Loop** cliente→especialista→tarefa→resolução→resposta.
+
+**Entregue:** `docs/ai-first/BLUEPRINT-AI-FIRST.md` (PT-BR, v1, status PROPOSTA) — §0 como usar · §1 visão + decisões AF-1…AF-6 · §2 inventário do que JÁ existe + gaps · §3 arquitetura do Loop (máquina de estados attending→task_pending→executing→done→replied + mapa modo→semáforo) · §4 plano faseado (FASE 1 Loop · FASE 2 Pipeline tempo-real · FASE 3 DELI Oráculo Telegram · FASE 4 autonomia/heartbeats) · §5 arquivos a criar/estender · §6 guard-rails · §7 próxima ação.
+
+**Inventário confirma** que a plataforma já tem a maioria dos blocos: memória (`client_facts`/`client_timeline`/`loja_metricas`/`agent_memories`), especialistas em `trigger/`, DELI + semáforo, Oracle (agent-builder), Hermes/Telegram + admin-mcp, drafts + aprovação, `client_tasks` + Realtime parcial, Console v2. **Gaps:** loop não cabeado · tela Pipeline · Realtime incompleto · `/agents/deli/notify` · `notifyBridge` comentado.
+
+**Constraint:** motor EvoNexus PROIBIDO em prod (re-implementar só o paradigma); nenhuma mensagem a cliente sem aprovação (drafts).
+
+**Próximo passo (🛑 CHECKPOINT):** Wandson lê o blueprint e aprova a **FASE 1 (o Loop)**. Ao aprovar, 1ª fatia = `supabase/migrations/20260623_001_loop_core.sql` (aditiva/reversível, autônoma) + helper `createLoopTask()` + estender `trigger/breno/responder.ts` (saída discriminada `resolver | criar_tarefa`). Nada de produção/cliente tocado nesta sessão.
+
+---
+
 ## 2026-06-22 — Sessão 89: Tela preta "Nenhum workspace" — causa-raiz de banco resolvida em prod (#482 + #485) + Front 1 (loop 404 evolution-webhook)
 
 **Sintoma:** Wandson não acessava `app.consultdelivery.com.br` — a plataforma carregava e caía numa tela preta **"Nenhum workspace encontrado para este usuário."**. Duas tentativas anteriores no frontend (#473 race-condition, #476 `getUser→getSession`) trataram o sintoma, não a causa.
