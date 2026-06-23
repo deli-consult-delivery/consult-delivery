@@ -578,9 +578,13 @@ function Defesa({ tenantDbId, userId }) {
   );
 }
 
-export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, onExit }) {
+export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) {
   const [tela, setTela] = useState('visao');
   const [defesaOn, setDefesaOn] = useState(null);
+  // Gating de módulos por tenant (tabela tenant_modules):
+  //   null  -> tenant sem linhas = acesso total (backward-compatible, comportamento atual)
+  //   Set() -> allowlist: só os module_key (= id do item de menu) com enabled=true
+  const [allowedModules, setAllowedModules] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try { return localStorage.getItem('cv2_sb_collapsed') === '1'; } catch { return false; }
@@ -604,6 +608,28 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
       .then(({ count }) => { if (alive) setDefesaOn((count ?? 0) > 0); });
     return () => { alive = false; };
   }, [tenantDbId]);
+
+  // Gating de módulos: lê tenant_modules. Sem linhas -> null (tudo liberado);
+  // com linhas -> Set dos module_key habilitados (allowlist).
+  useEffect(() => {
+    if (!tenantDbId) { setAllowedModules(null); return; }
+    let alive = true;
+    supabase.from('tenant_modules').select('module_key, enabled').eq('tenant_id', tenantDbId)
+      .then(({ data, error }) => {
+        if (!alive) return;
+        if (error || !data || data.length === 0) { setAllowedModules(null); return; }
+        setAllowedModules(new Set(data.filter(r => r.enabled).map(r => r.module_key)));
+      });
+    return () => { alive = false; };
+  }, [tenantDbId]);
+
+  // Guard: se há allowlist e a tela atual não está liberada, cair no 1º item permitido.
+  useEffect(() => {
+    if (!allowedModules) return;
+    if (allowedModules.has(tela)) return;
+    const primeiro = NAV_ITEMS.find(it => allowedModules.has(it.id));
+    if (primeiro) setTela(primeiro.id);
+  }, [allowedModules, tela]);
 
   // mobile: ESC fecha a sidebar-drawer
   useEffect(() => {
@@ -726,19 +752,21 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId, on
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
           </button>
         </div>
-        {GRUPOS.map((g, i) => (
-          <div key={i}>
-            <div className="cv2-grp">{g.label}</div>
-            {g.items.map(it => (
-              <div key={it.id} className={`cv2-item${tela === it.id ? ' on' : ''}`} onClick={() => { navWithParams(it.id, {}); setSidebarOpen(false); }}>
-                <Ico name={it.ic} />{it.label}
-              </div>
-            ))}
-          </div>
-        ))}
-        <div style={{ marginTop: 'auto', padding: 14, borderTop: '1px solid var(--line)' }}>
-          <button className="cv2-btn sec" style={{ width: '100%', justifyContent: 'center' }} onClick={onExit}>Voltar ao console clássico</button>
-        </div>
+        {GRUPOS.map((g, i) => {
+          // allowlist: esconde itens não liberados e grupos que ficarem vazios.
+          const items = allowedModules ? g.items.filter(it => allowedModules.has(it.id)) : g.items;
+          if (items.length === 0) return null;
+          return (
+            <div key={i}>
+              <div className="cv2-grp">{g.label}</div>
+              {items.map(it => (
+                <div key={it.id} className={`cv2-item${tela === it.id ? ' on' : ''}`} onClick={() => { navWithParams(it.id, {}); setSidebarOpen(false); }}>
+                  <Ico name={it.ic} />{it.label}
+                </div>
+              ))}
+            </div>
+          );
+        })}
       </aside>
       <div className="cv2-main">
         {ehChat ? (

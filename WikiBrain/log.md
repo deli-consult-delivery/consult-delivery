@@ -36,6 +36,26 @@
 
 ---
 
+## 2026-06-23 — Sessão 86: Onboarding de cliente restrito a Avaliação (CSAT/NPS) + aposentadoria do console clássico [T8/T9] — branch `claude/gracious-kapitsa-b2daad`, commit `f63c025`
+
+**Contexto:** Wandson quer vender só o módulo de Avaliação (CSAT/NPS) para um cliente novo — entrar vendo apenas Visão Geral + CSAT + NPS, com desbloqueio progressivo de mais módulos depois, sem deploy. Junto, aposentar de vez o console clássico (dívida que atrapalha o onboarding restrito).
+
+**Decisões travadas (AskUserQuestion, plano `cozy-skipping-breeze.md`):** **D1** aposentar o console clássico para todos (Console v2 = único; todo login autenticado cai no v2); **D2** gating de módulos via nova tabela `tenant_modules` (flag `enabled` por tenant; o menu do v2 filtra por ela); **D3** provisionamento via runbook SQL + edge `manage-users`; **D4** módulos do 1º cliente = Visão Geral + CSAT + NPS.
+
+**Design central do gating — "allowlist quando há linhas; aberto quando não há":** tenant **sem nenhuma linha** em `tenant_modules` → vê **todos** os módulos (backward-compatible, zero migração dos tenants atuais); tenant **com linhas** → vê **só** os `module_key` com `enabled = true`. `module_key` = o `id` do item de menu em `GRUPOS` (`ConsoleV2.jsx`). Filtro de menu é **defesa de UX, não de dados** — RLS/RBAC permanecem no backend, nenhuma policy relaxada.
+
+**Entregue:**
+- **Migration `20260622_010_tenant_modules.sql`** (APLICADA, version `20260623021358`) — tabela `tenant_modules` (`id` uuid PK, `tenant_id` uuid NOT NULL REFERENCES tenants ON DELETE CASCADE, `module_key` text NOT NULL, `enabled` boolean NOT NULL DEFAULT true, `created_at`). UNIQUE `(tenant_id, module_key)`; índice `idx_tenant_modules_tenant`; RLS enabled + 4 policies. **Teste de isolamento RLS PASSOU**; não-regressão: **0 linhas em produção** → todos os tenants atuais seguem com menu completo.
+- **`src/console/ConsoleV2.jsx`** — fetch de `tenant_modules` espelhando o padrão `defesaOn`/`tenant_agents`; `allowedIds = null` quando vazio (tudo liberado) ou `Set` dos `module_key` habilitados; filtro do render; guard de tela ativa; removido botão "Voltar ao console clássico" e a prop `onExit`.
+- **`src/App.jsx`** — console clássico aposentado: sempre renderiza `<ConsoleV2 .../>` para usuário logado com tenant; branch do clássico (`<Sidebar>`, screens) removido.
+- **`docs/runbooks/onboarding-cliente-avaliacao.md`** (novo) — runbook de 5 passos: criar tenant → ligar módulos (`visao,csat,nps`) → criar 1º admin via service-role → usuários adicionais via `manage-users` → desbloqueio progressivo sem deploy. Senhas via Infisical, nunca em git/chat.
+
+**Verificação (output bruto):** teste de isolamento RLS PASSOU; não-regressão 0 linhas confirmada; `npm run build` exit 0 (vite v5.4.21, sem imports órfãos).
+
+**Pendente do Wandson:** rodar o runbook para o 1º cliente real + validação visual.
+
+---
+
 ## 2026-06-22 — Sessão 89: Tela preta "Nenhum workspace" — causa-raiz de banco resolvida em prod (#482 + #485) + Front 1 (loop 404 evolution-webhook)
 
 **Sintoma:** Wandson não acessava `app.consultdelivery.com.br` — a plataforma carregava e caía numa tela preta **"Nenhum workspace encontrado para este usuário."**. Duas tentativas anteriores no frontend (#473 race-condition, #476 `getUser→getSession`) trataram o sintoma, não a causa.
