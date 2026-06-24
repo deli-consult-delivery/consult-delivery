@@ -101,7 +101,7 @@ module.exports = function datacrazyWebhookRouter({ sbFetch }) {
           external_ref:       ref,
           contact_identifier: conversation_id,
           nome_cliente:       lead_name || null,
-          origem:             'datacrazy',
+          origem:             'crm_externo',
           status:             'pendente',
         },
         prefer: 'return=representation',
