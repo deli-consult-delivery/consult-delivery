@@ -30,6 +30,7 @@
       "mcp__claude_ai_MCP_GITHUB__get_file_contents",
       "mcp__claude_ai_MCP_GITHUB__list_pull_requests",
       "mcp__claude_ai_MCP_GITHUB__pull_request_read",
+      "Bash(node --check *)",
       "Bash(git status)",
       "Bash(git diff*)",
       "Bash(git log*)",
@@ -48,8 +49,7 @@
       "Bash(pm2 describe *)",
       "Bash(pm2 restart bridge-server)",
       "Bash(pm2 restart bridge*)",
-      "Bash(pm2 reload bridge*)",
-      "Bash(node --check *)"
+      "Bash(pm2 reload bridge*)"
     ],
     "defaultMode": "acceptEdits",
     "ask": []
