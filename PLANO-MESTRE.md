@@ -213,7 +213,7 @@ Resumo de categorias: **CORE** dashboard/agentes/oracle→DELI/skills/atividade/
 
 - [ ] ⚠️ CI/CD: auto-deploy de `main` sobrescreve deploys manuais · [ ] ⚠️ Branches VPS divergem de origin
 - [ ] ⏳ Limpar 5 tenants seed (entra na onda 2) · [ ] ⏳ `is_active` em `tenants` · [ ] ⏳ Deletar `yasmin/dev`
-- [ ] 🔄 **Onboardar primeiro cliente real** (PRIORIDADE de negócio) — **infra pronta (sessão 86, `f63c025`):** gating de módulos por tenant (`tenant_modules`, aplicada) + Console v2 = único console + runbook `docs/runbooks/onboarding-cliente-avaliacao.md` para cliente restrito a Avaliação (CSAT/NPS). Falta o Wandson rodar o runbook p/ o 1º cliente real.
+- [x] ✅ **Onboardar primeiro cliente real — FEITO (sessão 92, PR #508, SHA `0a803ac`).** Karina Doceria provisionada: tenant `e9fdaa66` + 3 módulos (`csat`,`nps`,`visao`) + admin via service-role + RBAC semeado (`seed_rbac_system_roles` + `user_roles`). 4 defeitos corrigidos: RBAC (CSAT/NPS sem "Acesso negado"), `VisaoGeralAvaliacao` (KPIs próprios), branding (logo CD fixa, sem "CONSOLE · BETA"), runbook atualizado com Passo 3c. **⚠️ Pendente do Wandson:** smoke visual no browser como admin do cliente (CSAT + NPS + Visão Geral sem "Acesso negado").
 
 ---
 

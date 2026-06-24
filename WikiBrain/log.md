@@ -1,5 +1,19 @@
 # Wiki Log
 
+## 2026-06-24 — Sessão 92: 4 defeitos do 1º cliente restrito (Karina Doceria) corrigidos (PR #508)
+
+**Problema:** após provisionar o tenant Karina Doceria com 3 módulos (visao/csat/nps), 4 defeitos impediam o uso normal: CSAT e NPS retornavam "Acesso negado"; Visão Geral exibia o dashboard completo do CD em vez de KPIs do cliente; sidebar mostrava nome do cliente + "CONSOLE · BETA"; runbook sem instrução de RBAC.
+
+**Causa raiz (defeitos 1 e 2):** tenant criado sem linhas em `roles` → `seed_rbac_system_roles` nunca havia sido chamado → `hasRole('admin') = false` → `<RequireRole>` bloqueava as telas.
+
+**Fix RBAC:** migration `20260624_001_rbac_seed_karina_tenant.sql` — `seed_rbac_system_roles('e9fdaa66-…')` + `INSERT INTO user_roles` admin. Idempotente, verificado com `execute_sql` (7 papéis + 1 linha user_roles confirmados).
+
+**Fix Visão Geral:** hook `useKpisAvaliacao` + componente `VisaoGeralAvaliacao` em `ConsoleV2.jsx`. Quando `allowedModules` é um `Set` (tenant restrito), `VisaoGeral` delega para o novo componente que exibe KPIs de CSAT% e NPS dos últimos 30 dias + CTAs para as telas. Tenants sem allowlist (null) continuam com o dashboard completo — zero regressão.
+
+**Fix branding:** logo sempre `/assets/rocket-logo.png`, nome sempre "Consult Delivery", sem `<small>CONSOLE · BETA</small>`. Nome do cliente permanece só no chip do seletor de tenant.
+
+**Lição:** ao criar um tenant restrito, o Passo 3c do runbook é obrigatório. Sem RBAC semeado, todas as telas protegidas com `<RequireRole>` retornam "Acesso negado" mesmo com `tenant_members.role = 'admin'` — os dois sistemas são independentes.
+
 ## 2026-06-24 — Sessão cora-r2-tracker-docs (continuação): hotfix `em7Dias` undefined na aba de cobrança CORA (PR #501)
 
 **Problema:** PR #498 removeu `em7Dias` junto com `venceEm7Dias`, mas a variável ainda era referenciada no `useMemo` de `elegiveisRegua` (linha 1202). Em ES modules (strict mode), isso lança `ReferenceError: em7Dias is not defined`, quebrando o render do componente Cora e exibindo erro na tela ao clicar na aba de cobrança.
