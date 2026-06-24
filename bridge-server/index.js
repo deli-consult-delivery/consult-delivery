@@ -1558,6 +1558,8 @@ app.use('/api', requireJwt, require('./routes/cora-gestao')({ sbFetch, supabaseI
 // Asaas — saldo da conta (cache 5 min)
 app.use('/api', requireJwt, require('./routes/asaas-saldo')());
 
+// Monitor de Sessões — lista spawn-queue e stream SSE de logs (cd-spawn)
+app.use('/api', require('./routes/monitor')({ requireJwt }));
 
 // ════════════════════════════════════════════════════════════════════════════
 // BRENO Off-Hours — smoke routes
