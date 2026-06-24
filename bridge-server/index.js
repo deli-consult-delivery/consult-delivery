@@ -46,7 +46,11 @@ app.get('/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOStrin
 
 // ── Middleware: JWT Supabase ──────────────────────────────────────────────────
 async function requireJwt(req, res, next) {
-  const auth = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '').trim();
+  // SSE (EventSource) não suporta headers customizados — aceitar token via query param ?token=
+  const queryToken = req.query?.token;
+  const auth = queryToken
+    ? queryToken.trim()
+    : (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '').trim();
   if (!auth) return res.status(401).json({ error: 'missing token' });
   if (!SUPABASE_ANON_KEY) {
     req.user = { id: 'dev' };
@@ -1558,6 +1562,8 @@ app.use('/api', requireJwt, require('./routes/cora-gestao')({ sbFetch, supabaseI
 // Asaas — saldo da conta (cache 5 min)
 app.use('/api', requireJwt, require('./routes/asaas-saldo')());
 
+// Monitor de Sessões — lista spawn-queue e stream SSE de logs (cd-spawn)
+app.use('/api', require('./routes/monitor')({ requireJwt }));
 
 // ════════════════════════════════════════════════════════════════════════════
 // BRENO Off-Hours — smoke routes
