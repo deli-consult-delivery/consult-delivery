@@ -311,6 +311,23 @@ async function createHeartbeatTask(
   }
 ): Promise<void> {
   try {
+    const { data: existing } = await sb
+      .from("client_tasks")
+      .select("id")
+      .eq("tenant_id", TENANT_ID)
+      .eq("customer_id", params.customerId)
+      .eq("agent_id", params.agentId)
+      .eq("status", "todo")
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      logger.info("createHeartbeatTask: task já existe, pulando", {
+        customerId: params.customerId,
+        agentId: params.agentId,
+      });
+      return;
+    }
+
     const { error } = await sb.from("client_tasks").insert({
       tenant_id: TENANT_ID,
       customer_id: params.customerId,
