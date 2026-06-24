@@ -150,7 +150,8 @@ export const onboardingVerificarMarcosSchedule = schedules.task({
     }
 
     // Notifica equipe via Bridge — canal interno telegram_interno (nunca cliente)
-    const bridgeUrl = process.env.BRIDGE_URL ?? "http://187.127.25.24:3001";
+    const bridgeUrl   = process.env.BRIDGE_URL ?? "http://187.127.25.24:3001";
+    const bridgeToken = process.env.INTERNAL_BRIDGE_TOKEN ?? "";
 
     let notificacoes = 0;
     for (const m of lista) {
@@ -160,7 +161,7 @@ export const onboardingVerificarMarcosSchedule = schedules.task({
       try {
         const res = await fetch(`${bridgeUrl}/agents/deli/notify`, {
           method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...(bridgeToken && { Authorization: `Bearer ${bridgeToken}` }) },
           body:    JSON.stringify({
             channel: 'telegram_interno',
             message: mensagem,

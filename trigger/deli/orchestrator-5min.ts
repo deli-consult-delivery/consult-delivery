@@ -268,7 +268,7 @@ async function createPendingApproval(
 
 async function notifyBridge(semaforo: Semaforo, motivos: string[], runId: string): Promise<void> {
   try {
-    await fetch(`${getBridgeUrl()}/agents/deli/notify`, {
+    const r = await fetch(`${getBridgeUrl()}/agents/deli/notify`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -282,6 +282,9 @@ async function notifyBridge(semaforo: Semaforo, motivos: string[], runId: string
         urgente: semaforo === "Vermelho",
       }),
     });
+    if (!r.ok) {
+      logger.warn("notifyBridge: status não-ok", { status: r.status });
+    }
   } catch (err) {
     logger.warn("notifyBridge falhou", { error: (err as Error).message });
   }
@@ -406,11 +409,10 @@ export const deliOrchestrator5min = schedules.task({
     }
     motivos.push(...resultsBySemaforo.verde.map((s) => `🟢 ${s}`));
 
-    // 4. Notificar Bridge se não-Verde
-    // NOTIFICAÇÃO TEMPORARIAMENTE DESLIGADA — bug spam (Wandson 2026-05-26)
-    // if (semaforo !== "Verde") {
-    //   await notifyBridge(semaforo, motivos, ctx.run.id);
-    // }
+    // 4. Notificar Bridge se não-Verde (dedup de 30 min feito pelo endpoint)
+    if (semaforo !== "Verde") {
+      await notifyBridge(semaforo, motivos, ctx.run.id);
+    }
 
     logger.info("deli-orchestrator-5min: concluído", { semaforo, motivos });
 

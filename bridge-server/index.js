@@ -1564,6 +1564,9 @@ app.use('/api', requireJwt, require('./routes/asaas-dashboard')());
 // Monitor de Sessões — lista spawn-queue e stream SSE de logs (cd-spawn)
 app.use('/api', require('./routes/monitor')({ requireJwt }));
 
+// DELI notify — semáforo do orchestrator → internal_notifications + Hermes (Telegram)
+app.use('/', require('./routes/deli-notify')({ sbFetch, supabaseInsert }));
+
 // ════════════════════════════════════════════════════════════════════════════
 // BRENO Off-Hours — smoke routes
 // ════════════════════════════════════════════════════════════════════════════
