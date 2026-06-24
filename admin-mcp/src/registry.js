@@ -16,6 +16,7 @@ const readTools = [
 
 const writeTools = [
   require('./tools/cd_propor_draft'),
+  require('./tools/cd_despachar_especialista'),
 ];
 
 const allTools = [...readTools, ...writeTools];
