@@ -120,6 +120,8 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
       if (phone && cobrancaV2Id && !isTestSend) {
         const todayBRT = new Date();
         todayBRT.setUTCHours(3, 0, 0, 0); // meia-noite BRT = 03:00 UTC
+        // Guarda: antes das 03:00 UTC, "hoje BRT" ainda é o dia UTC anterior
+        if (new Date() < todayBRT) todayBRT.setUTCDate(todayBRT.getUTCDate() - 1);
         const sentToday = await sbFetch(
           `agent_drafts?tenant_id=eq.${encodeURIComponent(tenant_id)}&status=eq.sent&metadata->>customer_phone=eq.${encodeURIComponent(phone)}&metadata->>cobranca_v2_id=eq.${encodeURIComponent(cobrancaV2Id)}&created_at=gte.${encodeURIComponent(todayBRT.toISOString())}&limit=1&select=id`
         );

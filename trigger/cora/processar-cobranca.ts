@@ -141,6 +141,8 @@ NÃO use markdown ao redor do JSON. Responda SOMENTE o JSON.`;
     if (cob.customer_phone) {
       const todayStart = new Date();
       todayStart.setUTCHours(3, 0, 0, 0); // meia-noite BRT (UTC-3)
+      // Guarda: se for antes das 03:00 UTC, "hoje BRT" ainda é o dia UTC anterior
+      if (new Date() < todayStart) todayStart.setUTCDate(todayStart.getUTCDate() - 1);
       const { data: dup } = await sb
         .from("agent_drafts")
         .select("id")
