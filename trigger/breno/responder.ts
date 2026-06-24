@@ -72,6 +72,9 @@ export const brenoResponder = task({
         triggeredBy: input.triggered_by,
         durationMs: Date.now() - start,
         status: "success",
+        explanation: "Modo humano ativo: agente não interferiu nesta conversa.",
+        confidenceScore: 1.0,
+        pipelineStage: "triagem",
       });
 
       await sb.from("breno_interactions").insert({
@@ -240,6 +243,9 @@ REGRAS:
         output: { ok: true, action_taken: "task_created", task_id: taskId, mode },
         tenantId: input.tenant_id, triggeredBy: input.triggered_by,
         durationMs: Date.now() - start, status: "success",
+        explanation: `Demanda requer acesso a sistema externo — tarefa criada: "${parsed.tarefa?.titulo}". Cliente: ${conv?.contact_name || input.sender_name || "desconhecido"}.`,
+        confidenceScore: 0.85,
+        pipelineStage: "criacao_tarefa",
       });
 
       return OutputSchema.parse({
@@ -359,6 +365,11 @@ REGRAS:
       ]);
     }
 
+    const brenoScore = parsed.precisa_humano ? 0.55 : action_taken === "sent" ? 0.90 : 0.78;
+    const brenoExpl = parsed.precisa_humano
+      ? `Escalado para humano: ${parsed.motivo_humano || "problema complexo identificado"}. Tom: ${parsed.tom}.`
+      : `Respondido automaticamente (${action_taken}). Cliente: ${conv?.contact_name || input.sender_name || "desconhecido"}. Tom: ${parsed.tom}.`;
+
     await logAgentRun({
       runId: ctx.run.id,
       agentSlug: "breno-responder",
@@ -368,6 +379,9 @@ REGRAS:
       triggeredBy: input.triggered_by,
       durationMs: Date.now() - start,
       status: "success",
+      explanation: brenoExpl,
+      confidenceScore: brenoScore,
+      pipelineStage: "resposta",
     });
 
     return OutputSchema.parse({

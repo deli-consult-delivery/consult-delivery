@@ -205,6 +205,11 @@ NÃO use markdown ao redor do JSON. Responda SOMENTE o JSON.`;
       mensagem_enviada: null,
     });
 
+    const coraScores: Record<string, number> = { amigavel: 0.90, neutro: 0.80, formal: 0.75, urgente: 0.85 };
+    const diasLabel2 = input.dias_atraso <= 0
+      ? `${Math.abs(input.dias_atraso)}d antes do vencimento`
+      : `${input.dias_atraso}d em atraso`;
+
     await logAgentRun({
       runId:      ctx.run.id,
       agentSlug:  "cora-processar-cobranca",
@@ -213,6 +218,9 @@ NÃO use markdown ao redor do JSON. Responda SOMENTE o JSON.`;
       output:     { ok: true, draft_id: draft.id, tom },
       status:     "success",
       durationMs: Date.now() - start,
+      explanation: `Draft de cobrança criado para ${cob.customer_name} (${diasLabel2}). Tom ${tom} aplicado. Valor: R$ ${(cob.valor / 100).toFixed(2).replace('.', ',')}.`,
+      confidenceScore: coraScores[tom] ?? 0.80,
+      pipelineStage: "cobranca",
     });
 
     logger.info("cora-processar-cobranca: draft criado", { draft_id: draft.id, tom });

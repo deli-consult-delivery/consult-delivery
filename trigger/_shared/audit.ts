@@ -15,6 +15,10 @@ interface AgentRunLog {
   durationMs?: number;
   costUsd?: number;
   status?: "success" | "failed";
+  explanation?: string;
+  confidenceScore?: number;
+  pipelineStage?: string;
+  pipelinePosition?: number;
 }
 
 export async function logAgentRun({
@@ -27,6 +31,10 @@ export async function logAgentRun({
   durationMs,
   costUsd,
   status = "success",
+  explanation,
+  confidenceScore,
+  pipelineStage,
+  pipelinePosition,
 }: AgentRunLog): Promise<void> {
   try {
     const { error } = await getSupabase().from("agent_runs").upsert(
@@ -41,6 +49,10 @@ export async function logAgentRun({
         cost_usd: costUsd ?? null,
         status,
         completed_at: new Date().toISOString(),
+        explanation: explanation ?? null,
+        confidence_score: confidenceScore ?? null,
+        pipeline_stage: pipelineStage ?? null,
+        pipeline_position: pipelinePosition ?? null,
       },
       { onConflict: "trigger_dev_run_id" }
     );

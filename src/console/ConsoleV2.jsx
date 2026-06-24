@@ -40,6 +40,7 @@ import Automacoes from './Automacoes.jsx';
 import Deli from './Deli.jsx';
 import MiaAudit from './MiaAudit.jsx';
 import MonitorSessoes from './MonitorSessoes.jsx';
+import PipelineScreen from './PipelineScreen.jsx';
 import Oracle from './Oracle.jsx';
 import AgentInbox from './AgentInbox.jsx';
 import Heartbeats from './Heartbeats.jsx';
@@ -142,6 +143,7 @@ const GRUPOS = [
     { id: 'auditoria', ic: 'i-scroll', label: 'Auditoria' },
     { id: 'notificacoes', ic: 'i-bell', label: 'Notificações' },
     { id: 'monitor', ic: 'i-radio', label: 'Monitor de Agentes' },
+    { id: 'pipeline', ic: 'i-zap', label: 'Pipeline ao Vivo' },
   ]},
 ];
 
@@ -797,6 +799,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
       case 'auditoria': return <AuditLog tenantDbId={tenantDbId} />;
       case 'notificacoes': return <Notificacoes tenantDbId={tenantDbId} userId={userId} onNavigate={nav} />;
       case 'monitor': return <MonitorSessoes />;
+      case 'pipeline': return <PipelineScreen tenantDbId={tenantDbId} />;
       case 'lara-editorial': return <LaraEditorial tenantDbId={tenantDbId} userId={userId} />;
       case 'lara': return <Lara tenantDbId={tenantDbId} userId={userId} />;
       case 'tarefas-globais': return <TarefasGlobais tenantDbId={tenantDbId} userId={userId} />;
