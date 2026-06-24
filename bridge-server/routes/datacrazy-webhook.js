@@ -41,12 +41,12 @@ module.exports = function datacrazyWebhookRouter({ sbFetch }) {
     const tokenRaw = req.headers['x-crm-token'];
     if (!tokenRaw) return res.status(401).json({ error: 'token_ausente' });
 
-    const tokenHash = createHash('sha256').update(tokenRaw).digest('hex');
+    const tokenHash = createHash('sha256').update(tokenRaw.trim()).digest('hex');
 
     let tokenRows;
     try {
       tokenRows = await sbFetch(
-        `crm_webhook_tokens?token_hash=eq.${encodeURIComponent(tokenHash)}&ativo=eq.true&select=id,tenant_id,ativo&limit=1`
+        `crm_webhook_tokens?token_hash=eq.${tokenHash}&ativo=eq.true&select=id,tenant_id,ativo&limit=1`
       );
     } catch (e) {
       console.error('[datacrazy-webhook] Erro ao validar token:', e.message);
