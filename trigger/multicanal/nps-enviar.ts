@@ -174,14 +174,17 @@ export const npsEnviarTask = task({
         const { ok, detail } = await sendEvolutionText(inst, nps.contact_identifier, text);
         const statusStr = ok ? "ok" : "falhou";
 
-        await sb
-          .from("nps_avaliacoes")
-          .update({
-            msg_enviada_at:     new Date().toISOString(),
-            msg_enviada_status: statusStr,
-          })
-          .eq("id", nps.id)
-          .catch((err: unknown) => logger.error("nps-enviar: falha ao atualizar msg_enviada", { err: (err as Error).message }));
+        try {
+          await sb
+            .from("nps_avaliacoes")
+            .update({
+              msg_enviada_at:     new Date().toISOString(),
+              msg_enviada_status: statusStr,
+            })
+            .eq("id", nps.id);
+        } catch (err: unknown) {
+          logger.error("nps-enviar: falha ao atualizar msg_enviada", { err: err instanceof Error ? err.message : String(err) });
+        }
 
         resultados.push({ nps_id: nps.id, tenant_id: tenantId, status: ok ? "ok" : "falhou", detalhe: ok ? undefined : String(detail) });
         ok ? enviados++ : falhas++;
