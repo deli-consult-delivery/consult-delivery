@@ -1,5 +1,15 @@
 # Wiki Log
 
+## 2026-06-24 — Sessão cora-dashboard-limpeza: remoção de seções redundantes do dashboard financeiro CORA (PR #498)
+
+**Contexto:** Wandson identificou redundâncias no dashboard CORA (tab Financeiro → Visão Geral): (1) tabelas "Cobranças vencidas por cliente" e "Vencem nos próximos 7 dias" repetiam exatamente o que a Régua de Cobrança já mostra com seus filtros; (2) campo "A receber" nos blocos "Últimos 30 dias" e "Mês atual" era semanticamente incorreto (cobranças pending são futuras, não do passado).
+
+**Comportamento entregue:** dashboard mais limpo, sem duplicações. A Régua de Cobrança é o ponto único para gerenciar cobranças elegíveis, com filtros Todas/Vencidas/Próx. 7 dias. Os blocos de período agora mostram apenas Recebido, Confirmados e Inadimplência.
+
+**Confirmação sobre pagamento de boleto:** o sistema JÁ funciona corretamente. Asaas → `POST /webhooks/asaas` → status `received` → `regua-diaria.ts` filtra `.in("status", ["pending", "overdue"])` → CORA para de gerar mensagens. Sem alteração de código necessária.
+
+**O que foi removido (PROD via PR #498, squash-merged):** `vencidasPorCliente` + `venceEm7Dias` computed blocks, seções JSX 1.6 e 1.7, campo "A receber" dos dois IIFEs de período. 219 linhas deletadas, zero funcionalidade perdida. `npx tsc --noEmit` → zero erros.
+
 ## 2026-06-23 — Sessão webhook-hardening: `evolution-webhook` hardening defensivo deployado em prod (PR #491, Edge Function v56)
 
 **Contexto:** offshoot da investigação da tela preta / "Nenhum workspace" (saturação de banco, sessão 89). Naquela sessão, o hardening defensivo da edge function `evolution-webhook` ficou apenas **OFERECIDO ao Wandson, não aplicado**. Esta sessão fechou o ciclo: CODOU + MERGEOU + DEPLOYOU.
