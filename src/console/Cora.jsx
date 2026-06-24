@@ -1194,6 +1194,7 @@ export default function Cora({ tenantDbId, userId }) {
 
   // Dados extras para régua e gráficos de pizza (memoizados para evitar re-cálculo a cada render)
   const hoje10 = hoje.toISOString().slice(0, 10);
+  const em7Dias = new Date(hoje); em7Dias.setDate(em7Dias.getDate() + 7);
   const confirmadas = useMemo(() => cobrancasV2.filter(c => c.status === 'received' && c.confirmed_date), [cobrancasV2]);
   const aguardando = useMemo(() => cobrancasV2.filter(c => c.status === 'pending' && c.vencimento >= hoje10), [cobrancasV2, hoje10]);
   const elegiveisRegua = useMemo(() => cobrancasV2.filter(c => {
