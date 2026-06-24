@@ -1,5 +1,25 @@
 # Wiki Log
 
+## 2026-06-24 — Sessão ajuste-cora: 4 ajustes na tela de cobrança da Cora (branch wandson/ajuste-cora)
+
+**Problema:** 4 comportamentos incorretos na tela de cobrança da Cora identificados pelo Wandson:
+1. Botão "Não cobrar" marcava a fatura como ignorada mas não limpava os drafts pendentes da fila de aprovação
+2. Botão "Já pagou via PIX" só atualizava o banco local, não chamava a API Asaas para dar baixa real na fatura
+3. Fila de aprovação mostrava cobranças de todos os dias, não só do dia atual
+4. Deduplicação ocultava cobranças pelo telefone apenas — clientes com 2 faturas diferentes apareciam só 1 vez
+
+**Fixes entregues (commit `8c62e26`, branch `wandson/ajuste-cora`):**
+
+**(A) "Não cobrar" — rejeita drafts automaticamente:** `bridge-server/routes/cora-gestao.js` — após marcar `ignorar_cobranca=true`, faz PATCH em `agent_drafts` filtrando por `cobranca_v2_id=id` e `status=pending`, setando `status=rejected`. Task `trigger/cora/processar-cobranca.ts` agora também lê `ignorar_cobranca` na query e retorna `skipped: cobranca_ignorada` se true (evita gerar novo draft futuro).
+
+**(B) "Já pagou via PIX" → Asaas receiveInCash:** `bridge-server/routes/cora-gestao.js` — após update local, chama `POST https://api.asaas.com/v3/payments/{asaas_charge_id}/receiveInCash` com `paymentDate` e `value`. Falha no Asaas é não-fatal (log de warn, não 500). Também corrigido: rejeição de drafts era de todos os drafts pending da fila — agora é apenas os da fatura específica (`metadata->>cobranca_v2_id=eq.${id}`).
+
+**(C) Fila do dia atual:** `src/console/Cora.jsx` — `loadDrafts()` agora inclui filtro `.gte('created_at', todayBRT.toISOString())` onde `todayBRT = meia-noite BRT (03:00 UTC)`. Padrão consistente com o dedup já usado no Trigger.dev e no bridge.
+
+**(D) Dedup por phone+fatura:** UI (`Cora.jsx`), Trigger.dev (`processar-cobranca.ts`) e bridge-server (`cora-aprovacao.js`) trocaram dedup de "mesmo telefone" para "mesmo telefone E mesma fatura (`cobranca_v2_id`)". Mesmo número com serviços diferentes aparece normalmente na fila.
+
+**Pendente:** criar PR no GitHub (gh CLI sem auth na VPS). URL: `https://github.com/deli-consult-delivery/consult-delivery/pull/new/wandson/ajuste-cora`
+
 ## 2026-06-24 — Sessão 92: 4 defeitos do 1º cliente restrito (Karina Doceria) corrigidos (PR #508)
 
 **Problema:** após provisionar o tenant Karina Doceria com 3 módulos (visao/csat/nps), 4 defeitos impediam o uso normal: CSAT e NPS retornavam "Acesso negado"; Visão Geral exibia o dashboard completo do CD em vez de KPIs do cliente; sidebar mostrava nome do cliente + "CONSOLE · BETA"; runbook sem instrução de RBAC.
