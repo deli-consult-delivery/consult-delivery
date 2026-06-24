@@ -3,6 +3,7 @@ import { z } from "zod";
 import { executeAgent, getClientContext, recordFact, logTimeline } from "../../src/agents/shared/runtime";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
+import { createLoopTask } from "../_shared/loop-tasks";
 
 const InputSchema = z.object({
   tenant_id: z.string().uuid(),
@@ -17,14 +18,24 @@ const InputSchema = z.object({
   triggered_by: z.string().uuid().optional(),
 });
 
+const TarefaSchema = z.object({
+  titulo: z.string(),
+  descricao: z.string(),
+  prioridade: z.enum(["urgent", "high", "normal", "low"]),
+  sistema_alvo: z.enum(["vendaerp", "asaas", "nenhum"]),
+  operacao: z.string().nullable().optional(),
+  parametros: z.record(z.unknown()).nullable().optional(),
+});
+
 const OutputSchema = z.object({
   ok: z.boolean(),
   resposta: z.string(),
   tom: z.string(),
   draft_id: z.string().uuid().optional(),
+  task_id: z.string().uuid().optional(),
   precisa_humano: z.boolean(),
   motivo_humano: z.string().optional(),
-  action_taken: z.enum(["sent", "suggested", "skipped"]),
+  action_taken: z.enum(["sent", "suggested", "skipped", "task_created"]),
   mode: z.string(),
 });
 
@@ -116,37 +127,125 @@ export const brenoResponder = task({
       : null;
 
     const agentResult = await executeAgent('breno', {
-      task: 'respond_to_client',
+      task: 'respond_or_classify',
       cliente: conv?.contact_name || input.sender_name || "Cliente",
       mensagem: input.message,
       historico: ctxMessages || "",
       contexto_loja: contextoLoja,
-      instrucoes: `Retorne APENAS JSON (sem markdown): {"resposta":"...","tom":"amigavel|informativo|empático|urgente","precisa_humano":false,"motivo_humano":null}.
+      instrucoes: `Retorne APENAS JSON (sem markdown):
+{
+  "acao": "resolver" | "criar_tarefa",
+  "resposta": "...",
+  "tom": "amigavel|informativo|empatico|urgente",
+  "precisa_humano": false,
+  "motivo_humano": null,
+  "tarefa": null
+}
 
-REGRAS PARA O CAMPO "resposta":
-- Máximo 3 linhas curtas. Seja direto — cliente de WhatsApp não lê texto longo.
-- Use formatação WhatsApp: *negrito* para info importante, linha em branco entre blocos.
-- Estrutura ideal (adapte ao contexto):
-  Linha 1: confirmação/saudação breve (opcional, só se fizer sentido)
-  Linha 2: a resposta principal em 1 frase
-  Linha 3: próximo passo ou encerramento
-- Tom humano, próximo, sem scripts corporativos.
-- Se problema sério (produto estragado, cobrança errada, acidente): precisa_humano:true com motivo.
+Quando acao="criar_tarefa", preencha tarefa:
+{
+  "tarefa": {
+    "titulo": "...",
+    "descricao": "...",
+    "prioridade": "urgent|high|normal|low",
+    "sistema_alvo": "vendaerp|asaas|nenhum",
+    "operacao": null,
+    "parametros": null
+  }
+}
+
+REGRAS:
+- resolver: problema simples, resposta imediata em até 3 linhas curtas.
+- criar_tarefa: demanda que exige consulta a sistema externo (ERP, financeiro) ou ação complexa.
+- Tom humano, sem scripts corporativos. Máximo 3 linhas na resposta.
+- Se problema sério (cobrança errada, acidente, produto estragado): precisa_humano:true.
 - NUNCA prometa o que não pode cumprir.`,
     }, { runId: ctx.run.id, tenantId: input.tenant_id });
     const rawText = agentResult.output as string;
 
-    let parsed: { resposta: string; tom: string; precisa_humano: boolean; motivo_humano?: string | null };
+    let parsed: {
+      acao: "resolver" | "criar_tarefa";
+      resposta: string;
+      tom: string;
+      precisa_humano: boolean;
+      motivo_humano?: string | null;
+      tarefa?: {
+        titulo: string;
+        descricao: string;
+        prioridade: "urgent" | "high" | "normal" | "low";
+        sistema_alvo: "vendaerp" | "asaas" | "nenhum";
+        operacao?: string | null;
+        parametros?: Record<string, unknown> | null;
+      } | null;
+    };
     try {
       const m = rawText.match(/\{[\s\S]*\}/);
       parsed = JSON.parse(m ? m[0] : rawText);
+      if (!parsed.acao) parsed.acao = "resolver";
     } catch {
       parsed = {
+        acao: "resolver",
         resposta: "Oi! Recebemos sua mensagem. ✅\n\nRetornamos em instantes!",
         tom: "amigavel",
         precisa_humano: true,
         motivo_humano: "Erro no processamento automático",
       };
+    }
+
+    // Branch criar_tarefa — abre client_task e encerra sem draft
+    if (parsed.acao === "criar_tarefa" && parsed.tarefa && conv?.customer_id) {
+      let taskId: string | undefined;
+      try {
+        const tarefaData = TarefaSchema.parse(parsed.tarefa);
+        const result = await createLoopTask({
+          tenantId:      input.tenant_id,
+          conversationId: input.conversation_id,
+          customerId:    conv.customer_id,
+          agentId:       "breno",
+          titulo:        tarefaData.titulo,
+          descricao:     tarefaData.descricao,
+          prioridade:    tarefaData.prioridade,
+          sistemaAlvo:   tarefaData.sistema_alvo,
+          operacao:      tarefaData.operacao ?? null,
+          parametros:    tarefaData.parametros ?? null,
+        });
+        taskId = result.taskId;
+        logger.info("breno-responder: tarefa loop criada", { taskId, conversation_id: input.conversation_id });
+      } catch (err) {
+        logger.warn("breno-responder: falha ao criar loop task", { error: (err as Error).message });
+      }
+
+      await sb.from("breno_interactions").insert({
+        tenant_id: input.tenant_id,
+        conversation_id: input.conversation_id,
+        inbound_message_id: input.message_id,
+        outbound_message_id: null,
+        mode,
+        breno_response: parsed.resposta || "",
+        action_taken: "task_created",
+        agent_run_id: null,
+        requires_review: false,
+      });
+
+      if (lojaId) {
+        await logTimeline(lojaId, input.tenant_id, "breno", "loop_task_created",
+          `Tarefa de loop criada: ${parsed.tarefa.titulo}`,
+          { payload: { conversation_id: input.conversation_id, task_id: taskId, run_id: ctx.run.id } }
+        );
+      }
+
+      await logAgentRun({
+        runId: ctx.run.id, agentSlug: "breno-responder",
+        input: { conversation_id: input.conversation_id, message_id: input.message_id },
+        output: { ok: true, action_taken: "task_created", task_id: taskId, mode },
+        tenantId: input.tenant_id, triggeredBy: input.triggered_by,
+        durationMs: Date.now() - start, status: "success",
+      });
+
+      return OutputSchema.parse({
+        ok: true, resposta: parsed.resposta || "", tom: parsed.tom || "amigavel",
+        task_id: taskId, precisa_humano: false, action_taken: "task_created", mode,
+      });
     }
 
     const action_taken: "sent" | "suggested" = mode === "ia" ? "sent" : "suggested";
