@@ -18,6 +18,27 @@
 
 **O que foi removido (PROD via PR #498, squash-merged):** `vencidasPorCliente` + `venceEm7Dias` computed blocks, seções JSX 1.6 e 1.7, campo "A receber" dos dois IIFEs de período. 219 linhas deletadas, zero funcionalidade perdida. `npx tsc --noEmit` → zero erros.
 
+## 2026-06-23 — Sessão 88c: guarda de janela horária — incidente 04:08 BRT investigado e corrigido (PR #495)
+
+**Incidente:** agentes de encerramento enviaram mensagens a 15 grupos de clientes às 04:08 BRT do dia 23/06/2026. O horário correto é 18:00 BRT (seg-sex) e 12:00 BRT (sáb). Nenhum cron rodou fora do esperado.
+
+**Causa raiz:** a sessão anterior (88b) disparou manualmente o task `encerramento-envio-agendado-semana` no dashboard do Trigger.dev para testar o fix de idempotência cross-day. Não havia nenhuma proteção que impedisse o envio real fora do horário de operação — o agente não distinguia entre trigger manual e trigger agendado.
+
+**Evidência no banco:**
+- `03:58 BRT` — `encerramento` (gerar-imagem) triggered manualmente
+- `04:09 BRT` — `encerramento-scheduler` → enviou para 15 grupos ← INCIDENTE
+- `18:01 BRT` — `encerramento-scheduler` → run correto pós-fix ✅
+
+**Fix (PR #495, versão `20260623.8`, 75 tasks deployadas):** adicionada função `isWithinSendWindow(weekdayLabel, hourSP)` em ambos os arquivos de envio agendado:
+- `trigger/encerramento/envio-agendado.ts` — janela 16h–22h BRT (seg-sex) | 10h–16h BRT (sáb)
+- `trigger/bom-dia/envio-agendado.ts` — janela 07h–13h BRT (seg-sex) | 06h–12h BRT (sáb)
+
+Se acionado fora da janela (manual ou cron defeituoso), aborta sem enviar, registra `WARN` nos logs e grava `reason: "fora_da_janela_horaria"` no `agent_runs`. A `getSPDate()` foi atualizada para expor `hourSP` (via `nowSP.getUTCHours()` após ajuste UTC-3).
+
+**Verificação:** `tsc --noEmit` → zero erros. Run agendado das 18:01 BRT passou normalmente (dentro da janela).
+
+---
+
 ## 2026-06-23 — Sessão webhook-hardening: `evolution-webhook` hardening defensivo deployado em prod (PR #491, Edge Function v56)
 
 **Contexto:** offshoot da investigação da tela preta / "Nenhum workspace" (saturação de banco, sessão 89). Naquela sessão, o hardening defensivo da edge function `evolution-webhook` ficou apenas **OFERECIDO ao Wandson, não aplicado**. Esta sessão fechou o ciclo: CODOU + MERGEOU + DEPLOYOU.
