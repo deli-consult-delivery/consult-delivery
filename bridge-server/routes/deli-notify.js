@@ -2,8 +2,7 @@
 
 // POST /agents/deli/notify
 // Recebe semáforo do orchestrator-5min, deduplicando por janela de 30 min.
-// Auth: INTERNAL_BRIDGE_TOKEN via Authorization: Bearer <token> ou x-internal-token.
-// Sem auth → aceito (retrocompatível com tasks sem header, ex: onboarding).
+// Auth: INTERNAL_BRIDGE_TOKEN obrigatório via Authorization: Bearer <token> ou x-internal-token.
 // Canal primário: internal_notifications (sino do Topbar).
 // Canal secundário: Hermes gateway (Telegram), se HERMES_GATEWAY_URL estiver configurado.
 
@@ -11,6 +10,7 @@ const express = require('express');
 
 const TENANT_ID    = '9079bd4d-4df7-4023-90fb-d79c8ba7e900';
 const DEDUP_MIN    = 30; // janela anti-spam: 1 notificação por semaforo a cada 30 min
+const SEMAFOROS_VALIDOS = ['Verde', 'Amarelo', 'Vermelho'];
 
 module.exports = function buildDeliNotifyRouter({ sbFetch, supabaseInsert }) {
   const INTERNAL_TOKEN    = process.env.INTERNAL_BRIDGE_TOKEN;
@@ -21,20 +21,26 @@ module.exports = function buildDeliNotifyRouter({ sbFetch, supabaseInsert }) {
   const router = express.Router();
 
   router.post('/agents/deli/notify', async (req, res) => {
-    // Validação de token: requerido quando INTERNAL_BRIDGE_TOKEN estiver configurado
-    if (INTERNAL_TOKEN) {
-      const bearer    = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '').trim();
-      const xInternal = req.headers['x-internal-token'];
-      const provided  = bearer || xInternal;
-      if (!provided || provided !== INTERNAL_TOKEN) {
-        return res.status(401).json({ error: 'unauthorized' });
-      }
+    // Auth obrigatória — rejeita se token não configurado ou inválido
+    if (!INTERNAL_TOKEN) {
+      return res.status(503).json({ error: 'INTERNAL_BRIDGE_TOKEN não configurado' });
+    }
+    const bearer    = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '').trim();
+    const xInternal = req.headers['x-internal-token'];
+    const provided  = bearer || xInternal;
+    if (!provided || provided !== INTERNAL_TOKEN) {
+      return res.status(401).json({ error: 'unauthorized' });
     }
 
     const {
       semaforo, motivos = [], run_id, task_id, resultado,
       channel, message, urgente, metadata,
     } = req.body;
+
+    // Validar semaforo
+    if (semaforo && !SEMAFOROS_VALIDOS.includes(semaforo)) {
+      return res.status(400).json({ error: `semaforo inválido: ${semaforo}` });
+    }
 
     const texto = message || buildMensagem({ semaforo, motivos, run_id, task_id, resultado, urgente });
 
@@ -45,12 +51,12 @@ module.exports = function buildDeliNotifyRouter({ sbFetch, supabaseInsert }) {
       const recent = await sbFetch(
         `internal_notifications?tenant_id=eq.${TENANT_ID}`
           + `&agent=eq.deli&kind=eq.deli_alert`
-          + `&metadata->>semaforo=eq.${encodeURIComponent(semaforo || '')}`
+          + `&metadata->>semaforo=eq.${encodeURIComponent(String(semaforo || ''))}`
           + `&created_at=gte.${encodeURIComponent(cutoff)}`
           + `&order=created_at.desc&limit=1`
       );
       if (recent?.length) {
-        console.log(`[deli-notify] dedup: semaforo=${semaforo} já notificado em ${recent[0].created_at}`);
+        console.warn(`[deli-notify] dedup: semaforo=${semaforo} já notificado em ${recent[0].created_at}`);
         skipped = true;
       }
     } catch (err) {

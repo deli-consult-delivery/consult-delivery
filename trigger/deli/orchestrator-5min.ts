@@ -547,7 +547,7 @@ export const deliOrchestrator5min = schedules.task({
         const itensProcessar = result.items.slice(0, MAX_ITEMS_POR_TRIGGER);
         const truncados = result.items.length - itensProcessar.length;
         if (truncados > 0) {
-          console.log(
+          logger.info(
             `[deli-orchestrator] cap atingido em trigger="${trigger.name}" (${nivel}): ` +
               `${result.items.length} itens detectados, processando ${itensProcessar.length}, ` +
               `${truncados} truncado(s) neste ciclo`

@@ -73,7 +73,7 @@ module.exports = function buildPipelineHealthRouter({ requireJwt, sbFetch, SUPAB
       });
     } catch (err) {
       console.error('[pipeline-health]', err.message);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: 'Erro interno ao calcular saúde do pipeline' });
     }
   });
 
