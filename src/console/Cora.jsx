@@ -864,6 +864,37 @@ function DraftCard({ draft, tenantDbId, onDone }) {
   );
 }
 
+// ── SitCard — card de situação das cobranças Asaas ───────────────────────────
+function SitCard({ titulo, cor, dados, total, striped }) {
+  const pct = total > 0 ? Math.min(100, (dados.total / total) * 100) : 0;
+  return (
+    <div style={{ background: '#fff', border: '1px solid var(--g-100)', borderRadius: 12, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}>
+      <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--g-700)', marginBottom: 8 }}>{titulo}</div>
+      <div style={{ fontWeight: 800, fontSize: 20, color: cor, lineHeight: 1.1 }}>{fmtBRL(dados.total)}</div>
+      <div style={{ fontSize: 11, color: 'var(--tx2)', marginTop: 2, marginBottom: 10 }}>
+        {fmtBRL(dados.netTotal)} líquido
+      </div>
+      <div style={{ height: 6, borderRadius: 4, background: 'var(--g-100)', marginBottom: 10, overflow: 'hidden' }}>
+        {striped ? (
+          <div style={{ height: '100%', width: `${pct}%`, background: `repeating-linear-gradient(45deg, ${cor}44 0 4px, transparent 4px 8px)` }} />
+        ) : (
+          <div style={{ height: '100%', width: `${pct}%`, background: cor, borderRadius: 4 }} />
+        )}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: cor }}>
+          <Icon name="users" size={12} />
+          <span style={{ fontWeight: 600 }}>{dados.clients} cliente{dados.clients !== 1 ? 's' : ''}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: cor }}>
+          <Icon name="paper" size={12} />
+          <span style={{ fontWeight: 600 }}>{dados.invoices} cobrança{dados.invoices !== 1 ? 's' : ''}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function Cora({ tenantDbId, userId }) {
   const [activeTab, setActiveTab] = useState('financeiro');
@@ -894,6 +925,13 @@ export default function Cora({ tenantDbId, userId }) {
   // Saldo Asaas
   const [saldoAsaas, setSaldoAsaas] = useState(null);
   const [loadingSaldo, setLoadingSaldo] = useState(false);
+
+  // Situação das cobranças Asaas (dashboard por mês)
+  const [mesSit, setMesSit] = useState(() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [situacao, setSituacao] = useState(null); // null=carregando, false=erro, objeto=ok
 
   // UI toggles
   const [showPie, setShowPie] = useState(false);
@@ -996,6 +1034,22 @@ export default function Cora({ tenantDbId, userId }) {
     } catch (_) { /* silent */ }
     setLoadingSaldo(false);
   }, [tenantDbId]);
+
+  useEffect(() => {
+    if (!tenantDbId) return;
+    setSituacao(null);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      fetch(`${BRIDGE}/api/asaas/situacao-mes?mes=${mesSit}`, {
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      })
+        .then(r => r.ok ? r.json() : Promise.reject(r.status))
+        .then(json => {
+          const _totalGeral = (json.recebidas?.total || 0) + (json.confirmadas?.total || 0) + (json.aguardando?.total || 0) + (json.vencidas?.total || 0);
+          setSituacao({ ...json, _totalGeral });
+        })
+        .catch(() => setSituacao(false));
+    });
+  }, [tenantDbId, mesSit]);
 
   const saveModo = async (novoModo) => {
     if (!tenantDbId) return;
@@ -1382,6 +1436,27 @@ export default function Cora({ tenantDbId, userId }) {
 
           {/* ── Sub-tab: Visão Geral ─────────────────────── */}
           {finSubTab === 'visao-geral' && <>
+          {/* ── Situação das cobranças ─────────────────────── */}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--g-900)' }}>Situação das cobranças</span>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input type="month" value={mesSit} onChange={e => setMesSit(e.target.value)}
+                  style={{ fontSize: 12, padding: '4px 8px', border: '1px solid var(--g-200)', borderRadius: 6, color: 'var(--g-700)' }} />
+              </div>
+            </div>
+            {situacao === false && <div style={{ color: 'var(--red)', fontSize: 12 }}>Erro ao carregar dados do Asaas</div>}
+            {situacao && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                <SitCard titulo="Recebidas" cor="#16a34a" dados={situacao.recebidas} total={situacao._totalGeral} striped={false} />
+                <SitCard titulo="Confirmadas" cor="#2563eb" dados={situacao.confirmadas} total={situacao._totalGeral} striped={false} />
+                <SitCard titulo="Aguardando pagamento" cor="#D97706" dados={situacao.aguardando} total={situacao._totalGeral} striped={false} />
+                <SitCard titulo="Vencidas" cor="#dc2626" dados={situacao.vencidas} total={situacao._totalGeral} striped={true} />
+              </div>
+            )}
+            {situacao === null && <div style={{ fontSize: 12, color: 'var(--tx2)' }}>Carregando dados Asaas…</div>}
+          </div>
+
           {/* KPIs — linha 1: saldo + recebido + confirmadas + aguardando */}
           {cobrancasV2.length > 0 && (() => {
             const vencimentos = cobrancasV2.map(c => c.vencimento).filter(Boolean).sort();

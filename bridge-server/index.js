@@ -1558,6 +1558,9 @@ app.use('/api', requireJwt, require('./routes/cora-gestao')({ sbFetch, supabaseI
 // Asaas — saldo da conta (cache 5 min)
 app.use('/api', requireJwt, require('./routes/asaas-saldo')());
 
+// Asaas — dashboard situação das cobranças por mês
+app.use('/api', requireJwt, require('./routes/asaas-dashboard')());
+
 // Monitor de Sessões — lista spawn-queue e stream SSE de logs (cd-spawn)
 app.use('/api', require('./routes/monitor')({ requireJwt }));
 
