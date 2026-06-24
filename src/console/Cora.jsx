@@ -940,12 +940,18 @@ export default function Cora({ tenantDbId, userId }) {
   const loadDrafts = useCallback(async () => {
     if (!tenantDbId) return;
     setLoadingDrafts(true);
+    // Fila mostra apenas cobranças geradas no dia atual (BRT = UTC-3).
+    // Meia-noite BRT = 03:00 UTC. Cobranças de dias anteriores não aprovadas são ignoradas.
+    const todayBRT = new Date();
+    todayBRT.setUTCHours(3, 0, 0, 0);
+    if (new Date() < todayBRT) todayBRT.setUTCDate(todayBRT.getUTCDate() - 1);
     const { data } = await supabase
       .from('agent_drafts')
       .select('*')
       .eq('tenant_id', tenantDbId)
       .eq('agent_name', 'cora')
       .eq('status', 'pending')
+      .gte('created_at', todayBRT.toISOString())
       .order('created_at', { ascending: false });
     setDrafts(data || []);
     setLoadingDrafts(false);
@@ -1944,12 +1950,16 @@ export default function Cora({ tenantDbId, userId }) {
                 ✅ Nenhum draft aguardando aprovação.
               </div>
             ) : (() => {
-              const seenPhones = new Set();
+              // Dedup: oculta apenas se for o mesmo número E a mesma fatura.
+              // Mesmo número com fatura diferente (serviço diferente) aparece normalmente.
+              const seenKeys = new Set();
               const dedupedDrafts = drafts.filter(d => {
                 const phone = d.metadata?.customer_phone;
+                const cobrancaId = d.metadata?.cobranca_v2_id;
                 if (!phone) return true;
-                if (seenPhones.has(phone)) return false;
-                seenPhones.add(phone);
+                const key = `${phone}::${cobrancaId || ''}`;
+                if (seenKeys.has(key)) return false;
+                seenKeys.add(key);
                 return true;
               });
               const hiddenCount = drafts.length - dedupedDrafts.length;
@@ -1957,7 +1967,7 @@ export default function Cora({ tenantDbId, userId }) {
                 <>
                   {hiddenCount > 0 && (
                     <div style={{ padding: '8px 12px', marginBottom: 8, background: 'var(--g-100)', borderRadius: 6, fontSize: 12, color: 'var(--g-600)' }}>
-                      ℹ️ {hiddenCount} cobrança{hiddenCount > 1 ? 's' : ''} oculta{hiddenCount > 1 ? 's' : ''} — mesmo número já aparece na fila. Apenas 1 envio por número por dia é permitido.
+                      ℹ️ {hiddenCount} cobrança{hiddenCount > 1 ? 's' : ''} oculta{hiddenCount > 1 ? 's' : ''} — mesma fatura e número já aparece na fila. Apenas 1 envio por fatura por dia é permitido.
                     </div>
                   )}
                   {dedupedDrafts.map(d => (

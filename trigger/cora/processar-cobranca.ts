@@ -62,7 +62,7 @@ export const coraProcessarCobranca = task({
     // Lê cobrança V2
     const { data: cob, error } = await sb
       .from("cobrancas")
-      .select("id, customer_name, customer_phone, valor, vencimento, status, billing_type, invoice_url, bank_slip_url, pix_qr_code")
+      .select("id, customer_name, customer_phone, valor, vencimento, status, billing_type, invoice_url, bank_slip_url, pix_qr_code, ignorar_cobranca")
       .eq("id", input.cobranca_id)
       .eq("tenant_id", input.tenant_id)
       .single();
@@ -70,6 +70,11 @@ export const coraProcessarCobranca = task({
     if (error || !cob) {
       logger.error("cora-processar-cobranca: cobrança não encontrada", { id: input.cobranca_id });
       return { ok: false, draft_id: null, tom: "", skipped: true, reason: "cobranca_not_found" };
+    }
+
+    if (cob.ignorar_cobranca) {
+      logger.info("cora-processar-cobranca: cobrança marcada como ignorada — pulando", { id: input.cobranca_id });
+      return { ok: false, draft_id: null, tom: "", skipped: true, reason: "cobranca_ignorada" };
     }
 
     if (!cob.customer_name) {
@@ -131,21 +136,25 @@ NÃO use markdown ao redor do JSON. Responda SOMENTE o JSON.`;
       return { ok: false, draft_id: null, tom, skipped: true, reason: "empty_message" };
     }
 
-    // Dedup diário: evita 2 drafts para o mesmo telefone no mesmo dia
+    // Dedup diário: evita 2 drafts para o mesmo telefone E mesma fatura no mesmo dia.
+    // Mesmo telefone com fatura diferente (serviço diferente) não é bloqueado.
     if (cob.customer_phone) {
       const todayStart = new Date();
       todayStart.setUTCHours(3, 0, 0, 0); // meia-noite BRT (UTC-3)
+      // Guarda: se for antes das 03:00 UTC, "hoje BRT" ainda é o dia UTC anterior
+      if (new Date() < todayStart) todayStart.setUTCDate(todayStart.getUTCDate() - 1);
       const { data: dup } = await sb
         .from("agent_drafts")
         .select("id")
         .eq("tenant_id", input.tenant_id)
         .in("status", ["pending", "sent"])
         .filter("metadata->>customer_phone", "eq", cob.customer_phone)
+        .filter("metadata->>cobranca_v2_id", "eq", input.cobranca_id)
         .gte("created_at", todayStart.toISOString())
         .limit(1)
         .maybeSingle();
       if (dup) {
-        logger.info("cora-processar-cobranca: draft/envio já existe para este número hoje — pulando", { phone: cob.customer_phone });
+        logger.info("cora-processar-cobranca: draft/envio já existe para este número e fatura hoje — pulando", { phone: cob.customer_phone, cobranca_id: input.cobranca_id });
         return { ok: false, draft_id: null, tom, skipped: true, reason: "draft_duplicado_hoje" };
       }
     }

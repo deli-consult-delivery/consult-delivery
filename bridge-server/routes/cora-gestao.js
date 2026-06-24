@@ -55,6 +55,15 @@ module.exports = function buildCoraGestaoRouter({ sbFetch, supabaseInsert }) {
         }
       );
 
+      // Ao ignorar: rejeita drafts pendentes desta cobrança específica para que
+      // não apareçam na fila de aprovação
+      if (ignorar) {
+        await sbFetch(
+          `agent_drafts?tenant_id=eq.${encodeURIComponent(tenant_id)}&agent_name=eq.cora&status=eq.pending&metadata->>cobranca_v2_id=eq.${encodeURIComponent(id)}`,
+          { method: 'PATCH', body: { status: 'rejected' } }
+        );
+      }
+
       // Registra auditoria
       await supabaseInsert('cora_acoes', {
         tenant_id,
@@ -91,7 +100,7 @@ module.exports = function buildCoraGestaoRouter({ sbFetch, supabaseInsert }) {
 
       // Verifica que a cobrança pertence ao tenant e não está já quitada
       const rows = await sbFetch(
-        `cobrancas?id=eq.${encodeURIComponent(id)}&tenant_id=eq.${encodeURIComponent(tenant_id)}&select=id,status,customer_name,valor&limit=1`
+        `cobrancas?id=eq.${encodeURIComponent(id)}&tenant_id=eq.${encodeURIComponent(tenant_id)}&select=id,status,customer_name,valor,asaas_charge_id&limit=1`
       );
       if (!rows?.length) return res.status(404).json({ error: 'Cobrança não encontrada' });
       const cob = rows[0];
@@ -116,7 +125,35 @@ module.exports = function buildCoraGestaoRouter({ sbFetch, supabaseInsert }) {
         }
       );
 
-      // 2. Insere evento de pagamento
+      // 2. Chama Asaas API para dar baixa manual na fatura (receiveInCash)
+      if (cob.asaas_charge_id) {
+        const asaasApiKey = process.env.ASAAS_API_KEY;
+        if (asaasApiKey) {
+          try {
+            const asaasRes = await fetch(
+              `https://api.asaas.com/v3/payments/${encodeURIComponent(cob.asaas_charge_id)}/receiveInCash`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'access_token': asaasApiKey },
+                body: JSON.stringify({ paymentDate: agora.slice(0, 10), value: Number(cob.valor) }),
+              }
+            );
+            if (!asaasRes.ok) {
+              const detail = (await asaasRes.text()).slice(0, 300);
+              console.warn(`[cora-gestao/marcar-pago] Asaas receiveInCash ${asaasRes.status}: ${detail}`);
+            } else {
+              console.log(`[cora-gestao/marcar-pago] Asaas baixa registrada para ${cob.asaas_charge_id}`);
+            }
+          } catch (asaasErr) {
+            // Não falha a operação local — a baixa interna já foi registrada
+            console.warn(`[cora-gestao/marcar-pago] Erro ao chamar Asaas: ${asaasErr.message}`);
+          }
+        } else {
+          console.warn('[cora-gestao/marcar-pago] ASAAS_API_KEY não configurado — baixa não enviada ao Asaas');
+        }
+      }
+
+      // 3. Insere evento de pagamento
       await supabaseInsert('cobranca_eventos', {
         tenant_id,
         cobranca_id:  id,
@@ -125,19 +162,13 @@ module.exports = function buildCoraGestaoRouter({ sbFetch, supabaseInsert }) {
         metadata:     { observacao: observacao ?? null, marcado_por: req.user?.id ?? null },
       });
 
-      // 3. Rejeita todos os drafts pendentes desta cobrança
+      // 4. Rejeita apenas os drafts pendentes desta cobrança específica
       await sbFetch(
-        `agent_drafts?tenant_id=eq.${encodeURIComponent(tenant_id)}&agent_name=eq.cora&status=eq.pending`,
-        {
-          method: 'PATCH',
-          body: {
-            status:   'rejected',
-            metadata: { motivo_rejeicao: 'pagamento_manual_registrado' },
-          },
-        }
+        `agent_drafts?tenant_id=eq.${encodeURIComponent(tenant_id)}&agent_name=eq.cora&status=eq.pending&metadata->>cobranca_v2_id=eq.${encodeURIComponent(id)}`,
+        { method: 'PATCH', body: { status: 'rejected' } }
       );
 
-      // 4. Registra auditoria
+      // 5. Registra auditoria
       await supabaseInsert('cora_acoes', {
         tenant_id,
         cobranca_v2_id:   id,

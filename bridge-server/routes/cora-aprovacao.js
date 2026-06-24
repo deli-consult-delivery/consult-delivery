@@ -115,17 +115,20 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
       // 3. Montar mensagem com assinatura fixa da CORA.
       const mensagem = anexarAssinatura(draft.content);
 
-      // 4. Dedup diário: bloqueia se já foi enviado uma cobrança para este número hoje
-      if (phone && !isTestSend) {
+      // 4. Dedup diário: bloqueia se já foi enviado para este número E esta mesma fatura hoje.
+      //    Se for mesmo número mas fatura diferente (serviço diferente), permite envio.
+      if (phone && cobrancaV2Id && !isTestSend) {
         const todayBRT = new Date();
         todayBRT.setUTCHours(3, 0, 0, 0); // meia-noite BRT = 03:00 UTC
+        // Guarda: antes das 03:00 UTC, "hoje BRT" ainda é o dia UTC anterior
+        if (new Date() < todayBRT) todayBRT.setUTCDate(todayBRT.getUTCDate() - 1);
         const sentToday = await sbFetch(
-          `agent_drafts?tenant_id=eq.${encodeURIComponent(tenant_id)}&status=eq.sent&metadata->>customer_phone=eq.${encodeURIComponent(phone)}&created_at=gte.${encodeURIComponent(todayBRT.toISOString())}&limit=1&select=id`
+          `agent_drafts?tenant_id=eq.${encodeURIComponent(tenant_id)}&status=eq.sent&metadata->>customer_phone=eq.${encodeURIComponent(phone)}&metadata->>cobranca_v2_id=eq.${encodeURIComponent(cobrancaV2Id)}&created_at=gte.${encodeURIComponent(todayBRT.toISOString())}&limit=1&select=id`
         );
         if (sentToday?.length) {
-          console.warn(`[cora-aprovacao] dedup diário: já enviado para ${phone} hoje — bloqueando`);
+          console.warn(`[cora-aprovacao] dedup diário: já enviado para ${phone} fatura ${cobrancaV2Id} hoje — bloqueando`);
           return res.status(409).json({
-            error: 'Já foi enviada uma cobrança para este número hoje. Aprove outro cliente ou tente novamente amanhã.',
+            error: 'Já foi enviada uma cobrança para este número e esta fatura hoje. Aprove outro cliente ou tente novamente amanhã.',
             code:  'DUPLICATE_SEND_TODAY',
           });
         }
