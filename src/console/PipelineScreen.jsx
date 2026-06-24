@@ -144,9 +144,9 @@ function CardRun({ run }) {
           <div style={{ fontSize: 10, color: 'var(--tx3)', marginTop: 2, wordBreak: 'break-all' }}>
             {run.trigger_dev_run_id || run.id}
           </div>
-          {run.output?.resposta && (
+          {typeof run.output?.resposta === 'string' && run.output.resposta && (
             <div style={{ marginTop: 6, fontSize: 11, color: 'var(--tx2)', borderLeft: '2px solid var(--g1)', paddingLeft: 8 }}>
-              {String(run.output.resposta).slice(0, 200)}{String(run.output.resposta).length > 200 ? '…' : ''}
+              {run.output.resposta.slice(0, 200)}{run.output.resposta.length > 200 ? '…' : ''}
             </div>
           )}
         </div>
@@ -238,14 +238,21 @@ export default function PipelineScreen({ tenantDbId }) {
         filter: `tenant_id=eq.${tenantDbId}`,
       }, payload => {
         if (payload.eventType === 'INSERT') {
-          setRuns(prev => [payload.new, ...prev].slice(0, 200));
+          const desde = new Date(Date.now() - janela * 60 * 60 * 1000);
+          if (new Date(payload.new.created_at) >= desde) {
+            setRuns(prev => [payload.new, ...prev].slice(0, 200));
+          }
         } else if (payload.eventType === 'UPDATE') {
           setRuns(prev => prev.map(r => r.id === payload.new.id ? payload.new : r));
         } else if (payload.eventType === 'DELETE') {
           setRuns(prev => prev.filter(r => r.id !== payload.old.id));
         }
       })
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setErro(`Realtime indisponível: ${err?.message ?? status}`);
+        }
+      });
 
     return () => {
       if (channelRef.current) supabase.removeChannel(channelRef.current);

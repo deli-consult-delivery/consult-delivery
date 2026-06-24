@@ -218,7 +218,7 @@ NÃO use markdown ao redor do JSON. Responda SOMENTE o JSON.`;
       output:     { ok: true, draft_id: draft.id, tom },
       status:     "success",
       durationMs: Date.now() - start,
-      explanation: `Draft de cobrança criado para ${cob.customer_name} (${diasLabel2}). Tom ${tom} aplicado. Valor: R$ ${(cob.valor / 100).toFixed(2).replace('.', ',')}.`,
+      explanation: `Draft de cobrança criado para ${cob.customer_name} (${diasLabel2}). Tom ${tom} aplicado. Valor: R$ ${Number(cob.valor).toFixed(2).replace('.', ',')}.`,
       confidenceScore: coraScores[tom] ?? 0.80,
       pipelineStage: "cobranca",
     });
