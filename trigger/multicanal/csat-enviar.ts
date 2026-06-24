@@ -171,16 +171,15 @@ export const csatEnviarTask = task({
         const { ok, detail } = await sendEvolutionText(inst, av.contact_identifier, text);
         const statusStr = ok ? "ok" : "falhou";
 
-        try {
-          await sb
-            .from("atendimento_avaliacoes")
-            .update({
-              msg_enviada_at:     new Date().toISOString(),
-              msg_enviada_status: statusStr,
-            })
-            .eq("id", av.id);
-        } catch (err: unknown) {
-          logger.error("csat-enviar: falha ao atualizar msg_enviada", { err: err instanceof Error ? err.message : String(err) });
+        const { error: updateErr } = await sb
+          .from("atendimento_avaliacoes")
+          .update({
+            msg_enviada_at:     new Date().toISOString(),
+            msg_enviada_status: statusStr,
+          })
+          .eq("id", av.id);
+        if (updateErr) {
+          logger.error("csat-enviar: falha ao atualizar msg_enviada", { err: updateErr.message });
         }
 
         resultados.push({ avaliacao_id: av.id, tenant_id: tenantId, status: ok ? "ok" : "falhou", detalhe: ok ? undefined : String(detail) });
@@ -195,6 +194,7 @@ export const csatEnviarTask = task({
     await logAgentRun({
       runId:     ctx.run.id,
       agentSlug: "csat-enviar-avaliacao",
+      tenantId:  input.tenant_id,
       input,
       output,
       status:    falhas > 0 && enviados === 0 ? "failed" : "success",
