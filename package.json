@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "lint:jsx": "eslint 'src/**/*.jsx'",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -23,8 +24,12 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@trigger.dev/build": "4.4.6",
     "@vitejs/plugin-react": "^4.3.1",
+    "eslint": "^10.5.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.7.0",
     "typescript": "^5.9.3",
     "vite": "^5.4.8",
     "vitest": "^1.6.1"
