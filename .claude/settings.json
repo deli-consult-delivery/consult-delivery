@@ -82,6 +82,5 @@
   "autoCompactEnabled": true,
   "worktree": {
     "bgIsolation": "none"
-  },
-  "autoCompactWindow": 140000
+  }
 }
