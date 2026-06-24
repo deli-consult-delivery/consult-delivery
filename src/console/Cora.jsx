@@ -909,6 +909,8 @@ export default function Cora({ tenantDbId, userId }) {
   const [expandedDraftMap, setExpandedDraftMap] = useState({});
   const [sendingMap, setSendingMap] = useState({});
   const [rejeitarMap, setRejeitarMap] = useState({});
+  const [ignorandoMap, setIgnorandoMap] = useState({});
+  const [pagandoMap, setPagandoMap] = useState({});
   const cobrancasV2RealtimeTimer = useRef(null);
   const draftsRealtimeTimer = useRef(null);
 
@@ -998,6 +1000,37 @@ export default function Cora({ tenantDbId, userId }) {
     );
     setModo(novoModo);
     setSavingModo(false);
+  };
+
+  const ignorarCobranca = async (cob, ignorar) => {
+    setIgnorandoMap(prev => ({ ...prev, [cob.id]: true }));
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch(`${BRIDGE}/api/cora/cobrancas/${cob.id}/ignorar`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ tenant_id: tenantDbId, ignorar, motivo: ignorar ? 'pix_externo' : null }),
+      });
+      if (!r.ok) { const e = await r.json(); alert(e.error || 'Erro ao atualizar isenção'); }
+      else await loadCobrancasV2();
+    } catch (e) { alert(e.message); }
+    setIgnorandoMap(prev => { const n = { ...prev }; delete n[cob.id]; return n; });
+  };
+
+  const marcarPago = async (cob) => {
+    if (!window.confirm(`Confirmar que ${cob.customer_name || 'este cliente'} já pagou via PIX?\nIsso encerrará a cobrança e rejeitará mensagens pendentes.`)) return;
+    setPagandoMap(prev => ({ ...prev, [cob.id]: true }));
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch(`${BRIDGE}/api/cora/cobrancas/${cob.id}/marcar-pago`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ tenant_id: tenantDbId, observacao: 'PIX externo confirmado pelo operador' }),
+      });
+      if (!r.ok) { const e = await r.json(); alert(e.error || 'Erro ao marcar pagamento'); }
+      else { await loadCobrancasV2(); await loadDrafts(); }
+    } catch (e) { alert(e.message); }
+    setPagandoMap(prev => { const n = { ...prev }; delete n[cob.id]; return n; });
   };
 
   const gerarMensagem = async (cob) => {
@@ -1137,23 +1170,6 @@ export default function Cora({ tenantDbId, userId }) {
   const totalEmitido = cobrancasV2.reduce((s, c) => s + Number(c.valor), 0);
   const taxaInad = totalEmitido > 0 ? ((totalInad / totalEmitido) * 100).toFixed(1) : '0.0';
 
-  // Vencidas agrupadas por cliente (pior primeiro)
-  const vencidasMap = {};
-  cobrancasV2.filter(c => c.status === 'overdue').forEach(c => {
-    const key = c.customer_name || c.customer_phone || c.id;
-    if (!vencidasMap[key]) vencidasMap[key] = { name: c.customer_name || 'Cliente', phone: c.customer_phone, cobId: c.id, items: [], total: 0, maxDias: 0 };
-    vencidasMap[key].items.push(c);
-    vencidasMap[key].total += Number(c.valor);
-    const d = diasAtraso(c.vencimento);
-    if (d > vencidasMap[key].maxDias) { vencidasMap[key].maxDias = d; vencidasMap[key].cobId = c.id; }
-  });
-  const vencidasPorCliente = Object.values(vencidasMap).sort((a, b) => b.maxDias - a.maxDias);
-
-  // Cobranças que vencem nos próximos 7 dias
-  const em7Dias = new Date(hoje); em7Dias.setDate(em7Dias.getDate() + 7);
-  const venceEm7Dias = cobrancasV2
-    .filter(c => { if (c.status !== 'pending') return false; const v = new Date(c.vencimento + 'T00:00:00'); return v >= hoje && v <= em7Dias; })
-    .sort((a, b) => a.vencimento.localeCompare(b.vencimento));
 
   // Aging (overdue only)
   const aging = { '1–30': { qtd: 0, valor: 0 }, '31–60': { qtd: 0, valor: 0 }, '61–90': { qtd: 0, valor: 0 }, '90+': { qtd: 0, valor: 0 } };
@@ -1181,6 +1197,7 @@ export default function Cora({ tenantDbId, userId }) {
   const confirmadas = useMemo(() => cobrancasV2.filter(c => c.status === 'received' && c.confirmed_date), [cobrancasV2]);
   const aguardando = useMemo(() => cobrancasV2.filter(c => c.status === 'pending' && c.vencimento >= hoje10), [cobrancasV2, hoje10]);
   const elegiveisRegua = useMemo(() => cobrancasV2.filter(c => {
+    if (c.ignorar_cobranca) return false;
     if (c.status === 'overdue') return true;
     if (c.status === 'pending') { const v = new Date(c.vencimento + 'T00:00:00'); return v >= hoje && v <= em7Dias; }
     return false;
@@ -1411,7 +1428,6 @@ export default function Cora({ tenantDbId, userId }) {
               const t30 = new Date(hoje); t30.setDate(hoje.getDate() - 30);
               const t30s = t30.toISOString().slice(0, 10);
               const rec30  = cobrancasV2.filter(c => c.status === 'received' && (c.payment_date || c.confirmed_date) >= t30s);
-              const pend30 = cobrancasV2.filter(c => c.status === 'pending'  && c.vencimento >= t30s);
               const over30 = cobrancasV2.filter(c => c.status === 'overdue'  && c.vencimento >= t30s);
               return (
                 <div className="cv2-card" style={{ padding: 16 }}>
@@ -1419,7 +1435,6 @@ export default function Cora({ tenantDbId, userId }) {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                     <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>Recebido</div><div style={{ fontWeight: 700, color: 'var(--success)', fontSize: 15 }}>{fmtBRL(rec30.reduce((s, c) => s + Number(c.valor), 0))}</div></div>
                     <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>Confirmados</div><div style={{ fontWeight: 700, color: '#0ea5e9', fontSize: 15 }}>{rec30.filter(c => c.confirmed_date).length} cobranças</div></div>
-                    <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>A receber</div><div style={{ fontWeight: 700, color: '#D97706', fontSize: 15 }}>{fmtBRL(pend30.reduce((s, c) => s + Number(c.valor), 0))}</div><div style={{ fontSize: 11, color: '#D97706', marginTop: 2 }}>{pend30.length === 0 ? 'nada a receber' : `faltam ${pend30.length} cobr.`}</div></div>
                     <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>Inadimplência</div><div style={{ fontWeight: 700, color: 'var(--red)', fontSize: 15 }}>{fmtBRL(over30.reduce((s, c) => s + Number(c.valor), 0))}</div>{over30.length > 0 && <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 2 }}>{over30.length} vencida{over30.length > 1 ? 's' : ''}</div>}</div>
                   </div>
                 </div>
@@ -1427,7 +1442,6 @@ export default function Cora({ tenantDbId, userId }) {
             })()}
             {(() => {
               const recMes  = cobrancasV2.filter(c => c.status === 'received' && (c.payment_date || c.confirmed_date)?.slice(0, 7) === mesAtual);
-              const pendMes = cobrancasV2.filter(c => c.status === 'pending'  && c.vencimento?.slice(0, 7) === mesAtual);
               const overMes = cobrancasV2.filter(c => c.status === 'overdue'  && c.vencimento?.slice(0, 7) === mesAtual);
               const mesLabel = new Date(mesAtual + '-02').toLocaleDateString('pt-BR', { month: 'long' });
               return (
@@ -1436,7 +1450,6 @@ export default function Cora({ tenantDbId, userId }) {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                     <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>Recebido</div><div style={{ fontWeight: 700, color: 'var(--success)', fontSize: 15 }}>{fmtBRL(recMes.reduce((s, c) => s + Number(c.valor), 0))}</div></div>
                     <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>Confirmados</div><div style={{ fontWeight: 700, color: '#0ea5e9', fontSize: 15 }}>{recMes.filter(c => c.confirmed_date).length} cobranças</div></div>
-                    <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>A receber</div><div style={{ fontWeight: 700, color: '#D97706', fontSize: 15 }}>{fmtBRL(pendMes.reduce((s, c) => s + Number(c.valor), 0))}</div><div style={{ fontSize: 11, color: '#D97706', marginTop: 2 }}>{pendMes.length === 0 ? 'nada a receber' : `faltam ${pendMes.length} cobr.`}</div></div>
                     <div><div style={{ fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }}>Inadimplência</div><div style={{ fontWeight: 700, color: 'var(--red)', fontSize: 15 }}>{fmtBRL(overMes.reduce((s, c) => s + Number(c.valor), 0))}</div>{overMes.length > 0 && <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 2 }}>{overMes.length} vencida{overMes.length > 1 ? 's' : ''}</div>}</div>
                   </div>
                 </div>
@@ -1571,6 +1584,8 @@ export default function Cora({ tenantDbId, userId }) {
                   const isExpanded = expandedDraftMap[cob.id];
                   const isSending = sendingMap[draftForCob?.metadata?.cobranca_v2_id || draftForCob?.id];
                   const sentAcao = acoes.find(a => a.metadata?.cobranca_v2_id === cob.id && a.tipo === 'mensagem_enviada');
+                  const isIgnorando = !!ignorandoMap[cob.id];
+                  const isPagando = !!pagandoMap[cob.id];
                   return (
                     <div key={cob.id} style={{ borderBottom: '1px solid var(--g-100)' }}>
                       <div style={{ padding: '12px 20px', display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr) auto auto auto auto', alignItems: 'center', gap: 12 }}>
@@ -1597,7 +1612,7 @@ export default function Cora({ tenantDbId, userId }) {
                             : draftForCob ? <span style={{ fontSize: 11, fontWeight: 600, color: '#2563eb', background: '#2563eb22', padding: '3px 9px', borderRadius: 12 }}>Msg pronta</span>
                             : <span style={{ fontSize: 11, color: 'var(--g-400)' }}>Sem mensagem</span>}
                         </div>
-                        <div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end' }}>
                           {sentAcao ? null : draftForCob ? (
                             <button onClick={() => setExpandedDraftMap(prev => ({ ...prev, [cob.id]: !prev[cob.id] }))}
                               style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #2563eb', background: 'transparent', color: '#2563eb', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
@@ -1609,6 +1624,20 @@ export default function Cora({ tenantDbId, userId }) {
                               {isLoading ? <><Spinner /> Gerando…</> : '✉ Gerar mensagem'}
                             </button>
                           )}
+                          <button
+                            disabled={isPagando}
+                            onClick={() => marcarPago(cob)}
+                            title="Registrar pagamento manual (PIX externo)"
+                            style={{ padding: '4px 10px', borderRadius: 7, border: '1px solid #16a34a', background: 'transparent', color: '#16a34a', fontSize: 11, fontWeight: 600, cursor: isPagando ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', opacity: isPagando ? 0.6 : 1 }}>
+                            {isPagando ? '…' : '✓ Já pagou (PIX)'}
+                          </button>
+                          <button
+                            disabled={isIgnorando}
+                            onClick={() => ignorarCobranca(cob, true)}
+                            title="Marcar como isento — não gerar mais cobranças para esta fatura"
+                            style={{ padding: '4px 10px', borderRadius: 7, border: '1px solid var(--g-300)', background: 'transparent', color: 'var(--g-500)', fontSize: 11, fontWeight: 500, cursor: isIgnorando ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', opacity: isIgnorando ? 0.6 : 1 }}>
+                            {isIgnorando ? '…' : '🚫 Não cobrar'}
+                          </button>
                         </div>
                       </div>
                       {isExpanded && draftForCob && (
@@ -1630,204 +1659,6 @@ export default function Cora({ tenantDbId, userId }) {
               </div>
             )}
           </div>
-
-          {/* Cobranças vencidas por cliente */}
-          {vencidasPorCliente.length > 0 && (
-            <div className="cv2-card" style={{ overflow: 'hidden' }}>
-              <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--g-100)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: 'var(--red)', animation: 'pulse 1.5s infinite' }} />
-                <span style={{ fontWeight: 700, fontSize: 14 }}>Cobranças vencidas por cliente</span>
-                <span style={{ marginLeft: 4, fontSize: 12, color: 'var(--tx-2)', background: 'var(--g-100)', borderRadius: 10, padding: '1px 8px' }}>{vencidasPorCliente.length}</span>
-              </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed' }}>
-                  <thead>
-                    <tr style={{ background: 'var(--g-50)' }}>
-                      <th style={{ padding: '8px 16px', textAlign: 'left', fontWeight: 600, width: '22%' }}>Cliente</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, width: '14%' }}>Telefone</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, width: '7%' }}>Faturas</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>Total</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Maior atraso</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Forma</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Fatura</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Status</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Ação</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {vencidasPorCliente.map((cli, i) => {
-                      const cobData = cobrancasV2.find(c => c.id === cli.cobId);
-                      const bt = cobData?.billing_type;
-                      const linkFatura = cobData?.invoice_url || cobData?.bank_slip_url || null;
-                      const billingBadge = bt === 'PIX' ? { bg: '#dcfce7', color: '#15803d', label: 'PIX' }
-                        : bt === 'BOLETO' ? { bg: '#dbeafe', color: '#1d4ed8', label: 'Boleto' }
-                        : bt === 'CREDIT_CARD' ? { bg: '#f3e8ff', color: '#7c3aed', label: 'Cartão' }
-                        : null;
-                      const isLoadingRow = !!loadingMsgMap[cli.cobId];
-                      const draftForRow = drafts.find(d => d.metadata?.cobranca_v2_id === cli.cobId && d.status === 'pending');
-                      const isExpandedRow = !!expandedDraftMap[cli.cobId];
-                      const isSendingRow = !!sendingMap[draftForRow?.metadata?.cobranca_v2_id || draftForRow?.id];
-                      const sentAcaoRow = acoes.find(a => a.metadata?.cobranca_v2_id === cli.cobId && a.tipo === 'mensagem_enviada');
-                      return (
-                        <Fragment key={i}>
-                        <tr style={{ borderTop: '1px solid var(--g-100)' }}>
-                          <td style={{ padding: '8px 16px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={cli.name}>{cli.name}</td>
-                          <td style={{ padding: '8px 12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cli.phone || <span style={{ color: 'var(--tx-3)' }}>—</span>}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>{cli.items.length}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--red)', fontWeight: 600 }}>{fmtBRL(cli.total)}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                            <span style={{ background: cli.maxDias > 30 ? '#fee2e2' : '#fef3c7', color: cli.maxDias > 30 ? 'var(--red)' : '#92400e', borderRadius: 10, padding: '2px 8px', fontWeight: 600, fontSize: 12 }}>{cli.maxDias}d</span>
-                          </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                            {billingBadge
-                              ? <span style={{ background: billingBadge.bg, color: billingBadge.color, borderRadius: 8, padding: '2px 7px', fontSize: 11, fontWeight: 600 }}>{billingBadge.label}</span>
-                              : <span style={{ color: 'var(--tx-3)' }}>—</span>}
-                          </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                            {linkFatura
-                              ? <a href={linkFatura} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: 12, textDecoration: 'none', fontWeight: 500 }}>Ver ↗</a>
-                              : <span style={{ color: 'var(--tx-3)' }}>—</span>}
-                          </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                            <StatusEnvioCell enviado={!!sentAcaoRow} viewedDate={cobData?.invoice_viewed_date} />
-                          </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                            {sentAcaoRow ? <span style={{ fontSize: 12, color: 'var(--tx-3)' }}>—</span>
-                              : draftForRow ? (
-                                <button onClick={() => setExpandedDraftMap(prev => ({ ...prev, [cli.cobId]: !prev[cli.cobId] }))}
-                                  style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid #2563eb', background: 'transparent', color: '#2563eb', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                                  {isExpandedRow ? 'Fechar ▲' : 'Ver preview ▼'}
-                                </button>
-                              ) : (
-                                <button onClick={() => gerarMensagem(cobData)} disabled={isLoadingRow}
-                                  style={{ padding: '5px 12px', borderRadius: 6, border: 'none', background: 'var(--red)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: isLoadingRow ? 'wait' : 'pointer', opacity: isLoadingRow ? 0.7 : 1 }}>
-                                  {isLoadingRow ? '…' : 'Gerar cobrança'}
-                                </button>
-                              )}
-                          </td>
-                        </tr>
-                        {isExpandedRow && draftForRow && (
-                          <tr>
-                            <td colSpan={9} style={{ padding: '0 16px 14px', background: 'var(--g-50)' }}>
-                              <DraftPreviewBox
-                                draft={draftForRow}
-                                fallbackPhone={cli.phone}
-                                isSending={isSendingRow}
-                                isRejecting={rejeitarMap[draftForRow.id]}
-                                onEnviar={() => enviarDraft(draftForRow)}
-                                onTeste={async () => { const num = prompt('Número para teste (somente dígitos, ex: 5511999999999):'); if (num) await enviarDraft(draftForRow, num.replace(/\D/g, '')); }}
-                                onRejeitar={() => rejeitarDraft(draftForRow, cli.cobId)}
-                              />
-                            </td>
-                          </tr>
-                        )}
-                        </Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Vence em 7 dias */}
-          {venceEm7Dias.length > 0 && (
-            <div className="cv2-card" style={{ overflow: 'hidden' }}>
-              <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--g-100)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#f59e0b', animation: 'pulse 1.5s infinite' }} />
-                <span style={{ fontWeight: 700, fontSize: 14 }}>Vencem nos próximos 7 dias</span>
-                <span style={{ marginLeft: 4, fontSize: 12, color: 'var(--tx-2)', background: 'var(--g-100)', borderRadius: 10, padding: '1px 8px' }}>{venceEm7Dias.length}</span>
-              </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed' }}>
-                  <thead>
-                    <tr style={{ background: 'var(--g-50)' }}>
-                      <th style={{ padding: '8px 16px', textAlign: 'left', fontWeight: 600, width: '20%' }}>Cliente</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, width: '13%' }}>Telefone</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600, width: '10%' }}>Valor</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, width: '10%' }}>Vencimento</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, width: '8%' }}>Faltam</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, width: '8%' }}>Forma</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, width: '8%' }}>Fatura</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, width: '9%' }}>Status</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600, width: '14%' }}>Ação</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {venceEm7Dias.map((c, i) => {
-                      const faltam = Math.ceil((new Date(c.vencimento + 'T00:00:00') - hoje) / 86400000);
-                      const bt7 = c.billing_type;
-                      const link7 = c.invoice_url || c.bank_slip_url || null;
-                      const badge7 = bt7 === 'PIX' ? { bg: '#dcfce7', color: '#15803d', label: 'PIX' }
-                        : bt7 === 'BOLETO' ? { bg: '#dbeafe', color: '#1d4ed8', label: 'Boleto' }
-                        : bt7 === 'CREDIT_CARD' ? { bg: '#f3e8ff', color: '#7c3aed', label: 'Cartão' }
-                        : null;
-                      const isLoading7 = !!loadingMsgMap[c.id];
-                      const draftFor7 = drafts.find(d => d.metadata?.cobranca_v2_id === c.id && d.status === 'pending');
-                      const isExpanded7 = !!expandedDraftMap[c.id];
-                      const isSending7 = !!sendingMap[draftFor7?.metadata?.cobranca_v2_id || draftFor7?.id];
-                      const sentAcao7 = acoes.find(a => a.metadata?.cobranca_v2_id === c.id && a.tipo === 'mensagem_enviada');
-                      return (
-                        <Fragment key={i}>
-                        <tr style={{ borderTop: '1px solid var(--g-100)' }}>
-                          <td style={{ padding: '8px 16px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.customer_name || ''}>{c.customer_name || '—'}</td>
-                          <td style={{ padding: '8px 12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.customer_phone || <span style={{ color: 'var(--tx-3)' }}>—</span>}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>{fmtBRL(Number(c.valor))}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>{c.vencimento.split('-').reverse().join('/')}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                            <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: 10, padding: '2px 8px', fontWeight: 600, fontSize: 12 }}>{faltam}d</span>
-                          </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                            {badge7
-                              ? <span style={{ background: badge7.bg, color: badge7.color, borderRadius: 8, padding: '2px 7px', fontSize: 11, fontWeight: 600 }}>{badge7.label}</span>
-                              : <span style={{ color: 'var(--tx-3)' }}>—</span>}
-                          </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                            {link7
-                              ? <a href={link7} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontSize: 12, textDecoration: 'none', fontWeight: 500 }}>Ver ↗</a>
-                              : <span style={{ color: 'var(--tx-3)' }}>—</span>}
-                          </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                            <StatusEnvioCell enviado={!!sentAcao7} viewedDate={c.invoice_viewed_date} />
-                          </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                            {sentAcao7 ? <span style={{ fontSize: 12, color: 'var(--tx-3)' }}>—</span>
-                              : draftFor7 ? (
-                                <button onClick={() => setExpandedDraftMap(prev => ({ ...prev, [c.id]: !prev[c.id] }))}
-                                  style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid #2563eb', background: 'transparent', color: '#2563eb', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                                  {isExpanded7 ? 'Fechar ▲' : 'Ver preview ▼'}
-                                </button>
-                              ) : (
-                                <button onClick={() => gerarMensagem(c)} disabled={isLoading7}
-                                  style={{ padding: '5px 12px', borderRadius: 6, border: 'none', background: '#f59e0b', color: '#fff', fontSize: 12, fontWeight: 600, cursor: isLoading7 ? 'wait' : 'pointer', opacity: isLoading7 ? 0.7 : 1 }}>
-                                  {isLoading7 ? '…' : 'Gerar lembrete'}
-                                </button>
-                              )}
-                          </td>
-                        </tr>
-                        {isExpanded7 && draftFor7 && (
-                          <tr>
-                            <td colSpan={9} style={{ padding: '0 16px 14px', background: 'var(--g-50)' }}>
-                              <DraftPreviewBox
-                                draft={draftFor7}
-                                fallbackPhone={c.customer_phone}
-                                isSending={isSending7}
-                                isRejecting={rejeitarMap[draftFor7.id]}
-                                onEnviar={() => enviarDraft(draftFor7)}
-                                onTeste={async () => { const num = prompt('Número para teste (somente dígitos, ex: 5511999999999):'); if (num) await enviarDraft(draftFor7, num.replace(/\D/g, '')); }}
-                                onRejeitar={() => rejeitarDraft(draftFor7, c.id)}
-                              />
-                            </td>
-                          </tr>
-                        )}
-                        </Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
 
           </>}{/* fim visao-geral */}
 

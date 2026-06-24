@@ -1,5 +1,15 @@
 # Wiki Log
 
+## 2026-06-24 — Sessão cora-dashboard-limpeza: remoção de seções redundantes do dashboard financeiro CORA (PR #498)
+
+**Contexto:** Wandson identificou redundâncias no dashboard CORA (tab Financeiro → Visão Geral): (1) tabelas "Cobranças vencidas por cliente" e "Vencem nos próximos 7 dias" repetiam exatamente o que a Régua de Cobrança já mostra com seus filtros; (2) campo "A receber" nos blocos "Últimos 30 dias" e "Mês atual" era semanticamente incorreto (cobranças pending são futuras, não do passado).
+
+**Comportamento entregue:** dashboard mais limpo, sem duplicações. A Régua de Cobrança é o ponto único para gerenciar cobranças elegíveis, com filtros Todas/Vencidas/Próx. 7 dias. Os blocos de período agora mostram apenas Recebido, Confirmados e Inadimplência.
+
+**Confirmação sobre pagamento de boleto:** o sistema JÁ funciona corretamente. Asaas → `POST /webhooks/asaas` → status `received` → `regua-diaria.ts` filtra `.in("status", ["pending", "overdue"])` → CORA para de gerar mensagens. Sem alteração de código necessária.
+
+**O que foi removido (PROD via PR #498, squash-merged):** `vencidasPorCliente` + `venceEm7Dias` computed blocks, seções JSX 1.6 e 1.7, campo "A receber" dos dois IIFEs de período. 219 linhas deletadas, zero funcionalidade perdida. `npx tsc --noEmit` → zero erros.
+
 ## 2026-06-23 — Sessão webhook-hardening: `evolution-webhook` hardening defensivo deployado em prod (PR #491, Edge Function v56)
 
 **Contexto:** offshoot da investigação da tela preta / "Nenhum workspace" (saturação de banco, sessão 89). Naquela sessão, o hardening defensivo da edge function `evolution-webhook` ficou apenas **OFERECIDO ao Wandson, não aplicado**. Esta sessão fechou o ciclo: CODOU + MERGEOU + DEPLOYOU.
@@ -1162,3 +1172,12 @@ Touched: none
 - **Benefício:** (a) zera o lint do advisor para essas 4 FKs; (b) acelera a checagem de integridade da FK quando a linha-pai é deletada/atualizada (antes seq scan no filho); (c) future-proofing conforme as tabelas crescem.
 - **Verificação (output bruto):** `apply_migration` retornou `{"success":true}`; query em `pg_indexes` confirmou os 4 índices presentes em prod com `btree` correto. NÃO houve mudança de frontend/bridge → sem deploy de Pages/bridge necessário.
 - **Pendente:** nenhum (escopo fechado). As outras 130 FKs sem índice do advisor ficaram **intencionalmente fora de escopo**.
+
+## Sessão 92 — 2026-06-23 — CORA: isenção de cobrança, baixa manual PIX e régua flexível
+
+- **Migration `20260623_001_cora_ignorar_cobranca.sql` (APLICADA):** ADD COLUMN `ignorar_cobranca BOOLEAN NOT NULL DEFAULT FALSE` + `ignorar_motivo TEXT` na tabela `cobrancas`; índice parcial `idx_cobrancas_ignorar` filtra rapidamente os não-isentos.
+- **Bridge `cora-gestao.js` (novo):** `PATCH /api/cora/cobrancas/:id/ignorar` (marca/desmarca isenção com auditoria em `cora_acoes`) + `POST /api/cora/cobrancas/:id/marcar-pago` (set `status='received'`, insere `cobranca_eventos`, rejeita todos os `agent_drafts` pending da cobrança, auditoria). Ambos validam tenant membership (anti-IDOR).
+- **Trigger `regua-diaria.ts`:** filtro `.eq("ignorar_cobranca", false)` na query de elegíveis + dedup com janela de tempo dinâmica: pré-vencimento (`dias < 0`) = 48h mínimo entre mensagens; pós-vencimento (`dias >= 0`) = 24h. Substitui o dedup de meia-noite que enviava todo dia.
+- **Frontend `Cora.jsx`:** `elegiveisRegua` filtra `ignorar_cobranca=true`; botões "✓ Já pagou (PIX)" (verde, baixa manual) e "🚫 Não cobrar" (cinza, isenta) adicionados à coluna de ações de cada card da fila de aprovação.
+- **PR [#497](https://github.com/deli-consult-delivery/consult-delivery/pull/497), squash-mergeado em main.**
+- **Próximas ações:** (1) `pm2 restart bridge-server` na VPS; (2) `npx trigger.dev@4.4.6 deploy` para a nova régua; (3) validação visual no browser.
