@@ -28,11 +28,11 @@ export const coraGerarMensagemAsaas = task({
 
     const { data: agentCfg } = await sb
       .from("tenant_agent_config")
-      .select("mode")
+      .select("modo_override")
       .eq("tenant_id", input.tenant_id)
       .eq("agent_id", "cora")
       .maybeSingle();
-    const modo = (agentCfg?.mode as "humano" | "hibrido" | "ia") ?? "hibrido";
+    const modo = (agentCfg?.modo_override as "humano" | "hibrido" | "ia") ?? "hibrido";
     const autonomyLevel = modo === "ia" ? "verde" : modo === "humano" ? "vermelho" : "amarelo";
 
     const { data: cob, error } = await sb
