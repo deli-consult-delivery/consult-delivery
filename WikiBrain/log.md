@@ -1306,3 +1306,17 @@ Touched: none
 - Sessão `avaliacao-karina` (interativa via cd-spawn sem --auto) implementou módulos CSAT e NPS para o tenant Karina Doceria.
 - PR #529 + fix TS #530 mergeados.
 - **Próximas ações:** nenhuma (escopo fechado). Observar nas próximas sessões longas se o auto-compact nativo retoma a tarefa sem intervenção.
+
+## 2026-06-24 — Sessão: fix datacrazy webhook CSAT
+
+### O que foi feito
+- **404 URL typo**: URL `datarazy` → `datacrazy` corrigida no Datacrazy
+- **sbFetch.from bug**: Reescrita total de `datacrazy-webhook.js` para usar PostgREST REST (PR #537)
+- **check constraint**: `origem: 'datacrazy'` → `'crm_externo'`
+- **token 63 chars**: Token no Datacrazy tinha letra `e` faltando no meio — corrigido para 64 chars
+- **mensagem não chegava ao WhatsApp**: Conversa estava encerrada ao enviar. Solução: bridge reabre conversa (`PATCH status: open`) antes de enviar a mensagem CSAT, fecha depois (`PATCH status: resolved`)
+- **hook auto-restart**: Bridge reinicia automaticamente quando PR toca `bridge-server/`
+
+### Resultado final
+- Webhook recebe → cria avaliação → reabre conversa → envia CSAT → fecha conversa → cliente avalia ✅
+- Wandson testou e avaliou nota 5 às 22:34
