@@ -1,5 +1,31 @@
 # Wiki Log
 
+## 2026-06-24 — Sessão avaliacao-karina: integração Datacrazy CRM para CSAT automático (PR #533 + #534)
+
+**Objetivo:** quando atendente finaliza conversa no Datacrazy CRM da Karina Doceria, enviar CSAT automaticamente pela mesma conversa (WhatsApp/Instagram/Facebook via APIs oficiais do CRM).
+
+**O que foi entregue:**
+
+**(A) Bridge webhook** (`bridge-server/routes/datacrazy-webhook.js`, PR #533): endpoint `POST /webhooks/datacrazy/conversa-encerrada` — autenticação via `x-crm-token` (SHA-256 + timing-safe), rate limit 60 req/min, idempotência por `(tenant_id, external_ref)`, cria `atendimento_avaliacoes` e envia CSAT via `datacrazy-send.js` em background.
+
+**(B) Lib de envio** (`bridge-server/lib/datacrazy-send.js`, PR #533): `sendDatacrazyMessage()` chama `POST /api/v1/conversations/{id}/messages` com JWT Bearer; `renderTemplate()` substitui variáveis `{nome_cliente}`, `{link_avaliacao}`, `{nome_empresa}`.
+
+**(C) Migration** (`supabase/migrations/20260624_011_avaliacao_config_datacrazy.sql`, PR #533): adicionou `datacrazy_api_key TEXT` e `nome_empresa TEXT` em `avaliacao_config`; seed `nome_empresa='Karina Doceria'`.
+
+**(D) Chave API Datacrazy** (em banco, não no git): gerada "consult-delivery-avaliacao" no painel Datacrazy e inserida em `avaliacao_config.datacrazy_api_key` para o tenant Karina.
+
+**(E) Token webhook** (em banco, não no git): `crm_webhook_tokens` com hash SHA-256 do token da Karina. Token plain é guardado somente em banco.
+
+**(F) Automação Datacrazy** (configurada via UI): automação "Avaliação" no Datacrazy com trigger "Atendimento finalizado" → HTTP POST para `https://bridge.consultdelivery.com.br/webhooks/datacrazy/conversa-encerrada` com header `x-crm-token` e body `{"conversation_id":"${conversationId}","lead_name":"${leadName}"}`. Conectado e ativado pelo Wandson.
+
+**(G) Poller backup** (`trigger/multicanal/datacrazy-csat-poller.ts`, PR #534): task Trigger.dev a cada 5min — busca conversas `finished=true` dos últimos 10min, verifica idempotência em `atendimento_avaliacoes`, cria registros e envia CSAT. Fallback caso webhook não dispare. Deploy versão `20260624.83` (81 tasks).
+
+**Credenciais** (NUNCA no git — armazenadas apenas em banco/Infisical):
+- `datacrazy_api_key`: JWT Bearer "consult-delivery-avaliacao"
+- Token webhook Karina: hash em `crm_webhook_tokens`
+
+**Status:** em produção. Próximo passo: testar finalizando uma conversa real no Datacrazy e verificar CSAT chegando na conversa.
+
 ## 2026-06-24 — Sessão ajuste-cora: 4 ajustes na tela de cobrança da Cora (branch wandson/ajuste-cora)
 
 **Problema:** 4 comportamentos incorretos na tela de cobrança da Cora identificados pelo Wandson:
