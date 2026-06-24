@@ -1567,6 +1567,14 @@ app.use('/api', require('./routes/monitor')({ requireJwt }));
 // DELI notify — semáforo do orchestrator → internal_notifications + Hermes (Telegram)
 app.use('/', require('./routes/deli-notify')({ sbFetch, supabaseInsert }));
 
+// FASE 4.3 — Métricas de saúde do pipeline (GET /api/pipeline/health)
+app.use('/api', require('./routes/pipeline-health')({
+  requireJwt,
+  sbFetch,
+  SUPABASE_URL,
+  SUPABASE_SERVICE_KEY,
+}));
+
 // ════════════════════════════════════════════════════════════════════════════
 // BRENO Off-Hours — smoke routes
 // ════════════════════════════════════════════════════════════════════════════
