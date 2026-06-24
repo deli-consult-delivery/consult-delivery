@@ -114,8 +114,42 @@ JOIN public.profiles p ON p.id = tm.user_id
 WHERE tm.tenant_id = '$TENANT_ID';
 ```
 
+---
+
+## Passo 3c — Semear papéis RBAC do tenant + atribuir admin ⚠️ obrigatório
+
+> **Por que é necessário?** O Console v2 usa `<RequireRole>` para proteger as telas de CSAT e NPS.
+> A tabela `tenant_members.role` é apenas metadado de membership — o sistema de permissões lê
+> `user_roles` (ligado a `roles`). Um tenant recém-criado **não tem papéis** até este passo,
+> então `hasRole('admin') = false` e as telas retornam "Acesso negado".
+
+```sql
+-- Substituir $TENANT_ID (Passo 1) e $USER_ID (Passo 3a)
+
+-- 3c.1 — criar os 7 papéis-sistema do tenant (idempotente)
+SELECT public.seed_rbac_system_roles('$TENANT_ID');
+
+-- 3c.2 — atribuir role admin ao usuário
+INSERT INTO user_roles (user_id, role_id, granted_by)
+SELECT '$USER_ID', r.id, NULL
+FROM roles r
+WHERE r.tenant_id = '$TENANT_ID'
+  AND r.name = 'admin'
+ON CONFLICT DO NOTHING;
+```
+
+Conferir:
+
+```sql
+-- deve retornar ao menos a linha do admin
+SELECT ur.user_id, r.name AS role, r.tenant_id
+FROM user_roles ur
+JOIN roles r ON r.id = ur.role_id
+WHERE r.tenant_id = '$TENANT_ID';
+```
+
 ➡️ **Validar no browser:** logar com esse usuário → deve cair no Console v2 vendo **só**
-Visão Geral, CSAT e NPS.
+Visão Geral, CSAT e NPS — **sem a tela vermelha de "Acesso negado"**.
 
 ---
 
@@ -175,6 +209,7 @@ O cliente vê a mudança ao recarregar o Console v2.
 
 - [ ] Tenant criado (Passo 1) — `id` guardado.
 - [ ] Módulos `visao`, `csat`, `nps` ligados (Passo 2) — `SELECT` confirma 3 linhas `enabled = true`.
-- [ ] Admin do cliente criado (Passo 3) — login no browser mostra só os 3 módulos.
+- [ ] Admin do cliente criado (Passo 3) — profile + tenant_member criados.
+- [ ] Papéis RBAC semeados + admin atribuído (Passo 3c) — `SELECT user_roles` confirma linha; login no browser mostra só os 3 módulos **sem "Acesso negado"**.
 - [ ] Branding (logo/cor) aparece no console e nas páginas públicas.
 - [ ] Senha entregue ao cliente por canal seguro (nunca em git/chat).
