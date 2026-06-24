@@ -374,10 +374,79 @@ function Kpi({ l, v, d, neg, mut }) {
   );
 }
 
-function VisaoGeral({ tenantNome, tenantDbId, onNav }) {
+function useKpisAvaliacao(tenantDbId) {
+  const [av, setAv] = useState(null);
+  useEffect(() => {
+    if (!tenantDbId) return;
+    let alive = true;
+    (async () => {
+      const desde = new Date(Date.now() - 30 * 86400000).toISOString();
+      const [csatRes, npsRes] = await Promise.all([
+        supabase.from('atendimento_avaliacoes').select('nota, status').eq('tenant_id', tenantDbId).gte('created_at', desde),
+        supabase.from('nps_avaliacoes').select('nota').eq('tenant_id', tenantDbId).gte('created_at', desde),
+      ]);
+      if (!alive) return;
+      const csatRows = csatRes.data ?? [];
+      const csatResp = csatRows.filter(r => r.nota != null);
+      const csatPct = csatResp.length
+        ? Math.round((csatResp.filter(r => r.nota >= 4).length / csatResp.length) * 100)
+        : null;
+      const npsRows = npsRes.data ?? [];
+      const npsResp = npsRows.filter(r => r.nota != null);
+      const tot = npsResp.length;
+      const npsScore = tot
+        ? Math.round(((npsResp.filter(r => r.nota >= 9).length / tot) - (npsResp.filter(r => r.nota <= 6).length / tot)) * 100)
+        : null;
+      setAv({ csatPct, csatTotal: csatResp.length, npsScore, npsTotal: tot });
+    })();
+    return () => { alive = false; };
+  }, [tenantDbId]);
+  return av;
+}
+
+function VisaoGeralAvaliacao({ tenantNome, tenantDbId, onNav }) {
+  const av = useKpisAvaliacao(tenantDbId);
+  const npsCorLabel = s => s == null ? 'var(--tx2)' : s >= 50 ? 'var(--green)' : s >= 0 ? 'var(--warn,#f59e0b)' : 'var(--red)';
+  return (
+    <div>
+      <h1>Visão Geral <span className="cv2-mock" style={{ background: 'var(--green-soft)', color: 'var(--green)' }}>DADOS REAIS · ÚLTIMOS 30 DIAS</span></h1>
+      <div className="cv2-rule" />
+      <div className="cv2-sub">{tenantNome}</div>
+      <div className="cv2-kpis">
+        <Kpi l="CSAT — Atendimento" v={av ? (av.csatPct != null ? `${av.csatPct}%` : '—') : '…'} d={av ? `${av.csatTotal} avaliações respondidas` : 'carregando'} />
+        <Kpi l="NPS — Marca" v={av ? (av.npsScore != null ? String(av.npsScore) : '—') : '…'} d={av ? `${av.npsTotal} respondidas (30d)` : 'carregando'} />
+      </div>
+      <div className="cv2-card">
+        <h3>Avaliação de Atendimento (CSAT)</h3>
+        <div style={{ fontSize: 13, color: 'var(--tx2)', lineHeight: 1.8 }}>
+          Monitore a satisfação do cliente após cada atendimento. Meta recomendada: ≥ 80%.
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <button className="cv2-btn" onClick={() => onNav('csat')}>Abrir CSAT</button>
+        </div>
+      </div>
+      <div className="cv2-card">
+        <h3>NPS — Lealdade de Marca</h3>
+        <div style={{ fontSize: 13, color: 'var(--tx2)', lineHeight: 1.8 }}>
+          Acompanhe o Net Promoter Score da sua marca. Score acima de 50 é considerado excelente.
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <button className="cv2-btn" onClick={() => onNav('nps')}>Abrir NPS</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VisaoGeral({ tenantNome, tenantDbId, onNav, allowedModules }) {
   const { kpis, erro } = useKpisReais(tenantDbId);
   const alertas = useAlertas(tenantDbId);
   const fmt = n => (n ?? 0).toLocaleString('pt-BR');
+
+  if (allowedModules) {
+    return <VisaoGeralAvaliacao tenantNome={tenantNome} tenantDbId={tenantDbId} onNav={onNav} />;
+  }
+
   return (
     <div>
       <h1>Visão Geral <span className="cv2-mock" style={{ background: 'var(--green-soft)', color: 'var(--green)' }}>DADOS REAIS · ÚLTIMOS 30 DIAS</span></h1>
@@ -669,7 +738,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
 
   function render() {
     switch (tela) {
-      case 'visao': return <VisaoGeral tenantNome={tenantNome} tenantDbId={tenantDbId} onNav={nav} />;
+      case 'visao': return <VisaoGeral tenantNome={tenantNome} tenantDbId={tenantDbId} onNav={nav} allowedModules={allowedModules} />;
       case 'deli': return <Deli tenantDbId={tenantDbId} userId={userId} />;
       case 'crm': return <CRM tenantSlug={tenantSlug} tenantDbId={tenantDbId} onNavigate={nav} />;
       case 'lojas': return <Lojas tenantDbId={tenantDbId} userId={userId} />;
@@ -743,10 +812,9 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
       {sidebarOpen && <div className="cv2-overlay" onClick={() => setSidebarOpen(false)} />}
       <aside className={`cv2-sb${sidebarOpen ? ' open' : ''}`}>
         <div className="cv2-brand">
-          <img src={brand?.logo || '/assets/rocket-logo.png'} alt="" style={{ width: 22, height: 22, objectFit: 'contain' }} />
+          <img src="/assets/rocket-logo.png" alt="Consult Delivery" style={{ width: 22, height: 22, objectFit: 'contain' }} />
           <div>
-            <span className="anton" style={{ fontSize: 13, lineHeight: 1.05, display: 'block' }}>{tenantNome}</span>
-            <small>CONSOLE · BETA</small>
+            <span className="anton" style={{ fontSize: 13, lineHeight: 1.05, display: 'block' }}>Consult Delivery</span>
           </div>
           <button className="cv2-sb-close" onClick={() => setSidebarOpen(false)} aria-label="Fechar menu">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
