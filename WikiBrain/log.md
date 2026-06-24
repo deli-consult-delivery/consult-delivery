@@ -1,5 +1,15 @@
 # Wiki Log
 
+## 2026-06-24 — Sessão eslint-jsx-guard: prevenção permanente de ReferenceError em JSX (PR #503)
+
+**Problema:** após o hotfix #501, ficou evidente que não havia ferramenta de lint cobrindo arquivos `.jsx`. TypeScript (configurado apenas para `trigger/**/*.ts` e `src/agents/**/*.ts`) não detecta variáveis indefinidas em JSX — o `tsc --noEmit` passou mesmo com o bug.
+
+**Solução:** instalado ESLint v10 + `@eslint/js` + `eslint-plugin-react-hooks` + `globals`. Config `eslint.config.js` com `no-undef: error` cobrindo `src/**/*.jsx`. Hook PostToolUse `eslint-jsx.cjs` roda ESLint automaticamente após qualquer edição JSX e injeta erros no contexto do Claude Code. Script `lint:jsx` adicionado ao `package.json`. PR #503 mergeado.
+
+**Verificação:** teste do hook com variável não declarada → output `'variavelNaoDeclarada' is not defined  no-undef` capturado. `npm run lint:jsx` → 0 errors.
+
+---
+
 ## 2026-06-24 — Sessão cora-r2-tracker-docs (continuação): hotfix `em7Dias` undefined na aba de cobrança CORA (PR #501)
 
 **Problema:** PR #498 removeu `em7Dias` junto com `venceEm7Dias`, mas a variável ainda era referenciada no `useMemo` de `elegiveisRegua` (linha 1202). Em ES modules (strict mode), isso lança `ReferenceError: em7Dias is not defined`, quebrando o render do componente Cora e exibindo erro na tela ao clicar na aba de cobrança.
