@@ -43,6 +43,28 @@ A sessão **Cowork** (desktop) parou aqui e passou o bastão para a **sessão Cl
 
 ## 🔴 Onde parou
 
+_Última sessão: 2026-06-24 (sessão 94 — **QA visual do PipelineScreen + fix bug logAgentRun silencioso (logAgentRun não gravava em `agent_runs` desde PR #524).**
+
+**Bug raiz-causa:** PR #524 (FASE 4) adicionou `explanation`, `confidence_score`, `pipeline_stage`, `pipeline_position` ao upsert de `logAgentRun()` em `trigger/_shared/audit.ts`, mas a migration correspondente nunca foi aplicada. O soft-fail (`catch(err){ console.warn(...) }`) engoliu o erro → orchestrator aparecia COMPLETED no Trigger.dev mas `agent_runs` ficava vazio desde 16:01 UTC.
+
+**Fix:** migration `supabase/migrations/20260624_006_agent_runs_add_pipeline_cols.sql` (4 colunas aditivas: `explanation text`, `confidence_score numeric`, `pipeline_stage text`, `pipeline_position integer`) aplicada via Supabase MCP. Verificado com run de 19:30 UTC — `agent_runs` registrou `semaforo: Vermelho` com sucesso.
+
+**Heartbeat loop confirmado funcionando (output bruto):**
+- Orchestrator detectou VERMELHO (`cliente_sumiu_7d`) para grupo "EQUIPE - CONSULT DELIVERY"
+- `createHeartbeatTask()` criou `client_tasks` para BRENO (`agent_id='breno'`, `priority='high'`) em 18:57 e 19:06 UTC
+- Dedup funcionou: run de 19:30 detectou o mesmo VERMELHO e PULOU a criação (task já existia)
+
+**REPLICA IDENTITY FULL:** PR #528 já aplicou para `client_tasks`, `agent_runs`, `deli_pending_approvals` — confirmado no log anterior.
+
+**QA visual PipelineScreen (`Pipeline ao Vivo`) — APROVADO:**
+- Tela carrega em `app.consultdelivery.com.br` → menu SISTEMA → "Pipeline ao Vivo"
+- Kanban com 4 colunas: Aguardando (0) · Executando (0) · Concluído (59) · Falhou (1)
+- Cards mostram agente (DELI/VERA/BRENO), timestamps e run IDs
+- Saúde 7D: 608 runs · 96% ok · avg 4.0s · top: DELI (322), BRENO (176), VERA (56)
+- 1 card VERA em "Falhou" (vermelho)
+
+**Não implementado nesta sessão:** Fatia 1.5 (ERP write via `vendaerp_proposals` + confirmação Telegram) e E2E do loop completo (conversa → BRENO → `client_tasks` → Pipeline → execução → draft resposta).)_
+
 _Última sessão: 2026-06-24 (worktree `fase4-autonomia` — **fix(ai-first): dedup em `createHeartbeatTask` (PR #526, SHA `2898cc4`).** Correção do MEDIUM apontado pelo code-review da FASE 4: `createHeartbeatTask` em `orchestrator-5min.ts` agora faz SELECT antes do INSERT — se já existir task `status='todo'` para o mesmo `(tenant_id, customer_id, agent_id)`, o insert é pulado e logado como "task já existe, pulando". Evita acúmulo de 48 tasks idênticas em 24h de grupo VERMELHO persistente. `tsc --noEmit` limpo. **Track: AI-First / FASE 4 — fix pós-review.**)_
 
 _Última sessão: 2026-06-24 (worktree `fase4-autonomia` — **AI-First FASE 4 — Autonomia Ampliada (PR #524, SHA `20a35a1`).** 4.1 Heartbeats: `orchestrator-5min.ts` agora cria tasks proativas em `client_tasks` quando semáforo VERMELHO detecta `cliente_sumiu_7d` (→ BRENO, `phase_id=acompanhamento`) ou `metrica_caiu/inadimplente` (→ CORA); resolve chain `whatsapp_group.id → loja_id → client_id` antes de inserir; skipa itens sem vínculo. 4.2 Memória ativa: upsert em `client_facts` após cada detecção — `category=ultimo_contato_detectado` (cliente sumido) e `category=inadimplencia_detectada_em` (métrica crítica); idempotente. 4.3 Saúde do pipeline: novo endpoint `GET /api/pipeline/health?days=N` no bridge (`bridge-server/routes/pipeline-health.js`) + componente `PipelineHealthCard` no `PipelineScreen.jsx` mostrando total runs, taxa de sucesso, avg duração e top agentes. `tsc --noEmit` limpo, `node --check` limpo. Bridge reiniciado (`pm2 restart bridge-server`). **Track: AI-First / FASE 4.**)_
@@ -335,7 +357,7 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 - ⚠️ Respeitar: `agent_drafts.content` (não `body`); semáforo segue `tenant_agent_config.modo_override` → `tenants.modo_padrao` → `'humano'`
 
 0-MODULES. **✅ RUNBOOK EXECUTADO — 1º cliente restrito real provisionado (`Karina Doceria`, 2026-06-24). Falta só o smoke visual do Wandson.** Código + migration entregues e verificados na sessão 86 (build verde, teste de isolamento RLS PASSOU, não-regressão = 0 linhas → tenants atuais seguem com menu completo). **Onboarding rodado** seguindo `docs/runbooks/onboarding-cliente-avaliacao.md` — **output bruto (`execute_sql`):** tenant `e9fdaa66-cbe7-4dff-905b-afc4b10219ff` · slug `karina-doceria` · `status=active` · `plan=pro` · `color=#0f40b0`; `tenant_modules` = **3 linhas habilitadas** (`csat`,`nps`,`visao`) → allowlist ativa; **1 admin** (`role=admin`, email `wandsonconsultor@consultdelivery.com.br`) semeado via service-role (1º admin não passa pelo `manage-users`). Senha por canal seguro, **nunca em git/chat**. **O que falta (do Wandson, ~2 min):** logar como o cliente no Console v2 e confirmar que o menu mostra **só** Visão Geral + CSAT + NPS, grupos vazios somem, navegação para tela não-listada cai no guard; e a não-regressão (logar com um tenant existente sem linhas → menu completo como hoje). **Desbloqueio progressivo (futuro):** `INSERT … ON CONFLICT (tenant_id,module_key) DO UPDATE SET enabled=true;` por módulo, sem deploy. **Constraint de segurança permanente:** filtro de menu é defesa de UX, não de dados — RLS/RBAC permanecem no backend, nenhuma policy relaxada. **Track: T8/T9.**
-0-AI-FIRST. **✅ FASE 1 (PR #512) + ✅ FASE 2 (PR #518) + ✅ FASE 3.1 (PR #519) + ✅ FASE 3.2 (PR #521) + ✅ FASE 4 (PR #524) + ✅ fix dedup (PR #526, SHA `2898cc4`) CONCLUÍDAS.** FASE 4: heartbeats proativos, memória ativa, saúde do pipeline. Fix #526: dedup em `createHeartbeatTask` — sem acúmulo de tasks duplicadas. Bridge reiniciado. **Próximo passo:** aguardar Wandson definir próxima demanda AI-First. **Constraint permanente:** motor EvoNexus PROIBIDO em prod; nenhuma mensagem a cliente sem aprovação (drafts); `agent_drafts.content` (não `body`).
+0-AI-FIRST. **✅ FASE 1–4 + fix dedup (PR #526) + fix logAgentRun (migration `20260624_006`) + QA visual PipelineScreen CONCLUÍDOS.** Pipeline ao Vivo carregando em prod com 608 runs/7d, 96% ok. Heartbeat loop funcionando: orchestrator detecta VERMELHO → cria `client_tasks` BRENO → dedup correto. **Pendente (próximas demandas do Wandson):** (a) Fatia 1.5 — ERP write: quando `target_system='vendaerp'` e operação é escrita, criar `vendaerp_proposals` + aguardar confirmação Telegram antes de executar; (b) E2E real: conversa nova → BRENO não resolve → `client_tasks` criada → aparece no Pipeline → executada → draft de resposta ao cliente. **Constraint permanente:** motor EvoNexus PROIBIDO em prod; nenhuma mensagem a cliente sem aprovação (drafts); `agent_drafts.content` (não `body`).
 
 0-FK-CORA. **✅ CONCLUÍDO (sessão 90, PR #489, SHA `567b8d6`, squash em main) — escopo fechado, sem ação pendente.** Faxina aditiva: 4 índices de FK das tabelas CORA, follow-up da investigação da tela preta (sessão 89). O advisor (`get_advisors → unindexed_foreign_keys`) lista **134 FKs sem índice no projeto** — decisão com o Wandson (*"Aceito sua recomendação"*) = mexer **só nas 4 das tabelas CORA**. Migration `supabase/migrations/20260622_003_cora_fk_indexes.sql`: `idx_agent_drafts_reviewer_id`, `idx_cora_acoes_agent_run_id`, `idx_cora_cobrancas_regua_id`, `idx_internal_notifications_recipient_user_id` (todos `CREATE INDEX IF NOT EXISTS`, plain btree). **Não-óbvio:** a constraint `agent_drafts_approved_by_fkey` indexa a coluna **`reviewer_id`** (não `approved_by`) — confirmado no `pg_catalog`. **Verificação (output bruto):** `apply_migration` → `{"success":true}`; `pg_indexes` confirmou os 4 em prod. Sem mudança front/bridge → sem deploy. **As outras 130 FKs sem índice ficaram intencionalmente fora de escopo.**
 
@@ -397,6 +419,25 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 ---
 
 ## 📋 Log de sessões
+
+### 2026-06-24 (sessão 94 — QA PipelineScreen + fix logAgentRun silencioso [AI-First/QA])
+
+- **Contexto:** Investigação por que `agent_runs` ficava vazio desde 16:01 UTC; QA visual do PipelineScreen (`Pipeline ao Vivo`).
+- **Bug root-cause identificado e corrigido:**
+  - `logAgentRun()` em `trigger/_shared/audit.ts` tentava upsert com 4 colunas que não existiam no BD (`explanation`, `confidence_score`, `pipeline_stage`, `pipeline_position`).
+  - Soft-fail (`catch(err){ console.warn(...) }`) engoliu o erro — orchestrator aparecia COMPLETED no Trigger.dev mas `agent_runs` estava vazio.
+  - Fix: migration `supabase/migrations/20260624_006_agent_runs_add_pipeline_cols.sql` aplicada via Supabase MCP.
+  - Verificado: run de 19:30 UTC gravou corretamente em `agent_runs` com `semaforo: Vermelho`.
+- **Heartbeat loop confirmado E2E:**
+  - Orchestrator detectou grupo "EQUIPE - CONSULT DELIVERY" com 7+ dias de inatividade (VERMELHO, trigger `cliente_sumiu_7d`)
+  - `createHeartbeatTask()` criou task para BRENO em 18:57 e 19:06 UTC
+  - Dedup funcionou: run de 19:30 pulou criação (task já existia para o mesmo dia)
+- **QA visual PipelineScreen — APROVADO:**
+  - "Pipeline ao Vivo" acessível no menu SISTEMA (sidebar necessita scroll até o final)
+  - Kanban: Aguardando (0) · Executando (0) · Concluído (59) · Falhou (1)
+  - Saúde 7D: 608 runs · 96% ok · avg 4.0s · top: DELI (322), BRENO (176), VERA (56)
+  - Cards expandidos mostram timestamps e run IDs do Trigger.dev
+- **Track: AI-First / QA pós-FASE4.**
 
 ### 2026-06-24 (AI-First FASE 4 — Autonomia Ampliada — branch `wandson/fase4-autonomia`, PR #524 SHA `20a35a1` [AI-First/FASE4])
 

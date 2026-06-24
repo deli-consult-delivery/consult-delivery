@@ -1,5 +1,33 @@
 # Wiki Log
 
+## 2026-06-24 — Sessão 94: QA visual PipelineScreen + fix logAgentRun silencioso
+
+**Contexto:** Continuação da investigação do bug onde `agent_runs` ficava vazio desde 16:01 UTC, e QA visual da tela "Pipeline ao Vivo".
+
+**Bug corrigido — logAgentRun silencioso:**
+- Causa-raiz: PR #524 (FASE 4) adicionou 4 colunas ao upsert de `logAgentRun()` que não existiam no banco (`explanation`, `confidence_score`, `pipeline_stage`, `pipeline_position`)
+- Soft-fail (`try/catch + console.warn`) engolia o erro silenciosamente
+- Fix: migration `supabase/migrations/20260624_006_agent_runs_add_pipeline_cols.sql` aplicada (4 colunas aditivas)
+- Verificado: run de 19:30 UTC gravou `semaforo: Vermelho` em `agent_runs` com sucesso
+
+**Heartbeat loop validado E2E:**
+- Orchestrator detectou grupo "EQUIPE - CONSULT DELIVERY" com 7+ dias de inatividade
+- `createHeartbeatTask()` criou task BRENO (18:57 e 19:06 UTC)
+- Dedup funcionou: run de 19:30 pulou criação (task já existia)
+- `agent_runs` registrando corretamente após o fix
+
+**QA visual PipelineScreen — APROVADO:**
+- Menu SISTEMA (sidebar) → "Pipeline ao Vivo" acessível em produção
+- Kanban carregado: Aguardando (0) · Executando (0) · Concluído (59) · Falhou (1)
+- Saúde 7D: 608 runs · 96% ok · avg 4.0s · top agentes: DELI (322), BRENO (176), VERA (56)
+- Cards com timestamps e run IDs do Trigger.dev visíveis
+
+**Pendente (próximas sessões):**
+- Fatia 1.5: ERP write via `vendaerp_proposals` + confirmação Telegram
+- E2E completo: conversa real → BRENO → `client_tasks` → Pipeline → execução → draft resposta
+
+---
+
 ## 2026-06-24 — Sessão ajuste-cora: 4 ajustes na tela de cobrança da Cora (branch wandson/ajuste-cora)
 
 **Problema:** 4 comportamentos incorretos na tela de cobrança da Cora identificados pelo Wandson:
