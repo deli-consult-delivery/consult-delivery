@@ -57,11 +57,11 @@ function detectAguardandoAprovacao(slug) {
     } finally {
       fs.closeSync(fd);
     }
-    return (
-      tail.includes('aguardando aprovação') ||
-      tail.includes('aguardando aprovacao') ||
-      (tail.includes('wandson') && tail.includes('aprovação')) ||
-      (tail.includes('confirmar') && tail.includes('?'))
+    if (tail.includes('aguardando aprovação') || tail.includes('aguardando aprovacao')) return true;
+    // Verificar se "wandson" e "aprovação" estão na mesma linha
+    return tail.split('\n').some(l =>
+      (l.includes('wandson') && l.includes('aprovação')) ||
+      (l.includes('wandson') && l.includes('aprovacao'))
     );
   } catch {
     return false;
@@ -201,7 +201,10 @@ module.exports = function buildMonitorRouter({ requireJwt }) {
       res.end();
     }, MAX_SSE_DURATION_MS);
 
+    let cleaned = false;
     function cleanup() {
+      if (cleaned) return;
+      cleaned = true;
       clearInterval(pollTimer);
       clearInterval(hbTimer);
       clearTimeout(maxTimer);

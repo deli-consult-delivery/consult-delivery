@@ -97,21 +97,25 @@ export default function MonitorSessoes() {
     setLogLines('');
     setConectado(false);
 
+    let alive = true;
     (async () => {
       const { supabase } = await import('../lib/supabase.js');
       const { data: { session } } = await supabase.auth.getSession();
+      if (!alive) return;
       const token = session?.access_token;
 
+      // EventSource nativo não suporta headers customizados — token via query param.
+      // O bridge aceita ?token= apenas no handler SSE (não globalmente).
+      // Tokens Supabase têm TTL de 1h; não elevar esse TTL sem revisar este fluxo.
       const url = `${BRIDGE}/api/monitor/logs/${encodeURIComponent(selected)}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
 
-      // SSE não suporta headers customizados via EventSource nativo;
-      // passamos o token como query param (bridge lê via query se não tiver header)
       const es = new EventSource(url);
       esRef.current = es;
 
-      es.onopen = () => setConectado(true);
+      es.onopen = () => { if (alive) setConectado(true); };
 
       es.onmessage = (e) => {
+        if (!alive) return;
         try {
           const payload = JSON.parse(e.data);
           if (payload.reset) {
@@ -122,12 +126,11 @@ export default function MonitorSessoes() {
         } catch { /* ignore */ }
       };
 
-      es.onerror = () => {
-        setConectado(false);
-      };
+      es.onerror = () => { if (alive) setConectado(false); };
     })();
 
     return () => {
+      alive = false;
       if (esRef.current) { esRef.current.close(); esRef.current = null; }
     };
   }, [selected]);
