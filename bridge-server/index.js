@@ -46,11 +46,7 @@ app.get('/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOStrin
 
 // ── Middleware: JWT Supabase ──────────────────────────────────────────────────
 async function requireJwt(req, res, next) {
-  // SSE (EventSource) não suporta headers customizados — aceitar token via query param ?token=
-  const queryToken = req.query?.token;
-  const auth = queryToken
-    ? queryToken.trim()
-    : (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '').trim();
+  const auth = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '').trim();
   if (!auth) return res.status(401).json({ error: 'missing token' });
   if (!SUPABASE_ANON_KEY) {
     req.user = { id: 'dev' };
