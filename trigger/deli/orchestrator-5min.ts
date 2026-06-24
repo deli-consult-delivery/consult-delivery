@@ -266,6 +266,178 @@ async function createPendingApproval(
   }
 }
 
+// ─── 4.1 + 4.2: Helpers de heartbeat — tasks proativas e memória ativa ────────
+
+async function resolveLojaIdFromGroup(
+  sb: ReturnType<typeof getSupabase>,
+  groupId: string
+): Promise<string | null> {
+  try {
+    const { data } = await sb
+      .from("whatsapp_groups")
+      .select("loja_id")
+      .eq("id", groupId)
+      .limit(1);
+    return (data as Array<{ loja_id: string | null }> | null)?.[0]?.loja_id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveCustomerIdFromLoja(
+  sb: ReturnType<typeof getSupabase>,
+  lojaId: string
+): Promise<string | null> {
+  try {
+    const { data } = await sb
+      .from("lojas")
+      .select("client_id")
+      .eq("id", lojaId)
+      .limit(1);
+    return (data as Array<{ client_id: string | null }> | null)?.[0]?.client_id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function createHeartbeatTask(
+  sb: ReturnType<typeof getSupabase>,
+  params: {
+    customerId: string;
+    agentId: string;
+    title: string;
+    phaseId: string;
+    description: string;
+  }
+): Promise<void> {
+  try {
+    const { error } = await sb.from("client_tasks").insert({
+      tenant_id: TENANT_ID,
+      customer_id: params.customerId,
+      agent_id: params.agentId,
+      title: params.title,
+      phase_id: params.phaseId,
+      priority: "high",
+      description: params.description,
+      status: "todo",
+    });
+    if (error) {
+      logger.warn("createHeartbeatTask: insert falhou", { error: error.message });
+    } else {
+      logger.info("createHeartbeatTask: task criada", {
+        customerId: params.customerId,
+        agentId: params.agentId,
+      });
+    }
+  } catch (err) {
+    logger.warn("createHeartbeatTask: exception", { error: (err as Error).message });
+  }
+}
+
+async function upsertClientFact(
+  sb: ReturnType<typeof getSupabase>,
+  lojaId: string,
+  category: string,
+  value: string
+): Promise<void> {
+  try {
+    const { data: existing } = await sb
+      .from("client_facts")
+      .select("id")
+      .eq("loja_id", lojaId)
+      .eq("tenant_id", TENANT_ID)
+      .eq("category", category)
+      .limit(1);
+
+    if (existing?.length) {
+      await sb
+        .from("client_facts")
+        .update({ fact: value, agent_name: "deli-orchestrator" })
+        .eq("loja_id", lojaId)
+        .eq("tenant_id", TENANT_ID)
+        .eq("category", category);
+    } else {
+      await sb.from("client_facts").insert({
+        loja_id: lojaId,
+        tenant_id: TENANT_ID,
+        category,
+        fact: value,
+        agent_name: "deli-orchestrator",
+        confidence: 100,
+      });
+    }
+  } catch (err) {
+    logger.warn("upsertClientFact: exception", {
+      error: (err as Error).message,
+      lojaId,
+      category,
+    });
+  }
+}
+
+async function processHeartbeatActions(
+  sb: ReturnType<typeof getSupabase>,
+  triggerName: string,
+  items: Array<{ id: string; label: string; detail?: string }>,
+  isoNow: string
+): Promise<void> {
+  const isClienteSumiu = triggerName.includes("cliente_sumiu");
+  const isInadimplente =
+    triggerName.includes("inadimplente") || triggerName.includes("metrica_caiu");
+
+  if (!isClienteSumiu && !isInadimplente) return;
+
+  for (const item of items.slice(0, MAX_ITEMS_POR_TRIGGER)) {
+    if (isClienteSumiu) {
+      // item.id = whatsapp_group.id → resolve loja_id → client_id
+      const lojaId = await resolveLojaIdFromGroup(sb, item.id);
+      if (!lojaId) {
+        logger.info("processHeartbeatActions: grupo sem loja vinculada, skip", {
+          groupId: item.id,
+        });
+        continue;
+      }
+
+      // 4.2: Persistir fato — último contato detectado
+      await upsertClientFact(sb, lojaId, "ultimo_contato_detectado", isoNow);
+
+      // 4.1: Criar task para BRENO
+      const customerId = await resolveCustomerIdFromLoja(sb, lojaId);
+      if (!customerId) {
+        logger.info("processHeartbeatActions: loja sem customer, skip task BRENO", { lojaId });
+        continue;
+      }
+      await createHeartbeatTask(sb, {
+        customerId,
+        agentId: "breno",
+        title: `Retomar contato: ${item.label}`,
+        phaseId: "acompanhamento",
+        description: `Grupo inativo há 7+ dias. Detectado pelo orchestrator em ${isoNow}.`,
+      });
+    } else {
+      // isInadimplente — item.id = loja.id
+      const lojaId = item.id;
+
+      // 4.2: Persistir fato — inadimplência detectada
+      await upsertClientFact(sb, lojaId, "inadimplencia_detectada_em", isoNow);
+
+      // 4.1: Criar task para CORA
+      const customerId = await resolveCustomerIdFromLoja(sb, lojaId);
+      if (!customerId) {
+        logger.info("processHeartbeatActions: loja sem customer, skip task CORA", { lojaId });
+        continue;
+      }
+      await createHeartbeatTask(sb, {
+        customerId,
+        agentId: "cora",
+        title: `Cobrança pendente: ${item.label}${item.detail ? ` (${item.detail})` : ""}`,
+        phaseId: "acompanhamento",
+        description: `Métrica crítica detectada. Detectado pelo orchestrator em ${isoNow}.`,
+      });
+    }
+  }
+}
+
 async function notifyBridge(semaforo: Semaforo, motivos: string[], runId: string): Promise<void> {
   try {
     const r = await fetch(`${getBridgeUrl()}/agents/deli/notify`, {
@@ -389,6 +561,13 @@ export const deliOrchestrator5min = schedules.task({
 
         if (trigger.autonomy_level === "vermelho") {
           resultsBySemaforo.vermelho.push(result.summary);
+          // 4.1 + 4.2: Heartbeats — tasks proativas e memória ativa (só VERMELHO)
+          await processHeartbeatActions(
+            sb,
+            trigger.name,
+            result.items,
+            new Date().toISOString()
+          );
         } else {
           resultsBySemaforo.amarelo.push(result.summary);
         }

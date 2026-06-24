@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase.js';
 
+const BRIDGE = import.meta.env.VITE_BRIDGE_URL || 'https://bridge.consultdelivery.com.br';
+
 // ─── Pipeline ao Vivo — Kanban de execuções de agentes ───────────────────────
 // Fonte: agent_runs + agents (nome legível)
 // Colunas: Aguardando (queued) → Executando (running) → Concluído (success) → Falhou (failed)
@@ -193,13 +195,80 @@ function Coluna({ col, runs }) {
   );
 }
 
+// ─── Saúde do Pipeline ────────────────────────────────────────────────────
+function PipelineHealthCard({ sessionToken }) {
+  const [health, setHealth] = useState(null);
+  const [loadingH, setLoadingH] = useState(true);
+
+  useEffect(() => {
+    if (!sessionToken) return;
+    setLoadingH(true);
+    fetch(`${BRIDGE}/api/pipeline/health?days=7`, {
+      headers: { Authorization: `Bearer ${sessionToken}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { setHealth(d); setLoadingH(false); })
+      .catch(() => setLoadingH(false));
+  }, [sessionToken]);
+
+  const coreTaxa = !health?.success_rate ? 'var(--tx3)'
+    : health.success_rate >= 80 ? '#1e7d43'
+    : health.success_rate >= 50 ? '#8b6914'
+    : '#B70C00';
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+      background: 'var(--g0,#f9f9f9)', border: '1px solid var(--g1)', borderRadius: 8,
+      padding: '10px 16px', margin: '0 0 12px 0', fontSize: 12,
+    }}>
+      <span style={{ fontWeight: 700, color: 'var(--tx2)', fontSize: 11, letterSpacing: '.5px', textTransform: 'uppercase' }}>
+        Saúde 7d
+      </span>
+      {loadingH ? (
+        <span style={{ color: 'var(--tx3)' }}>…</span>
+      ) : !health ? (
+        <span style={{ color: 'var(--tx3)' }}>indisponível</span>
+      ) : (
+        <>
+          <span style={{ color: 'var(--tx2)' }}>
+            <strong style={{ color: 'var(--tx1)' }}>{health.total_runs}</strong> runs
+          </span>
+          <span style={{ color: coreTaxa, fontWeight: 700 }}>
+            {health.success_rate ?? '—'}% ok
+          </span>
+          {health.avg_duration_ms != null && (
+            <span style={{ color: 'var(--tx2)' }}>
+              avg <strong style={{ color: 'var(--tx1)' }}>{(health.avg_duration_ms / 1000).toFixed(1)}s</strong>
+            </span>
+          )}
+          {health.top_agents?.length > 0 && (
+            <span style={{ color: 'var(--tx2)' }}>
+              top: {health.top_agents.slice(0, 3).map(a =>
+                `${a.agent_id.split('-')[0].toUpperCase()} (${a.count})`
+              ).join(', ')}
+            </span>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Componente principal ──────────────────────────────────────────────────
 export default function PipelineScreen({ tenantDbId }) {
   const [runs, setRuns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
   const [janela, setJanela] = useState(24); // horas
+  const [sessionToken, setSessionToken] = useState(null);
   const channelRef = useRef(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSessionToken(data?.session?.access_token ?? null);
+    });
+  }, []);
 
   async function carregar(tenantId, horas) {
     const desde = new Date(Date.now() - horas * 60 * 60 * 1000).toISOString();
@@ -309,6 +378,11 @@ export default function PipelineScreen({ tenantDbId }) {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Card de saúde do pipeline */}
+      <div style={{ padding: '12px 24px 0' }}>
+        <PipelineHealthCard sessionToken={sessionToken} />
       </div>
 
       {/* Corpo: kanban */}
