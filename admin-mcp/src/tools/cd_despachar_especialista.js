@@ -23,7 +23,7 @@ module.exports = {
       .min(10)
       .describe('Descrição da demanda — o que precisa ser feito (mínimo 10 caracteres)'),
     target_system: z
-      .enum(['vendaerp', 'asaas', 'whatsapp', 'nenhum'])
+      .enum(['vendaerp', 'asaas', 'nenhum'])
       .optional()
       .describe('Sistema alvo onde o especialista vai atuar (default: nenhum)'),
   },
@@ -31,7 +31,7 @@ module.exports = {
     // 1. Resolver customer_id a partir da loja (FK: lojas.client_id → customers.id)
     const lojas = await sb.sbGet(
       'lojas',
-      `id=eq.${encodeURIComponent(args.loja_id)}&select=id,nome,client_id&limit=1`
+      `id=eq.${args.loja_id}&select=id,nome,client_id&limit=1`
     );
     if (!lojas || lojas.length === 0) {
       throw new Error(`loja ${args.loja_id} não encontrada`);
@@ -48,7 +48,7 @@ module.exports = {
     const row = {
       tenant_id:     args.tenant_id,
       customer_id:   loja.client_id,
-      phase_id:      'acompanhamento',  // fase padrão para demandas avulsas
+      phase_id:      'acompanhamento',
       title:         `[${args.especialista.toUpperCase()}] ${args.descricao.slice(0, 80)}`,
       description:   args.descricao,
       status:        'todo',
@@ -57,7 +57,6 @@ module.exports = {
       loop_state:    'open',
       target_system: args.target_system ?? 'nenhum',
       created_at:    new Date().toISOString(),
-      updated_at:    new Date().toISOString(),
     };
 
     const created = await sb.sbInsert('client_tasks', row);
