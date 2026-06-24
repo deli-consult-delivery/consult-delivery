@@ -16,9 +16,25 @@
       "Bash(npx trigger.dev*)",
       "Bash(npx trigger.dev@latest deploy --skip-typecheck)",
       "Bash(curl -s --connect-timeout *)",
-      "Bash(claude --version)"
+      "Bash(claude --version)",
+      "mcp__claude_ai_Supabase__execute_sql",
+      "mcp__claude_ai_Supabase__apply_migration",
+      "mcp__claude_ai_Supabase__list_tables",
+      "mcp__claude_ai_Supabase__list_migrations",
+      "mcp__claude_ai_Supabase__get_logs",
+      "mcp__claude_ai_Supabase__get_publishable_keys",
+      "mcp__claude_ai_Supabase__deploy_edge_function",
+      "mcp__claude_ai_MCP_GITHUB__create_pull_request",
+      "mcp__claude_ai_MCP_GITHUB__merge_pull_request",
+      "mcp__claude_ai_MCP_GITHUB__push_files",
+      "mcp__claude_ai_MCP_GITHUB__get_file_contents",
+      "mcp__claude_ai_MCP_GITHUB__list_pull_requests",
+      "mcp__claude_ai_MCP_GITHUB__pull_request_read",
+      "Bash(git *)",
+      "Bash(pm2 *)",
+      "Bash(node --check *)"
     ],
-    "defaultMode": "default",
+    "defaultMode": "acceptEdits",
     "ask": []
   },
   "hooks": {
