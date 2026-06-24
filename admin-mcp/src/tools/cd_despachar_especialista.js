@@ -48,7 +48,7 @@ module.exports = {
     const row = {
       tenant_id:     args.tenant_id,
       customer_id:   loja.client_id,
-      phase_id:      'acompanhamento',  // fase padrão para demandas avulsas
+      phase_id:      'acompanhamento',
       title:         `[${args.especialista.toUpperCase()}] ${args.descricao.slice(0, 80)}`,
       description:   args.descricao,
       status:        'todo',
