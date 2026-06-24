@@ -1210,3 +1210,15 @@ Touched: none
 - **Frontend `Cora.jsx`:** `elegiveisRegua` filtra `ignorar_cobranca=true`; botões "✓ Já pagou (PIX)" (verde, baixa manual) e "🚫 Não cobrar" (cinza, isenta) adicionados à coluna de ações de cada card da fila de aprovação.
 - **PR [#497](https://github.com/deli-consult-delivery/consult-delivery/pull/497), squash-mergeado em main.**
 - **Próximas ações:** (1) `pm2 restart bridge-server` na VPS; (2) `npx trigger.dev@4.4.6 deploy` para a nova régua; (3) validação visual no browser.
+
+## Sessão 93 — 2026-06-24 — Compactação manual: confiar no auto-compact nativo (remover chave ignorada)
+
+- **Problema (Wandson):** precisava rodar `/compact` na mão sempre que a janela de contexto enchia (~70%). Pediu um hook que compactasse sozinho a 70% e desse continuidade — ou qualquer outra coisa que resolvesse.
+- **Descoberta crítica (pesquisa na doc oficial):** **(1)** hooks NÃO conseguem disparar compactação — `PreCompact`/`PostCompact` são puramente reativos; não existe evento "ao atingir X% de contexto". Um hook que faz `/compact` a 70% é **impossível**. **(2)** `autoCompactWindow: 140000` no `.claude/settings.json` era a tentativa anterior de fixar o limiar em 70% (140k/200k) — chave **não-documentada e comprovadamente ignorada** (a prova empírica é o próprio Wandson continuar compactando na mão apesar dela). Não há setting/env documentado para ajustar o **limiar** (só `DISABLE_AUTO_COMPACT=1`, liga/desliga). **(3)** `autoCompactEnabled: true` é documentado e válido — já compacta sozinho perto do limite e **retoma a tarefa**.
+- **Decisão (AskUserQuestion):** abordagem = **"Só confiar no nativo"** (não criar hook); escopo = **só consult-delivery** (settings.json versionado).
+- **Mudança:** removida a linha `"autoCompactWindow": 140000` do `.claude/settings.json`; mantido `autoCompactEnabled: true`; **nenhum hook criado**; hooks existentes (SessionStart→ecc-pipeline-context, PostToolUse→typecheck, Stop→typecheck-stop) intactos.
+- **Verificação (output bruto):** em `origin/main:.claude/settings.json` → `autoCompactEnabled: true` presente, `autoCompactWindow` ausente; `jq empty` ok (JSON íntegro — settings.json malformado desligaria TODAS as settings em silêncio).
+- **PR [#506](https://github.com/deli-consult-delivery/consult-delivery/pull/506), squash-mergeado em main (`c77325e`).**
+- **Limite honesto:** o auto-compact nativo dispara **perto do limite**, não a 70% — o Wandson perde o controle fino de compactar mais cedo, mas deixa de precisar do `/compact` manual. Se quiser o nudge a 70% de volta no futuro, o caminho é um hook `PostToolUse` que lê o `usage` do transcript e só **avisa** a 70% (não compacta).
+- **Propagação à VPS:** `.claude/settings.json` é config de tooling local — sem deploy de Pages/bridge. O checkout canônico `/root/consult-delivery` recebe a mudança no próximo `git reset --hard origin/main` da rotina do bridge.
+- **Próximas ações:** nenhuma (escopo fechado). Observar nas próximas sessões longas se o auto-compact nativo retoma a tarefa sem intervenção.
