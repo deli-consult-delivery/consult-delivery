@@ -1,5 +1,13 @@
 # Wiki Log
 
+## 2026-06-24 — Sessão cora-r2-tracker-docs (continuação): hotfix `em7Dias` undefined na aba de cobrança CORA (PR #501)
+
+**Problema:** PR #498 removeu `em7Dias` junto com `venceEm7Dias`, mas a variável ainda era referenciada no `useMemo` de `elegiveisRegua` (linha 1202). Em ES modules (strict mode), isso lança `ReferenceError: em7Dias is not defined`, quebrando o render do componente Cora e exibindo erro na tela ao clicar na aba de cobrança.
+
+**Fix:** Redefinir `em7Dias` antes do `useMemo` (`const em7Dias = new Date(hoje); em7Dias.setDate(em7Dias.getDate() + 7);`). 1 linha inserida. PR #501 squash-mergeado; deploy via GitHub Actions em ~3 min.
+
+**Lição:** ao remover uma variável intermediária, grep por todos os usos antes de deletar — TypeScript não capturou porque o arquivo é `.jsx` (não `.tsx`) e a checagem de tipos é parcial.
+
 ## 2026-06-24 — Sessão cora-dashboard-limpeza: remoção de seções redundantes do dashboard financeiro CORA (PR #498)
 
 **Contexto:** Wandson identificou redundâncias no dashboard CORA (tab Financeiro → Visão Geral): (1) tabelas "Cobranças vencidas por cliente" e "Vencem nos próximos 7 dias" repetiam exatamente o que a Régua de Cobrança já mostra com seus filtros; (2) campo "A receber" nos blocos "Últimos 30 dias" e "Mês atual" era semanticamente incorreto (cobranças pending são futuras, não do passado).
