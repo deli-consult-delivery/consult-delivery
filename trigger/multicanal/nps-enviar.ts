@@ -81,11 +81,15 @@ export const npsEnviarTask = task({
 
     logger.info("nps-enviar: iniciando", { tenantId: input.tenant_id });
 
+    const agora = new Date();
+    const seteDiasAtras = new Date(agora.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
     let query = sb
       .from("nps_avaliacoes")
       .select("id, tenant_id, public_token, contact_identifier, contact_nome, status")
       .is("msg_enviada_at", null)
       .eq("status", "pendente")
+      .gte("created_at", seteDiasAtras)
       .order("created_at", { ascending: true })
       .limit(50);
 
@@ -174,16 +178,15 @@ export const npsEnviarTask = task({
         const { ok, detail } = await sendEvolutionText(inst, nps.contact_identifier, text);
         const statusStr = ok ? "ok" : "falhou";
 
-        try {
-          await sb
-            .from("nps_avaliacoes")
-            .update({
-              msg_enviada_at:     new Date().toISOString(),
-              msg_enviada_status: statusStr,
-            })
-            .eq("id", nps.id);
-        } catch (err: unknown) {
-          logger.error("nps-enviar: falha ao atualizar msg_enviada", { err: err instanceof Error ? err.message : String(err) });
+        const { error: updateErr } = await sb
+          .from("nps_avaliacoes")
+          .update({
+            msg_enviada_at:     new Date().toISOString(),
+            msg_enviada_status: statusStr,
+          })
+          .eq("id", nps.id);
+        if (updateErr) {
+          logger.error("nps-enviar: falha ao atualizar msg_enviada", { err: updateErr.message });
         }
 
         resultados.push({ nps_id: nps.id, tenant_id: tenantId, status: ok ? "ok" : "falhou", detalhe: ok ? undefined : String(detail) });
@@ -198,6 +201,7 @@ export const npsEnviarTask = task({
     await logAgentRun({
       runId:     ctx.run.id,
       agentSlug: "nps-enviar",
+      tenantId:  input.tenant_id,
       input,
       output,
       status:    falhas > 0 && enviados === 0 ? "failed" : "success",
