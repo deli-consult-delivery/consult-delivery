@@ -1255,4 +1255,26 @@ Touched: none
 - **PR [#506](https://github.com/deli-consult-delivery/consult-delivery/pull/506), squash-mergeado em main (`c77325e`).**
 - **Limite honesto:** o auto-compact nativo dispara **perto do limite**, não a 70% — o Wandson perde o controle fino de compactar mais cedo, mas deixa de precisar do `/compact` manual. Se quiser o nudge a 70% de volta no futuro, o caminho é um hook `PostToolUse` que lê o `usage` do transcript e só **avisa** a 70% (não compacta).
 - **Propagação à VPS:** `.claude/settings.json` é config de tooling local — sem deploy de Pages/bridge. O checkout canônico `/root/consult-delivery` recebe a mudança no próximo `git reset --hard origin/main` da rotina do bridge.
+
+## 2026-06-24 — Sessão realtime-replica-identity + AI-First Item 2 e 3
+
+### Item 3 — REPLICA IDENTITY FULL (PR #528, mergeado)
+- Applied `REPLICA IDENTITY FULL` + `supabase_realtime` publication para tabelas do pipeline: `client_tasks`, `deli_pending_approvals`, `agent_runs`, `internal_notifications`.
+- Migration: `supabase/migrations/20260624_005_pipeline_realtime_full.sql`
+
+### Item 2 — Heartbeat Loop end-to-end (Blueprint AI-First)
+- **Objetivo:** orchestrator detecta inatividade do grupo "EQUIPE - CONSULT DELIVERY" (7+ dias) → cria `client_tasks` para BRENO → aparece no PipelineScreen.
+- **Fixes aplicados:**
+  1. `deli_triggers`: `cliente_sumiu_7d` tinha `autonomy_level='verde'`; corrigido para `'vermelho'` (apenas VERMELHO gera heartbeat task).
+  2. `lojas`: loja de teste "LOJA DE TESTE - PLATAFORMA" tinha `client_id=null`; corrigido com UUID real do customer.
+  3. `agent_runs` migration: `logAgentRun` tentava upsert com colunas inexistentes (`explanation`, `confidence_score`, `pipeline_stage`, `pipeline_position`) → upsert falhava silenciosamente desde o FASE 4 (PR #524). Migration `20260624_006_agent_runs_add_pipeline_cols.sql` adicionou as colunas.
+- **Verificação (output bruto):**
+  - Run de 19:30 UTC: `agent_runs` → `semaforo: Vermelho`, `motivos: ["🔴 1 grupo(s) sem mensagem há 7+ dias: EQUIPE - CONSULT DELIVERY"]`
+  - `client_tasks` para BRENO: "Retomar contato: EQUIPE - CONSULT DELIVERY" (criadas às 18:57 e 19:06 UTC)
+  - Dedup funcionando: run das 19:30 não criou duplicata (1 task/trigger/loja/dia)
+- **Loop confirmado:** orchestrator → detecta inatividade → VERMELHO → createHeartbeatTask → client_tasks → PipelineScreen (BRENO).
+
+### Karina Doceria — CSAT e NPS automáticos (PR #529, mergeado)
+- Sessão `avaliacao-karina` (interativa via cd-spawn sem --auto) implementou módulos CSAT e NPS para o tenant Karina Doceria.
+- PR #529 + fix TS #530 mergeados.
 - **Próximas ações:** nenhuma (escopo fechado). Observar nas próximas sessões longas se o auto-compact nativo retoma a tarefa sem intervenção.
