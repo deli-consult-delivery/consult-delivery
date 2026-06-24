@@ -65,13 +65,13 @@ module.exports = function buildAsaasDashboardRouter() {
       const [recebidas, confirmadas, aguardando, vencidas] = await Promise.all([
         fetchAllPayments(ASAAS_API_KEY, {
           status: 'RECEIVED',
-          'paymentDate[ge]': firstDay,
-          'paymentDate[le]': lastDay,
+          'dueDate[ge]': firstDay,
+          'dueDate[le]': lastDay,
         }),
         fetchAllPayments(ASAAS_API_KEY, {
           status: 'CONFIRMED',
-          'confirmedDate[ge]': firstDay,
-          'confirmedDate[le]': lastDay,
+          'dueDate[ge]': firstDay,
+          'dueDate[le]': lastDay,
         }),
         fetchAllPayments(ASAAS_API_KEY, {
           status: 'PENDING',
