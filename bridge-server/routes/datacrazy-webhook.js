@@ -68,6 +68,7 @@ module.exports = function datacrazyWebhookRouter({ sbFetch }) {
 
     // ── 2. Validação do payload ─────────────────────────────────────────────
     const { conversation_id, lead_id, lead_name, external_ref } = req.body || {};
+    console.log(`[datacrazy-webhook] entrada: conv=${conversation_id} lead=${lead_name}`);
 
     if (!conversation_id) {
       return res.status(400).json({ error: 'conversation_id_obrigatorio' });
@@ -88,6 +89,7 @@ module.exports = function datacrazyWebhookRouter({ sbFetch }) {
 
     if (existingRows?.length) {
       const linkAvaliacao = `${PUBLIC_BASE}/avaliacao/${existingRows[0].public_token}`;
+      console.log(`[datacrazy-webhook] reenvio ignorado: ref=${ref}`);
       return res.status(200).json({ ok: true, reenvio: true, link_avaliacao: linkAvaliacao });
     }
 
