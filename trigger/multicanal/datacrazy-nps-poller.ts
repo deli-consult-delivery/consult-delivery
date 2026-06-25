@@ -186,7 +186,7 @@ export const datacrazyNpsPollerTask = task({
     let configQuery = sb
       .from("avaliacao_config")
       .select(
-        "tenant_id, nps_auto_envio, nps_mensagem_template, nps_cooldown_dias, datacrazy_api_key, nome_empresa"
+        "tenant_id, nps_auto_envio, nps_mensagem_template, nps_cooldown_dias, datacrazy_api_key, nome_empresa, piloto_telefone_teste"
       )
       .eq("nps_auto_envio", true)
       .not("datacrazy_api_key", "is", null);
@@ -347,7 +347,42 @@ export const datacrazyNpsPollerTask = task({
           nome_empresa: config.nome_empresa || "nossa empresa",
         });
 
-        const { ok, detail } = await sendDatacrazyNpsMessage(apiKey, conv.id, text);
+        // Piloto: se piloto_telefone_teste configurado, redirecionar para esse número via Evolution API
+        let ok: boolean;
+        let detail: unknown;
+        if (config.piloto_telefone_teste) {
+          const { data: instRows } = await (sb as any)
+            .from("evolution_instances")
+            .select("evolution_url, api_key, instance_name")
+            .eq("tenant_id", tenantId)
+            .limit(1);
+          const inst = instRows?.[0];
+          if (!inst?.evolution_url) {
+            logger.warn("datacrazy-nps-poller: piloto_telefone_teste definido mas sem instância Evolution", { tenantId });
+            ({ ok, detail } = await sendDatacrazyNpsMessage(apiKey, conv.id, text));
+          } else {
+            const phone = config.piloto_telefone_teste.replace(/\D/g, "");
+            try {
+              const resp = await fetch(
+                `${inst.evolution_url}/message/sendText/${inst.instance_name}`,
+                {
+                  method:  "POST",
+                  headers: { "Content-Type": "application/json", apikey: inst.api_key },
+                  body:    JSON.stringify({ number: phone, text }),
+                }
+              );
+              const body = await resp.json().catch(() => ({}));
+              ok = resp.ok;
+              detail = resp.ok ? undefined : body;
+              if (ok) logger.info("datacrazy-nps-poller: NPS enviado para piloto_telefone_teste", { phone, convId: conv.id });
+            } catch (err) {
+              ok = false;
+              detail = (err as Error).message;
+            }
+          }
+        } else {
+          ({ ok, detail } = await sendDatacrazyNpsMessage(apiKey, conv.id, text));
+        }
         const statusStr = ok ? "ok" : "falhou";
 
         const { error: updErr } = await sb
