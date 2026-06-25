@@ -1356,3 +1356,19 @@ Claude Code não expõe % de contexto via hooks. Não é possível disparar `/cl
 - Compactação automática preserva os 6 itens estruturados obrigatoriamente
 - Nova sessão recebe handoff da anterior automaticamente
 - Aviso a ~70% da capacidade estimada para o usuário salvar contexto manualmente
+
+## Sessão 96 — 2026-06-25
+
+**Branch:** wandson/branding-avaliacao → **PR #542** mergeado em main
+
+### O que foi feito
+- Extraída lib `bridge-server/lib/branding.js` com `getBrandByTenant`, `safeLogoUrl`, `getAvaliacaoConfig`
+- `NpsPublico.jsx` reescrito com branding completo: logo do tenant, cor dinâmica, mensagens customizáveis
+- `AvaliacaoPublica.jsx` atualizado com `csat_titulo`, `csat_subtitulo`, `csat_agradecimento`
+- Migration `20260625_002_avaliacao_config_branding.sql` aplicada — 6 novas colunas em `avaliacao_config`
+- Rotas Bridge: `GET/PATCH /api/tenant/avaliacao-config` + `GET/PATCH /api/tenant/branding` (admin only)
+- Console V2: nova tela `AvaliacaoConfig.jsx` — Identidade Visual + Mensagens CSAT + Mensagens NPS
+
+### Pendente
+- `pm2 restart bridge-server` no VPS (SSH não funcionou da worktree — fazer via tmux/VPS direto)
+- Verificar NPS da Karina no browser após deploy do frontend (~3 min GitHub Actions)
