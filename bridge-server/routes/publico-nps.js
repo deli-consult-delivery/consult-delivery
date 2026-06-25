@@ -14,6 +14,7 @@
 
 const express = require('express');
 const { z }   = require('zod');
+const { getBrandByTenant, getAvaliacaoConfig } = require('../lib/branding');
 
 // ── Rate limiter in-memory ────────────────────────────────────────────────────
 const rateLimitNps = new Map();
@@ -61,12 +62,6 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
     return rows?.[0] ?? null;
   }
 
-  async function getTenantName(tenantId) {
-    const rows = await sbFetch(
-      `tenants?id=eq.${encodeURIComponent(tenantId)}&select=name&limit=1`
-    );
-    return rows?.[0]?.name ?? null;
-  }
 
   async function checkExpired(nps) {
     if (!nps.public_token_expires_at) return false;
@@ -99,11 +94,20 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
         return res.status(200).json({ ja_respondida: true, nota: nps.nota });
       }
 
-      const nome_loja = await getTenantName(nps.tenant_id);
+      const [brand, config] = await Promise.all([
+        getBrandByTenant(sbFetch, nps.tenant_id),
+        getAvaliacaoConfig(sbFetch, nps.tenant_id),
+      ]);
 
       return res.status(200).json({
-        nome_loja: nome_loja ?? 'nossa loja',
+        nome_loja: brand?.name ?? 'nossa loja',
         status:    nps.status,
+        brand,
+        config: config ? {
+          nps_titulo:        config.nps_titulo,
+          nps_subtitulo:     config.nps_subtitulo,
+          nps_agradecimento: config.nps_agradecimento,
+        } : null,
       });
     } catch (err) {
       console.error('[publico/nps GET]', err.message);
