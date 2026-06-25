@@ -1335,3 +1335,24 @@ Touched: none
 ### Resultado final
 - Webhook recebe → cria avaliação → reabre conversa → envia CSAT → fecha conversa → cliente avalia ✅
 - Wandson testou e avaliou nota 5 às 22:34
+
+## 2026-06-25 — Sessão: sistema de handoff automático de contexto
+
+### Problema
+Compactação automática do Claude Code era genérica e perdia contexto importante. Usuário precisava fazer `/compact` manual com frequência.
+
+### O que foi feito (PR #538)
+- **3 hooks novos** em `.claude/hooks/`:
+  - `handoff-pre-compact.cjs` — PreCompact: injeta template estruturado com 6 itens obrigatórios (tarefa, status, branch+arquivos, decisões, próximo passo, contexto crítico); persiste snapshot git em `~/.claude/handoffs/pre-compact.md`
+  - `handoff-post-compact.cjs` — PostCompact: restaura contexto pós-compactação lendo snapshot + checkpoints gstack
+  - `context-watchdog.cjs` — PostToolUse: conta tool calls por sessão; avisa a 40 calls (~70% proxy) para rodar `/context-save`; alerta urgente em 60+
+- **SessionStart** (`ecc-pipeline-context.cjs`): injeta último handoff/checkpoint (<4h) automaticamente na abertura de cada sessão nova
+- **settings.json**: registra `PreCompact`, `PostCompact` e watchdog como hooks
+
+### Limitação técnica documentada
+Claude Code não expõe % de contexto via hooks. Não é possível disparar `/clear` automaticamente. A solução melhora radicalmente a **qualidade** da compactação e da restauração; o threshold de 70% é aproximado via contagem de tool calls.
+
+### Resultado
+- Compactação automática preserva os 6 itens estruturados obrigatoriamente
+- Nova sessão recebe handoff da anterior automaticamente
+- Aviso a ~70% da capacidade estimada para o usuário salvar contexto manualmente
