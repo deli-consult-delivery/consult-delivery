@@ -6,14 +6,15 @@ import { logAgentRun } from "../_shared/audit";
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
 const InputSchema = z.object({
-  tenant_id:       z.string().uuid().optional(),
-  lookback_minutes: z.number().int().min(1).max(60).default(10),
+  tenant_id:                 z.string().uuid().optional(),
+  lookback_minutes:          z.number().int().min(1).max(10).default(7),
+  contact_identifier_filter: z.string().optional(),
 });
 
 const ResultItemSchema = z.object({
   conversation_id: z.string(),
   contact_name:    z.string().optional(),
-  status:          z.enum(["ok", "falhou", "sem_config", "ja_processado", "cooldown_ativo"]),
+  status:          z.enum(["ok", "falhou", "sem_config", "ja_processado", "cooldown_ativo", "filtrado"]),
   detalhe:         z.string().optional(),
 });
 
@@ -47,6 +48,7 @@ interface DatacrazyConversation {
   contact?: {
     name:        string;
     phoneNumber: string;
+    contactId:   string;
     platform:    string;
   };
 }
@@ -106,8 +108,9 @@ export const datacrazyNpsPollerTask = task({
     const sb    = getSupabase();
 
     logger.info("datacrazy-nps-poller: iniciando", {
-      tenantId:        input.tenant_id,
-      lookbackMinutes: input.lookback_minutes,
+      tenantId:                input.tenant_id,
+      lookbackMinutes:         input.lookback_minutes,
+      contactIdentifierFilter: input.contact_identifier_filter,
     });
 
     // ── 1. Carregar configs de tenants com NPS habilitado ────────────────────
@@ -152,14 +155,30 @@ export const datacrazyNpsPollerTask = task({
         continue;
       }
 
+      // ── 3. Filtro por contato (para testes isolados) ─────────────────────
+      if (input.contact_identifier_filter) {
+        const before = finishedConvs.length;
+        finishedConvs = finishedConvs.filter(
+          (c) =>
+            c.contact?.phoneNumber === input.contact_identifier_filter ||
+            c.contact?.contactId   === input.contact_identifier_filter
+        );
+        logger.info("datacrazy-nps-poller: filtro de contato aplicado", {
+          tenantId,
+          filtro: input.contact_identifier_filter,
+          antes:  before,
+          depois: finishedConvs.length,
+        });
+      }
+
       totalVerificados += finishedConvs.length;
-      logger.info(`datacrazy-nps-poller: ${finishedConvs.length} conv finalizadas (tenant ${tenantId})`);
+      logger.info(`datacrazy-nps-poller: ${finishedConvs.length} conv finalizadas recentemente (tenant ${tenantId})`);
 
       for (const conv of finishedConvs) {
         const contactIdentifier = conv.contact?.phoneNumber || conv.id;
         const contactName       = conv.contact?.name || conv.name || null;
 
-        // ── 3. Idempotência: verificar se essa conversa já foi processada ──
+        // ── 4. Idempotência: verificar se essa conversa já foi processada ──
         const { data: existingRef } = await sb
           .from("nps_avaliacoes")
           .select("id")
@@ -172,7 +191,7 @@ export const datacrazyNpsPollerTask = task({
           continue;
         }
 
-        // ── 4. Verificar cooldown por contato ─────────────────────────────
+        // ── 5. Verificar cooldown por contato ─────────────────────────────
         const cooldownCutoff = new Date(
           Date.now() - cooldownDias * 24 * 60 * 60 * 1000
         ).toISOString();
@@ -200,7 +219,7 @@ export const datacrazyNpsPollerTask = task({
           continue;
         }
 
-        // ── 5. Criar registro NPS ─────────────────────────────────────────
+        // ── 6. Criar registro NPS ─────────────────────────────────────────
         const { data: novaAv, error: insertErr } = await sb
           .from("nps_avaliacoes")
           .insert({
@@ -228,7 +247,7 @@ export const datacrazyNpsPollerTask = task({
           continue;
         }
 
-        // ── 6. Montar e enviar mensagem NPS ───────────────────────────────
+        // ── 7. Montar e enviar mensagem NPS ───────────────────────────────
         const linkNps = `${PUBLIC_BASE}/nps/${novaAv.public_token}`;
         const template =
           config.nps_mensagem_template ||
@@ -301,12 +320,12 @@ export const datacrazyNpsPollerTask = task({
   },
 });
 
-// ─── Cron: a cada 30 minutos ─────────────────────────────────────────────────
+// Cron: a cada 5 min, janela de 7 min — só pega conversas finalizadas agora
 export const datacrazyNpsPollerCron = schedules.task({
   id:   "datacrazy-nps-poller-cron",
-  cron: "*/30 * * * *",
+  cron: "*/5 * * * *",
   run:  async (_payload, { ctx }) => {
-    logger.info("datacrazy-nps-poller-cron: disparando");
-    return datacrazyNpsPollerTask.triggerAndWait({ lookback_minutes: 35 }).unwrap();
+    logger.info("datacrazy-nps-poller-cron: disparando", { runId: ctx.run.id });
+    return datacrazyNpsPollerTask.triggerAndWait({ lookback_minutes: 7 }).unwrap();
   },
 });
