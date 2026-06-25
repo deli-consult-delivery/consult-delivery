@@ -1,20 +1,5 @@
 # Wiki Log
 
-## 2026-06-25 — Sessão 95: datacrazy-nps-poller para Karina Doceria
-
-**Contexto:** Karina Doceria usa Datacrazy CRM (não Evolution API), precisava do equivalente do CSAT poller mas para NPS.
-
-**Implementado:**
-- `trigger/multicanal/datacrazy-nps-poller.ts` — cron 30 min, busca conversas finalizadas no Datacrazy, verifica idempotência por `external_ref` e cooldown de 30 dias por contato, envia link NPS via `POST /conversations/{id}/messages`
-- `supabase/migrations/20260625_001_nps_avaliacoes_external_ref.sql` — coluna `external_ref TEXT` + índice único `(tenant_id, external_ref WHERE NOT NULL)` em `nps_avaliacoes`
-
-**Verificações:**
-- Config Karina: `nps_auto_envio=true`, `datacrazy_api_key` presente, cooldown 30 dias ✅
-- `tsc --noEmit` sem erros ✅
-- Deploy Trigger.dev versão `20260625.4` (83 tasks) ✅
-- Migration aplicada no Supabase ✅
-- PR #540 criado e mergeado em main ✅
-
 ## 2026-06-24 — Sessão 94: QA visual PipelineScreen + fix logAgentRun silencioso
 
 **Contexto:** Continuação da investigação do bug onde `agent_runs` ficava vazio desde 16:01 UTC, e QA visual da tela "Pipeline ao Vivo".
@@ -1356,19 +1341,3 @@ Claude Code não expõe % de contexto via hooks. Não é possível disparar `/cl
 - Compactação automática preserva os 6 itens estruturados obrigatoriamente
 - Nova sessão recebe handoff da anterior automaticamente
 - Aviso a ~70% da capacidade estimada para o usuário salvar contexto manualmente
-
-## Sessão 96 — 2026-06-25
-
-**Branch:** wandson/branding-avaliacao → **PR #542** mergeado em main
-
-### O que foi feito
-- Extraída lib `bridge-server/lib/branding.js` com `getBrandByTenant`, `safeLogoUrl`, `getAvaliacaoConfig`
-- `NpsPublico.jsx` reescrito com branding completo: logo do tenant, cor dinâmica, mensagens customizáveis
-- `AvaliacaoPublica.jsx` atualizado com `csat_titulo`, `csat_subtitulo`, `csat_agradecimento`
-- Migration `20260625_002_avaliacao_config_branding.sql` aplicada — 6 novas colunas em `avaliacao_config`
-- Rotas Bridge: `GET/PATCH /api/tenant/avaliacao-config` + `GET/PATCH /api/tenant/branding` (admin only)
-- Console V2: nova tela `AvaliacaoConfig.jsx` — Identidade Visual + Mensagens CSAT + Mensagens NPS
-
-### Pendente
-- `pm2 restart bridge-server` no VPS (SSH não funcionou da worktree — fazer via tmux/VPS direto)
-- Verificar NPS da Karina no browser após deploy do frontend (~3 min GitHub Actions)
