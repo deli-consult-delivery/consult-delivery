@@ -3,6 +3,75 @@ import { z } from "zod";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 
+// ─── F1: Snapshot de atendente/duração ───────────────────────────────────────
+
+interface ConversationSnapshot {
+  assigned_to:           string | null;
+  attending_agent_id:    string | null;
+  atendente_nome:        string | null;
+  atendimento_inicio_at: string | null;
+  atendimento_fim_at:    string | null;
+  duracao_minutos:       number | null;
+  qtd_mensagens:         number | null;
+}
+
+function isUuid(s: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+}
+
+async function fetchConversationSnapshot(
+  sb: ReturnType<typeof getSupabase>,
+  convId: string,
+  tenantId: string
+): Promise<ConversationSnapshot | null> {
+  // Datacrazy conv IDs são strings arbitrárias, não UUIDs do CD.
+  // Se não for UUID, não há conversa correspondente na tabela conversations.
+  if (!isUuid(convId)) return null;
+
+  const { data: conv } = await (sb as any)
+    .from("conversations")
+    .select("assigned_to, attending_agent_id, started_at, finished_at, closed_at")
+    .eq("id", convId)
+    .eq("tenant_id", tenantId)
+    .limit(1)
+    .maybeSingle();
+
+  if (!conv) return null;
+
+  const fimAt: string | null = conv.finished_at ?? conv.closed_at ?? null;
+  let duracao_minutos: number | null = null;
+  if (conv.started_at && fimAt) {
+    const diffMs = new Date(fimAt).getTime() - new Date(conv.started_at).getTime();
+    duracao_minutos = Math.max(0, Math.round(diffMs / 60_000));
+  }
+
+  let atendente_nome: string | null = null;
+  if (conv.assigned_to) {
+    const { data: profile } = await (sb as any)
+      .from("profiles")
+      .select("full_name")
+      .eq("id", conv.assigned_to)
+      .limit(1)
+      .maybeSingle();
+    atendente_nome = (profile as { full_name?: string } | null)?.full_name ?? null;
+  }
+
+  const { count: qtdMsg } = await (sb as any)
+    .from("whatsapp_messages")
+    .select("*", { count: "exact", head: true })
+    .eq("conversation_id", convId);
+
+  return {
+    assigned_to:           conv.assigned_to ?? null,
+    attending_agent_id:    conv.attending_agent_id ?? null,
+    atendente_nome,
+    atendimento_inicio_at: conv.started_at ?? null,
+    atendimento_fim_at:    fimAt,
+    duracao_minutos,
+    qtd_mensagens:         qtdMsg ?? null,
+  };
+}
+
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
 const InputSchema = z.object({
@@ -219,16 +288,35 @@ export const datacrazyNpsPollerTask = task({
           continue;
         }
 
-        // ── 6. Criar registro NPS ─────────────────────────────────────────
+        // ── 6. F1: Snapshot de atendente/duração ─────────────────────────
+        // Para conversas Datacrazy, conv.id não é UUID → snapshot = null (ok).
+        let snap: ConversationSnapshot | null = null;
+        try {
+          snap = await fetchConversationSnapshot(sb, conv.id, tenantId);
+        } catch (snapErr) {
+          logger.warn("datacrazy-nps-poller: erro ao buscar snapshot de conversa", {
+            convId: conv.id,
+            err:    (snapErr as Error).message,
+          });
+        }
+
+        // ── 7. Criar registro NPS ─────────────────────────────────────────
         const { data: novaAv, error: insertErr } = await sb
           .from("nps_avaliacoes")
           .insert({
-            tenant_id:          tenantId,
-            external_ref:       conv.id,
-            contact_identifier: contactIdentifier,
-            contact_nome:       contactName,
-            status:             "pendente",
-          })
+            tenant_id:             tenantId,
+            external_ref:          conv.id,
+            contact_identifier:    contactIdentifier,
+            contact_nome:          contactName,
+            status:                "pendente",
+            atendente_nome:        snap?.atendente_nome ?? null,
+            assigned_to:           snap?.assigned_to ?? null,
+            agent_id:              snap?.attending_agent_id ?? null,
+            atendimento_inicio_at: snap?.atendimento_inicio_at ?? null,
+            atendimento_fim_at:    snap?.atendimento_fim_at ?? null,
+            duracao_minutos:       snap?.duracao_minutos ?? null,
+            qtd_mensagens:         snap?.qtd_mensagens ?? null,
+          } as any)
           .select("id, public_token")
           .single();
 
@@ -247,7 +335,7 @@ export const datacrazyNpsPollerTask = task({
           continue;
         }
 
-        // ── 7. Montar e enviar mensagem NPS ───────────────────────────────
+        // ── 8. Montar e enviar mensagem NPS ───────────────────────────────
         const linkNps = `${PUBLIC_BASE}/nps/${novaAv.public_token}`;
         const template =
           config.nps_mensagem_template ||
