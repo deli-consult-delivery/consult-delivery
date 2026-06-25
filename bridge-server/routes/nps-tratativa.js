@@ -51,7 +51,7 @@ module.exports = function buildNpsTratativaRouter({ requireJwt, sbFetch, assertT
       return res.json({ ok: true });
     } catch (err) {
       console.error('[nps-tratativa PATCH]', err.message);
-      return res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: 'Erro interno ao salvar tratativa' });
     }
   });
 

@@ -113,7 +113,7 @@ function StatusBadge({ status }) {
   );
 }
 
-function ModalTratativa({ item, onSalvar, onFechar, salvando }) {
+function ModalTratativa({ item, onSalvar, onFechar, salvando, erroModal }) {
   const [status, setStatus] = useState(item.tratativa_status || 'em_andamento');
   const [obs, setObs] = useState(item.tratativa_obs || '');
 
@@ -143,6 +143,10 @@ function ModalTratativa({ item, onSalvar, onFechar, salvando }) {
           placeholder="O que foi feito, próximo passo…"
           style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid var(--line)', fontSize: 13, resize: 'vertical', marginBottom: 16 }}
         />
+
+        {erroModal && (
+          <div style={{ background: '#fee2e2', color: '#991b1b', borderRadius: 6, padding: '7px 10px', fontSize: 12, marginBottom: 12 }}>{erroModal}</div>
+        )}
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button onClick={onFechar} disabled={salvando}
@@ -178,6 +182,7 @@ export default function ControleAtendimentos({ tenantDbId }) {
   const [erro, setErro] = useState(null);
   const [modalItem, setModalItem] = useState(null);
   const [salvando, setSalvando] = useState(false);
+  const [erroModal, setErroModal] = useState(null);
 
   const buscarDados = useCallback(async () => {
     if (!tenantDbId) return;
@@ -221,12 +226,16 @@ export default function ControleAtendimentos({ tenantDbId }) {
 
   async function salvarTratativa(id, status, obs) {
     setSalvando(true);
+    setErroModal(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      if (!session?.access_token) {
+        setErroModal('Sessão expirada. Faça login novamente.');
+        return;
+      }
       const resp = await fetch(`${BRIDGE}/api/nps-avaliacoes/${id}/tratativa`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({ status, obs, tenant_id: tenantDbId }),
       });
       if (!resp.ok) {
@@ -234,12 +243,13 @@ export default function ControleAtendimentos({ tenantDbId }) {
         throw new Error(e.error || 'Erro ao salvar');
       }
       setModalItem(null);
+      setErroModal(null);
       setRows(prev => prev.map(r => r.id === id
         ? { ...r, tratativa_status: status, tratativa_obs: obs, tratativa_at: new Date().toISOString() }
         : r
       ));
     } catch (e) {
-      alert('Erro: ' + e.message);
+      setErroModal('Erro ao salvar: ' + e.message);
     } finally {
       setSalvando(false);
     }
@@ -249,8 +259,7 @@ export default function ControleAtendimentos({ tenantDbId }) {
   const atendentes = calcAtendentes(rows);
   const detratoresFila = rows
     .filter(r => r.nota != null && r.nota <= 6 && r.tratativa_status !== 'resolvido')
-    .concat(rows.filter(r => r.nota != null && r.nota <= 6 && r.tratativa_status === 'resolvido'))
-    .filter((r, i, arr) => arr.findIndex(x => x.id === r.id) === i);
+    .concat(rows.filter(r => r.nota != null && r.nota <= 6 && r.tratativa_status === 'resolvido'));
   const ultimasAvaliacoes = rows.filter(r => r.nota != null).slice(0, 50);
 
   return (
@@ -444,8 +453,9 @@ export default function ControleAtendimentos({ tenantDbId }) {
         <ModalTratativa
           item={modalItem}
           onSalvar={salvarTratativa}
-          onFechar={() => setModalItem(null)}
+          onFechar={() => { setModalItem(null); setErroModal(null); }}
           salvando={salvando}
+          erroModal={erroModal}
         />
       )}
     </div>
