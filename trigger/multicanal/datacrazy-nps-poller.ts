@@ -304,20 +304,29 @@ export const datacrazyNpsPollerTask = task({
         }
 
         // ── 5. Decisão NPS × CSAT (nunca os dois) ─────────────────────────
-        // Cliente recebeu NPS nos últimos `cooldownDias`? Sim → CSAT. Não → NPS.
+        // Regra:
+        //  • 1º atendimento de sempre do cliente → CSAT (NPS no 1º contato é
+        //    prematuro: o cliente ainda não tem relação com a marca).
+        //  • 2º em diante → NPS se fora dos `cooldownDias`; senão CSAT.
         const cooldownCutoff = new Date(
           Date.now() - cooldownDias * 24 * 60 * 60 * 1000
         ).toISOString();
 
-        const { data: npsRecente } = await sb
-          .from("nps_avaliacoes")
-          .select("id")
-          .eq("tenant_id", tenantId)
-          .eq("contact_identifier", contactIdentifier)
-          .gte("created_at", cooldownCutoff)
-          .limit(1);
+        // Já recebeu alguma pesquisa antes? (NPS ou CSAT, em qualquer data)
+        const [{ data: priorNps }, { data: priorCsat }, { data: npsRecente }] = await Promise.all([
+          sb.from("nps_avaliacoes").select("id")
+            .eq("tenant_id", tenantId).eq("contact_identifier", contactIdentifier).limit(1),
+          (sb as any).from("atendimento_avaliacoes").select("id")
+            .eq("tenant_id", tenantId).eq("contact_identifier", contactIdentifier).limit(1),
+          sb.from("nps_avaliacoes").select("id")
+            .eq("tenant_id", tenantId).eq("contact_identifier", contactIdentifier)
+            .gte("created_at", cooldownCutoff).limit(1),
+        ]);
 
-        const enviarCsat = (npsRecente?.length ?? 0) > 0;
+        const primeiroAtendimento = !(priorNps?.length) && !(priorCsat?.length);
+        const npsNoCooldown        = (npsRecente?.length ?? 0) > 0;
+        // CSAT no 1º atendimento OU quando NPS ainda está no cooldown.
+        const enviarCsat = primeiroAtendimento || npsNoCooldown;
 
         if (enviarCsat) {
           // ── 5a. CSAT (pesquisa de atendimento) ──────────────────────────
