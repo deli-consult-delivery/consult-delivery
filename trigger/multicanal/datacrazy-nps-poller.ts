@@ -192,7 +192,7 @@ export const datacrazyNpsPollerTask = task({
     let configQuery = sb
       .from("avaliacao_config")
       .select(
-        "tenant_id, nps_auto_envio, nps_mensagem_template, csat_mensagem_template, nps_cooldown_dias, datacrazy_api_key, nome_empresa, piloto_telefone_teste"
+        "tenant_id, nps_auto_envio, nps_mensagem_template, csat_mensagem_template, nps_cooldown_dias, datacrazy_api_key, nome_empresa, piloto_telefone_teste, nps_baseline_at"
       )
       .eq("nps_auto_envio", true)
       .not("datacrazy_api_key", "is", null);
@@ -257,6 +257,20 @@ export const datacrazyNpsPollerTask = task({
         // atendimento finalizado virar um registro próprio — sem ferir o unique
         // (tenant, external_ref) e permitindo as repetições do modelo.
         const finalizacaoRef = `${conv.id}:${conv.updatedAt || ""}`;
+
+        // ── 3a. Baseline (anti-backlog) ───────────────────────────────────
+        // Só processa conversas finalizadas DEPOIS do go-live do tenant.
+        // Suprime o backlog de conversas já finalizadas antes da ativação.
+        if (config.nps_baseline_at && conv.updatedAt &&
+            new Date(conv.updatedAt) <= new Date(config.nps_baseline_at)) {
+          resultados.push({
+            conversation_id: conv.id,
+            contact_name:    contactName ?? undefined,
+            status:          "filtrado",
+            detalhe:         "anterior ao baseline",
+          });
+          continue;
+        }
 
         // ── 3b. Whitelist de piloto ───────────────────────────────────────
         // Durante o piloto, só processa conversas do contato de teste.
@@ -453,16 +467,15 @@ export const datacrazyNpsPollerTask = task({
   },
 });
 
-// ⚠️ CRON DESATIVADO (2026-06-26) — incidente de envio em massa.
-// O polling não detecta "recém-finalizada" de forma confiável (DataCrazy não
-// tem timestamp de finalização; updatedAt varre o backlog). Reativar SÓ após
-// migrar para disparo por evento (webhook DataCrazy). A task manual segue
-// disponível para testes via trigger explícito.
-// export const datacrazyNpsPollerCron = schedules.task({
-//   id:   "datacrazy-nps-poller-cron",
-//   cron: "*/5 * * * *",
-//   run:  async (_payload, { ctx }) => {
-//     logger.info("datacrazy-nps-poller-cron: disparando", { runId: ctx.run.id });
-//     return datacrazyNpsPollerTask.triggerAndWait({ lookback_minutes: 7 }).unwrap();
-//   },
-// });
+// Cron a cada 5 min (janela 7 min). Reativado 2026-06-26 com proteção de
+// BASELINE: o dispatcher só processa conversas com updatedAt > nps_baseline_at,
+// suprimindo o backlog. Os senders legados nps-enviar-cron e
+// csat-enviar-avaliacao-cron seguem DESATIVADOS (o dispatcher é self-contained).
+export const datacrazyNpsPollerCron = schedules.task({
+  id:   "datacrazy-nps-poller-cron",
+  cron: "*/5 * * * *",
+  run:  async (_payload, { ctx }) => {
+    logger.info("datacrazy-nps-poller-cron: disparando", { runId: ctx.run.id });
+    return datacrazyNpsPollerTask.triggerAndWait({ lookback_minutes: 7 }).unwrap();
+  },
+});
