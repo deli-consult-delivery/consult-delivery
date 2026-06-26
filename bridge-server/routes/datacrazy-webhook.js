@@ -20,7 +20,7 @@
  */
 
 const { createHash } = require('crypto');
-const { sendDatacrazyMessage } = require('../lib/datacrazy-send');
+const { sendDatacrazyMessage, getDatacrazyAtendenteEInicio } = require('../lib/datacrazy-send');
 const { decidirECriarRegistro } = require('../lib/avaliacao-decisao');
 
 // Rate limit simples em memória: 60 req/min por IP
@@ -121,20 +121,38 @@ module.exports = function datacrazyWebhookRouter({ sbFetch }) {
           return;
         }
 
-        // 3d. Envio via Datacrazy (reabre → envia → finaliza de volta)
+        // 3d. Captura atendente + início do atendimento ANTES do envio (o nosso
+        // reopen/send pode iniciar um novo ticket e poluir a detecção).
+        const finishedAt = conv.updatedAt; // momento da finalização
+        const { atendenteNome, inicioAt } = await getDatacrazyAtendenteEInicio(
+          config.datacrazy_api_key, conversation_id
+        );
+        const duracaoMin = inicioAt
+          ? Math.max(0, Math.round((new Date(finishedAt).getTime() - new Date(inicioAt).getTime()) / 60000))
+          : null;
+
+        // 3e. Envio via Datacrazy (reabre → envia → finaliza de volta)
         const { ok, detail } = await sendDatacrazyMessage(
           { apiKey: config.datacrazy_api_key },
           conversation_id,
           r.text
         );
 
+        // 3f. Atualiza envio + atendente/duração no registro
         const tabela = r.tipo === 'nps' ? 'nps_avaliacoes' : 'atendimento_avaliacoes';
         sbFetch(`${tabela}?id=eq.${encodeURIComponent(r.recordId)}`, {
           method: 'PATCH',
-          body: { msg_enviada_at: new Date().toISOString(), msg_enviada_status: ok ? 'ok' : 'falhou' },
-        }).catch(e => console.error('[datacrazy-webhook] Erro ao atualizar msg_enviada:', e.message));
+          body: {
+            msg_enviada_at:        new Date().toISOString(),
+            msg_enviada_status:    ok ? 'ok' : 'falhou',
+            atendente_nome:        atendenteNome,
+            atendimento_inicio_at: inicioAt,
+            atendimento_fim_at:    finishedAt,
+            duracao_minutos:       duracaoMin,
+          },
+        }).catch(e => console.error('[datacrazy-webhook] Erro ao atualizar registro:', e.message));
 
-        console.log(`[datacrazy-webhook] conv=${conversation_id} tipo=${r.tipo} envio=${ok ? 'ok' : 'falhou'}`);
+        console.log(`[datacrazy-webhook] conv=${conversation_id} tipo=${r.tipo} envio=${ok ? 'ok' : 'falhou'} atendente=${atendenteNome || '-'} dur=${duracaoMin ?? '-'}min`);
         if (!ok) console.error('[datacrazy-webhook] Falha no envio:', detail);
       } catch (err) {
         console.error('[datacrazy-webhook] Erro no background:', err.message);
