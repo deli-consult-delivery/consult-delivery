@@ -1341,3 +1341,29 @@ Claude Code não expõe % de contexto via hooks. Não é possível disparar `/cl
 - Compactação automática preserva os 6 itens estruturados obrigatoriamente
 - Nova sessão recebe handoff da anterior automaticamente
 - Aviso a ~70% da capacidade estimada para o usuário salvar contexto manualmente
+
+## 2026-06-26 — Elos do Loop AI-First + PipelineScreen com Demandas
+
+### Contexto
+Wandson apontou que o Blueprint AI-First (FASE 1 — Loop ponta-a-ponta) não foi implementado conforme especificado. As sessões anteriores construíram infraestrutura (PipelineScreen/Telegram/heartbeats) mas pularam o núcleo: o loop cliente→tarefa→execução→resposta.
+
+### Diagnóstico
+- `trigger/_shared/loop-tasks.ts`, `trigger/agents/executar-tarefa.ts`, `trigger/agents/responder-conclusao.ts`, `trigger/breno/responder.ts` — código existia mas tinha os **elos de disparo quebrados**
+- Breno criava `client_task` mas não disparava `agent-executar-tarefa`
+- `executar-tarefa` executava mas não disparava `agent-responder-conclusao`
+- O loop ficava preso em `loop_state='open'` para sempre
+
+### O que foi feito (PR #569)
+1. **breno/responder.ts**: import + `agentExecutarTarefa.trigger()` após `createLoopTask()` suceder
+2. **executar-tarefa.ts**: import + `agentResponderConclusao.trigger()` após salvar resultado; adicionado `conversation_id` ao select
+3. **PipelineScreen.jsx**: nova seção "Demandas do Loop" mostrando `client_tasks` por `loop_state` (Aguardando/Executando/Respondido) com realtime Supabase; aparece quando há tarefas de loop ativas
+4. Deploy Trigger.dev: versão 20260626.54 — 82 tarefas detectadas
+
+### Memória salva
+- `memory/feedback-blueprint-ordem-errada.md`: regra para nunca pular a FASE mais baixa do Blueprint
+
+### Status
+- Loop AI-First: elos conectados, deploy feito ✅
+- FASE 3 Telegram (semáforo): já funcionava ✅
+- FASE 1 Loop: `executar-tarefa` executa VendaERP (read-only); Asaas = placeholder; `responder-conclusao` cria draft
+- Próximo: testar loop ponta-a-ponta com número próprio do Wandson
