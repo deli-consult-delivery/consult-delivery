@@ -211,12 +211,14 @@ export const npsEnviarTask = task({
   },
 });
 
-// ─── Cron: a cada hora (NPS tem cooldown de 30 dias, não é urgente) ──────────
-export const npsEnviarCron = schedules.task({
-  id:   "nps-enviar-cron",
-  cron: "0 * * * *",
-  run:  async (_payload, { ctx }) => {
-    logger.info("nps-enviar-cron: disparando task principal");
-    return npsEnviarTask.triggerAndWait({}).unwrap();
-  },
-});
+// ⚠️ CRON DESATIVADO (2026-06-26) — incidente de envio em massa.
+// Reativar só após o disparo por evento (webhook DataCrazy) estar no ar.
+// A task manual npsEnviarTask segue disponível para testes.
+// export const npsEnviarCron = schedules.task({
+//   id:   "nps-enviar-cron",
+//   cron: "0 * * * *",
+//   run:  async (_payload, { ctx }) => {
+//     logger.info("nps-enviar-cron: disparando task principal");
+//     return npsEnviarTask.triggerAndWait({}).unwrap();
+//   },
+// });
