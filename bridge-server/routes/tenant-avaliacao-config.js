@@ -176,5 +176,86 @@ module.exports = function buildTenantAvaliacaoConfigRouter({ requireJwt, sbFetch
     }
   });
 
+  // ── POST /api/tenant/branding/logo ────────────────────────────────────────
+  // Upload de arquivo de logo (base64). Sobe ao Storage público e seta logo_url.
+  const LOGO_BUCKET   = 'public';
+  // 1,4MB: o base64 (~1,9MB) cabe no limite de 2mb do express.json (index.js).
+  const LOGO_MAX_BYTES = 1_400_000;
+  // SVG é deliberadamente EXCLUÍDO: é XML e pode carregar <script>/onload,
+  // servido como image/svg+xml no domínio supabase.co → stored XSS. Só raster.
+  const LOGO_TYPES = {
+    'image/png':  'png',
+    'image/jpeg': 'jpg',
+    'image/webp': 'webp',
+  };
+
+  const LogoUploadSchema = z.object({
+    tenant_id:      z.string().uuid(),
+    content_base64: z.string().min(1),
+    content_type:   z.string(),
+  });
+
+  router.post('/tenant/branding/logo', requireJwt, async (req, res) => {
+    const parsed = LogoUploadSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'dados_invalidos', detalhes: parsed.error.issues });
+    }
+    const { tenant_id, content_base64, content_type } = parsed.data;
+
+    const ext = LOGO_TYPES[content_type];
+    if (!ext) {
+      return res.status(400).json({ error: 'tipo_invalido', detalhe: 'Use PNG, JPG, WEBP ou SVG' });
+    }
+
+    const SUPABASE_URL         = process.env.SUPABASE_URL;
+    const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
+      return res.status(500).json({ error: 'storage_indisponivel' });
+    }
+
+    try {
+      if (!await assertTenantAdmin(req, res, tenant_id)) return;
+
+      const raw = content_base64.includes(',') ? content_base64.split(',').pop() : content_base64;
+      const buffer = Buffer.from(raw, 'base64');
+      if (!buffer.length) return res.status(400).json({ error: 'arquivo_vazio' });
+      if (buffer.length > LOGO_MAX_BYTES) {
+        return res.status(413).json({ error: 'arquivo_grande', detalhe: 'Máximo 1,4 MB' });
+      }
+
+      const path = `branding/${tenant_id}-${Date.now()}.${ext}`;
+      const up = await fetch(
+        `${SUPABASE_URL}/storage/v1/object/${LOGO_BUCKET}/${path}`,
+        {
+          method:  'POST',
+          headers: {
+            'Content-Type': content_type,
+            Authorization:  `Bearer ${SUPABASE_SERVICE_KEY}`,
+            apikey:         SUPABASE_SERVICE_KEY,
+            'x-upsert':     'true',
+          },
+          body: buffer,
+        }
+      );
+      if (!up.ok) {
+        const detail = (await up.text()).slice(0, 200);
+        console.error('[tenant/branding/logo] storage', up.status, detail);
+        return res.status(502).json({ error: 'falha_upload', detalhe: detail });
+      }
+
+      const logoUrl = `${SUPABASE_URL}/storage/v1/object/public/${LOGO_BUCKET}/${path}`;
+
+      await sbFetch(
+        `tenants?id=eq.${encodeURIComponent(tenant_id)}`,
+        { method: 'PATCH', body: { logo_url: logoUrl }, prefer: 'return=minimal' }
+      );
+
+      return res.json({ logo_url: logoUrl });
+    } catch (err) {
+      console.error('[tenant/branding/logo POST]', err.message);
+      return res.status(500).json({ error: 'erro_interno' });
+    }
+  });
+
   return router;
 };

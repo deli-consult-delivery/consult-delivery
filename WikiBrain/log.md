@@ -1,20 +1,5 @@
 # Wiki Log
 
-## 2026-06-25 — Sessão 95: datacrazy-nps-poller para Karina Doceria
-
-**Contexto:** Karina Doceria usa Datacrazy CRM (não Evolution API), precisava do equivalente do CSAT poller mas para NPS.
-
-**Implementado:**
-- `trigger/multicanal/datacrazy-nps-poller.ts` — cron 30 min, busca conversas finalizadas no Datacrazy, verifica idempotência por `external_ref` e cooldown de 30 dias por contato, envia link NPS via `POST /conversations/{id}/messages`
-- `supabase/migrations/20260625_001_nps_avaliacoes_external_ref.sql` — coluna `external_ref TEXT` + índice único `(tenant_id, external_ref WHERE NOT NULL)` em `nps_avaliacoes`
-
-**Verificações:**
-- Config Karina: `nps_auto_envio=true`, `datacrazy_api_key` presente, cooldown 30 dias ✅
-- `tsc --noEmit` sem erros ✅
-- Deploy Trigger.dev versão `20260625.4` (83 tasks) ✅
-- Migration aplicada no Supabase ✅
-- PR #540 criado e mergeado em main ✅
-
 ## 2026-06-24 — Sessão 94: QA visual PipelineScreen + fix logAgentRun silencioso
 
 **Contexto:** Continuação da investigação do bug onde `agent_runs` ficava vazio desde 16:01 UTC, e QA visual da tela "Pipeline ao Vivo".

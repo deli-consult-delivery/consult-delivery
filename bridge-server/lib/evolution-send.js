@@ -17,13 +17,22 @@
  * @param {Function} opts.sbFetch  Helper sbFetch do bridge (URL, method, body)
  * @returns {Promise<{ok: boolean, status: number, message_id?: string, detail?: unknown}>}
  */
-async function sendEvolutionText({ tenantId, number, text, sbFetch }) {
-  const instances = await sbFetch(
-    `evolution_instances?tenant_id=eq.${encodeURIComponent(tenantId)}&select=evolution_url,api_key,instance_name,status&limit=1`
-  );
+async function sendEvolutionText({ tenantId, number, text, sbFetch, fallbackTenantId }) {
+  async function lookupInst(tid) {
+    const rows = await sbFetch(
+      `evolution_instances?tenant_id=eq.${encodeURIComponent(tid)}&select=evolution_url,api_key,instance_name,status&limit=1`
+    );
+    const i = Array.isArray(rows) ? rows[0] : null;
+    return (i?.evolution_url && i?.api_key && i?.instance_name) ? i : null;
+  }
 
-  const inst = Array.isArray(instances) ? instances[0] : null;
-  if (!inst?.evolution_url || !inst?.api_key || !inst?.instance_name) {
+  // Tenta a instância do tenant; se não houver, usa a do tenant de fallback
+  // (ex.: tenants que só usam DataCrazy e não têm Evolution própria).
+  let inst = await lookupInst(tenantId);
+  if (!inst && fallbackTenantId && fallbackTenantId !== tenantId) {
+    inst = await lookupInst(fallbackTenantId);
+  }
+  if (!inst) {
     return { ok: false, status: 0, detail: 'sem_instancia_evolution' };
   }
 

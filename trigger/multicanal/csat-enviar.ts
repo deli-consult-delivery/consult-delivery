@@ -209,11 +209,14 @@ export const csatEnviarTask = task({
 // tiveram a mensagem enviada. O webhook do CRM já envia imediatamente;
 // este cron é o fallback.
 
-export const csatEnviarCron = schedules.task({
-  id:   "csat-enviar-avaliacao-cron",
-  cron: "*/15 * * * *",
-  run:  async (_payload, { ctx }) => {
-    logger.info("csat-enviar-avaliacao-cron: disparando task principal");
-    return csatEnviarTask.triggerAndWait({}).unwrap();
-  },
-});
+// ⚠️ CRON DESATIVADO (2026-06-26) — incidente de envio em massa.
+// Era o sender que ignorava o flag csat_auto_envio. Reativar só após o
+// disparo por evento (webhook DataCrazy) estar no ar.
+// export const csatEnviarCron = schedules.task({
+//   id:   "csat-enviar-avaliacao-cron",
+//   cron: "*/15 * * * *",
+//   run:  async (_payload, { ctx }) => {
+//     logger.info("csat-enviar-avaliacao-cron: disparando task principal");
+//     return csatEnviarTask.triggerAndWait({}).unwrap();
+//   },
+// });

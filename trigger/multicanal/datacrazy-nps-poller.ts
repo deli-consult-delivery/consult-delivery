@@ -3,6 +3,75 @@ import { z } from "zod";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 
+// ─── F1: Snapshot de atendente/duração ───────────────────────────────────────
+
+interface ConversationSnapshot {
+  assigned_to:           string | null;
+  attending_agent_id:    string | null;
+  atendente_nome:        string | null;
+  atendimento_inicio_at: string | null;
+  atendimento_fim_at:    string | null;
+  duracao_minutos:       number | null;
+  qtd_mensagens:         number | null;
+}
+
+function isUuid(s: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+}
+
+async function fetchConversationSnapshot(
+  sb: ReturnType<typeof getSupabase>,
+  convId: string,
+  tenantId: string
+): Promise<ConversationSnapshot | null> {
+  // Datacrazy conv IDs são strings arbitrárias, não UUIDs do CD.
+  // Se não for UUID, não há conversa correspondente na tabela conversations.
+  if (!isUuid(convId)) return null;
+
+  const { data: conv } = await (sb as any)
+    .from("conversations")
+    .select("assigned_to, attending_agent_id, started_at, finished_at, closed_at")
+    .eq("id", convId)
+    .eq("tenant_id", tenantId)
+    .limit(1)
+    .maybeSingle();
+
+  if (!conv) return null;
+
+  const fimAt: string | null = conv.finished_at ?? conv.closed_at ?? null;
+  let duracao_minutos: number | null = null;
+  if (conv.started_at && fimAt) {
+    const diffMs = new Date(fimAt).getTime() - new Date(conv.started_at).getTime();
+    duracao_minutos = Math.max(0, Math.round(diffMs / 60_000));
+  }
+
+  let atendente_nome: string | null = null;
+  if (conv.assigned_to) {
+    const { data: profile } = await (sb as any)
+      .from("profiles")
+      .select("full_name")
+      .eq("id", conv.assigned_to)
+      .limit(1)
+      .maybeSingle();
+    atendente_nome = (profile as { full_name?: string } | null)?.full_name ?? null;
+  }
+
+  const { count: qtdMsg } = await (sb as any)
+    .from("whatsapp_messages")
+    .select("*", { count: "exact", head: true })
+    .eq("conversation_id", convId);
+
+  return {
+    assigned_to:           conv.assigned_to ?? null,
+    attending_agent_id:    conv.attending_agent_id ?? null,
+    atendente_nome,
+    atendimento_inicio_at: conv.started_at ?? null,
+    atendimento_fim_at:    fimAt,
+    duracao_minutos,
+    qtd_mensagens:         qtdMsg ?? null,
+  };
+}
+
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
 const InputSchema = z.object({
@@ -15,6 +84,7 @@ const ResultItemSchema = z.object({
   conversation_id: z.string(),
   contact_name:    z.string().optional(),
   status:          z.enum(["ok", "falhou", "sem_config", "ja_processado", "cooldown_ativo", "filtrado"]),
+  tipo:            z.enum(["nps", "csat"]).optional(),
   detalhe:         z.string().optional(),
 });
 
@@ -35,6 +105,11 @@ const PUBLIC_BASE =
   "https://app.consultdelivery.com.br";
 
 const DATACRAZY_BASE = process.env.DATACRAZY_API_URL || "https://api.g1.datacrazy.io";
+
+// Janela curta p/ deduplicar a MESMA finalização entre ticks de cron sobrepostos
+// (lookback 7min > intervalo 5min). Não bloqueia re-avaliações futuras — quem faz
+// isso é o cooldown de 30d por contato. 120min cobre folga de atrasos do scheduler.
+const DEDUP_FINALIZACAO_MIN = 120;
 
 function renderTemplate(template: string, vars: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? `{${key}}`);
@@ -117,7 +192,7 @@ export const datacrazyNpsPollerTask = task({
     let configQuery = sb
       .from("avaliacao_config")
       .select(
-        "tenant_id, nps_auto_envio, nps_mensagem_template, nps_cooldown_dias, datacrazy_api_key, nome_empresa"
+        "tenant_id, nps_auto_envio, nps_mensagem_template, csat_mensagem_template, nps_cooldown_dias, datacrazy_api_key, nome_empresa, piloto_telefone_teste, nps_baseline_at"
       )
       .eq("nps_auto_envio", true)
       .not("datacrazy_api_key", "is", null);
@@ -177,126 +252,198 @@ export const datacrazyNpsPollerTask = task({
       for (const conv of finishedConvs) {
         const contactIdentifier = conv.contact?.phoneNumber || conv.id;
         const contactName       = conv.contact?.name || conv.name || null;
+        // external_ref único POR FINALIZAÇÃO. O DataCrazy reusa a mesma conversa
+        // por contato; juntar o updatedAt (momento da finalização) faz cada
+        // atendimento finalizado virar um registro próprio — sem ferir o unique
+        // (tenant, external_ref) e permitindo as repetições do modelo.
+        const finalizacaoRef = `${conv.id}:${conv.updatedAt || ""}`;
 
-        // ── 4. Idempotência: verificar se essa conversa já foi processada ──
-        const { data: existingRef } = await sb
+        // ── 3a. Baseline (anti-backlog) ───────────────────────────────────
+        // Só processa conversas finalizadas DEPOIS do go-live do tenant.
+        // Suprime o backlog de conversas já finalizadas antes da ativação.
+        if (config.nps_baseline_at && conv.updatedAt &&
+            new Date(conv.updatedAt) <= new Date(config.nps_baseline_at)) {
+          resultados.push({
+            conversation_id: conv.id,
+            contact_name:    contactName ?? undefined,
+            status:          "filtrado",
+            detalhe:         "anterior ao baseline",
+          });
+          continue;
+        }
+
+        // ── 3b. Whitelist de piloto ───────────────────────────────────────
+        // Durante o piloto, só processa conversas do contato de teste.
+        // Envia normal via DataCrazy (na própria conversa de teste).
+        if (config.piloto_telefone_teste) {
+          // Compara pelos últimos 8 dígitos — tolerante à variação do 9º dígito
+          // do celular brasileiro (DataCrazy pode guardar com ou sem o 9).
+          const sufixo = (s: string) => s.replace(/\D/g, "").slice(-8);
+          const alvo  = sufixo(config.piloto_telefone_teste);
+          const atual = sufixo(String(contactIdentifier));
+          if (!atual || atual !== alvo) {
+            resultados.push({
+              conversation_id: conv.id,
+              contact_name:    contactName ?? undefined,
+              status:          "filtrado",
+              detalhe:         "fora da whitelist de piloto",
+            });
+            continue;
+          }
+        }
+
+        // ── 4. Idempotência da finalização (NÃO permanente) ───────────────
+        // DataCrazy mantém UMA conversa por contato (external_ref estável):
+        // a mesma conversa é re-finalizada a cada novo pedido. Uma idempotência
+        // permanente por external_ref avaliaria o cliente uma única vez na vida.
+        // Aqui só evitamos reenviar a MESMA finalização capturada por janelas de
+        // cron sobrepostas (lookback 7min > intervalo 5min). Re-avaliações
+        // futuras são governadas pelo cooldown de 30d por contato (passo 5).
+        const dedupCutoff = new Date(Date.now() - DEDUP_FINALIZACAO_MIN * 60 * 1000).toISOString();
+
+        const { data: jaNps } = await sb
           .from("nps_avaliacoes")
           .select("id")
           .eq("tenant_id", tenantId)
-          .eq("external_ref", conv.id)
+          .eq("external_ref", finalizacaoRef)
+          .gte("created_at", dedupCutoff)
           .limit(1);
 
-        if (existingRef?.length) {
+        const { data: jaCsat } = await (sb as any)
+          .from("atendimento_avaliacoes")
+          .select("id")
+          .eq("tenant_id", tenantId)
+          .eq("external_ref", finalizacaoRef)
+          .gte("created_at", dedupCutoff)
+          .limit(1);
+
+        if (jaNps?.length || jaCsat?.length) {
           resultados.push({ conversation_id: conv.id, status: "ja_processado" });
           continue;
         }
 
-        // ── 5. Verificar cooldown por contato ─────────────────────────────
+        // ── 5. Decisão NPS × CSAT (nunca os dois) ─────────────────────────
+        // Regra:
+        //  • 1º atendimento de sempre do cliente → CSAT (NPS no 1º contato é
+        //    prematuro: o cliente ainda não tem relação com a marca).
+        //  • 2º em diante → NPS se fora dos `cooldownDias`; senão CSAT.
         const cooldownCutoff = new Date(
           Date.now() - cooldownDias * 24 * 60 * 60 * 1000
         ).toISOString();
 
-        const { data: cooldownCheck } = await sb
-          .from("nps_avaliacoes")
-          .select("id")
-          .eq("tenant_id", tenantId)
-          .eq("contact_identifier", contactIdentifier)
-          .gte("created_at", cooldownCutoff)
-          .limit(1);
+        // Já recebeu alguma pesquisa antes? (NPS ou CSAT, em qualquer data)
+        const [{ data: priorNps }, { data: priorCsat }, { data: npsRecente }] = await Promise.all([
+          sb.from("nps_avaliacoes").select("id")
+            .eq("tenant_id", tenantId).eq("contact_identifier", contactIdentifier).limit(1),
+          (sb as any).from("atendimento_avaliacoes").select("id")
+            .eq("tenant_id", tenantId).eq("contact_identifier", contactIdentifier).limit(1),
+          sb.from("nps_avaliacoes").select("id")
+            .eq("tenant_id", tenantId).eq("contact_identifier", contactIdentifier)
+            .gte("created_at", cooldownCutoff).limit(1),
+        ]);
 
-        if (cooldownCheck?.length) {
-          logger.info("datacrazy-nps-poller: cooldown ativo", {
-            convId:    conv.id,
-            contato:   contactIdentifier,
-            cooldown:  cooldownDias,
+        const primeiroAtendimento = !(priorNps?.length) && !(priorCsat?.length);
+        const npsNoCooldown        = (npsRecente?.length ?? 0) > 0;
+        // CSAT no 1º atendimento OU quando NPS ainda está no cooldown.
+        const enviarCsat = primeiroAtendimento || npsNoCooldown;
+
+        if (enviarCsat) {
+          // ── 5a. CSAT (pesquisa de atendimento) ──────────────────────────
+          const { data: novaCsat, error: csatErr } = await (sb as any)
+            .from("atendimento_avaliacoes")
+            .insert({
+              tenant_id:          tenantId,
+              external_ref:       finalizacaoRef,
+              contact_identifier: contactIdentifier,
+              nome_cliente:       contactName,
+              origem:             "crm_externo",
+              status:             "pendente",
+            })
+            .select("id, public_token")
+            .single();
+
+          if (csatErr || !novaCsat) {
+            logger.error("datacrazy-poller: erro ao inserir CSAT", { convId: conv.id, err: csatErr?.message });
+            resultados.push({ conversation_id: conv.id, contact_name: contactName ?? undefined, status: "falhou", tipo: "csat", detalhe: csatErr?.message });
+            falhas++;
+            continue;
+          }
+
+          const linkAvaliacao = `${PUBLIC_BASE}/avaliacao/${novaCsat.public_token}`;
+          const tplCsat = config.csat_mensagem_template ||
+            "Olá {nome_cliente}! 😊 Seu atendimento foi encerrado. Como foi? Avalie aqui: {link_avaliacao}";
+          const textCsat = renderTemplate(tplCsat, {
+            nome_cliente:   contactName || "cliente",
+            link_avaliacao: linkAvaliacao,
+            nome_empresa:   config.nome_empresa || "nossa empresa",
           });
-          resultados.push({
-            conversation_id: conv.id,
-            contact_name:    contactName ?? undefined,
-            status:          "cooldown_ativo",
-            detalhe:         `cooldown de ${cooldownDias} dias ativo`,
-          });
+
+          const { ok, detail } = await sendDatacrazyNpsMessage(apiKey, conv.id, textCsat);
+          await (sb as any)
+            .from("atendimento_avaliacoes")
+            .update({ msg_enviada_at: new Date().toISOString(), msg_enviada_status: ok ? "ok" : "falhou" })
+            .eq("id", novaCsat.id);
+
+          if (ok) enviados++; else falhas++;
+          resultados.push({ conversation_id: conv.id, contact_name: contactName ?? undefined, status: ok ? "ok" : "falhou", tipo: "csat", detalhe: ok ? undefined : String(detail) });
+          logger.info("datacrazy-poller: CSAT processado", { convId: conv.id, status: ok ? "ok" : "falhou" });
           continue;
         }
 
-        // ── 6. Criar registro NPS ─────────────────────────────────────────
+        // ── 5b. NPS ───────────────────────────────────────────────────────
+        // F1: Snapshot de atendente/duração (conv.id não-UUID → snapshot null, ok)
+        let snap: ConversationSnapshot | null = null;
+        try {
+          snap = await fetchConversationSnapshot(sb, conv.id, tenantId);
+        } catch (snapErr) {
+          logger.warn("datacrazy-poller: erro ao buscar snapshot", { convId: conv.id, err: (snapErr as Error).message });
+        }
+
         const { data: novaAv, error: insertErr } = await sb
           .from("nps_avaliacoes")
           .insert({
-            tenant_id:          tenantId,
-            external_ref:       conv.id,
-            contact_identifier: contactIdentifier,
-            contact_nome:       contactName,
-            status:             "pendente",
-          })
+            tenant_id:             tenantId,
+            external_ref:          finalizacaoRef,
+            contact_identifier:    contactIdentifier,
+            contact_nome:          contactName,
+            status:                "pendente",
+            atendente_nome:        snap?.atendente_nome ?? null,
+            assigned_to:           snap?.assigned_to ?? null,
+            agent_id:              snap?.attending_agent_id ?? null,
+            atendimento_inicio_at: snap?.atendimento_inicio_at ?? null,
+            atendimento_fim_at:    snap?.atendimento_fim_at ?? null,
+            duracao_minutos:       snap?.duracao_minutos ?? null,
+            qtd_mensagens:         snap?.qtd_mensagens ?? null,
+          } as any)
           .select("id, public_token")
           .single();
 
         if (insertErr || !novaAv) {
-          logger.error("datacrazy-nps-poller: erro ao inserir NPS", {
-            convId: conv.id,
-            err:    insertErr?.message,
-          });
-          resultados.push({
-            conversation_id: conv.id,
-            contact_name:    contactName ?? undefined,
-            status:          "falhou",
-            detalhe:         insertErr?.message,
-          });
+          logger.error("datacrazy-poller: erro ao inserir NPS", { convId: conv.id, err: insertErr?.message });
+          resultados.push({ conversation_id: conv.id, contact_name: contactName ?? undefined, status: "falhou", tipo: "nps", detalhe: insertErr?.message });
           falhas++;
           continue;
         }
 
-        // ── 7. Montar e enviar mensagem NPS ───────────────────────────────
         const linkNps = `${PUBLIC_BASE}/nps/${novaAv.public_token}`;
-        const template =
+        const tplNps =
           config.nps_mensagem_template ||
           "Olá {nome_cliente}! Gostaríamos de saber sua opinião sobre a {nome_empresa}. Responda nossa pesquisa rápida: {link_nps}";
-
-        const text = renderTemplate(template, {
+        const textNps = renderTemplate(tplNps, {
           nome_cliente: contactName || "cliente",
           link_nps:     linkNps,
           nome_empresa: config.nome_empresa || "nossa empresa",
         });
 
-        const { ok, detail } = await sendDatacrazyNpsMessage(apiKey, conv.id, text);
-        const statusStr = ok ? "ok" : "falhou";
-
-        const { error: updErr } = await sb
+        const { ok, detail } = await sendDatacrazyNpsMessage(apiKey, conv.id, textNps);
+        await sb
           .from("nps_avaliacoes")
-          .update({
-            msg_enviada_at:     new Date().toISOString(),
-            msg_enviada_status: statusStr,
-          })
+          .update({ msg_enviada_at: new Date().toISOString(), msg_enviada_status: ok ? "ok" : "falhou" })
           .eq("id", novaAv.id);
 
-        if (updErr) {
-          logger.error("datacrazy-nps-poller: erro ao atualizar msg_enviada", {
-            err: updErr.message,
-          });
-        }
-
-        if (!ok) {
-          logger.error("datacrazy-nps-poller: falha ao enviar mensagem NPS", {
-            convId: conv.id,
-            detail,
-          });
-          falhas++;
-        } else {
-          enviados++;
-        }
-
-        resultados.push({
-          conversation_id: conv.id,
-          contact_name:    contactName ?? undefined,
-          status:          ok ? "ok" : "falhou",
-          detalhe:         ok ? undefined : String(detail),
-        });
-
-        logger.info("datacrazy-nps-poller: NPS processado", {
-          convId: conv.id,
-          status: statusStr,
-        });
+        if (ok) enviados++; else falhas++;
+        resultados.push({ conversation_id: conv.id, contact_name: contactName ?? undefined, status: ok ? "ok" : "falhou", tipo: "nps", detalhe: ok ? undefined : String(detail) });
+        logger.info("datacrazy-poller: NPS processado", { convId: conv.id, status: ok ? "ok" : "falhou" });
       }
     }
 
@@ -320,7 +467,10 @@ export const datacrazyNpsPollerTask = task({
   },
 });
 
-// Cron: a cada 5 min, janela de 7 min — só pega conversas finalizadas agora
+// Cron a cada 5 min (janela 7 min). Reativado 2026-06-26 com proteção de
+// BASELINE: o dispatcher só processa conversas com updatedAt > nps_baseline_at,
+// suprimindo o backlog. Os senders legados nps-enviar-cron e
+// csat-enviar-avaliacao-cron seguem DESATIVADOS (o dispatcher é self-contained).
 export const datacrazyNpsPollerCron = schedules.task({
   id:   "datacrazy-nps-poller-cron",
   cron: "*/5 * * * *",

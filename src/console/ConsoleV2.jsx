@@ -55,6 +55,7 @@ import Inadimplentes from './Inadimplentes.jsx';
 import AtendimentoAvaliacoes from './AtendimentoAvaliacoes.jsx';
 import NpsResultados from './NpsResultados.jsx';
 import AvaliacaoConfig from './AvaliacaoConfig.jsx';
+import ControleAtendimentos from './ControleAtendimentos.jsx';
 // telas reusadas do console clássico (funcionais — visual convertido nas ondas 2-3)
 import TarefasClientesScreen from '../screens/TarefasClientesScreen.jsx';
 import ChatScreen from '../screens/ChatScreen.jsx';
@@ -92,6 +93,7 @@ const GRUPOS = [
     { id: 'avaliacoes', ic: 'i-chart', label: 'Avaliações' },
     { id: 'csat', ic: 'i-chart', label: 'CSAT — Atendimento' },
     { id: 'nps', ic: 'i-chart', label: 'NPS — Marca' },
+    { id: 'controle-atendimentos', ic: 'i-chart', label: 'Controle Atend.' },
     { id: 'avaliacao-config', ic: 'i-settings', label: 'Configurar Avaliação' },
     { id: 'espacos', ic: 'i-layers', label: 'Espaços' },
     { id: 'ativar', ic: 'i-plug', label: 'Ativar loja' },
@@ -763,6 +765,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
       case 'avaliacoes': return <Avaliacoes tenantDbId={tenantDbId} userId={userId} />;
       case 'csat': return <AtendimentoAvaliacoes tenantDbId={tenantDbId} userId={userId} />;
       case 'nps': return <NpsResultados tenantDbId={tenantDbId} userId={userId} />;
+      case 'controle-atendimentos': return <ControleAtendimentos tenantDbId={tenantDbId} />;
       case 'avaliacao-config': return <AvaliacaoConfig tenantDbId={tenantDbId} />;
       case 'espacos': return <TarefasClientesScreen tenantDbId={tenantDbId} userId={userId} deepLinkCustomerId={deepLinkCustomerId} />;
       case 'ativar': return <AtivarLoja tenantDbId={tenantDbId} />;

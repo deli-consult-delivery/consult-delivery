@@ -62,11 +62,46 @@ function SecaoIdentidade({ tenantDbId, brandAtual }) {
   const [salvando,   setSalvando]   = useState(false);
   const [feedback,   setFeedback]   = useState('');
   const [logoPreviewOk, setLogoOk] = useState(false);
+  const [enviandoLogo, setEnviandoLogo] = useState(false);
 
   useEffect(() => {
     setLogoUrl(brandAtual?.logo_url    || '');
     setColor(brandAtual?.theme_color   || brandAtual?.color || '');
   }, [brandAtual]);
+
+  async function onPickFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // permite reescolher o mesmo arquivo
+    if (!file) return;
+    if (file.size > 1_400_000) {
+      setFeedback('Erro: imagem maior que 1,4 MB. Use uma menor.');
+      return;
+    }
+    setEnviandoLogo(true); setFeedback('');
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload  = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('falha ao ler o arquivo'));
+        reader.readAsDataURL(file);
+      });
+      const resp = await apiFetch(`${BRIDGE_URL}/api/tenant/branding/logo`, {
+        method: 'POST',
+        body: JSON.stringify({
+          tenant_id:      tenantDbId,
+          content_type:   file.type,
+          content_base64: String(dataUrl),
+        }),
+      });
+      setLogoUrl(resp.logo_url || '');
+      setLogoOk(false);
+      setFeedback('Logo enviada e salva! Já aparece nos links de avaliação.');
+    } catch (err) {
+      setFeedback(`Erro ao enviar logo: ${err.message}`);
+    } finally {
+      setEnviandoLogo(false);
+    }
+  }
 
   async function salvar() {
     setSalvando(true); setFeedback('');
@@ -88,7 +123,19 @@ function SecaoIdentidade({ tenantDbId, brandAtual }) {
       <h2 style={sectionTitleStyle}>Identidade Visual</h2>
       <p style={descStyle}>Logo e cor que aparecem nas páginas públicas de avaliação (CSAT e NPS).</p>
 
-      <Field label="URL da logo" hint="Use uma URL pública HTTPS. A imagem aparece no cabeçalho da pesquisa.">
+      <Field label="Logo" hint="Envie um arquivo do seu computador (PNG, JPG ou WEBP, até 1,4 MB) ou cole uma URL pública HTTPS.">
+        <div style={{ marginBottom: 8 }}>
+          <label className="cv2-btn" style={{ cursor: enviandoLogo ? 'wait' : 'pointer', display: 'inline-block' }}>
+            {enviandoLogo ? 'Enviando…' : '📤 Enviar imagem do computador'}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={onPickFile}
+              disabled={enviandoLogo}
+              style={{ display: 'none' }}
+            />
+          </label>
+        </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
           <input
             type="text"

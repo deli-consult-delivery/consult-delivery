@@ -45,8 +45,8 @@ export default function NpsPublico() {
         return r.json();
       })
       .then(d => {
+        setDados(d); // mantém a marca do tenant em todos os estados (inclusive já respondida)
         if (d.ja_respondida) { setTela(TELA.JA_RESPONDIDA); return; }
-        setDados(d);
         setTela(TELA.FORMULARIO);
       })
       .catch(e => {
