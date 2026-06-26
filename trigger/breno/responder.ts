@@ -267,15 +267,24 @@ REGRAS:
 
     let draft_id: string | undefined;
     if (mode === "hibrido") {
-      const { data: draft } = await sb.from("agent_drafts").insert({
+      // autonomy_level tem CHECK constraint (verde|amarelo|vermelho).
+      // Draft que aguarda aprovação humana = amarelo (agente propõe, humano aprova).
+      // "hibrido" violava a constraint e o insert falhava em silêncio → nenhum draft criado.
+      const { data: draft, error: draftErr } = await sb.from("agent_drafts").insert({
         tenant_id: input.tenant_id,
         agent_name: "breno",
         channel: "whatsapp",
         subject: `Resposta sugerida para conversa ${input.conversation_id}`,
         content: parsed.resposta,
-        autonomy_level: "hibrido",
+        autonomy_level: "amarelo",
         status: "pending",
       }).select("id").single();
+      if (draftErr) {
+        logger.error("breno-responder: falha ao criar draft", {
+          error: draftErr.message,
+          conversation_id: input.conversation_id,
+        });
+      }
       draft_id = draft?.id;
     }
 
