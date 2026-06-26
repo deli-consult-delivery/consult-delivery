@@ -1557,6 +1557,9 @@ app.use('/api/whisper', requireJwt, require('./routes/whisper'));
 // Cora — aprovação e rejeição de drafts de cobrança (envia via Evolution API)
 app.use('/api', requireJwt, require('./routes/cora-aprovacao')({ sbFetch, supabaseInsert }));
 
+// Breno — envio de drafts de atendimento ao aprovar (envia via Evolution API)
+app.use('/api', requireJwt, require('./routes/breno-aprovacao')({ sbFetch, supabaseInsert }));
+
 // Cora — gestão manual: isenção e baixa manual de pagamento PIX
 app.use('/api', requireJwt, require('./routes/cora-gestao')({ sbFetch, supabaseInsert }));
 
