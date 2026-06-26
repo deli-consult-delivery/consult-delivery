@@ -90,11 +90,11 @@ const GRUPOS = [
     { id: 'cora', ic: 'i-cash', label: 'Cobrança' },
     { id: 'defesa', ic: 'i-shield', label: 'Defesa Comercial' },
     { id: 'radar', ic: 'i-radio', label: 'Dashboard iFood' },
-    { id: 'avaliacoes', ic: 'i-chart', label: 'Avaliações' },
-    { id: 'csat', ic: 'i-chart', label: 'CSAT — Atendimento' },
-    { id: 'nps', ic: 'i-chart', label: 'NPS — Marca' },
+    { id: 'avaliacoes', ic: 'i-eye', label: 'Avaliações' },
+    { id: 'csat', ic: 'i-check', label: 'CSAT — Atendimento' },
+    { id: 'nps', ic: 'i-target', label: 'NPS — Marca' },
     { id: 'controle-atendimentos', ic: 'i-chart', label: 'Controle Atend.' },
-    { id: 'avaliacao-config', ic: 'i-settings', label: 'Configurar Avaliação' },
+    { id: 'avaliacao-config', ic: 'i-gear', label: 'Configurar Avaliação' },
     { id: 'espacos', ic: 'i-layers', label: 'Espaços' },
     { id: 'ativar', ic: 'i-plug', label: 'Ativar loja' },
     { id: 'campanhas', ic: 'i-flag', label: 'Campanhas' },
@@ -869,9 +869,11 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
               </button>
               <span className="crumb">Console › <b>{LABELS[tela] || tela}</b></span>
               <GlobalSearch tenantDbId={tenantDbId} onNavigate={setTela} />
-              <span className="cv2-pill" title={`Plano freemium · ${CREDITOS_MES.toLocaleString('pt-BR')} créditos/mês · 1 por execução de IA · ${runs ?? 0} usados`}>
-                <Ico name="i-zap" size={13} /> Créditos IA <b>{creditosTxt}</b>
-              </span>
+              {(!allowedModules || allowedModules.has('creditos-ia')) && (
+                <span className="cv2-pill" title={`Plano freemium · ${CREDITOS_MES.toLocaleString('pt-BR')} créditos/mês · 1 por execução de IA · ${runs ?? 0} usados`}>
+                  <Ico name="i-zap" size={13} /> Créditos IA <b>{creditosTxt}</b>
+                </span>
+              )}
               {tenantsList.length > 1 ? (
                 <select value={tenantDbId || ''} onChange={e => { const t = tenantsList.find(x => x.dbId === e.target.value); if (t) setSel(t); }}
                   style={{ background: '#fff', color: 'var(--tx)', border: '1px solid var(--line)', borderRadius: 4, padding: '7px 9px', fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit', maxWidth: 180 }}>
@@ -880,7 +882,10 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
               ) : (
                 <span className="cv2-pill">Cliente <b>{tenantNome}</b></span>
               )}
-              <span className="cv2-pill" title="Notificações não lidas">
+              <span className="cv2-pill" title="Ver notificações" role="button" tabIndex={0}
+                style={{ cursor: 'pointer' }}
+                onClick={() => setTela('notificacoes')}
+                onKeyDown={e => { if (e.key === 'Enter') setTela('notificacoes'); }}>
                 <Ico name="i-bell" size={13} /><b style={notif > 0 ? { color: 'var(--red)' } : { color: 'var(--tx2)' }}>{notif}</b>
               </span>
               <span className="cv2-avatar">{inicial}</span>
