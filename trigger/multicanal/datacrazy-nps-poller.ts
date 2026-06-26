@@ -252,6 +252,11 @@ export const datacrazyNpsPollerTask = task({
       for (const conv of finishedConvs) {
         const contactIdentifier = conv.contact?.phoneNumber || conv.id;
         const contactName       = conv.contact?.name || conv.name || null;
+        // external_ref único POR FINALIZAÇÃO. O DataCrazy reusa a mesma conversa
+        // por contato; juntar o updatedAt (momento da finalização) faz cada
+        // atendimento finalizado virar um registro próprio — sem ferir o unique
+        // (tenant, external_ref) e permitindo as repetições do modelo.
+        const finalizacaoRef = `${conv.id}:${conv.updatedAt || ""}`;
 
         // ── 3b. Whitelist de piloto ───────────────────────────────────────
         // Durante o piloto, só processa conversas do contato de teste.
@@ -286,7 +291,7 @@ export const datacrazyNpsPollerTask = task({
           .from("nps_avaliacoes")
           .select("id")
           .eq("tenant_id", tenantId)
-          .eq("external_ref", conv.id)
+          .eq("external_ref", finalizacaoRef)
           .gte("created_at", dedupCutoff)
           .limit(1);
 
@@ -294,7 +299,7 @@ export const datacrazyNpsPollerTask = task({
           .from("atendimento_avaliacoes")
           .select("id")
           .eq("tenant_id", tenantId)
-          .eq("external_ref", conv.id)
+          .eq("external_ref", finalizacaoRef)
           .gte("created_at", dedupCutoff)
           .limit(1);
 
@@ -334,7 +339,7 @@ export const datacrazyNpsPollerTask = task({
             .from("atendimento_avaliacoes")
             .insert({
               tenant_id:          tenantId,
-              external_ref:       conv.id,
+              external_ref:       finalizacaoRef,
               contact_identifier: contactIdentifier,
               nome_cliente:       contactName,
               origem:             "crm_externo",
@@ -384,7 +389,7 @@ export const datacrazyNpsPollerTask = task({
           .from("nps_avaliacoes")
           .insert({
             tenant_id:             tenantId,
-            external_ref:          conv.id,
+            external_ref:          finalizacaoRef,
             contact_identifier:    contactIdentifier,
             contact_nome:          contactName,
             status:                "pendente",
