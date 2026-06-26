@@ -73,7 +73,7 @@ async function getDatacrazyConversation(apiKey, conversationId, lookbackMinutes 
     const cutoff = new Date(Date.now() - lookbackMinutes * 60 * 1000).toISOString();
     const resp = await fetch(
       `${DATACRAZY_API_BASE}/api/v1/conversations?limit=100&updatedAtStart=${encodeURIComponent(cutoff)}`,
-      { headers: { 'Authorization': `Bearer ${apiKey}` }, signal: AbortSignal.timeout(5000) }
+      { headers: { 'Authorization': `Bearer ${apiKey}` }, signal: AbortSignal.timeout(15000) }
     );
     if (!resp.ok) {
       console.warn(`[datacrazy-send] listConversations → ${resp.status}`);
