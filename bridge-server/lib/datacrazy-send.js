@@ -64,19 +64,27 @@ async function sendDatacrazyMessage(config, conversationId, body, scheduledDate 
  * @returns {Promise<{id:string, updatedAt:string|null, finished:boolean|null,
  *                    phoneNumber:string|null, name:string|null} | null>}
  */
-async function getDatacrazyConversation(apiKey, conversationId) {
+async function getDatacrazyConversation(apiKey, conversationId, lookbackMinutes = 15) {
   if (!apiKey || !conversationId) return null;
+  // O GET unitário /conversations/{id} retorna erro nesta API. Usa-se a LISTA
+  // (mesma do poller) com janela recente — o webhook dispara na finalização,
+  // então a conversa está entre as mais recentes (ordenadas por updatedAt).
   try {
+    const cutoff = new Date(Date.now() - lookbackMinutes * 60 * 1000).toISOString();
     const resp = await fetch(
-      `${DATACRAZY_API_BASE}/api/v1/conversations/${conversationId}`,
+      `${DATACRAZY_API_BASE}/api/v1/conversations?limit=100&updatedAtStart=${encodeURIComponent(cutoff)}`,
       { headers: { 'Authorization': `Bearer ${apiKey}` }, signal: AbortSignal.timeout(5000) }
     );
     if (!resp.ok) {
-      console.warn(`[datacrazy-send] getConversation ${conversationId} → ${resp.status}`);
+      console.warn(`[datacrazy-send] listConversations → ${resp.status}`);
       return null;
     }
-    const c = await resp.json().catch(() => null);
-    if (!c) return null;
+    const data = await resp.json().catch(() => null);
+    const c = (data?.data || []).find((x) => x.id === conversationId);
+    if (!c) {
+      console.warn(`[datacrazy-send] conv=${conversationId} não está na lista recente (${lookbackMinutes}min)`);
+      return null;
+    }
     return {
       id:          c.id || conversationId,
       updatedAt:   c.updatedAt || null,
