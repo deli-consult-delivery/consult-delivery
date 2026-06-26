@@ -20,7 +20,7 @@
  */
 
 const { createHash } = require('crypto');
-const { sendDatacrazyMessage, getDatacrazyConversation } = require('../lib/datacrazy-send');
+const { sendDatacrazyMessage } = require('../lib/datacrazy-send');
 const { decidirECriarRegistro } = require('../lib/avaliacao-decisao');
 
 // Rate limit simples em memória: 60 req/min por IP
@@ -106,13 +106,12 @@ module.exports = function datacrazyWebhookRouter({ sbFetch }) {
         if (!config.nps_auto_envio) { console.log('[datacrazy-webhook] pausado (nps_auto_envio=false)', tenantId); return; }
         if (!config.datacrazy_api_key) { console.warn('[datacrazy-webhook] sem datacrazy_api_key', tenantId); return; }
 
-        // 3b. Detalhes da conversa (telefone/updatedAt/nome). Fallbacks robustos.
-        const det = await getDatacrazyConversation(config.datacrazy_api_key, conversation_id);
+        // 3b. Conversa: identificada pelo conv.id (não precisa buscar telefone).
+        // updatedAt = agora (o webhook dispara no momento da finalização).
         const conv = {
-          id:          conversation_id,
-          updatedAt:   det?.updatedAt || new Date().toISOString(),  // webhook = momento da finalização
-          phoneNumber: det?.phoneNumber || null,                     // null → decisao usa conv.id como identifier
-          name:        det?.name || lead_name || null,
+          id:        conversation_id,
+          updatedAt: new Date().toISOString(),
+          name:      lead_name || null,
         };
 
         // 3c. Decisão + criação do registro (lib compartilhada)
