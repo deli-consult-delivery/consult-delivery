@@ -175,7 +175,7 @@ export const datacrazyCsatPollerTask = task({
             external_ref:       conv.id,
             contact_identifier: conv.id,
             nome_cliente:       contactName,
-            origem:             "datacrazy",
+            origem:             "crm_externo",
             status:             "pendente",
           })
           .select("id, public_token")

@@ -337,7 +337,7 @@ export const datacrazyNpsPollerTask = task({
               external_ref:       conv.id,
               contact_identifier: contactIdentifier,
               nome_cliente:       contactName,
-              origem:             "datacrazy",
+              origem:             "crm_externo",
               status:             "pendente",
             })
             .select("id, public_token")
