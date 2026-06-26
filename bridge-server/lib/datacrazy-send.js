@@ -44,14 +44,15 @@ async function sendDatacrazyMessage(config, conversationId, body, scheduledDate 
     );
     const data = await resp.json().catch(() => ({}));
 
-    // Aguarda 2s e finaliza a conversa de volta
-    setTimeout(() => {
-      _conversationAction(config.apiKey, conversationId, 'finish').catch(() => {});
-    }, 2000);
+    // Aguarda 2s (deixa a mensagem ser entregue) e finaliza a conversa de volta.
+    // AWAIT (não setTimeout solto): garante que a conversa é re-finalizada antes
+    // de retornar, mesmo que o processo reinicie logo depois.
+    await new Promise((r) => setTimeout(r, 2000));
+    await _conversationAction(config.apiKey, conversationId, 'finish');
 
     return { ok: resp.ok, messageId: data.id, detail: resp.ok ? undefined : data };
   } catch (err) {
-    _conversationAction(config.apiKey, conversationId, 'finish').catch(() => {});
+    await _conversationAction(config.apiKey, conversationId, 'finish');
     return { ok: false, detail: err.message };
   }
 }
@@ -68,7 +69,7 @@ async function getDatacrazyConversation(apiKey, conversationId) {
   try {
     const resp = await fetch(
       `${DATACRAZY_API_BASE}/api/v1/conversations/${conversationId}`,
-      { headers: { 'Authorization': `Bearer ${apiKey}` } }
+      { headers: { 'Authorization': `Bearer ${apiKey}` }, signal: AbortSignal.timeout(5000) }
     );
     if (!resp.ok) {
       console.warn(`[datacrazy-send] getConversation ${conversationId} → ${resp.status}`);

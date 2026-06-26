@@ -48,10 +48,14 @@ async function decidirECriarRegistro({ sbFetch, tenantId, config, conv }) {
   }
 
   // ── Dedup da finalização (NPS + CSAT) ─────────────────────────────────────
+  // Casa por PREFIXO conv.id: (não pelo finalizacaoRef exato) para que webhook e
+  // poller de segurança nunca dupliquem, mesmo que o updatedAt difira em precisão
+  // entre a API de lista (poller) e a unitária (webhook). Janela de 120 min.
   const dedupCutoff = new Date(Date.now() - DEDUP_FINALIZACAO_MIN * 60 * 1000).toISOString();
+  const refPrefix = `like.${enc(conv.id + ':')}*`;
   const [jaNps, jaCsat] = await Promise.all([
-    sbFetch(`nps_avaliacoes?tenant_id=eq.${enc(tenantId)}&external_ref=eq.${enc(finalizacaoRef)}&created_at=gte.${enc(dedupCutoff)}&select=id&limit=1`),
-    sbFetch(`atendimento_avaliacoes?tenant_id=eq.${enc(tenantId)}&external_ref=eq.${enc(finalizacaoRef)}&created_at=gte.${enc(dedupCutoff)}&select=id&limit=1`),
+    sbFetch(`nps_avaliacoes?tenant_id=eq.${enc(tenantId)}&external_ref=${refPrefix}&created_at=gte.${enc(dedupCutoff)}&select=id&limit=1`),
+    sbFetch(`atendimento_avaliacoes?tenant_id=eq.${enc(tenantId)}&external_ref=${refPrefix}&created_at=gte.${enc(dedupCutoff)}&select=id&limit=1`),
   ]);
   if (jaNps?.length || jaCsat?.length) {
     return { status: 'ja_processado' };

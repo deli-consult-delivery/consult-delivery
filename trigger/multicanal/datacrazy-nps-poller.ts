@@ -329,7 +329,7 @@ export const datacrazyNpsPollerTask = task({
           .from("nps_avaliacoes")
           .select("id")
           .eq("tenant_id", tenantId)
-          .eq("external_ref", finalizacaoRef)
+          .like("external_ref", `${conv.id}:%`)
           .gte("created_at", dedupCutoff)
           .limit(1);
 
@@ -337,7 +337,7 @@ export const datacrazyNpsPollerTask = task({
           .from("atendimento_avaliacoes")
           .select("id")
           .eq("tenant_id", tenantId)
-          .eq("external_ref", finalizacaoRef)
+          .like("external_ref", `${conv.id}:%`)
           .gte("created_at", dedupCutoff)
           .limit(1);
 
