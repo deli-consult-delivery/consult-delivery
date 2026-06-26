@@ -245,7 +245,7 @@ const styles = {
     animation: 'spin 0.8s linear infinite',
   },
   loadingText: { color: '#666', fontSize: 14, margin: 0 },
-  errorText:   { color: '#B70C00', fontSize: 18, fontWeight: 700, margin: 0 },
+  errorText:   { color: '#374151', fontSize: 18, fontWeight: 700, margin: 0 },
   errorSub:    { color: '#666', fontSize: 13, margin: 0, maxWidth: 320 },
   header: {
     padding: '14px 20px',
