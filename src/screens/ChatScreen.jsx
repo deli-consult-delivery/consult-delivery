@@ -4407,13 +4407,14 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {/* TODO: canal interno não persiste finalização (ver estudo §1.3-d) */}
+                  {/* TODO: canal interno não persiste finalização (ver estudo §1.3-d).
+                      Botão desabilitado para não enganar o usuário (a UI mudaria sem persistir). */}
                   {active?.status === 'finalizado' ? (
-                    <button className="lc-action-btn" onClick={() => setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: null } : c))}>
+                    <button className="lc-action-btn" disabled title="Canais internos não são finalizáveis por aqui">
                       <Icon name="refresh" size={13} /> Reabrir
                     </button>
                   ) : (
-                    <button className="lc-action-btn primary" onClick={() => setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'finalizado' } : c))}>
+                    <button className="lc-action-btn primary" disabled title="Canais internos não são finalizáveis por aqui">
                       <Icon name="check" size={13} /> Finalizar
                     </button>
                   )}
@@ -4686,22 +4687,23 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
                   <span className="lc-protocol">#{active.id?.slice(-5) || '00000'}</span>
                   <span title={realtimeStatus === 'SUBSCRIBED' ? 'Realtime conectado' : 'Realtime desconectado — atualize a página'} style={{ width: 7, height: 7, borderRadius: '50%', background: realtimeStatus === 'SUBSCRIBED' ? '#22C55E' : '#EF4444', flexShrink: 0, display: 'inline-block' }} />
                   {isChannel ? (
-                    /* TODO: canal interno não persiste finalização (ver estudo §1.3-d) */
+                    /* TODO: canal interno não persiste finalização (ver estudo §1.3-d).
+                       Botão desabilitado para não enganar o usuário (a UI mudaria sem persistir). */
                     active?.status === 'finalizado' ? (
-                      <button className="lc-action-btn" onClick={() => setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: null } : c))}>
+                      <button className="lc-action-btn" disabled title="Canais internos não são finalizáveis por aqui">
                         <Icon name="refresh" size={13} /> Reabrir
                       </button>
                     ) : (
-                      <button className="lc-action-btn primary" onClick={() => setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'finalizado' } : c))}>
+                      <button className="lc-action-btn primary" disabled title="Canais internos não são finalizáveis por aqui">
                         <Icon name="check" size={13} /> Finalizar
                       </button>
                     )
                   ) : convStatus === 'finalizado' ? (
-                    <button className="lc-action-btn" onClick={async () => { const { error } = await changeStatus('atendimento_aberto'); if (error) { alert('Não foi possível reabrir a conversa: ' + (typeof error === 'string' ? error : error.message || 'erro desconhecido')); return; } await insertEvent(activeId, 'reopened'); loadMsgs(activeId); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'atendimento_aberto', status_v2: 'in_progress' } : c)); refreshStatus(); }} disabled={statusLoading}>
+                    <button className="lc-action-btn" onClick={async () => { const { error } = await changeStatus('atendimento_aberto'); if (error) { alert('Não foi possível reabrir a conversa: ' + (typeof error === 'string' ? error : error.message || 'erro desconhecido')); return; } await insertEvent(activeId, 'reopened'); loadMsgs(activeId); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'atendimento_aberto', status_v2: 'in_progress' } : c)); await refreshStatus(); }} disabled={statusLoading}>
                       <Icon name="refresh" size={13} /> Reabrir
                     </button>
                   ) : (
-                    <button className="lc-action-btn primary" onClick={async () => { const { error } = await finish(); if (error) { alert('Não foi possível finalizar a conversa: ' + (typeof error === 'string' ? error : error.message || 'erro desconhecido')); return; } await insertEvent(activeId, 'closed'); loadMsgs(activeId); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'finalizado', status_v2: 'closed' } : c)); setResolved(r => ({ ...r, [activeId]: true })); refreshStatus(); }} disabled={statusLoading}>
+                    <button className="lc-action-btn primary" onClick={async () => { const { error } = await finish(); if (error) { alert('Não foi possível finalizar a conversa: ' + (typeof error === 'string' ? error : error.message || 'erro desconhecido')); return; } await insertEvent(activeId, 'closed'); loadMsgs(activeId); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'finalizado', status_v2: 'closed' } : c)); setResolved(r => ({ ...r, [activeId]: true })); await refreshStatus(); }} disabled={statusLoading}>
                       <Icon name="check" size={13} /> {resolved[activeId] ? 'Finalizado' : 'Finalizar'}
                     </button>
                   )}
