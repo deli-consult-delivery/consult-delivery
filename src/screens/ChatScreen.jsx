@@ -1818,7 +1818,7 @@ function VisualizacaoScreen({ tenantDbId }) {
 // ═══════════════════════════════════════════════════════════════
 // CHAT SCREEN — componente principal
 // ═══════════════════════════════════════════════════════════════
-export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, deepLinkConvId }) {
+export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, deepLinkConvId, embedded = false }) {
   // ── Dados e instâncias ────────────────────────────────────
   const [instances, setInstances]            = useState([]);
   const [selectedInstance, setSelectedInstance] = useState(null);
@@ -2592,9 +2592,28 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
       finished_by: currentUser?.id || null,
     };
     try {
-      await supabase.from('conversations').update(payload).in('id', ids);
-      setConvs(prev => prev.map(c => selectedConvIds.has(c.id) ? { ...c, status: 'finalizado' } : c));
-    } catch { /* ignore */ }
+      // .select('id') retorna as linhas realmente afetadas (RLS pode barrar parte).
+      const { data, error } = await supabase
+        .from('conversations')
+        .update(payload)
+        .in('id', ids)
+        .select('id');
+      if (error) {
+        alert('Falha ao finalizar em massa: ' + (error.message || 'erro desconhecido'));
+        setBulkLoading(false);
+        return;
+      }
+      const okIds = new Set((data || []).map(r => r.id));
+      const okCount = okIds.size;
+      setConvs(prev => prev.map(c => okIds.has(c.id) ? { ...c, status: 'finalizado', status_v2: 'closed' } : c));
+      if (okCount < n) {
+        alert(`Finalizadas ${okCount} de ${n} conversa${n === 1 ? '' : 's'}. As demais não foram alteradas (sem permissão / RLS).`);
+      }
+    } catch (err) {
+      alert('Falha ao finalizar em massa: ' + (err?.message || 'erro desconhecido'));
+      setBulkLoading(false);
+      return;
+    }
     setSelectedConvIds(new Set());
     setSelectMode(false);
     setBulkLoading(false);
@@ -4024,15 +4043,18 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
   // ── SUB-ABA (tabs que não são inbox) ──────────────────────
   if (headerTab !== 'inbox') {
     return (
-      <div className="route-enter livechat lc-tabbed" style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <div className="route-enter livechat lc-tabbed" style={{ height: embedded ? '100%' : '100vh', display: 'flex', flexDirection: 'column' }}>
         <header className="lc-fullhead" style={{ flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+            {/* Breadcrumb escondido quando embutido no Console V2 (já há topbar .cv2-tb-chat) — ver estudo §1.3-f */}
+            {!embedded && (<>
             <div className="lc-breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>
               <span>Plataforma</span>
               <Icon name="chevright" size={12} />
               <span style={{ color: 'white', fontWeight: 600 }}>Chat ao Vivo</span>
             </div>
             <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.1)' }} />
+            </>)}
             <div className="lc-tabs">
               {[
                 { id: 'inbox', icon: 'chat',  label: 'Caixa de entrada' },
@@ -4077,6 +4099,8 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
       {/* ─── HEADER full-width ────────────────────────────────── */}
       <header className="lc-fullhead" style={{ gridArea: 'header' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+          {/* Breadcrumb escondido quando embutido no Console V2 (já há topbar .cv2-tb-chat) — ver estudo §1.3-f */}
+          {!embedded && (<>
           <div className="lc-breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>
             <span>Plataforma</span>
             <Icon name="chevright" size={12} />
@@ -4090,6 +4114,7 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
             })()}
           </div>
           <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.1)' }} />
+          </>)}
           <div className="lc-tabs">
             {[
               { id: 'inbox', icon: 'chat',  label: 'Caixa de entrada' },
@@ -4382,6 +4407,7 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {/* TODO: canal interno não persiste finalização (ver estudo §1.3-d) */}
                   {active?.status === 'finalizado' ? (
                     <button className="lc-action-btn" onClick={() => setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: null } : c))}>
                       <Icon name="refresh" size={13} /> Reabrir
@@ -4660,6 +4686,7 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
                   <span className="lc-protocol">#{active.id?.slice(-5) || '00000'}</span>
                   <span title={realtimeStatus === 'SUBSCRIBED' ? 'Realtime conectado' : 'Realtime desconectado — atualize a página'} style={{ width: 7, height: 7, borderRadius: '50%', background: realtimeStatus === 'SUBSCRIBED' ? '#22C55E' : '#EF4444', flexShrink: 0, display: 'inline-block' }} />
                   {isChannel ? (
+                    /* TODO: canal interno não persiste finalização (ver estudo §1.3-d) */
                     active?.status === 'finalizado' ? (
                       <button className="lc-action-btn" onClick={() => setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: null } : c))}>
                         <Icon name="refresh" size={13} /> Reabrir
@@ -4670,11 +4697,11 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
                       </button>
                     )
                   ) : convStatus === 'finalizado' ? (
-                    <button className="lc-action-btn" onClick={async () => { const { error } = await changeStatus('atendimento_aberto'); if (!error) { await insertEvent(activeId, 'reopened'); loadMsgs(activeId); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'atendimento_aberto', status_v2: 'in_progress' } : c)); } }} disabled={statusLoading}>
+                    <button className="lc-action-btn" onClick={async () => { const { error } = await changeStatus('atendimento_aberto'); if (error) { alert('Não foi possível reabrir a conversa: ' + (typeof error === 'string' ? error : error.message || 'erro desconhecido')); return; } await insertEvent(activeId, 'reopened'); loadMsgs(activeId); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'atendimento_aberto', status_v2: 'in_progress' } : c)); refreshStatus(); }} disabled={statusLoading}>
                       <Icon name="refresh" size={13} /> Reabrir
                     </button>
                   ) : (
-                    <button className="lc-action-btn primary" onClick={async () => { const { error } = await finish(); if (!error) { await insertEvent(activeId, 'closed'); loadMsgs(activeId); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'finalizado', status_v2: 'closed' } : c)); setResolved(r => ({ ...r, [activeId]: true })); } }} disabled={statusLoading}>
+                    <button className="lc-action-btn primary" onClick={async () => { const { error } = await finish(); if (error) { alert('Não foi possível finalizar a conversa: ' + (typeof error === 'string' ? error : error.message || 'erro desconhecido')); return; } await insertEvent(activeId, 'closed'); loadMsgs(activeId); setConvs(prev => prev.map(c => c.id === activeId ? { ...c, status: 'finalizado', status_v2: 'closed' } : c)); setResolved(r => ({ ...r, [activeId]: true })); refreshStatus(); }} disabled={statusLoading}>
                       <Icon name="check" size={13} /> {resolved[activeId] ? 'Finalizado' : 'Finalizar'}
                     </button>
                   )}
