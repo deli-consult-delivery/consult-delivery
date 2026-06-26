@@ -1,7 +1,6 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "../../../trigger/_shared/supabase";
-import { getAnthropic } from "../../../trigger/_shared/claude";
 import { logAgentRun } from "../../../trigger/_shared/audit";
+import { chat } from "../../../trigger/agents/llm-client";
 
 export interface RunContext {
   runId: string;
@@ -183,21 +182,13 @@ export async function executeAgent(
 ): Promise<AgentResult> {
   const systemPrompt = await getPrompt(agentId, ctx.tenantId ?? "");
 
-  const client: Anthropic = getAnthropic();
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 4096,
-    system: systemPrompt,
-    messages: [{ role: "user", content: JSON.stringify(payload) }],
-  });
+  const response = await chat([
+    { role: "system", content: systemPrompt },
+    { role: "user",   content: JSON.stringify(payload) },
+  ]);
 
-  const output = response.content
-    .filter((b) => b.type === "text")
-    .map((b) => (b as Anthropic.TextBlock).text)
-    .join("");
-
-  const tokens =
-    (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0);
+  const output = response.content;
+  const tokens = (response.tokens_in ?? 0) + (response.tokens_out ?? 0);
 
   await logRun({
     runId: ctx.runId,
@@ -208,5 +199,5 @@ export async function executeAgent(
     status: "success",
   });
 
-  return { output, tokens, modelId: "claude-sonnet-4-6" };
+  return { output, tokens, modelId: response.modelo };
 }
