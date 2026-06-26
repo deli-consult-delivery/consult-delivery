@@ -252,9 +252,12 @@ export const datacrazyNpsPollerTask = task({
         // Durante o piloto, só processa conversas do contato de teste.
         // Envia normal via DataCrazy (na própria conversa de teste).
         if (config.piloto_telefone_teste) {
-          const alvo  = config.piloto_telefone_teste.replace(/\D/g, "");
-          const atual = String(contactIdentifier).replace(/\D/g, "");
-          if (!atual || !atual.includes(alvo)) {
+          // Compara pelos últimos 8 dígitos — tolerante à variação do 9º dígito
+          // do celular brasileiro (DataCrazy pode guardar com ou sem o 9).
+          const sufixo = (s: string) => s.replace(/\D/g, "").slice(-8);
+          const alvo  = sufixo(config.piloto_telefone_teste);
+          const atual = sufixo(String(contactIdentifier));
+          if (!atual || atual !== alvo) {
             resultados.push({
               conversation_id: conv.id,
               contact_name:    contactName ?? undefined,
