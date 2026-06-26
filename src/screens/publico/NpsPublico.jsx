@@ -115,19 +115,18 @@ export default function NpsPublico() {
     </div>
   );
 
-  // ── Erro / Expirado ───────────────────────────────────────────────────────
+  // ── Erro / Expirado (página NEUTRA — sem identidade de marca) ──────────────
   if (tela === TELA.ERRO) return (
     <div style={styles.page}>
-      <header style={{ ...styles.header, background: DEFAULT_BRAND_COLOR }}>
+      <header style={{ ...styles.header, background: '#4B5563' }}>
         <div style={styles.headerInner}>
-          <span style={{ ...styles.logoMark, color: DEFAULT_BRAND_COLOR }}>CD</span>
-          <span style={styles.headerTitle}>Pesquisa NPS</span>
+          <span style={styles.headerTitle}>Pesquisa de satisfação</span>
         </div>
       </header>
       <div style={styles.center}>
-        <p style={styles.errorTitle}>Link inválido ou expirado</p>
+        <p style={{ ...styles.errorTitle, color: '#374151' }}>Link inválido ou expirado</p>
         <p style={styles.errorSub}>
-          {erroMsg || 'Este link não é mais válido. Entre em contato com sua consultoria.'}
+          {erroMsg || 'Este link não é mais válido.'}
         </p>
       </div>
     </div>
