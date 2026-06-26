@@ -34,8 +34,8 @@ export default function AvaliacaoPublica() {
       })
       .then((d) => {
         if (d) {
+          setData(d); // mantém a marca do tenant inclusive no estado "já respondida"
           if (d.ja_respondida) setResp(d.nota ?? null);
-          else setData(d);
         }
         setLoading(false);
       })

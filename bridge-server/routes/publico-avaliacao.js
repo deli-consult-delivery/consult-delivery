@@ -100,15 +100,14 @@ module.exports = function buildPublicoAvaliacaoRouter({ sbFetch }) {
         return res.status(410).json({ erro: 'link_expirado' });
       }
 
-      if (avaliacao.status === 'respondida') {
-        return res.status(200).json({ ja_respondida: true, nota: avaliacao.nota });
-      }
-
-      // status === 'pendente'
       const [brand, config] = await Promise.all([
         getBrandByTenant(sbFetch, avaliacao.tenant_id),
         getAvaliacaoConfig(sbFetch, avaliacao.tenant_id),
       ]);
+
+      if (avaliacao.status === 'respondida') {
+        return res.status(200).json({ ja_respondida: true, nota: avaliacao.nota, brand });
+      }
       return res.status(200).json({
         atendente_nome: avaliacao.atendente_nome,
         status:         avaliacao.status,
