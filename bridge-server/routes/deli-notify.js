@@ -78,8 +78,20 @@ module.exports = function buildDeliNotifyRouter({ sbFetch, supabaseInsert }) {
         console.error('[deli-notify] internal_notifications insert falhou:', err.message);
       }
 
-      // Hermes gateway → Telegram (opcional, soft-fail)
-      if (HERMES_GATEWAY && HERMES_TOKEN) {
+      // Telegram Bot API direto (primário, soft-fail)
+      const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+      if (TELEGRAM_BOT_TOKEN) {
+        fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: texto, parse_mode: 'HTML' }),
+          signal:  AbortSignal.timeout(10_000),
+        }).then(r => {
+          if (!r.ok) return r.json().then(j => console.warn(`[deli-notify] telegram ${r.status}:`, j.description));
+          console.log('[deli-notify] telegram: enviado chat_id=' + TELEGRAM_CHAT_ID);
+        }).catch(err => console.warn('[deli-notify] telegram falhou (soft):', err.message));
+      } else if (HERMES_GATEWAY && HERMES_TOKEN) {
+        // fallback legado — requer HERMES_GATEWAY_URL configurado
         fetch(`${HERMES_GATEWAY}/api/send-telegram`, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${HERMES_TOKEN}` },
