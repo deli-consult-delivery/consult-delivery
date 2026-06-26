@@ -181,11 +181,12 @@ module.exports = function buildTenantAvaliacaoConfigRouter({ requireJwt, sbFetch
   const LOGO_BUCKET   = 'public';
   // 1,4MB: o base64 (~1,9MB) cabe no limite de 2mb do express.json (index.js).
   const LOGO_MAX_BYTES = 1_400_000;
+  // SVG é deliberadamente EXCLUÍDO: é XML e pode carregar <script>/onload,
+  // servido como image/svg+xml no domínio supabase.co → stored XSS. Só raster.
   const LOGO_TYPES = {
     'image/png':  'png',
     'image/jpeg': 'jpg',
     'image/webp': 'webp',
-    'image/svg+xml': 'svg',
   };
 
   const LogoUploadSchema = z.object({

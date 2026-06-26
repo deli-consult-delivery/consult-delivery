@@ -123,13 +123,13 @@ function SecaoIdentidade({ tenantDbId, brandAtual }) {
       <h2 style={sectionTitleStyle}>Identidade Visual</h2>
       <p style={descStyle}>Logo e cor que aparecem nas páginas públicas de avaliação (CSAT e NPS).</p>
 
-      <Field label="Logo" hint="Envie um arquivo do seu computador (PNG, JPG, WEBP ou SVG, até 1,4 MB) ou cole uma URL pública HTTPS.">
+      <Field label="Logo" hint="Envie um arquivo do seu computador (PNG, JPG ou WEBP, até 1,4 MB) ou cole uma URL pública HTTPS.">
         <div style={{ marginBottom: 8 }}>
           <label className="cv2-btn" style={{ cursor: enviandoLogo ? 'wait' : 'pointer', display: 'inline-block' }}>
             {enviandoLogo ? 'Enviando…' : '📤 Enviar imagem do computador'}
             <input
               type="file"
-              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              accept="image/png,image/jpeg,image/webp"
               onChange={onPickFile}
               disabled={enviandoLogo}
               style={{ display: 'none' }}
