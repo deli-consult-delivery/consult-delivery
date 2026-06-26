@@ -453,12 +453,16 @@ export const datacrazyNpsPollerTask = task({
   },
 });
 
-// Cron: a cada 5 min, janela de 7 min — só pega conversas finalizadas agora
-export const datacrazyNpsPollerCron = schedules.task({
-  id:   "datacrazy-nps-poller-cron",
-  cron: "*/5 * * * *",
-  run:  async (_payload, { ctx }) => {
-    logger.info("datacrazy-nps-poller-cron: disparando", { runId: ctx.run.id });
-    return datacrazyNpsPollerTask.triggerAndWait({ lookback_minutes: 7 }).unwrap();
-  },
-});
+// ⚠️ CRON DESATIVADO (2026-06-26) — incidente de envio em massa.
+// O polling não detecta "recém-finalizada" de forma confiável (DataCrazy não
+// tem timestamp de finalização; updatedAt varre o backlog). Reativar SÓ após
+// migrar para disparo por evento (webhook DataCrazy). A task manual segue
+// disponível para testes via trigger explícito.
+// export const datacrazyNpsPollerCron = schedules.task({
+//   id:   "datacrazy-nps-poller-cron",
+//   cron: "*/5 * * * *",
+//   run:  async (_payload, { ctx }) => {
+//     logger.info("datacrazy-nps-poller-cron: disparando", { runId: ctx.run.id });
+//     return datacrazyNpsPollerTask.triggerAndWait({ lookback_minutes: 7 }).unwrap();
+//   },
+// });
