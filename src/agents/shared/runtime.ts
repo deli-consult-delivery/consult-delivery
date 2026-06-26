@@ -182,10 +182,12 @@ export async function executeAgent(
 ): Promise<AgentResult> {
   const systemPrompt = await getPrompt(agentId, ctx.tenantId ?? "");
 
+  // forceJson=false: agentes de texto (DELI, LARA, VERA) não devem ter formato forçado;
+  // agentes que precisam de JSON incluem a instrução no próprio payload.
   const response = await chat([
     { role: "system", content: systemPrompt },
     { role: "user",   content: JSON.stringify(payload) },
-  ]);
+  ], false);
 
   const output = response.content;
   const tokens = (response.tokens_in ?? 0) + (response.tokens_out ?? 0);
