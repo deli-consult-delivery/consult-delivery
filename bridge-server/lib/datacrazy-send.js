@@ -99,6 +99,48 @@ async function getDatacrazyConversation(apiKey, conversationId, lookbackMinutes 
 }
 
 /**
+ * Lê as mensagens da conversa para extrair o atendente e o início do atendimento.
+ * O DataCrazy mantém UMA conversa por contato; cada atendimento é um "ticket"
+ * marcado por uma mensagem com firstTicketMessage=true. Mensagens de atendente têm
+ * received=false + user.{name}. Resposta: { messages: [...] } (mais recente primeiro).
+ *
+ * @returns {Promise<{atendenteNome: string|null, inicioAt: string|null}>}
+ */
+async function getDatacrazyAtendenteEInicio(apiKey, conversationId) {
+  if (!apiKey || !conversationId) return { atendenteNome: null, inicioAt: null };
+  try {
+    const resp = await fetch(
+      `${DATACRAZY_API_BASE}/api/v1/conversations/${conversationId}/messages?limit=50`,
+      { headers: { 'Authorization': `Bearer ${apiKey}` }, signal: AbortSignal.timeout(15000) }
+    );
+    if (!resp.ok) return { atendenteNome: null, inicioAt: null };
+    const data = await resp.json().catch(() => null);
+    const msgs = (data && data.messages) || [];
+
+    // Início do ticket atual = mensagem mais recente com firstTicketMessage.
+    let inicioAt = null;
+    for (const m of msgs) {
+      if (m.firstTicketMessage) { inicioAt = m.createdAt || null; break; }
+    }
+
+    // Atendente = autor humano (received=false + user.name) da mensagem mais
+    // recente DENTRO do ticket atual (createdAt >= inicioAt).
+    let atendenteNome = null;
+    for (const m of msgs) {
+      if (inicioAt && m.createdAt && new Date(m.createdAt) < new Date(inicioAt)) continue;
+      const nome = m.received === false && m.user && typeof m.user.name === 'string'
+        ? m.user.name.trim() : '';
+      if (nome) { atendenteNome = nome; break; }
+    }
+
+    return { atendenteNome, inicioAt };
+  } catch (err) {
+    console.error(`[datacrazy-send] getAtendente ${conversationId} erro:`, err.message);
+    return { atendenteNome: null, inicioAt: null };
+  }
+}
+
+/**
  * Substitui variáveis {nome_cliente}, {link_avaliacao}, {link_nps}, {nome_empresa}
  * no template de mensagem.
  */
@@ -106,4 +148,4 @@ function renderTemplate(template, vars) {
   return template.replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? `{${key}}`);
 }
 
-module.exports = { sendDatacrazyMessage, getDatacrazyConversation, renderTemplate };
+module.exports = { sendDatacrazyMessage, getDatacrazyConversation, getDatacrazyAtendenteEInicio, renderTemplate };
