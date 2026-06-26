@@ -226,6 +226,24 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
             } else {
               console.info(`[publico/nps] alerta detrator enviado nps=${npsId} nota=${notaFinal}`);
             }
+
+            // Notificação interna (sino do Console) — broadcast ao tenant.
+            try {
+              await sbFetch('internal_notifications', {
+                method: 'POST',
+                body: {
+                  tenant_id:         tenantId,
+                  recipient_user_id: null,
+                  kind:              'system',
+                  title:             `Detrator NPS — nota ${notaFinal}`,
+                  body:              `${av.contact_nome || 'Cliente'} deu nota ${notaFinal}. Atendente: ${av.atendente_nome || 'não identificado'}. Trate em até 48h.`,
+                  link:              '/controle-atendimentos',
+                },
+                prefer: 'return=minimal',
+              });
+            } catch (notifErr) {
+              console.error('[publico/nps] erro ao criar notificação de detrator:', notifErr.message);
+            }
           } catch (alertErr) {
             console.error('[publico/nps] erro no alerta de detrator:', alertErr.message);
           }

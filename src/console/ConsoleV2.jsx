@@ -281,7 +281,7 @@ function useTopbar(tenantDbId, userId) {
         const [{ count: runs }, notifRes] = await Promise.all([
           supabase.from('agent_runs').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantDbId).gte('created_at', ini.toISOString()),
           userId
-            ? supabase.from('internal_notifications').select('*', { count: 'exact', head: true }).eq('recipient_user_id', userId).is('read_at', null)
+            ? supabase.from('internal_notifications').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantDbId).is('read_at', null).or(`recipient_user_id.eq.${userId},recipient_user_id.is.null`)
             : Promise.resolve({ count: 0 }),
         ]);
         if (alive) setS({ runs: runs ?? 0, notif: notifRes?.count ?? 0 });
