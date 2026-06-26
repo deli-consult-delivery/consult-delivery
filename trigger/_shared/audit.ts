@@ -5,6 +5,28 @@ import { getSupabase } from "./supabase";
 // Após o cutover P-2, agent_runs.tenant_id é NOT NULL em todas as linhas.
 const CONSULT_TENANT_ID = "9079bd4d-4df7-4023-90fb-d79c8ba7e900";
 
+// Mapa automático agentSlug → pipeline_stage para runs que não passam o campo explicitamente.
+// Garante que pipeline_stage fique preenchido mesmo em tasks legadas.
+const AGENT_PIPELINE_STAGE: Record<string, string> = {
+  "deli":                    "orchestrator",
+  "deli-orchestrator-5min":  "orchestrator",
+  "breno":                   "loop",
+  "breno-resumir-conversa":  "loop",
+  "breno-renotificar":       "loop",
+  "lara":                    "crm",
+  "vera":                    "bi",
+  "cora":                    "financeiro",
+  "sofia":                   "prospeccao",
+  "analise-ifood":           "analise",
+  "relatorio-diario":        "relatorio",
+  "revisao-matinal":         "supervisao",
+  "briefing-7h":             "supervisao",
+  "supervisionar":           "supervisao",
+  "conversa":                "atendimento",
+  "chat-handler":            "atendimento",
+  "nova":                    "onboarding",
+};
+
 interface AgentRunLog {
   runId: string;
   agentSlug: string;
@@ -51,7 +73,7 @@ export async function logAgentRun({
         completed_at: new Date().toISOString(),
         explanation: explanation ?? null,
         confidence_score: confidenceScore ?? null,
-        pipeline_stage: pipelineStage ?? null,
+        pipeline_stage: pipelineStage ?? AGENT_PIPELINE_STAGE[agentSlug] ?? agentSlug,
         pipeline_position: pipelinePosition ?? null,
       },
       { onConflict: "trigger_dev_run_id" }

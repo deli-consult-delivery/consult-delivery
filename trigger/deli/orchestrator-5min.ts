@@ -317,7 +317,7 @@ async function createHeartbeatTask(
       .eq("tenant_id", TENANT_ID)
       .eq("customer_id", params.customerId)
       .eq("agent_id", params.agentId)
-      .eq("status", "todo")
+      .in("status", ["todo", "in_progress"])
       .limit(1);
 
     if (existing && existing.length > 0) {
