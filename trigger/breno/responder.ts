@@ -102,7 +102,7 @@ export const brenoResponder = task({
 
     const { data: conv } = await sb
       .from("conversations")
-      .select("id, contact_name, phone_number, customer_id")
+      .select("id, contact_name, phone_number, customer_id, whatsapp_chat_id, instance_id")
       .eq("id", input.conversation_id)
       .eq("tenant_id", input.tenant_id)
       .maybeSingle();
@@ -278,6 +278,12 @@ REGRAS:
         content: parsed.resposta,
         autonomy_level: "amarelo",
         status: "pending",
+        target_id: conv?.whatsapp_chat_id ?? null,
+        metadata: {
+          conversation_id: input.conversation_id,
+          whatsapp_chat_id: conv?.whatsapp_chat_id ?? null,
+          instance_id: conv?.instance_id ?? null,
+        },
       }).select("id").single();
       if (draftErr) {
         logger.error("breno-responder: falha ao criar draft", {

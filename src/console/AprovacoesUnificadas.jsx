@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
 
+// Bridge: envio real de drafts (ex.: WhatsApp do Breno ao aprovar).
+const BRIDGE = import.meta.env.VITE_BRIDGE_URL || 'https://bridge.consultdelivery.com.br';
+
 // ============================================================
 // T4 · Aprovacoes Unificadas (GAP-3)
 // Fila unificada de aprovacoes pendentes neste workspace:
@@ -98,7 +101,7 @@ function ItemDraft({ item, onAprovar, onRejeitar, agindo }) {
             className="cv2-btn"
             style={{ fontSize: 12 }}
             disabled={agindo === item.id}
-            onClick={() => onAprovar(item.id, editando ? texto : item.content)}
+            onClick={() => onAprovar(item, editando ? texto : item.content)}
           >
             {agindo === item.id ? '...' : 'Aprovar'}
           </button>
@@ -215,14 +218,35 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  async function aprovarDraft(id, content) {
+  async function aprovarDraft(item, content) {
+    const id = item.id;
     setAgindo(id);
     const { error } = await supabase
       .from('agent_drafts')
       .update({ status: 'approved', content, reviewer_id: userId ?? null, reviewed_at: new Date().toISOString() })
       .eq('id', id);
+    if (error) { setAgindo(null); setErro(error.message); return; }
+
+    // Drafts de WhatsApp do Breno: além de aprovar, enviar de fato ao cliente
+    // via o endpoint genérico do Bridge (resolve a instância Evolution + envia).
+    if (item.channel === 'whatsapp' && item.agent_name === 'breno') {
+      try {
+        const token = (await supabase.auth.getSession()).data.session?.access_token;
+        const res = await fetch(`${BRIDGE}/api/breno/aprovar/${id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ tenant_id: tenantDbId }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          setErro(`Aprovado, mas falhou ao enviar: ${err.error || res.status}`);
+        }
+      } catch (e) {
+        setErro(`Aprovado, mas falhou ao enviar: ${e.message}`);
+      }
+    }
+
     setAgindo(null);
-    if (error) { setErro(error.message); return; }
     await carregar();
   }
 

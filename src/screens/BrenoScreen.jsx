@@ -354,8 +354,28 @@ function DraftsTab({ tenantDbId }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const approve = async (id) => {
-    await supabase.from('agent_drafts').update({ status: 'approved' }).eq('id', id);
+  const approve = async (draft) => {
+    // 1. Marca como aprovado (mantém o comportamento anterior).
+    await supabase.from('agent_drafts').update({ status: 'approved' }).eq('id', draft.id);
+
+    // 2. Drafts de WhatsApp do Breno devem ser enviados de fato ao cliente.
+    //    O endpoint genérico do Bridge resolve a instância Evolution e envia.
+    if (draft.channel === 'whatsapp' && draft.agent_name === 'breno') {
+      try {
+        const token = (await supabase.auth.getSession()).data.session?.access_token;
+        const res = await fetch(`${BRIDGE}/api/breno/aprovar/${draft.id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ tenant_id: tenantDbId }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          alert(`Aprovado, mas falhou ao enviar: ${err.error || res.status}`);
+        }
+      } catch (e) {
+        alert(`Aprovado, mas falhou ao enviar: ${e.message}`);
+      }
+    }
     load();
   };
   const reject = async (id) => {
@@ -396,7 +416,7 @@ function DraftsTab({ tenantDbId }) {
             <p style={{ margin: '0 0 10px', fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 1.5 }}>{d.content}</p>
             {(isPending || isFlagged) && (
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => approve(d.id)} style={{ flex: 1, padding: '6px 12px', background: 'rgba(22,163,74,0.15)', border: '1px solid rgba(22,163,74,0.3)', borderRadius: 6, color: '#16a34a', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>✓ Aprovar</button>
+                <button onClick={() => approve(d)} style={{ flex: 1, padding: '6px 12px', background: 'rgba(22,163,74,0.15)', border: '1px solid rgba(22,163,74,0.3)', borderRadius: 6, color: '#16a34a', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>✓ Aprovar</button>
                 <button onClick={() => reject(d.id)} style={{ flex: 1, padding: '6px 12px', background: 'rgba(220,38,38,0.1)', border: '1px solid rgba(220,38,38,0.25)', borderRadius: 6, color: '#dc2626', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>✕ Rejeitar</button>
               </div>
             )}
