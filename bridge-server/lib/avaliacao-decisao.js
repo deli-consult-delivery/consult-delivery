@@ -47,6 +47,18 @@ async function decidirECriarRegistro({ sbFetch, tenantId, config, conv }) {
     return { status: 'filtrado', detalhe: 'anterior ao baseline' };
   }
 
+  // ── Whitelist de piloto (mesma do poller) ─────────────────────────────────
+  // Durante testes, só processa o contato de teste. Compara últimos 8 dígitos
+  // (tolerante à variação do 9º dígito do celular brasileiro).
+  if (config.piloto_telefone_teste) {
+    const sufixo = (s) => String(s || '').replace(/\D/g, '').slice(-8);
+    const alvo  = sufixo(config.piloto_telefone_teste);
+    const atual = sufixo(contactIdentifier);
+    if (!atual || atual !== alvo) {
+      return { status: 'filtrado', detalhe: 'fora da whitelist de piloto' };
+    }
+  }
+
   // ── Dedup da finalização (NPS + CSAT) ─────────────────────────────────────
   // Casa por PREFIXO conv.id: (não pelo finalizacaoRef exato) para que webhook e
   // poller de segurança nunca dupliquem, mesmo que o updatedAt difira em precisão

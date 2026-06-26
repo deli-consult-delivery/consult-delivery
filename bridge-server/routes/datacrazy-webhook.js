@@ -94,7 +94,7 @@ module.exports = function datacrazyWebhookRouter({ sbFetch }) {
         try {
           const rows = await sbFetch(
             `avaliacao_config?tenant_id=eq.${encodeURIComponent(tenantId)}` +
-            `&select=nps_auto_envio,csat_auto_envio,datacrazy_api_key,nome_empresa,nps_baseline_at,nps_cooldown_dias,csat_mensagem_template,nps_mensagem_template&limit=1`
+            `&select=nps_auto_envio,csat_auto_envio,datacrazy_api_key,nome_empresa,nps_baseline_at,nps_cooldown_dias,csat_mensagem_template,nps_mensagem_template,piloto_telefone_teste&limit=1`
           );
           config = rows?.[0];
         } catch (e) {
