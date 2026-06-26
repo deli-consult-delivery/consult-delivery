@@ -274,7 +274,8 @@ export const datacrazyNpsPollerTask = task({
       logger.info(`datacrazy-nps-poller: ${finishedConvs.length} conv finalizadas recentemente (tenant ${tenantId})`);
 
       for (const conv of finishedConvs) {
-        const contactIdentifier = conv.contact?.phoneNumber || conv.id;
+        // contact_identifier = conv.id (estável por contato; consistente com o webhook).
+        const contactIdentifier = conv.id;
         const contactName       = conv.contact?.name || conv.name || null;
         // external_ref único POR FINALIZAÇÃO. O DataCrazy reusa a mesma conversa
         // por contato; juntar o updatedAt (momento da finalização) faz cada
@@ -300,12 +301,8 @@ export const datacrazyNpsPollerTask = task({
         // Durante o piloto, só processa conversas do contato de teste.
         // Envia normal via DataCrazy (na própria conversa de teste).
         if (config.piloto_telefone_teste) {
-          // Compara pelos últimos 8 dígitos — tolerante à variação do 9º dígito
-          // do celular brasileiro (DataCrazy pode guardar com ou sem o 9).
-          const sufixo = (s: string) => s.replace(/\D/g, "").slice(-8);
-          const alvo  = sufixo(config.piloto_telefone_teste);
-          const atual = sufixo(String(contactIdentifier));
-          if (!atual || atual !== alvo) {
+          // Identifier agora é o conv.id → whitelist compara o conv.id exato.
+          if (String(contactIdentifier) !== String(config.piloto_telefone_teste).trim()) {
             resultados.push({
               conversation_id: conv.id,
               contact_name:    contactName ?? undefined,

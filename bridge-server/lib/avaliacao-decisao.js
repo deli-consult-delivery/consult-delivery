@@ -37,7 +37,9 @@ const enc = (v) => encodeURIComponent(v);
  *                    contactName?:string, detalhe?:string}>}
  */
 async function decidirECriarRegistro({ sbFetch, tenantId, config, conv }) {
-  const contactIdentifier = conv.phoneNumber || conv.id;
+  // contact_identifier = conv.id (estável por contato: DataCrazy mantém 1 conversa
+  // por contato). Não depende do telefone (cuja resolução via lista é lenta/instável).
+  const contactIdentifier = conv.id;
   const contactName       = conv.name || null;
   const finalizacaoRef    = `${conv.id}:${conv.updatedAt || ''}`;
 
@@ -47,14 +49,12 @@ async function decidirECriarRegistro({ sbFetch, tenantId, config, conv }) {
     return { status: 'filtrado', detalhe: 'anterior ao baseline' };
   }
 
-  // ── Whitelist de piloto (mesma do poller) ─────────────────────────────────
-  // Durante testes, só processa o contato de teste. Compara últimos 8 dígitos
-  // (tolerante à variação do 9º dígito do celular brasileiro).
+  // ── Whitelist de piloto ───────────────────────────────────────────────────
+  // Durante testes, só processa a conversa de teste. Como o identifier agora é o
+  // conv.id, a whitelist compara o conv.id exato (piloto_telefone_teste recebe o
+  // conv.id no teste). Em produção fica NULL (sem whitelist).
   if (config.piloto_telefone_teste) {
-    const sufixo = (s) => String(s || '').replace(/\D/g, '').slice(-8);
-    const alvo  = sufixo(config.piloto_telefone_teste);
-    const atual = sufixo(contactIdentifier);
-    if (!atual || atual !== alvo) {
+    if (String(contactIdentifier) !== String(config.piloto_telefone_teste).trim()) {
       return { status: 'filtrado', detalhe: 'fora da whitelist de piloto' };
     }
   }
