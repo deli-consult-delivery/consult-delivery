@@ -216,7 +216,7 @@ export const datacrazyNpsPollerTask = task({
     let configQuery = sb
       .from("avaliacao_config")
       .select(
-        "tenant_id, nps_auto_envio, nps_mensagem_template, csat_mensagem_template, nps_cooldown_dias, datacrazy_api_key, nome_empresa, piloto_telefone_teste, nps_baseline_at"
+        "tenant_id, nps_auto_envio, nps_mensagem_template, csat_mensagem_template, nps_cooldown_dias, nps_min_atendimentos, datacrazy_api_key, nome_empresa, piloto_telefone_teste, nps_baseline_at"
       )
       .eq("nps_auto_envio", true)
       .not("datacrazy_api_key", "is", null);
@@ -355,21 +355,23 @@ export const datacrazyNpsPollerTask = task({
           Date.now() - cooldownDias * 24 * 60 * 60 * 1000
         ).toISOString();
 
-        // Já recebeu alguma pesquisa antes? (NPS ou CSAT, em qualquer data)
+        // Conta atendimentos anteriores (NPS + CSAT, qualquer data) + cooldown.
+        const minAtend = config.nps_min_atendimentos ?? 4;
         const [{ data: priorNps }, { data: priorCsat }, { data: npsRecente }] = await Promise.all([
           sb.from("nps_avaliacoes").select("id")
-            .eq("tenant_id", tenantId).eq("contact_identifier", contactIdentifier).limit(1),
+            .eq("tenant_id", tenantId).eq("contact_identifier", contactIdentifier).limit(20),
           (sb as any).from("atendimento_avaliacoes").select("id")
-            .eq("tenant_id", tenantId).eq("contact_identifier", contactIdentifier).limit(1),
+            .eq("tenant_id", tenantId).eq("contact_identifier", contactIdentifier).limit(20),
           sb.from("nps_avaliacoes").select("id")
             .eq("tenant_id", tenantId).eq("contact_identifier", contactIdentifier)
             .gte("created_at", cooldownCutoff).limit(1),
         ]);
 
-        const primeiroAtendimento = !(priorNps?.length) && !(priorCsat?.length);
-        const npsNoCooldown        = (npsRecente?.length ?? 0) > 0;
-        // CSAT no 1º atendimento OU quando NPS ainda está no cooldown.
-        const enviarCsat = primeiroAtendimento || npsNoCooldown;
+        // NPS só a partir do minAtend-ésimo atendimento finalizado (default 4).
+        const atendimentoAtual = (priorNps?.length ?? 0) + (priorCsat?.length ?? 0) + 1;
+        const aindaCedoParaNps  = atendimentoAtual < minAtend;
+        const npsNoCooldown     = (npsRecente?.length ?? 0) > 0;
+        const enviarCsat        = aindaCedoParaNps || npsNoCooldown;
 
         if (enviarCsat) {
           // ── 5a. CSAT (pesquisa de atendimento) ──────────────────────────
