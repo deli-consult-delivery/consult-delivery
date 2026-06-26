@@ -69,6 +69,61 @@ function calcAtendentes(rows) {
     .sort((a, b) => b.qtd - a.qtd);
 }
 
+function calcNpsBreakdown(rows) {
+  const resp = rows.filter(r => r.nota != null);
+  const n = resp.length;
+  const prom = resp.filter(r => r.nota >= 9).length;
+  const pass = resp.filter(r => r.nota >= 7 && r.nota <= 8).length;
+  const det = resp.filter(r => r.nota <= 6).length;
+  const dist = Array.from({ length: 11 }, (_, i) => resp.filter(r => r.nota === i).length);
+  const pct = x => (n > 0 ? Math.round((x / n) * 100) : 0);
+  return { n, prom, pass, det, pctProm: pct(prom), pctPass: pct(pass), pctDet: pct(det), dist };
+}
+
+function calcCsat(rows) {
+  const resp = rows.filter(r => r.nota != null);
+  const enviadas = rows.filter(r => r.msg_enviada_status != null).length;
+  const n = resp.length;
+  const media = n > 0 ? resp.reduce((s, r) => s + r.nota, 0) / n : null;
+  const dist = Array.from({ length: 5 }, (_, i) => resp.filter(r => r.nota === i + 1).length);
+  const taxaResposta = enviadas > 0 ? Math.round((n / enviadas) * 100) : 0;
+  return { n, enviadas, media, dist, taxaResposta };
+}
+
+function calcTempo(npsRows, csatRows) {
+  const all = [...npsRows, ...csatRows];
+  const durs = all.filter(r => r.duracao_minutos != null).map(r => r.duracao_minutos);
+  const duracaoMedia = durs.length ? Math.round(durs.reduce((s, d) => s + d, 0) / durs.length) : null;
+  const respTimes = all
+    .filter(r => r.responded_at && r.created_at)
+    .map(r => (new Date(r.responded_at) - new Date(r.created_at)) / 60000)
+    .filter(m => m >= 0);
+  const tempoResposta = respTimes.length ? Math.round(respTimes.reduce((s, m) => s + m, 0) / respTimes.length) : null;
+  return { duracaoMedia, tempoResposta };
+}
+
+function calcSaudeEnvio(npsRows, csatRows) {
+  const all = [...npsRows, ...csatRows];
+  return {
+    enviados:  all.filter(r => r.msg_enviada_status === 'ok').length,
+    falhas:    all.filter(r => r.msg_enviada_status === 'falhou').length,
+    pendentes: all.filter(r => r.msg_enviada_status == null).length,
+  };
+}
+
+function DistBar({ label, valor, max, cor }) {
+  const pct = max > 0 ? Math.round((valor / max) * 100) : 0;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+      <span style={{ width: 24, fontSize: 11, color: 'var(--tx2)', textAlign: 'right' }}>{label}</span>
+      <div style={{ flex: 1, background: '#f1f5f9', borderRadius: 4, height: 14, overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: cor || 'var(--accent,#2563eb)' }} />
+      </div>
+      <span style={{ width: 28, fontSize: 11, color: 'var(--tx2)' }}>{valor}</span>
+    </div>
+  );
+}
+
 function corNota(nota) {
   if (nota == null) return 'var(--tx2)';
   if (nota >= 9) return 'var(--green)';
@@ -178,6 +233,7 @@ export default function ControleAtendimentos({ tenantDbId }) {
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
   const [rows, setRows] = useState([]);
+  const [csatRows, setCsatRows] = useState([]);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState(null);
   const [modalItem, setModalItem] = useState(null);
@@ -195,26 +251,36 @@ export default function ControleAtendimentos({ tenantDbId }) {
       desde = diasAtras(periodo === '7d' ? 7 : 30);
     }
 
-    let query = supabase
+    let fimISO = null;
+    if (periodo === 'custom' && dataFim) {
+      const fim = new Date(dataFim);
+      fim.setHours(23, 59, 59, 999);
+      fimISO = fim.toISOString();
+    }
+
+    let qNps = supabase
       .from('nps_avaliacoes')
-      .select('id, contact_identifier, contact_nome, nota, comentario, status, tratativa_status, tratativa_obs, tratativa_at, created_at, msg_enviada_status, atendente_nome, duracao_minutos, assigned_to')
+      .select('id, contact_identifier, contact_nome, nota, comentario, status, tratativa_status, tratativa_obs, tratativa_at, created_at, responded_at, msg_enviada_status, atendente_nome, duracao_minutos, assigned_to')
       .eq('tenant_id', tenantDbId)
       .gte('created_at', desde)
       .order('created_at', { ascending: false })
       .limit(500);
-
-    if (periodo === 'custom' && dataFim) {
-      const fim = new Date(dataFim);
-      fim.setHours(23, 59, 59, 999);
-      query = query.lte('created_at', fim.toISOString());
-    }
+    let qCsat = supabase
+      .from('atendimento_avaliacoes')
+      .select('id, nome_cliente, nota, status, created_at, responded_at, msg_enviada_status, atendente_nome, duracao_minutos')
+      .eq('tenant_id', tenantDbId)
+      .gte('created_at', desde)
+      .order('created_at', { ascending: false })
+      .limit(500);
+    if (fimISO) { qNps = qNps.lte('created_at', fimISO); qCsat = qCsat.lte('created_at', fimISO); }
 
     setCarregando(true);
     setErro(null);
     try {
-      const { data, error } = await query;
-      if (error) throw error;
-      setRows(data || []);
+      const [resNps, resCsat] = await Promise.all([qNps, qCsat]);
+      if (resNps.error) throw resNps.error;
+      setRows(resNps.data || []);
+      setCsatRows(resCsat.error ? [] : (resCsat.data || []));
     } catch (e) {
       setErro(e.message);
     } finally {
@@ -257,6 +323,12 @@ export default function ControleAtendimentos({ tenantDbId }) {
 
   const kpis = calcKpis(rows);
   const atendentes = calcAtendentes(rows);
+  const npsBd = calcNpsBreakdown(rows);
+  const csat = calcCsat(csatRows);
+  const tempo = calcTempo(rows, csatRows);
+  const saude = calcSaudeEnvio(rows, csatRows);
+  const maxNpsDist = Math.max(1, ...npsBd.dist);
+  const maxCsatDist = Math.max(1, ...csat.dist);
   const detratoresFila = rows
     .filter(r => r.nota != null && r.nota <= 6 && r.tratativa_status !== 'resolvido')
     .concat(rows.filter(r => r.nota != null && r.nota <= 6 && r.tratativa_status === 'resolvido'));
@@ -321,6 +393,60 @@ export default function ControleAtendimentos({ tenantDbId }) {
           </div>
         )}
       </section>
+
+      {/* ── NPS detalhado ── */}
+      {!carregando && (
+      <section style={{ marginBottom: 28 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--tx2)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '.4px' }}>NPS detalhado</div>
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          <div className="cv2-kpi-row" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <KpiCard label="Promotores (9–10)" valor={`${npsBd.pctProm}%`} detalhe={`${npsBd.prom} respostas`} cor="var(--green)" />
+            <KpiCard label="Passivos (7–8)" valor={`${npsBd.pctPass}%`} detalhe={`${npsBd.pass} respostas`} cor="var(--warn,#f59e0b)" />
+            <KpiCard label="Detratores (0–6)" valor={`${npsBd.pctDet}%`} detalhe={`${npsBd.det} respostas`} cor="var(--red)" />
+          </div>
+          <div style={{ flex: 1, minWidth: 260 }}>
+            <div style={{ fontSize: 11, color: 'var(--tx2)', marginBottom: 6 }}>Distribuição das notas (0–10)</div>
+            {npsBd.dist.map((v, i) => (
+              <DistBar key={i} label={String(i)} valor={v} max={maxNpsDist} cor={i >= 9 ? 'var(--green)' : i >= 7 ? 'var(--warn,#f59e0b)' : 'var(--red)'} />
+            ))}
+          </div>
+        </div>
+      </section>
+      )}
+
+      {/* ── CSAT detalhado ── */}
+      {!carregando && (
+      <section style={{ marginBottom: 28 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--tx2)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '.4px' }}>CSAT — Avaliação de atendimento</div>
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          <div className="cv2-kpi-row" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <KpiCard label="Média (1–5)" valor={csat.media != null ? csat.media.toFixed(1) : '—'} cor={csat.media != null ? (csat.media >= 4 ? 'var(--green)' : csat.media >= 3 ? 'var(--warn,#f59e0b)' : 'var(--red)') : undefined} />
+            <KpiCard label="Respondidas" valor={csat.n} detalhe={`${csat.enviadas} enviadas`} />
+            <KpiCard label="Taxa de resposta" valor={`${csat.taxaResposta}%`} />
+          </div>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ fontSize: 11, color: 'var(--tx2)', marginBottom: 6 }}>Distribuição das notas (1–5)</div>
+            {csat.dist.map((v, i) => (
+              <DistBar key={i} label={`${i + 1}★`} valor={v} max={maxCsatDist} cor={i + 1 >= 4 ? 'var(--green)' : i + 1 >= 3 ? 'var(--warn,#f59e0b)' : 'var(--red)'} />
+            ))}
+          </div>
+        </div>
+      </section>
+      )}
+
+      {/* ── Tempo de atendimento & saúde de envio ── */}
+      {!carregando && (
+      <section style={{ marginBottom: 28 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--tx2)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '.4px' }}>Tempo de atendimento & envio</div>
+        <div className="cv2-kpi-row" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <KpiCard label="Duração média" valor={fmtMin(tempo.duracaoMedia)} detalhe="abertura → finalização" />
+          <KpiCard label="Tempo médio p/ responder" valor={fmtMin(tempo.tempoResposta)} detalhe="envio → resposta" />
+          <KpiCard label="Enviados (NPS+CSAT)" valor={saude.enviados} />
+          <KpiCard label="Falhas de envio" valor={saude.falhas} cor={saude.falhas > 0 ? 'var(--red)' : undefined} />
+          <KpiCard label="Pendentes" valor={saude.pendentes} />
+        </div>
+      </section>
+      )}
 
       {/* ── Seção 2: Fila de detratores ── */}
       <section style={{ marginBottom: 28 }}>
