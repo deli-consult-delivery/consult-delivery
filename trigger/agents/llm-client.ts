@@ -26,7 +26,7 @@ export interface ChatResponse {
 const TIMEOUT_MS = 120_000;
 
 // ─── Ollama Cloud ─────────────────────────────────────────────────────────────
-async function chatOllamaCloud(messages: ChatMessage[]): Promise<ChatResponse> {
+async function chatOllamaCloud(messages: ChatMessage[], forceJson = true): Promise<ChatResponse> {
   const baseUrl = process.env.OLLAMA_BASE_URL;
   const apiKey  = process.env.OLLAMA_API_KEY;
   const model   = process.env.LLM_MODEL || process.env.OLLAMA_MODEL || "kimi-k2.6:cloud";
@@ -48,7 +48,7 @@ async function chatOllamaCloud(messages: ChatMessage[]): Promise<ChatResponse> {
         model,
         messages,
         stream: false,
-        format: "json",
+        ...(forceJson ? { format: "json" } : {}),
         options: { temperature: 0.1, num_predict: 8192 },
       }),
       signal: controller.signal,
@@ -121,10 +121,10 @@ async function chatAnthropic(messages: ChatMessage[]): Promise<ChatResponse> {
 }
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
-export async function chat(messages: ChatMessage[]): Promise<ChatResponse> {
+export async function chat(messages: ChatMessage[], forceJson = true): Promise<ChatResponse> {
   const provider = process.env.LLM_PROVIDER || "ollama-cloud";
 
-  if (provider === "ollama-cloud") return chatOllamaCloud(messages);
+  if (provider === "ollama-cloud") return chatOllamaCloud(messages, forceJson);
   if (provider === "anthropic")    return chatAnthropic(messages);
 
   throw new Error(`LLM_PROVIDER inválido: "${provider}". Use "ollama-cloud" ou "anthropic"`);
