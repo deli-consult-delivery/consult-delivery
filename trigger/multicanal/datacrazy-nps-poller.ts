@@ -106,6 +106,11 @@ const PUBLIC_BASE =
 
 const DATACRAZY_BASE = process.env.DATACRAZY_API_URL || "https://api.g1.datacrazy.io";
 
+// Janela curta p/ deduplicar a MESMA finalização entre ticks de cron sobrepostos
+// (lookback 7min > intervalo 5min). Não bloqueia re-avaliações futuras — quem faz
+// isso é o cooldown de 30d por contato. 120min cobre folga de atrasos do scheduler.
+const DEDUP_FINALIZACAO_MIN = 120;
+
 function renderTemplate(template: string, vars: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? `{${key}}`);
 }
@@ -268,12 +273,21 @@ export const datacrazyNpsPollerTask = task({
           }
         }
 
-        // ── 4. Idempotência: já processada em NPS ou CSAT? ────────────────
+        // ── 4. Idempotência da finalização (NÃO permanente) ───────────────
+        // DataCrazy mantém UMA conversa por contato (external_ref estável):
+        // a mesma conversa é re-finalizada a cada novo pedido. Uma idempotência
+        // permanente por external_ref avaliaria o cliente uma única vez na vida.
+        // Aqui só evitamos reenviar a MESMA finalização capturada por janelas de
+        // cron sobrepostas (lookback 7min > intervalo 5min). Re-avaliações
+        // futuras são governadas pelo cooldown de 30d por contato (passo 5).
+        const dedupCutoff = new Date(Date.now() - DEDUP_FINALIZACAO_MIN * 60 * 1000).toISOString();
+
         const { data: jaNps } = await sb
           .from("nps_avaliacoes")
           .select("id")
           .eq("tenant_id", tenantId)
           .eq("external_ref", conv.id)
+          .gte("created_at", dedupCutoff)
           .limit(1);
 
         const { data: jaCsat } = await (sb as any)
@@ -281,6 +295,7 @@ export const datacrazyNpsPollerTask = task({
           .select("id")
           .eq("tenant_id", tenantId)
           .eq("external_ref", conv.id)
+          .gte("created_at", dedupCutoff)
           .limit(1);
 
         if (jaNps?.length || jaCsat?.length) {
