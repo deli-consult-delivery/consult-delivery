@@ -91,14 +91,14 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
         return res.status(410).json({ erro: 'link_expirado' });
       }
 
-      if (nps.status === 'respondida') {
-        return res.status(200).json({ ja_respondida: true, nota: nps.nota });
-      }
-
       const [brand, config] = await Promise.all([
         getBrandByTenant(sbFetch, nps.tenant_id),
         getAvaliacaoConfig(sbFetch, nps.tenant_id),
       ]);
+
+      if (nps.status === 'respondida') {
+        return res.status(200).json({ ja_respondida: true, nota: nps.nota, brand });
+      }
 
       return res.status(200).json({
         nome_loja: brand?.name ?? 'nossa loja',
