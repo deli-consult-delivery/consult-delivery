@@ -3,18 +3,25 @@
 /**
  * POST /webhooks/datacrazy/conversa-encerrada
  *
- * Chamado pelo Datacrazy quando um atendimento é encerrado.
+ * Chamado pelo Datacrazy quando um atendimento é encerrado. Caminho PRINCIPAL
+ * (por evento → imediato, uma conversa por vez, sem risco de envio em massa).
+ *
  * Fluxo:
- *  1. Valida x-crm-token do tenant
- *  2. Cria registro em atendimento_avaliacoes (idempotente)
- *  3. Responde 201 imediatamente
- *  4. Em background: envia mensagem CSAT via Datacrazy API
+ *  1. Valida x-crm-token do tenant.
+ *  2. Responde 202 imediatamente.
+ *  3. Em background:
+ *     - busca config do tenant (gate por nps_auto_envio).
+ *     - busca detalhes da conversa no Datacrazy (telefone, updatedAt, nome).
+ *     - decide CSAT (1º atendimento / dentro do cooldown) ou NPS (decisao compartilhada).
+ *     - envia via lib/datacrazy-send (reabre → envia → FINALIZA de volta).
+ *
+ * O alerta de detrator dispara em publico-nps.js quando o cliente responde nota ≤ 6
+ * (independe deste gatilho).
  */
 
 const { createHash } = require('crypto');
-const { sendDatacrazyMessage, renderTemplate } = require('../lib/datacrazy-send');
-
-const PUBLIC_BASE = process.env.VITE_PUBLIC_URL || 'https://app.consultdelivery.com.br';
+const { sendDatacrazyMessage, getDatacrazyConversation } = require('../lib/datacrazy-send');
+const { decidirECriarRegistro } = require('../lib/avaliacao-decisao');
 
 // Rate limit simples em memória: 60 req/min por IP
 const rateLimitMap = new Map();
@@ -57,7 +64,7 @@ module.exports = function datacrazyWebhookRouter({ sbFetch }) {
       return res.status(401).json({ error: 'token_invalido' });
     }
 
-    const tokenId = tokenRows[0].id;
+    const tokenId  = tokenRows[0].id;
     const tenantId = tokenRows[0].tenant_id;
 
     // Atualiza last_used_at de forma assíncrona (não bloqueia resposta)
@@ -66,109 +73,72 @@ module.exports = function datacrazyWebhookRouter({ sbFetch }) {
       body: { last_used_at: new Date().toISOString() },
     }).catch(() => {});
 
-    // ── 2. Validação do payload ─────────────────────────────────────────────
-    const { conversation_id, lead_id, lead_name, external_ref } = req.body || {};
-    console.log(`[datacrazy-webhook] entrada: conv=${conversation_id} lead=${lead_name}`);
+    // ── 2. Payload ──────────────────────────────────────────────────────────
+    const payload = req.body || {};
+    const { conversation_id, lead_name } = payload;
+    // Log do corpo bruto para confirmar os campos que o Datacrazy envia.
+    console.log('[datacrazy-webhook] payload:', JSON.stringify(payload).slice(0, 500));
 
     if (!conversation_id) {
       return res.status(400).json({ error: 'conversation_id_obrigatorio' });
     }
 
-    const ref = external_ref || conversation_id;
+    // Responde imediatamente — processamento em background.
+    res.status(202).json({ ok: true, conversation_id });
 
-    // ── 3. Idempotência por (tenant_id, external_ref) ──────────────────────
-    let existingRows;
-    try {
-      existingRows = await sbFetch(
-        `atendimento_avaliacoes?tenant_id=eq.${encodeURIComponent(tenantId)}&external_ref=eq.${encodeURIComponent(ref)}&select=id,public_token&limit=1`
-      );
-    } catch (e) {
-      console.error('[datacrazy-webhook] Erro ao verificar idempotência:', e.message);
-      return res.status(500).json({ error: 'erro_interno' });
-    }
-
-    if (existingRows?.length) {
-      const linkAvaliacao = `${PUBLIC_BASE}/avaliacao/${existingRows[0].public_token}`;
-      console.log(`[datacrazy-webhook] reenvio ignorado: ref=${ref}`);
-      return res.status(200).json({ ok: true, reenvio: true, link_avaliacao: linkAvaliacao });
-    }
-
-    // ── 4. Cria registro de avaliação CSAT ─────────────────────────────────
-    let novaAvaliacaoArr;
-    try {
-      novaAvaliacaoArr = await sbFetch('atendimento_avaliacoes?select=id,public_token', {
-        method: 'POST',
-        body: {
-          tenant_id:          tenantId,
-          external_ref:       ref,
-          contact_identifier: conversation_id,
-          nome_cliente:       lead_name || null,
-          origem:             'crm_externo',
-          status:             'pendente',
-        },
-        prefer: 'return=representation',
-      });
-    } catch (e) {
-      console.error('[datacrazy-webhook] Erro ao criar avaliação:', e.message);
-      return res.status(500).json({ error: 'erro_interno' });
-    }
-
-    const novaAvaliacao = novaAvaliacaoArr?.[0];
-    if (!novaAvaliacao?.public_token) {
-      console.error('[datacrazy-webhook] Avaliação criada sem public_token');
-      return res.status(500).json({ error: 'erro_interno' });
-    }
-
-    // Responde imediatamente com 201
-    const linkAvaliacao = `${PUBLIC_BASE}/avaliacao/${novaAvaliacao.public_token}`;
-    res.status(201).json({ ok: true, link_avaliacao: linkAvaliacao });
-
-    // ── 5. Envio da mensagem CSAT via Datacrazy (background) ───────────────
+    // ── 3. Processamento em background ─────────────────────────────────────
     setImmediate(async () => {
       try {
-        let configRows;
+        // 3a. Config do tenant (gate por nps_auto_envio = chave-mestra de pausa)
+        let config;
         try {
-          configRows = await sbFetch(
-            `avaliacao_config?tenant_id=eq.${encodeURIComponent(tenantId)}&select=csat_auto_envio,csat_mensagem_template,datacrazy_api_key,nome_empresa&limit=1`
+          const rows = await sbFetch(
+            `avaliacao_config?tenant_id=eq.${encodeURIComponent(tenantId)}` +
+            `&select=nps_auto_envio,csat_auto_envio,datacrazy_api_key,nome_empresa,nps_baseline_at,nps_cooldown_dias,csat_mensagem_template,nps_mensagem_template,piloto_telefone_teste&limit=1`
           );
+          config = rows?.[0];
         } catch (e) {
           console.error('[datacrazy-webhook] Erro ao buscar config:', e.message);
           return;
         }
 
-        const config = configRows?.[0];
-        if (!config?.csat_auto_envio || !config?.datacrazy_api_key) return;
+        if (!config) { console.warn('[datacrazy-webhook] sem config p/ tenant', tenantId); return; }
+        if (!config.nps_auto_envio) { console.log('[datacrazy-webhook] pausado (nps_auto_envio=false)', tenantId); return; }
+        if (!config.datacrazy_api_key) { console.warn('[datacrazy-webhook] sem datacrazy_api_key', tenantId); return; }
 
-        const template = config.csat_mensagem_template ||
-          'Olá {nome_cliente}! 😊 Seu atendimento foi encerrado. Como foi? Avalie aqui: {link_avaliacao}';
+        // 3b. Detalhes da conversa (telefone/updatedAt/nome). Fallbacks robustos.
+        const det = await getDatacrazyConversation(config.datacrazy_api_key, conversation_id);
+        const conv = {
+          id:          conversation_id,
+          updatedAt:   det?.updatedAt || new Date().toISOString(),  // webhook = momento da finalização
+          phoneNumber: det?.phoneNumber || null,                     // null → decisao usa conv.id como identifier
+          name:        det?.name || lead_name || null,
+        };
 
-        const text = renderTemplate(template, {
-          nome_cliente:   lead_name || 'cliente',
-          link_avaliacao: linkAvaliacao,
-          nome_empresa:   config.nome_empresa || 'nossa empresa',
-        });
+        // 3c. Decisão + criação do registro (lib compartilhada)
+        const r = await decidirECriarRegistro({ sbFetch, tenantId, config, conv });
+        if (r.status !== 'criado') {
+          console.log(`[datacrazy-webhook] conv=${conversation_id} ${r.status}${r.detalhe ? ' ('+r.detalhe+')' : ''}`);
+          return;
+        }
 
+        // 3d. Envio via Datacrazy (reabre → envia → finaliza de volta)
         const { ok, detail } = await sendDatacrazyMessage(
           { apiKey: config.datacrazy_api_key },
           conversation_id,
-          text
+          r.text
         );
 
-        const updateBody = {
-          msg_enviada_at:     new Date().toISOString(),
-          msg_enviada_status: ok ? 'ok' : 'falhou',
-        };
-
-        sbFetch(`atendimento_avaliacoes?id=eq.${encodeURIComponent(novaAvaliacao.id)}`, {
+        const tabela = r.tipo === 'nps' ? 'nps_avaliacoes' : 'atendimento_avaliacoes';
+        sbFetch(`${tabela}?id=eq.${encodeURIComponent(r.recordId)}`, {
           method: 'PATCH',
-          body: updateBody,
+          body: { msg_enviada_at: new Date().toISOString(), msg_enviada_status: ok ? 'ok' : 'falhou' },
         }).catch(e => console.error('[datacrazy-webhook] Erro ao atualizar msg_enviada:', e.message));
 
-        if (!ok) {
-          console.error('[datacrazy-webhook] Falha ao enviar mensagem CSAT:', detail);
-        }
+        console.log(`[datacrazy-webhook] conv=${conversation_id} tipo=${r.tipo} envio=${ok ? 'ok' : 'falhou'}`);
+        if (!ok) console.error('[datacrazy-webhook] Falha no envio:', detail);
       } catch (err) {
-        console.error('[datacrazy-webhook] Erro no background CSAT:', err.message);
+        console.error('[datacrazy-webhook] Erro no background:', err.message);
       }
     });
   });

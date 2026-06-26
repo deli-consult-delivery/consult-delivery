@@ -76,7 +76,7 @@ async function fetchConversationSnapshot(
 
 const InputSchema = z.object({
   tenant_id:                 z.string().uuid().optional(),
-  lookback_minutes:          z.number().int().min(1).max(10).default(7),
+  lookback_minutes:          z.number().int().min(1).max(60).default(7),
   contact_identifier_filter: z.string().optional(),
 });
 
@@ -105,6 +105,7 @@ const PUBLIC_BASE =
   "https://app.consultdelivery.com.br";
 
 const DATACRAZY_BASE = process.env.DATACRAZY_API_URL || "https://api.g1.datacrazy.io";
+const DATACRAZY_MESSAGING_BASE = process.env.DATACRAZY_MESSAGING_URL || "https://messaging.g1.datacrazy.io";
 
 // Janela curta p/ deduplicar a MESMA finalização entre ticks de cron sobrepostos
 // (lookback 7min > intervalo 5min). Não bloqueia re-avaliações futuras — quem faz
@@ -147,11 +148,30 @@ async function fetchRecentFinishedConversations(
   return (data.data ?? []).filter((c) => c.finished === true);
 }
 
+// Reabre/finaliza a conversa via API de messaging do Datacrazy.
+async function datacrazyConversationAction(
+  apiKey: string,
+  conversationId: string,
+  action: "reopen" | "finish"
+): Promise<void> {
+  try {
+    await fetch(
+      `${DATACRAZY_MESSAGING_BASE}/api/messaging/conversations/${conversationId}/${action}`,
+      { method: "POST", headers: { Authorization: `Bearer ${apiKey}` } }
+    );
+  } catch (_) {
+    // best-effort
+  }
+}
+
 async function sendDatacrazyNpsMessage(
   apiKey: string,
   conversationId: string,
   messageBody: string
 ): Promise<{ ok: boolean; detail?: unknown }> {
+  // Reabre antes de enviar para garantir entrega ao WhatsApp.
+  await datacrazyConversationAction(apiKey, conversationId, "reopen");
+
   const resp = await fetch(
     `${DATACRAZY_BASE}/api/v1/conversations/${conversationId}/messages`,
     {
@@ -164,6 +184,10 @@ async function sendDatacrazyNpsMessage(
     }
   );
   const body = await resp.json().catch(() => ({}));
+
+  // Finaliza a conversa de volta (a mensagem reabre o atendimento).
+  await datacrazyConversationAction(apiKey, conversationId, "finish");
+
   return { ok: resp.ok, detail: resp.ok ? undefined : body };
 }
 
@@ -305,7 +329,7 @@ export const datacrazyNpsPollerTask = task({
           .from("nps_avaliacoes")
           .select("id")
           .eq("tenant_id", tenantId)
-          .eq("external_ref", finalizacaoRef)
+          .like("external_ref", `${conv.id}:%`)
           .gte("created_at", dedupCutoff)
           .limit(1);
 
@@ -313,7 +337,7 @@ export const datacrazyNpsPollerTask = task({
           .from("atendimento_avaliacoes")
           .select("id")
           .eq("tenant_id", tenantId)
-          .eq("external_ref", finalizacaoRef)
+          .like("external_ref", `${conv.id}:%`)
           .gte("created_at", dedupCutoff)
           .limit(1);
 
@@ -467,15 +491,16 @@ export const datacrazyNpsPollerTask = task({
   },
 });
 
-// Cron a cada 5 min (janela 7 min). Reativado 2026-06-26 com proteção de
-// BASELINE: o dispatcher só processa conversas com updatedAt > nps_baseline_at,
-// suprimindo o backlog. Os senders legados nps-enviar-cron e
-// csat-enviar-avaliacao-cron seguem DESATIVADOS (o dispatcher é self-contained).
+// REDE DE SEGURANÇA (2026-06-26): o caminho principal é o webhook
+// /webhooks/datacrazy/conversa-encerrada (imediato). Este cron roda a cada 30 min
+// com janela de 35 min só para pegar finalizações que o webhook tenha perdido.
+// Baseline + dedup (mesmo external_ref=conv.id:updatedAt) garantem que não duplica
+// com o webhook. O envio também reabre→finaliza a conversa.
 export const datacrazyNpsPollerCron = schedules.task({
   id:   "datacrazy-nps-poller-cron",
-  cron: "*/5 * * * *",
+  cron: "*/30 * * * *",
   run:  async (_payload, { ctx }) => {
-    logger.info("datacrazy-nps-poller-cron: disparando", { runId: ctx.run.id });
-    return datacrazyNpsPollerTask.triggerAndWait({ lookback_minutes: 7 }).unwrap();
+    logger.info("datacrazy-nps-poller-cron: disparando (rede de segurança)", { runId: ctx.run.id });
+    return datacrazyNpsPollerTask.triggerAndWait({ lookback_minutes: 35 }).unwrap();
   },
 });
