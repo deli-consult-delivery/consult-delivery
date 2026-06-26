@@ -210,11 +210,15 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
               nota:           String(notaFinal),
             });
 
+            // Tenants que só usam DataCrazy não têm Evolution própria —
+            // usa a instância da Consult Delivery como fallback para o alerta interno.
+            const CD_TENANT_ID = process.env.CD_TENANT_ID || '9079bd4d-4df7-4023-90fb-d79c8ba7e900';
             const result = await sendEvolutionText({
               tenantId,
               number: cfg.detrator_wpp_jid,
               text:   texto,
               sbFetch,
+              fallbackTenantId: CD_TENANT_ID,
             });
 
             if (!result.ok) {
