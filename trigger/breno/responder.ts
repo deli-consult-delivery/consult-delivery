@@ -4,6 +4,7 @@ import { executeAgent, getClientContext, recordFact, logTimeline } from "../../s
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 import { createLoopTask } from "../_shared/loop-tasks";
+import { agentExecutarTarefa } from "../agents/executar-tarefa";
 
 const InputSchema = z.object({
   tenant_id: z.string().uuid(),
@@ -214,6 +215,14 @@ REGRAS:
         });
         taskId = result.taskId;
         logger.info("breno-responder: tarefa loop criada", { taskId, conversation_id: input.conversation_id });
+
+        // Disparar execução imediatamente — elo que fecha o loop
+        await agentExecutarTarefa.trigger({
+          tenant_id:    input.tenant_id,
+          task_id:      taskId,
+          triggered_by: ctx.run.id,
+        });
+        logger.info("breno-responder: agent-executar-tarefa disparado", { taskId });
       } catch (err) {
         logger.warn("breno-responder: falha ao criar loop task", { error: (err as Error).message });
       }

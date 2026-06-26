@@ -81,11 +81,15 @@ export const npsEnviarTask = task({
 
     logger.info("nps-enviar: iniciando", { tenantId: input.tenant_id });
 
+    const agora = new Date();
+    const seteDiasAtras = new Date(agora.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
     let query = sb
       .from("nps_avaliacoes")
       .select("id, tenant_id, public_token, contact_identifier, contact_nome, status")
       .is("msg_enviada_at", null)
       .eq("status", "pendente")
+      .gte("created_at", seteDiasAtras)
       .order("created_at", { ascending: true })
       .limit(50);
 
@@ -174,14 +178,16 @@ export const npsEnviarTask = task({
         const { ok, detail } = await sendEvolutionText(inst, nps.contact_identifier, text);
         const statusStr = ok ? "ok" : "falhou";
 
-        await sb
+        const { error: updateErr } = await sb
           .from("nps_avaliacoes")
           .update({
             msg_enviada_at:     new Date().toISOString(),
             msg_enviada_status: statusStr,
           })
-          .eq("id", nps.id)
-          .catch((err: unknown) => logger.error("nps-enviar: falha ao atualizar msg_enviada", { err: (err as Error).message }));
+          .eq("id", nps.id);
+        if (updateErr) {
+          logger.error("nps-enviar: falha ao atualizar msg_enviada", { err: updateErr.message });
+        }
 
         resultados.push({ nps_id: nps.id, tenant_id: tenantId, status: ok ? "ok" : "falhou", detalhe: ok ? undefined : String(detail) });
         ok ? enviados++ : falhas++;
@@ -195,6 +201,7 @@ export const npsEnviarTask = task({
     await logAgentRun({
       runId:     ctx.run.id,
       agentSlug: "nps-enviar",
+      tenantId:  input.tenant_id,
       input,
       output,
       status:    falhas > 0 && enviados === 0 ? "failed" : "success",
@@ -204,12 +211,14 @@ export const npsEnviarTask = task({
   },
 });
 
-// ─── Cron: a cada hora (NPS tem cooldown de 30 dias, não é urgente) ──────────
-export const npsEnviarCron = schedules.task({
-  id:   "nps-enviar-cron",
-  cron: "0 * * * *",
-  run:  async (_payload, { ctx }) => {
-    logger.info("nps-enviar-cron: disparando task principal");
-    return npsEnviarTask.triggerAndWait({}).unwrap();
-  },
-});
+// ⚠️ CRON DESATIVADO (2026-06-26) — incidente de envio em massa.
+// Reativar só após o disparo por evento (webhook DataCrazy) estar no ar.
+// A task manual npsEnviarTask segue disponível para testes.
+// export const npsEnviarCron = schedules.task({
+//   id:   "nps-enviar-cron",
+//   cron: "0 * * * *",
+//   run:  async (_payload, { ctx }) => {
+//     logger.info("nps-enviar-cron: disparando task principal");
+//     return npsEnviarTask.triggerAndWait({}).unwrap();
+//   },
+// });

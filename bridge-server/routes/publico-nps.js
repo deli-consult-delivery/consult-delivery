@@ -14,6 +14,8 @@
 
 const express = require('express');
 const { z }   = require('zod');
+const { getBrandByTenant, getAvaliacaoConfig } = require('../lib/branding');
+const { sendEvolutionText, renderTemplate }    = require('../lib/evolution-send');
 
 // ── Rate limiter in-memory ────────────────────────────────────────────────────
 const rateLimitNps = new Map();
@@ -61,12 +63,6 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
     return rows?.[0] ?? null;
   }
 
-  async function getTenantName(tenantId) {
-    const rows = await sbFetch(
-      `tenants?id=eq.${encodeURIComponent(tenantId)}&select=name&limit=1`
-    );
-    return rows?.[0]?.name ?? null;
-  }
 
   async function checkExpired(nps) {
     if (!nps.public_token_expires_at) return false;
@@ -95,15 +91,24 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
         return res.status(410).json({ erro: 'link_expirado' });
       }
 
+      const [brand, config] = await Promise.all([
+        getBrandByTenant(sbFetch, nps.tenant_id),
+        getAvaliacaoConfig(sbFetch, nps.tenant_id),
+      ]);
+
       if (nps.status === 'respondida') {
-        return res.status(200).json({ ja_respondida: true, nota: nps.nota });
+        return res.status(200).json({ ja_respondida: true, nota: nps.nota, brand });
       }
 
-      const nome_loja = await getTenantName(nps.tenant_id);
-
       return res.status(200).json({
-        nome_loja: nome_loja ?? 'nossa loja',
+        nome_loja: brand?.name ?? 'nossa loja',
         status:    nps.status,
+        brand,
+        config: config ? {
+          nps_titulo:        config.nps_titulo,
+          nps_subtitulo:     config.nps_subtitulo,
+          nps_agradecimento: config.nps_agradecimento,
+        } : null,
       });
     } catch (err) {
       console.error('[publico/nps GET]', err.message);
@@ -164,6 +169,69 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
       }
 
       console.info(`[publico/nps POST] nps=${nps.id} nota=${nota}`);
+
+      // F2: Alerta de detrator em background (não bloqueia resposta ao cliente)
+      if (nota <= 6) {
+        const npsId     = nps.id;
+        const tenantId  = nps.tenant_id;
+        const notaFinal = nota;
+
+        setImmediate(async () => {
+          try {
+            const [configRows, detailRows] = await Promise.all([
+              sbFetch(
+                `avaliacao_config?tenant_id=eq.${encodeURIComponent(tenantId)}&select=detrator_notificar,detrator_wpp_jid,detrator_msg_template,nps_threshold_detrator&limit=1`
+              ),
+              sbFetch(
+                `nps_avaliacoes?id=eq.${encodeURIComponent(npsId)}&select=atendente_nome,duracao_minutos,contact_nome&limit=1`
+              ),
+            ]);
+
+            const cfg = Array.isArray(configRows) ? configRows[0] : null;
+            if (!cfg?.detrator_notificar) return;
+
+            const threshold = cfg.nps_threshold_detrator ?? 6;
+            if (notaFinal > threshold) return;
+
+            if (!cfg.detrator_wpp_jid) {
+              console.warn('[publico/nps] detrator_notificar=true mas detrator_wpp_jid não configurado');
+              return;
+            }
+
+            const av            = Array.isArray(detailRows) ? (detailRows[0] ?? {}) : {};
+            const duracaoTexto  = av.duracao_minutos != null ? `${av.duracao_minutos} min` : 'não registrada';
+            const template      = cfg.detrator_msg_template ||
+              '⚠️ *Detrator detectado!*\n\nCliente: {contact_nome}\nAtendente: {atendente_nome}\nDuração: {duracao}\nNota NPS: *{nota}*\n\nAbra o caso e trate em até 48h.';
+
+            const texto = renderTemplate(template, {
+              contact_nome:   av.contact_nome   || 'desconhecido',
+              atendente_nome: av.atendente_nome || 'não identificado',
+              duracao:        duracaoTexto,
+              nota:           String(notaFinal),
+            });
+
+            // Tenants que só usam DataCrazy não têm Evolution própria —
+            // usa a instância da Consult Delivery como fallback para o alerta interno.
+            const CD_TENANT_ID = process.env.CD_TENANT_ID || '9079bd4d-4df7-4023-90fb-d79c8ba7e900';
+            const result = await sendEvolutionText({
+              tenantId,
+              number: cfg.detrator_wpp_jid,
+              text:   texto,
+              sbFetch,
+              fallbackTenantId: CD_TENANT_ID,
+            });
+
+            if (!result.ok) {
+              console.error(`[publico/nps] falha no alerta detrator nps=${npsId}`, result.detail);
+            } else {
+              console.info(`[publico/nps] alerta detrator enviado nps=${npsId} nota=${notaFinal}`);
+            }
+          } catch (alertErr) {
+            console.error('[publico/nps] erro no alerta de detrator:', alertErr.message);
+          }
+        });
+      }
+
       return res.status(200).json({ ok: true });
     } catch (err) {
       console.error('[publico/nps POST]', err.message);

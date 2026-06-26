@@ -1,5 +1,33 @@
 # Wiki Log
 
+## 2026-06-24 — Sessão 94: QA visual PipelineScreen + fix logAgentRun silencioso
+
+**Contexto:** Continuação da investigação do bug onde `agent_runs` ficava vazio desde 16:01 UTC, e QA visual da tela "Pipeline ao Vivo".
+
+**Bug corrigido — logAgentRun silencioso:**
+- Causa-raiz: PR #524 (FASE 4) adicionou 4 colunas ao upsert de `logAgentRun()` que não existiam no banco (`explanation`, `confidence_score`, `pipeline_stage`, `pipeline_position`)
+- Soft-fail (`try/catch + console.warn`) engolia o erro silenciosamente
+- Fix: migration `supabase/migrations/20260624_006_agent_runs_add_pipeline_cols.sql` aplicada (4 colunas aditivas)
+- Verificado: run de 19:30 UTC gravou `semaforo: Vermelho` em `agent_runs` com sucesso
+
+**Heartbeat loop validado E2E:**
+- Orchestrator detectou grupo "EQUIPE - CONSULT DELIVERY" com 7+ dias de inatividade
+- `createHeartbeatTask()` criou task BRENO (18:57 e 19:06 UTC)
+- Dedup funcionou: run de 19:30 pulou criação (task já existia)
+- `agent_runs` registrando corretamente após o fix
+
+**QA visual PipelineScreen — APROVADO:**
+- Menu SISTEMA (sidebar) → "Pipeline ao Vivo" acessível em produção
+- Kanban carregado: Aguardando (0) · Executando (0) · Concluído (59) · Falhou (1)
+- Saúde 7D: 608 runs · 96% ok · avg 4.0s · top agentes: DELI (322), BRENO (176), VERA (56)
+- Cards com timestamps e run IDs do Trigger.dev visíveis
+
+**Pendente (próximas sessões):**
+- Fatia 1.5: ERP write via `vendaerp_proposals` + confirmação Telegram
+- E2E completo: conversa real → BRENO → `client_tasks` → Pipeline → execução → draft resposta
+
+---
+
 ## 2026-06-24 — Sessão ajuste-cora: 4 ajustes na tela de cobrança da Cora (branch wandson/ajuste-cora)
 
 **Problema:** 4 comportamentos incorretos na tela de cobrança da Cora identificados pelo Wandson:
@@ -1255,4 +1283,87 @@ Touched: none
 - **PR [#506](https://github.com/deli-consult-delivery/consult-delivery/pull/506), squash-mergeado em main (`c77325e`).**
 - **Limite honesto:** o auto-compact nativo dispara **perto do limite**, não a 70% — o Wandson perde o controle fino de compactar mais cedo, mas deixa de precisar do `/compact` manual. Se quiser o nudge a 70% de volta no futuro, o caminho é um hook `PostToolUse` que lê o `usage` do transcript e só **avisa** a 70% (não compacta).
 - **Propagação à VPS:** `.claude/settings.json` é config de tooling local — sem deploy de Pages/bridge. O checkout canônico `/root/consult-delivery` recebe a mudança no próximo `git reset --hard origin/main` da rotina do bridge.
+
+## 2026-06-24 — Sessão realtime-replica-identity + AI-First Item 2 e 3
+
+### Item 3 — REPLICA IDENTITY FULL (PR #528, mergeado)
+- Applied `REPLICA IDENTITY FULL` + `supabase_realtime` publication para tabelas do pipeline: `client_tasks`, `deli_pending_approvals`, `agent_runs`, `internal_notifications`.
+- Migration: `supabase/migrations/20260624_005_pipeline_realtime_full.sql`
+
+### Item 2 — Heartbeat Loop end-to-end (Blueprint AI-First)
+- **Objetivo:** orchestrator detecta inatividade do grupo "EQUIPE - CONSULT DELIVERY" (7+ dias) → cria `client_tasks` para BRENO → aparece no PipelineScreen.
+- **Fixes aplicados:**
+  1. `deli_triggers`: `cliente_sumiu_7d` tinha `autonomy_level='verde'`; corrigido para `'vermelho'` (apenas VERMELHO gera heartbeat task).
+  2. `lojas`: loja de teste "LOJA DE TESTE - PLATAFORMA" tinha `client_id=null`; corrigido com UUID real do customer.
+  3. `agent_runs` migration: `logAgentRun` tentava upsert com colunas inexistentes (`explanation`, `confidence_score`, `pipeline_stage`, `pipeline_position`) → upsert falhava silenciosamente desde o FASE 4 (PR #524). Migration `20260624_006_agent_runs_add_pipeline_cols.sql` adicionou as colunas.
+- **Verificação (output bruto):**
+  - Run de 19:30 UTC: `agent_runs` → `semaforo: Vermelho`, `motivos: ["🔴 1 grupo(s) sem mensagem há 7+ dias: EQUIPE - CONSULT DELIVERY"]`
+  - `client_tasks` para BRENO: "Retomar contato: EQUIPE - CONSULT DELIVERY" (criadas às 18:57 e 19:06 UTC)
+  - Dedup funcionando: run das 19:30 não criou duplicata (1 task/trigger/loja/dia)
+- **Loop confirmado:** orchestrator → detecta inatividade → VERMELHO → createHeartbeatTask → client_tasks → PipelineScreen (BRENO).
+
+### Karina Doceria — CSAT e NPS automáticos (PR #529, mergeado)
+- Sessão `avaliacao-karina` (interativa via cd-spawn sem --auto) implementou módulos CSAT e NPS para o tenant Karina Doceria.
+- PR #529 + fix TS #530 mergeados.
 - **Próximas ações:** nenhuma (escopo fechado). Observar nas próximas sessões longas se o auto-compact nativo retoma a tarefa sem intervenção.
+
+## 2026-06-24 — Sessão: fix datacrazy webhook CSAT
+
+### O que foi feito
+- **404 URL typo**: URL `datarazy` → `datacrazy` corrigida no Datacrazy
+- **sbFetch.from bug**: Reescrita total de `datacrazy-webhook.js` para usar PostgREST REST (PR #537)
+- **check constraint**: `origem: 'datacrazy'` → `'crm_externo'`
+- **token 63 chars**: Token no Datacrazy tinha letra `e` faltando no meio — corrigido para 64 chars
+- **mensagem não chegava ao WhatsApp**: Conversa estava encerrada ao enviar. Solução: bridge reabre conversa (`PATCH status: open`) antes de enviar a mensagem CSAT, fecha depois (`PATCH status: resolved`)
+- **hook auto-restart**: Bridge reinicia automaticamente quando PR toca `bridge-server/`
+
+### Resultado final
+- Webhook recebe → cria avaliação → reabre conversa → envia CSAT → fecha conversa → cliente avalia ✅
+- Wandson testou e avaliou nota 5 às 22:34
+
+## 2026-06-25 — Sessão: sistema de handoff automático de contexto
+
+### Problema
+Compactação automática do Claude Code era genérica e perdia contexto importante. Usuário precisava fazer `/compact` manual com frequência.
+
+### O que foi feito (PR #538)
+- **3 hooks novos** em `.claude/hooks/`:
+  - `handoff-pre-compact.cjs` — PreCompact: injeta template estruturado com 6 itens obrigatórios (tarefa, status, branch+arquivos, decisões, próximo passo, contexto crítico); persiste snapshot git em `~/.claude/handoffs/pre-compact.md`
+  - `handoff-post-compact.cjs` — PostCompact: restaura contexto pós-compactação lendo snapshot + checkpoints gstack
+  - `context-watchdog.cjs` — PostToolUse: conta tool calls por sessão; avisa a 40 calls (~70% proxy) para rodar `/context-save`; alerta urgente em 60+
+- **SessionStart** (`ecc-pipeline-context.cjs`): injeta último handoff/checkpoint (<4h) automaticamente na abertura de cada sessão nova
+- **settings.json**: registra `PreCompact`, `PostCompact` e watchdog como hooks
+
+### Limitação técnica documentada
+Claude Code não expõe % de contexto via hooks. Não é possível disparar `/clear` automaticamente. A solução melhora radicalmente a **qualidade** da compactação e da restauração; o threshold de 70% é aproximado via contagem de tool calls.
+
+### Resultado
+- Compactação automática preserva os 6 itens estruturados obrigatoriamente
+- Nova sessão recebe handoff da anterior automaticamente
+- Aviso a ~70% da capacidade estimada para o usuário salvar contexto manualmente
+
+## 2026-06-26 — Elos do Loop AI-First + PipelineScreen com Demandas
+
+### Contexto
+Wandson apontou que o Blueprint AI-First (FASE 1 — Loop ponta-a-ponta) não foi implementado conforme especificado. As sessões anteriores construíram infraestrutura (PipelineScreen/Telegram/heartbeats) mas pularam o núcleo: o loop cliente→tarefa→execução→resposta.
+
+### Diagnóstico
+- `trigger/_shared/loop-tasks.ts`, `trigger/agents/executar-tarefa.ts`, `trigger/agents/responder-conclusao.ts`, `trigger/breno/responder.ts` — código existia mas tinha os **elos de disparo quebrados**
+- Breno criava `client_task` mas não disparava `agent-executar-tarefa`
+- `executar-tarefa` executava mas não disparava `agent-responder-conclusao`
+- O loop ficava preso em `loop_state='open'` para sempre
+
+### O que foi feito (PR #569)
+1. **breno/responder.ts**: import + `agentExecutarTarefa.trigger()` após `createLoopTask()` suceder
+2. **executar-tarefa.ts**: import + `agentResponderConclusao.trigger()` após salvar resultado; adicionado `conversation_id` ao select
+3. **PipelineScreen.jsx**: nova seção "Demandas do Loop" mostrando `client_tasks` por `loop_state` (Aguardando/Executando/Respondido) com realtime Supabase; aparece quando há tarefas de loop ativas
+4. Deploy Trigger.dev: versão 20260626.54 — 82 tarefas detectadas
+
+### Memória salva
+- `memory/feedback-blueprint-ordem-errada.md`: regra para nunca pular a FASE mais baixa do Blueprint
+
+### Status
+- Loop AI-First: elos conectados, deploy feito ✅
+- FASE 3 Telegram (semáforo): já funcionava ✅
+- FASE 1 Loop: `executar-tarefa` executa VendaERP (read-only); Asaas = placeholder; `responder-conclusao` cria draft
+- Próximo: testar loop ponta-a-ponta com número próprio do Wandson

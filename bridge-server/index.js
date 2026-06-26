@@ -1392,13 +1392,18 @@ app.use('/api', require('./routes/publico-aprovacao')({
 app.use('/api/publico', require('./routes/publico-avaliacao')({ sbFetch }));
 app.use('/api', require('./routes/avaliacao-link')({ requireJwt, sbFetch, assertTenantMember }));
 app.use('/api', require('./routes/avaliacao-resumo')({ requireJwt, sbFetch, assertTenantMember }));
+app.use('/api', require('./routes/tenant-avaliacao-config')({ requireJwt, sbFetch, assertTenantMember }));
 
 // ── CSAT — Webhook inbound do CRM externo (atendimento finalizado) ───────────
 app.use('/webhooks', require('./routes/crm-atendimento-webhook')({ sbFetch }));
 
+// ── CSAT — Webhook Datacrazy (conversa encerrada → envia avaliação no chat) ──
+app.use('/webhooks', require('./routes/datacrazy-webhook')({ sbFetch }));
+
 // ── NPS de Marca: página pública + link autenticado ───────────────────────────
 app.use('/api/publico', require('./routes/publico-nps')({ sbFetch }));
 app.use('/api', require('./routes/nps-link')({ requireJwt, sbFetch, assertTenantMember }));
+app.use('/api', require('./routes/nps-tratativa')({ requireJwt, sbFetch, assertTenantMember }));
 
 // ── S2-G05 — DELI Semáforo: aprovações pendentes ─────────────────────────────
 app.use('/api', require('./routes/deli-approvals')({

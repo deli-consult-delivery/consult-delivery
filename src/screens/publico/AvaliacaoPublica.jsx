@@ -34,8 +34,8 @@ export default function AvaliacaoPublica() {
       })
       .then((d) => {
         if (d) {
+          setData(d); // mantém a marca do tenant inclusive no estado "já respondida"
           if (d.ja_respondida) setResp(d.nota ?? null);
-          else setData(d);
         }
         setLoading(false);
       })
@@ -68,11 +68,15 @@ export default function AvaliacaoPublica() {
     }
   }
 
-  // ── Cor da marca (theme_color tem prioridade; fallback no padrão CD) ─────────
+  // ── Cor da marca e configuração de mensagens ─────────────────────────────────
   const brand      = data?.brand || null;
   const brandColor = brand?.theme_color || brand?.color || DEFAULT_BRAND;
   const brandName  = brand?.name || 'Consult Delivery';
   const logoUrl    = brand?.logo_url || null;
+  const config     = data?.config || null;
+  const tituloPage = config?.csat_titulo        || 'Como foi seu atendimento?';
+  const subtitulo  = config?.csat_subtitulo     || null;
+  const msgAgradec = config?.csat_agradecimento || 'Obrigado por avaliar seu atendimento.';
 
   if (loading) return (
     <div style={styles.center}>
@@ -129,7 +133,7 @@ export default function AvaliacaoPublica() {
           <span style={{ ...styles.doneIcon, color: brandColor }}>✓</span>
           <h2 style={styles.doneTitle}>Avaliação enviada!</h2>
           <p style={styles.doneSub}>{'★'.repeat(nota)}{'☆'.repeat(5 - nota)}</p>
-          <p style={styles.doneSub}>Obrigado por avaliar seu atendimento.</p>
+          <p style={styles.doneSub}>{msgAgradec}</p>
         </div>
       </main>
     </div>
@@ -144,7 +148,8 @@ export default function AvaliacaoPublica() {
       {Header}
       <main style={styles.main}>
         <section style={styles.card}>
-          <h1 style={styles.titulo}>Como foi seu atendimento?</h1>
+          <h1 style={styles.titulo}>{tituloPage}</h1>
+          {subtitulo && <p style={styles.subtitulo}>{subtitulo}</p>}
           {cliente && <p style={styles.saudacao}>Olá, {cliente}!</p>}
           {atendente && (
             <p style={styles.atendente}>
@@ -240,7 +245,7 @@ const styles = {
     animation: 'spin 0.8s linear infinite',
   },
   loadingText: { color: '#666', fontSize: 14, margin: 0 },
-  errorText:   { color: '#B70C00', fontSize: 18, fontWeight: 700, margin: 0 },
+  errorText:   { color: '#374151', fontSize: 18, fontWeight: 700, margin: 0 },
   errorSub:    { color: '#666', fontSize: 13, margin: 0, maxWidth: 320 },
   header: {
     padding: '14px 20px',
@@ -260,7 +265,8 @@ const styles = {
     boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
     textAlign: 'center',
   },
-  titulo: { fontSize: 22, fontWeight: 800, margin: '0 0 8px' },
+  titulo:    { fontSize: 22, fontWeight: 800, margin: '0 0 8px' },
+  subtitulo: { fontSize: 14, color: '#555', margin: '0 0 8px' },
   saudacao: { fontSize: 15, color: '#444', margin: '0 0 4px' },
   atendente: { fontSize: 14, color: '#666', margin: '0 0 20px' },
   starsWrap: { display: 'flex', justifyContent: 'center', gap: 6, margin: '8px 0' },

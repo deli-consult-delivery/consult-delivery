@@ -171,14 +171,16 @@ export const csatEnviarTask = task({
         const { ok, detail } = await sendEvolutionText(inst, av.contact_identifier, text);
         const statusStr = ok ? "ok" : "falhou";
 
-        await sb
+        const { error: updateErr } = await sb
           .from("atendimento_avaliacoes")
           .update({
             msg_enviada_at:     new Date().toISOString(),
             msg_enviada_status: statusStr,
           })
-          .eq("id", av.id)
-          .catch((err: unknown) => logger.error("csat-enviar: falha ao atualizar msg_enviada", { err: (err as Error).message }));
+          .eq("id", av.id);
+        if (updateErr) {
+          logger.error("csat-enviar: falha ao atualizar msg_enviada", { err: updateErr.message });
+        }
 
         resultados.push({ avaliacao_id: av.id, tenant_id: tenantId, status: ok ? "ok" : "falhou", detalhe: ok ? undefined : String(detail) });
         ok ? enviados++ : falhas++;
@@ -192,6 +194,7 @@ export const csatEnviarTask = task({
     await logAgentRun({
       runId:     ctx.run.id,
       agentSlug: "csat-enviar-avaliacao",
+      tenantId:  input.tenant_id,
       input,
       output,
       status:    falhas > 0 && enviados === 0 ? "failed" : "success",
@@ -206,11 +209,14 @@ export const csatEnviarTask = task({
 // tiveram a mensagem enviada. O webhook do CRM já envia imediatamente;
 // este cron é o fallback.
 
-export const csatEnviarCron = schedules.task({
-  id:   "csat-enviar-avaliacao-cron",
-  cron: "*/15 * * * *",
-  run:  async (_payload, { ctx }) => {
-    logger.info("csat-enviar-avaliacao-cron: disparando task principal");
-    return csatEnviarTask.triggerAndWait({}).unwrap();
-  },
-});
+// ⚠️ CRON DESATIVADO (2026-06-26) — incidente de envio em massa.
+// Era o sender que ignorava o flag csat_auto_envio. Reativar só após o
+// disparo por evento (webhook DataCrazy) estar no ar.
+// export const csatEnviarCron = schedules.task({
+//   id:   "csat-enviar-avaliacao-cron",
+//   cron: "*/15 * * * *",
+//   run:  async (_payload, { ctx }) => {
+//     logger.info("csat-enviar-avaliacao-cron: disparando task principal");
+//     return csatEnviarTask.triggerAndWait({}).unwrap();
+//   },
+// });
