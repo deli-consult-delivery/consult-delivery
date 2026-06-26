@@ -255,14 +255,112 @@ function PipelineHealthCard({ sessionToken }) {
   );
 }
 
+// ─── Loop de Tarefas (client_tasks) ──────────────────────────────────────────
+
+const LOOP_COLS = [
+  { id: 'open',      label: 'Aguardando',  cor: '#8b6914', bg: '#fdf7e3', borda: '#f0d060' },
+  { id: 'executing', label: 'Executando',  cor: '#1563b0', bg: '#eaf2fd', borda: '#90c0f0' },
+  { id: 'done',      label: 'Respondido',  cor: '#1e7d43', bg: '#e8f3ec', borda: '#7dd4a8' },
+];
+
+const SISTEMA_LABELS = {
+  vendaerp: 'VendaERP',
+  asaas:    'Asaas',
+  nenhum:   'Memória',
+};
+
+function CardTarefa({ tarefa }) {
+  const [exp, setExp] = useState(false);
+  const col = LOOP_COLS.find(c => c.id === tarefa.loop_state) || LOOP_COLS[0];
+  const sistema = SISTEMA_LABELS[tarefa.target_system] || tarefa.target_system || '';
+
+  return (
+    <div
+      onClick={() => setExp(v => !v)}
+      style={{
+        background: 'var(--white)',
+        border: `1px solid var(--g1)`,
+        borderLeft: `3px solid ${col.borda}`,
+        borderRadius: 6,
+        padding: '10px 12px',
+        marginBottom: 8,
+        cursor: 'pointer',
+        boxShadow: '0 1px 3px rgba(0,0,0,.06)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+        <div style={{
+          fontSize: 10, fontWeight: 700, letterSpacing: '.5px',
+          background: col.bg, color: col.cor,
+          padding: '2px 6px', borderRadius: 4, flexShrink: 0,
+        }}>
+          BRENO
+        </div>
+        {sistema && (
+          <div style={{ fontSize: 10, color: 'var(--tx2)', background: 'var(--g1)', padding: '2px 6px', borderRadius: 4 }}>
+            {sistema}
+          </div>
+        )}
+        <div style={{ fontSize: 10, color: 'var(--tx3)', marginLeft: 'auto' }}>
+          {fmtHora(tarefa.created_at)}
+        </div>
+      </div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx1)', marginBottom: 4 }}>
+        {tarefa.title}
+      </div>
+      {tarefa.description && (
+        <div style={{
+          fontSize: 11.5, color: 'var(--tx2)', lineHeight: 1.5,
+          display: exp ? 'block' : '-webkit-box',
+          WebkitLineClamp: exp ? 'unset' : 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: exp ? 'visible' : 'hidden',
+        }}>
+          {tarefa.description}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ColunaLoop({ col, tarefas }) {
+  return (
+    <div style={{ flex: '0 0 280px', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 0 12px 0', marginBottom: 4 }}>
+        <div style={{
+          width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
+          background: col.cor,
+          boxShadow: col.id === 'executing' ? `0 0 0 3px ${col.bg}` : 'none',
+        }} />
+        <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--tx1)' }}>{col.label}</span>
+        <span style={{
+          marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: col.cor,
+          background: col.bg, padding: '2px 7px', borderRadius: 10,
+        }}>{tarefas.length}</span>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', paddingRight: 2 }}>
+        {tarefas.length === 0 ? (
+          <div style={{ textAlign: 'center', color: 'var(--tx3)', fontSize: 12, paddingTop: 24 }}>
+            Nenhuma tarefa
+          </div>
+        ) : (
+          tarefas.map(t => <CardTarefa key={t.id} tarefa={t} />)
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Componente principal ──────────────────────────────────────────────────
 export default function PipelineScreen({ tenantDbId }) {
   const [runs, setRuns] = useState([]);
+  const [tarefas, setTarefas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
   const [janela, setJanela] = useState(24); // horas
   const [sessionToken, setSessionToken] = useState(null);
   const channelRef = useRef(null);
+  const tarefasChannelRef = useRef(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -289,6 +387,51 @@ export default function PipelineScreen({ tenantDbId }) {
     }
     setLoading(false);
   }
+
+  // ── Carregar e assinar client_tasks do loop ───────────────────────────────
+  useEffect(() => {
+    if (!tenantDbId) return;
+    const desde = new Date(Date.now() - janela * 60 * 60 * 1000).toISOString();
+
+    supabase
+      .from('client_tasks')
+      .select('id, title, description, priority, loop_state, target_system, created_at, updated_at')
+      .eq('tenant_id', tenantDbId)
+      .not('loop_state', 'is', null)
+      .gte('created_at', desde)
+      .order('created_at', { ascending: false })
+      .limit(50)
+      .then(({ data }) => setTarefas(data || []));
+
+    if (tarefasChannelRef.current) supabase.removeChannel(tarefasChannelRef.current);
+
+    tarefasChannelRef.current = supabase
+      .channel(`loop-tarefas-${tenantDbId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'client_tasks',
+        filter: `tenant_id=eq.${tenantDbId}`,
+      }, payload => {
+        if (payload.eventType === 'INSERT' && payload.new.loop_state) {
+          setTarefas(prev => [payload.new, ...prev].slice(0, 50));
+        } else if (payload.eventType === 'UPDATE') {
+          setTarefas(prev => {
+            const existe = prev.find(t => t.id === payload.new.id);
+            if (existe) return prev.map(t => t.id === payload.new.id ? payload.new : t);
+            if (payload.new.loop_state) return [payload.new, ...prev].slice(0, 50);
+            return prev;
+          });
+        } else if (payload.eventType === 'DELETE') {
+          setTarefas(prev => prev.filter(t => t.id !== payload.old.id));
+        }
+      })
+      .subscribe();
+
+    return () => {
+      if (tarefasChannelRef.current) supabase.removeChannel(tarefasChannelRef.current);
+    };
+  }, [tenantDbId, janela]);
 
   useEffect(() => {
     if (!tenantDbId) return;
@@ -385,7 +528,30 @@ export default function PipelineScreen({ tenantDbId }) {
         <PipelineHealthCard sessionToken={sessionToken} />
       </div>
 
-      {/* Corpo: kanban */}
+      {/* Seção: Tarefas do Loop (client_tasks) */}
+      {tarefas.length > 0 && (
+        <div style={{ flexShrink: 0 }}>
+          <div style={{ padding: '10px 24px 6px', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--tx2)', textTransform: 'uppercase', letterSpacing: '.5px' }}>
+              Demandas do Loop
+            </span>
+            <span style={{ fontSize: 11, color: 'var(--tx3)', background: 'var(--g1)', padding: '1px 7px', borderRadius: 10 }}>
+              {tarefas.length}
+            </span>
+          </div>
+          <div style={{ overflowX: 'auto', display: 'flex', gap: 16, padding: '0 24px 12px', borderBottom: '1px solid var(--g1)' }}>
+            {LOOP_COLS.map(col => (
+              <ColunaLoop
+                key={col.id}
+                col={col}
+                tarefas={tarefas.filter(t => t.loop_state === col.id).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Corpo: kanban de execuções de agentes */}
       {loading ? (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--tx2)' }}>
           Carregando pipeline…

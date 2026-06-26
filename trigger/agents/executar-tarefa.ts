@@ -2,6 +2,7 @@ import { task, logger } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
+import { agentResponderConclusao } from "./responder-conclusao";
 
 const InputSchema = z.object({
   tenant_id: z.string().uuid(),
@@ -28,7 +29,7 @@ export const agentExecutarTarefa = task({
     // 1. Carregar tarefa e garantir que está no estado 'open'
     const { data: tarefa, error: tarefaErr } = await sb
       .from("client_tasks")
-      .select("id, tenant_id, title, target_system, loop_state, execution_result")
+      .select("id, tenant_id, title, target_system, loop_state, execution_result, conversation_id")
       .eq("id", input.task_id)
       .eq("tenant_id", input.tenant_id)
       .maybeSingle();
@@ -123,6 +124,20 @@ export const agentExecutarTarefa = task({
       durationMs: Date.now() - start,
       status: finalState === "done" ? "success" : "failed",
     });
+
+    // 5. Disparar responder-conclusao para fechar o loop com o cliente
+    const convId = (tarefa as Record<string, unknown>).conversation_id as string | undefined;
+    if (convId) {
+      await agentResponderConclusao.trigger({
+        tenant_id:       input.tenant_id,
+        task_id:         input.task_id,
+        conversation_id: convId,
+        triggered_by:    ctx.run.id,
+      });
+      logger.info("agent-executar-tarefa: agent-responder-conclusao disparado", { task_id: input.task_id });
+    } else {
+      logger.warn("agent-executar-tarefa: conversation_id ausente — responder-conclusao não disparado", { task_id: input.task_id });
+    }
 
     return OutputSchema.parse({
       ok: finalState === "done",
