@@ -57,6 +57,39 @@ async function sendDatacrazyMessage(config, conversationId, body, scheduledDate 
 }
 
 /**
+ * Busca os detalhes de uma conversa no DataCrazy (telefone, updatedAt, nome).
+ * Usado pelo webhook de finalização, cujo payload pode não trazer esses campos.
+ *
+ * @returns {Promise<{id:string, updatedAt:string|null, finished:boolean|null,
+ *                    phoneNumber:string|null, name:string|null} | null>}
+ */
+async function getDatacrazyConversation(apiKey, conversationId) {
+  if (!apiKey || !conversationId) return null;
+  try {
+    const resp = await fetch(
+      `${DATACRAZY_API_BASE}/api/v1/conversations/${conversationId}`,
+      { headers: { 'Authorization': `Bearer ${apiKey}` } }
+    );
+    if (!resp.ok) {
+      console.warn(`[datacrazy-send] getConversation ${conversationId} → ${resp.status}`);
+      return null;
+    }
+    const c = await resp.json().catch(() => null);
+    if (!c) return null;
+    return {
+      id:          c.id || conversationId,
+      updatedAt:   c.updatedAt || null,
+      finished:    typeof c.finished === 'boolean' ? c.finished : null,
+      phoneNumber: c.contact?.phoneNumber || null,
+      name:        c.contact?.name || c.name || null,
+    };
+  } catch (err) {
+    console.error(`[datacrazy-send] getConversation ${conversationId} erro:`, err.message);
+    return null;
+  }
+}
+
+/**
  * Substitui variáveis {nome_cliente}, {link_avaliacao}, {link_nps}, {nome_empresa}
  * no template de mensagem.
  */
@@ -64,4 +97,4 @@ function renderTemplate(template, vars) {
   return template.replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? `{${key}}`);
 }
 
-module.exports = { sendDatacrazyMessage, renderTemplate };
+module.exports = { sendDatacrazyMessage, getDatacrazyConversation, renderTemplate };
