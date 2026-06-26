@@ -84,6 +84,7 @@ const ResultItemSchema = z.object({
   conversation_id: z.string(),
   contact_name:    z.string().optional(),
   status:          z.enum(["ok", "falhou", "sem_config", "ja_processado", "cooldown_ativo", "filtrado"]),
+  tipo:            z.enum(["nps", "csat"]).optional(),
   detalhe:         z.string().optional(),
 });
 
@@ -186,7 +187,7 @@ export const datacrazyNpsPollerTask = task({
     let configQuery = sb
       .from("avaliacao_config")
       .select(
-        "tenant_id, nps_auto_envio, nps_mensagem_template, nps_cooldown_dias, datacrazy_api_key, nome_empresa, piloto_telefone_teste"
+        "tenant_id, nps_auto_envio, nps_mensagem_template, csat_mensagem_template, nps_cooldown_dias, datacrazy_api_key, nome_empresa, piloto_telefone_teste"
       )
       .eq("nps_auto_envio", true)
       .not("datacrazy_api_key", "is", null);
@@ -247,25 +248,50 @@ export const datacrazyNpsPollerTask = task({
         const contactIdentifier = conv.contact?.phoneNumber || conv.id;
         const contactName       = conv.contact?.name || conv.name || null;
 
-        // ── 4. Idempotência: verificar se essa conversa já foi processada ──
-        const { data: existingRef } = await sb
+        // ── 3b. Whitelist de piloto ───────────────────────────────────────
+        // Durante o piloto, só processa conversas do contato de teste.
+        // Envia normal via DataCrazy (na própria conversa de teste).
+        if (config.piloto_telefone_teste) {
+          const alvo  = config.piloto_telefone_teste.replace(/\D/g, "");
+          const atual = String(contactIdentifier).replace(/\D/g, "");
+          if (!atual || !atual.includes(alvo)) {
+            resultados.push({
+              conversation_id: conv.id,
+              contact_name:    contactName ?? undefined,
+              status:          "filtrado",
+              detalhe:         "fora da whitelist de piloto",
+            });
+            continue;
+          }
+        }
+
+        // ── 4. Idempotência: já processada em NPS ou CSAT? ────────────────
+        const { data: jaNps } = await sb
           .from("nps_avaliacoes")
           .select("id")
           .eq("tenant_id", tenantId)
           .eq("external_ref", conv.id)
           .limit(1);
 
-        if (existingRef?.length) {
+        const { data: jaCsat } = await (sb as any)
+          .from("atendimento_avaliacoes")
+          .select("id")
+          .eq("tenant_id", tenantId)
+          .eq("external_ref", conv.id)
+          .limit(1);
+
+        if (jaNps?.length || jaCsat?.length) {
           resultados.push({ conversation_id: conv.id, status: "ja_processado" });
           continue;
         }
 
-        // ── 5. Verificar cooldown por contato ─────────────────────────────
+        // ── 5. Decisão NPS × CSAT (nunca os dois) ─────────────────────────
+        // Cliente recebeu NPS nos últimos `cooldownDias`? Sim → CSAT. Não → NPS.
         const cooldownCutoff = new Date(
           Date.now() - cooldownDias * 24 * 60 * 60 * 1000
         ).toISOString();
 
-        const { data: cooldownCheck } = await sb
+        const { data: npsRecente } = await sb
           .from("nps_avaliacoes")
           .select("id")
           .eq("tenant_id", tenantId)
@@ -273,34 +299,60 @@ export const datacrazyNpsPollerTask = task({
           .gte("created_at", cooldownCutoff)
           .limit(1);
 
-        if (cooldownCheck?.length) {
-          logger.info("datacrazy-nps-poller: cooldown ativo", {
-            convId:    conv.id,
-            contato:   contactIdentifier,
-            cooldown:  cooldownDias,
+        const enviarCsat = (npsRecente?.length ?? 0) > 0;
+
+        if (enviarCsat) {
+          // ── 5a. CSAT (pesquisa de atendimento) ──────────────────────────
+          const { data: novaCsat, error: csatErr } = await (sb as any)
+            .from("atendimento_avaliacoes")
+            .insert({
+              tenant_id:          tenantId,
+              external_ref:       conv.id,
+              contact_identifier: contactIdentifier,
+              nome_cliente:       contactName,
+              origem:             "datacrazy",
+              status:             "pendente",
+            })
+            .select("id, public_token")
+            .single();
+
+          if (csatErr || !novaCsat) {
+            logger.error("datacrazy-poller: erro ao inserir CSAT", { convId: conv.id, err: csatErr?.message });
+            resultados.push({ conversation_id: conv.id, contact_name: contactName ?? undefined, status: "falhou", tipo: "csat", detalhe: csatErr?.message });
+            falhas++;
+            continue;
+          }
+
+          const linkAvaliacao = `${PUBLIC_BASE}/avaliacao/${novaCsat.public_token}`;
+          const tplCsat = config.csat_mensagem_template ||
+            "Olá {nome_cliente}! 😊 Seu atendimento foi encerrado. Como foi? Avalie aqui: {link_avaliacao}";
+          const textCsat = renderTemplate(tplCsat, {
+            nome_cliente:   contactName || "cliente",
+            link_avaliacao: linkAvaliacao,
+            nome_empresa:   config.nome_empresa || "nossa empresa",
           });
-          resultados.push({
-            conversation_id: conv.id,
-            contact_name:    contactName ?? undefined,
-            status:          "cooldown_ativo",
-            detalhe:         `cooldown de ${cooldownDias} dias ativo`,
-          });
+
+          const { ok, detail } = await sendDatacrazyNpsMessage(apiKey, conv.id, textCsat);
+          await (sb as any)
+            .from("atendimento_avaliacoes")
+            .update({ msg_enviada_at: new Date().toISOString(), msg_enviada_status: ok ? "ok" : "falhou" })
+            .eq("id", novaCsat.id);
+
+          if (ok) enviados++; else falhas++;
+          resultados.push({ conversation_id: conv.id, contact_name: contactName ?? undefined, status: ok ? "ok" : "falhou", tipo: "csat", detalhe: ok ? undefined : String(detail) });
+          logger.info("datacrazy-poller: CSAT processado", { convId: conv.id, status: ok ? "ok" : "falhou" });
           continue;
         }
 
-        // ── 6. F1: Snapshot de atendente/duração ─────────────────────────
-        // Para conversas Datacrazy, conv.id não é UUID → snapshot = null (ok).
+        // ── 5b. NPS ───────────────────────────────────────────────────────
+        // F1: Snapshot de atendente/duração (conv.id não-UUID → snapshot null, ok)
         let snap: ConversationSnapshot | null = null;
         try {
           snap = await fetchConversationSnapshot(sb, conv.id, tenantId);
         } catch (snapErr) {
-          logger.warn("datacrazy-nps-poller: erro ao buscar snapshot de conversa", {
-            convId: conv.id,
-            err:    (snapErr as Error).message,
-          });
+          logger.warn("datacrazy-poller: erro ao buscar snapshot", { convId: conv.id, err: (snapErr as Error).message });
         }
 
-        // ── 7. Criar registro NPS ─────────────────────────────────────────
         const { data: novaAv, error: insertErr } = await sb
           .from("nps_avaliacoes")
           .insert({
@@ -321,105 +373,31 @@ export const datacrazyNpsPollerTask = task({
           .single();
 
         if (insertErr || !novaAv) {
-          logger.error("datacrazy-nps-poller: erro ao inserir NPS", {
-            convId: conv.id,
-            err:    insertErr?.message,
-          });
-          resultados.push({
-            conversation_id: conv.id,
-            contact_name:    contactName ?? undefined,
-            status:          "falhou",
-            detalhe:         insertErr?.message,
-          });
+          logger.error("datacrazy-poller: erro ao inserir NPS", { convId: conv.id, err: insertErr?.message });
+          resultados.push({ conversation_id: conv.id, contact_name: contactName ?? undefined, status: "falhou", tipo: "nps", detalhe: insertErr?.message });
           falhas++;
           continue;
         }
 
-        // ── 8. Montar e enviar mensagem NPS ───────────────────────────────
         const linkNps = `${PUBLIC_BASE}/nps/${novaAv.public_token}`;
-        const template =
+        const tplNps =
           config.nps_mensagem_template ||
           "Olá {nome_cliente}! Gostaríamos de saber sua opinião sobre a {nome_empresa}. Responda nossa pesquisa rápida: {link_nps}";
-
-        const text = renderTemplate(template, {
+        const textNps = renderTemplate(tplNps, {
           nome_cliente: contactName || "cliente",
           link_nps:     linkNps,
           nome_empresa: config.nome_empresa || "nossa empresa",
         });
 
-        // Piloto: se piloto_telefone_teste configurado, redirecionar para esse número via Evolution API
-        let ok: boolean;
-        let detail: unknown;
-        if (config.piloto_telefone_teste) {
-          const { data: instRows } = await (sb as any)
-            .from("evolution_instances")
-            .select("evolution_url, api_key, instance_name")
-            .eq("tenant_id", tenantId)
-            .limit(1);
-          const inst = instRows?.[0];
-          if (!inst?.evolution_url) {
-            logger.warn("datacrazy-nps-poller: piloto_telefone_teste definido mas sem instância Evolution", { tenantId });
-            ({ ok, detail } = await sendDatacrazyNpsMessage(apiKey, conv.id, text));
-          } else {
-            const phone = config.piloto_telefone_teste.replace(/\D/g, "");
-            try {
-              const resp = await fetch(
-                `${inst.evolution_url}/message/sendText/${inst.instance_name}`,
-                {
-                  method:  "POST",
-                  headers: { "Content-Type": "application/json", apikey: inst.api_key },
-                  body:    JSON.stringify({ number: phone, text }),
-                }
-              );
-              const body = await resp.json().catch(() => ({}));
-              ok = resp.ok;
-              detail = resp.ok ? undefined : body;
-              if (ok) logger.info("datacrazy-nps-poller: NPS enviado para piloto_telefone_teste", { phone, convId: conv.id });
-            } catch (err) {
-              ok = false;
-              detail = (err as Error).message;
-            }
-          }
-        } else {
-          ({ ok, detail } = await sendDatacrazyNpsMessage(apiKey, conv.id, text));
-        }
-        const statusStr = ok ? "ok" : "falhou";
-
-        const { error: updErr } = await sb
+        const { ok, detail } = await sendDatacrazyNpsMessage(apiKey, conv.id, textNps);
+        await sb
           .from("nps_avaliacoes")
-          .update({
-            msg_enviada_at:     new Date().toISOString(),
-            msg_enviada_status: statusStr,
-          })
+          .update({ msg_enviada_at: new Date().toISOString(), msg_enviada_status: ok ? "ok" : "falhou" })
           .eq("id", novaAv.id);
 
-        if (updErr) {
-          logger.error("datacrazy-nps-poller: erro ao atualizar msg_enviada", {
-            err: updErr.message,
-          });
-        }
-
-        if (!ok) {
-          logger.error("datacrazy-nps-poller: falha ao enviar mensagem NPS", {
-            convId: conv.id,
-            detail,
-          });
-          falhas++;
-        } else {
-          enviados++;
-        }
-
-        resultados.push({
-          conversation_id: conv.id,
-          contact_name:    contactName ?? undefined,
-          status:          ok ? "ok" : "falhou",
-          detalhe:         ok ? undefined : String(detail),
-        });
-
-        logger.info("datacrazy-nps-poller: NPS processado", {
-          convId: conv.id,
-          status: statusStr,
-        });
+        if (ok) enviados++; else falhas++;
+        resultados.push({ conversation_id: conv.id, contact_name: contactName ?? undefined, status: ok ? "ok" : "falhou", tipo: "nps", detalhe: ok ? undefined : String(detail) });
+        logger.info("datacrazy-poller: NPS processado", { convId: conv.id, status: ok ? "ok" : "falhou" });
       }
     }
 

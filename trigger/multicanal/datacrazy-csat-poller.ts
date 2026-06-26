@@ -260,12 +260,17 @@ export const datacrazyCsatPollerTask = task({
   },
 });
 
-// ─── Cron: a cada 5 minutos ──────────────────────────────────────────────────
-export const datacrazyCsatPollerCron = schedules.task({
-  id:   "datacrazy-csat-poller-cron",
-  cron: "*/5 * * * *",
-  run:  async (_payload, { ctx }) => {
-    logger.info("datacrazy-csat-poller-cron: disparando");
-    return datacrazyCsatPollerTask.triggerAndWait({ lookback_minutes: 10 }).unwrap();
-  },
-});
+// ─── Cron DESABILITADO ───────────────────────────────────────────────────────
+// O envio de CSAT foi unificado no datacrazy-nps-poller (dispatcher único):
+// uma conversa finalizada gera NPS (fora dos 30d) OU CSAT (dentro dos 30d),
+// nunca os dois. Manter dois crons varrendo as mesmas conversas causava
+// double-send. A task `datacrazyCsatPollerTask` segue disponível p/ disparo manual.
+//
+// export const datacrazyCsatPollerCron = schedules.task({
+//   id:   "datacrazy-csat-poller-cron",
+//   cron: "*/5 * * * *",
+//   run:  async (_payload, { ctx }) => {
+//     logger.info("datacrazy-csat-poller-cron: disparando");
+//     return datacrazyCsatPollerTask.triggerAndWait({ lookback_minutes: 10 }).unwrap();
+//   },
+// });
