@@ -102,7 +102,7 @@ export const brenoResponder = task({
 
     const { data: conv } = await sb
       .from("conversations")
-      .select("id, contact_name, phone_number, customer_id")
+      .select("id, contact_name, phone_number, customer_id, whatsapp_chat_id, instance_id")
       .eq("id", input.conversation_id)
       .eq("tenant_id", input.tenant_id)
       .maybeSingle();
@@ -267,15 +267,30 @@ REGRAS:
 
     let draft_id: string | undefined;
     if (mode === "hibrido") {
-      const { data: draft } = await sb.from("agent_drafts").insert({
+      // autonomy_level tem CHECK constraint (verde|amarelo|vermelho).
+      // Draft que aguarda aprovação humana = amarelo (agente propõe, humano aprova).
+      // "hibrido" violava a constraint e o insert falhava em silêncio → nenhum draft criado.
+      const { data: draft, error: draftErr } = await sb.from("agent_drafts").insert({
         tenant_id: input.tenant_id,
         agent_name: "breno",
         channel: "whatsapp",
         subject: `Resposta sugerida para conversa ${input.conversation_id}`,
         content: parsed.resposta,
-        autonomy_level: "hibrido",
+        autonomy_level: "amarelo",
         status: "pending",
+        target_id: conv?.whatsapp_chat_id ?? null,
+        metadata: {
+          conversation_id: input.conversation_id,
+          whatsapp_chat_id: conv?.whatsapp_chat_id ?? null,
+          instance_id: conv?.instance_id ?? null,
+        },
       }).select("id").single();
+      if (draftErr) {
+        logger.error("breno-responder: falha ao criar draft", {
+          error: draftErr.message,
+          conversation_id: input.conversation_id,
+        });
+      }
       draft_id = draft?.id;
     }
 

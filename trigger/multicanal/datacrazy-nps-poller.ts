@@ -490,16 +490,19 @@ export const datacrazyNpsPollerTask = task({
   },
 });
 
-// REDE DE SEGURANÇA (2026-06-26): o caminho principal é o webhook
-// /webhooks/datacrazy/conversa-encerrada (imediato). Este cron roda a cada 30 min
-// com janela de 35 min só para pegar finalizações que o webhook tenha perdido.
-// Baseline + dedup (mesmo external_ref=conv.id:updatedAt) garantem que não duplica
-// com o webhook. O envio também reabre→finaliza a conversa.
-export const datacrazyNpsPollerCron = schedules.task({
-  id:   "datacrazy-nps-poller-cron",
-  cron: "*/30 * * * *",
-  run:  async (_payload, { ctx }) => {
-    logger.info("datacrazy-nps-poller-cron: disparando (rede de segurança)", { runId: ctx.run.id });
-    return datacrazyNpsPollerTask.triggerAndWait({ lookback_minutes: 35 }).unwrap();
-  },
-});
+// ⚠️ CRON DESATIVADO (2026-06-26) — causava envio em massa/duplicado.
+// A API do DataCrazy IGNORA o filtro updatedAtStart (retorna ~1000 conversas) e o
+// poller não filtrava por updatedAt no cliente → processava TODAS as finalizadas
+// pós-baseline a cada ciclo, reenviando para quem já recebeu pelo webhook (quando o
+// registro do webhook já estava fora da janela de dedup de 120min).
+// O webhook /webhooks/datacrazy/conversa-encerrada é o único caminho (imediato e
+// confiável). Para reativar como rede de segurança, é preciso ANTES filtrar por
+// updatedAt no lado do bridge (a task manual datacrazyNpsPollerTask segue disponível).
+// export const datacrazyNpsPollerCron = schedules.task({
+//   id:   "datacrazy-nps-poller-cron",
+//   cron: "*/30 * * * *",
+//   run:  async (_payload, { ctx }) => {
+//     logger.info("datacrazy-nps-poller-cron: disparando (rede de segurança)", { runId: ctx.run.id });
+//     return datacrazyNpsPollerTask.triggerAndWait({ lookback_minutes: 35 }).unwrap();
+//   },
+// });
