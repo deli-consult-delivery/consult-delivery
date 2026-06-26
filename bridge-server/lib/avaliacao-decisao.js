@@ -74,17 +74,23 @@ async function decidirECriarRegistro({ sbFetch, tenantId, config, conv }) {
   }
 
   // ── Decisão NPS × CSAT ────────────────────────────────────────────────────
+  // NPS só a partir do `nps_min_atendimentos`-ésimo atendimento finalizado
+  // (default 4). Antes disso → CSAT. Cliente abre vários atendimentos antes de
+  // receber o pedido; perguntar "indicaria?" cedo demais não faz sentido.
   const cooldownDias   = config.nps_cooldown_dias ?? 30;
+  const minAtend       = config.nps_min_atendimentos ?? 4;
   const cooldownCutoff = new Date(Date.now() - cooldownDias * 24 * 60 * 60 * 1000).toISOString();
   const [priorNps, priorCsat, npsRecente] = await Promise.all([
-    sbFetch(`nps_avaliacoes?tenant_id=eq.${enc(tenantId)}&contact_identifier=eq.${enc(contactIdentifier)}&select=id&limit=1`),
-    sbFetch(`atendimento_avaliacoes?tenant_id=eq.${enc(tenantId)}&contact_identifier=eq.${enc(contactIdentifier)}&select=id&limit=1`),
+    sbFetch(`nps_avaliacoes?tenant_id=eq.${enc(tenantId)}&contact_identifier=eq.${enc(contactIdentifier)}&select=id&limit=20`),
+    sbFetch(`atendimento_avaliacoes?tenant_id=eq.${enc(tenantId)}&contact_identifier=eq.${enc(contactIdentifier)}&select=id&limit=20`),
     sbFetch(`nps_avaliacoes?tenant_id=eq.${enc(tenantId)}&contact_identifier=eq.${enc(contactIdentifier)}&created_at=gte.${enc(cooldownCutoff)}&select=id&limit=1`),
   ]);
 
-  const primeiroAtendimento = !(priorNps?.length) && !(priorCsat?.length);
-  const npsNoCooldown        = (npsRecente?.length ?? 0) > 0;
-  const enviarCsat           = primeiroAtendimento || npsNoCooldown;
+  // Atendimentos anteriores (CSAT + NPS) do contato; este é o (anteriores + 1)º.
+  const atendimentoAtual = (priorNps?.length ?? 0) + (priorCsat?.length ?? 0) + 1;
+  const aindaCedoParaNps = atendimentoAtual < minAtend;
+  const npsNoCooldown    = (npsRecente?.length ?? 0) > 0;
+  const enviarCsat       = aindaCedoParaNps || npsNoCooldown;
 
   if (enviarCsat) {
     const arr = await sbFetch('atendimento_avaliacoes?select=id,public_token', {
