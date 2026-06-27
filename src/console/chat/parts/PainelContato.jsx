@@ -46,7 +46,8 @@ function Linha({ rotulo, valor }) {
   );
 }
 
-export default function PainelContato({ conv, customer }) {
+export default function PainelContato({ conv, customer, transfer }) {
+  const tr = transfer || {};
   const [abertos, setAbertos] = useState({ perfil: true, negocio: false });
   const toggle = (k) => setAbertos((s) => ({ ...s, [k]: !s[k] }));
 
@@ -62,6 +63,8 @@ export default function PainelContato({ conv, customer }) {
 
   const nome = customer?.name || conv.nome;
   const telefone = customer?.phone || conv.telefone || '';
+  const podeTransferir = !conv.isChan && Array.isArray(tr.deps) && tr.deps.length > 0;
+  const deptAtual = (tr.deps || []).find((d) => d.id === conv.deptId)?.name || null;
 
   return (
     <div className="ccv-col3">
@@ -69,14 +72,32 @@ export default function PainelContato({ conv, customer }) {
         {/* cabeçalho */}
         <div className="ccv-panel-av">
           <div className="ccv-av" style={{ background: corAvatar(nome), width: 56, height: 56, minWidth: 56, fontSize: 20 }}>
-            {inicial(nome)}
+            {conv.foto
+              ? <img className="ccv-av-img" src={conv.foto} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+              : inicial(nome)}
           </div>
           <div className="ccv-panel-name">{nome}</div>
           {telefone && <div className="ccv-panel-sub">{telefone}</div>}
         </div>
 
-        {/* ações (placeholders) */}
+        {/* ações */}
         <div className="ccv-acoes">
+          {podeTransferir && (
+            <label className="ccv-transfer-field">
+              <span className="ccv-transfer-lb"><Ico name="i-users" size={13} /> Transferir para departamento</span>
+              <select
+                className="ccv-transfer"
+                value=""
+                disabled={tr.transferindo}
+                onChange={(e) => { const v = e.target.value; e.target.value = ''; if (v) tr.transferir?.(v); }}
+              >
+                <option value="">{deptAtual ? `Atual: ${deptAtual}` : 'Selecione…'}</option>
+                {tr.deps.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <button type="button" className="ccv-acao-btn" title="Adicionar negócio (em breve)" disabled>
             <Ico name="i-folder" size={15} /> Adicionar negócio
           </button>

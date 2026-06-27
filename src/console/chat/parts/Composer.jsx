@@ -7,6 +7,10 @@
  *  - Colar imagem: onPaste captura a imagem do clipboard → onEnviarMidia;
  *  - Gravação PTT: toggle (inicia / para+envia) com timer e botão cancelar.
  *
+ * FASE 3 — barra de reply ativa no topo (.ccv-reply-bar): quando `replyTo` está
+ * setado, mostra a citação + botão cancelar; o envio é feito normalmente (o
+ * container inclui o quoted_content e limpa replyTo após o envio).
+ *
  * Props:
  *  - onEnviar: (texto) => void
  *  - onEnviarMidia: (file) => void
@@ -17,6 +21,8 @@
  *  - pararEnviar: () => void   (para a gravação e envia o áudio)
  *  - cancelar: () => void       (descarta a gravação)
  *  - enviandoMidia: boolean
+ *  - replyTo: msgShape|null     (mensagem sendo respondida; FASE 3)
+ *  - onCancelReply: () => void  (limpa a barra de resposta; FASE 3)
  *
  * Estado local: apenas o rascunho do input (controlado). Imutável.
  * Toda a aparência mora em chat-cv2.css (escopo .cv2-main .ccv-*).
@@ -34,6 +40,9 @@ const fmtTempo = (s) => {
   return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 };
 
+// texto da citação na barra de reply (replyTo pode ter txt e/ou mídia)
+const previewReply = (m) => m?.txt || (m?.mtype ? '📎 mídia' : '');
+
 export default function Composer({
   onEnviar,
   onEnviarMidia,
@@ -44,6 +53,8 @@ export default function Composer({
   pararEnviar,
   cancelar,
   enviandoMidia = false,
+  replyTo = null,
+  onCancelReply,
 }) {
   const [draft, setDraft] = useState('');
   const fileRef = useRef(null);
@@ -80,39 +91,63 @@ export default function Composer({
 
   const podeEnviarTexto = !disabled && draft.trim().length > 0;
 
+  // barra de reply (FASE 3) — citação ativa + botão cancelar, acima do composer
+  const replyBar = replyTo ? (
+    <div className="ccv-reply-bar">
+      <div className="ccv-reply-content">
+        <div className="ccv-reply-who">Respondendo {replyTo.out ? 'você' : (replyTo.who || 'cliente')}</div>
+        <div className="ccv-reply-txt">{previewReply(replyTo)}</div>
+      </div>
+      <button
+        type="button"
+        className="ccv-cbtn"
+        title="Cancelar resposta"
+        aria-label="Cancelar resposta"
+        onClick={() => onCancelReply?.()}
+      >
+        <span style={{ fontSize: 15, lineHeight: 1 }}>✕</span>
+      </button>
+    </div>
+  ) : null;
+
   // ── modo gravação: substitui a linha do composer pelos controles de áudio ───
   if (gravando) {
     return (
-      <div className="ccv-composer ccv-rec">
-        <span className="ccv-rec-dot" aria-hidden="true" />
-        <span className="ccv-rec-time">{fmtTempo(segundos)}</span>
-        <span className="ccv-rec-hint">Gravando áudio…</span>
-        <div className="ccv-rec-actions">
-          <button
-            type="button"
-            className="ccv-cbtn"
-            title="Cancelar gravação"
-            onClick={() => cancelar?.()}
-            aria-label="Cancelar gravação"
-          >
-            <span style={{ fontSize: 15, lineHeight: 1 }}>✕</span>
-          </button>
-          <button
-            type="button"
-            className="ccv-cbtn send"
-            title="Parar e enviar áudio"
-            onClick={() => pararEnviar?.()}
-            aria-label="Enviar áudio"
-          >
-            <Ico name="i-check" size={16} />
-          </button>
+      <>
+        {replyBar}
+        <div className="ccv-composer ccv-rec">
+          <span className="ccv-rec-dot" aria-hidden="true" />
+          <span className="ccv-rec-time">{fmtTempo(segundos)}</span>
+          <span className="ccv-rec-hint">Gravando áudio…</span>
+          <div className="ccv-rec-actions">
+            <button
+              type="button"
+              className="ccv-cbtn"
+              title="Cancelar gravação"
+              onClick={() => cancelar?.()}
+              aria-label="Cancelar gravação"
+            >
+              <span style={{ fontSize: 15, lineHeight: 1 }}>✕</span>
+            </button>
+            <button
+              type="button"
+              className="ccv-cbtn send"
+              title="Parar e enviar áudio"
+              onClick={() => pararEnviar?.()}
+              aria-label="Enviar áudio"
+            >
+              <Ico name="i-check" size={16} />
+            </button>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="ccv-composer">
+    <>
+      {replyBar}
+      <div className="ccv-composer">
       <input ref={fileRef} type="file" hidden accept={ACCEPT} onChange={onPickFile} />
 
       {/* anexar — funcional (FASE 2) */}
@@ -127,12 +162,9 @@ export default function Composer({
         <Ico name="i-clip" size={16} />
       </button>
 
-      {/* agendar / citar — placeholders visuais (próximas fases) */}
+      {/* agendar — placeholder visual (próxima fase); citar agora é via hover na msg */}
       <button type="button" className="ccv-cbtn" title="Agendar (em breve)" disabled aria-label="Agendar envio">
         <Ico name="i-clock" size={16} />
-      </button>
-      <button type="button" className="ccv-cbtn" title="Citar (em breve)" disabled aria-label="Citar mensagem">
-        <Ico name="i-reply" size={16} />
       </button>
 
       <input
@@ -168,6 +200,7 @@ export default function Composer({
           <Ico name="i-mic" size={16} />
         </button>
       )}
-    </div>
+      </div>
+    </>
   );
 }

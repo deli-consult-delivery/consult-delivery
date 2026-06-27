@@ -211,7 +211,7 @@ function GlobalSearch({ tenantDbId, onNavigate }) {
   const navHits = termo.length < 1 ? [] : NAV_ITEMS.filter(it => norm(it.label).includes(termo)).slice(0, 7);
   const temAlgo = navHits.length || ent.lojas.length || ent.convs.length;
 
-  function go(tela) { onNavigate(tela); setOpen(false); setQ(''); }
+  function go(tela, params) { onNavigate(tela, params); setOpen(false); setQ(''); }
 
   return (
     <div ref={boxRef} className="cv2-gsearch" style={{ flex: 1, maxWidth: 420, position: 'relative' }}>
@@ -232,7 +232,7 @@ function GlobalSearch({ tenantDbId, onNavigate }) {
           {ent.lojas.length > 0 && <SecaoBusca titulo="Lojas" />}
           {ent.lojas.map(l => <ItemBusca key={'l-' + l.id} ic="i-store" principal={l.nome} sec={l.cidade || ''} onClick={() => go('lojas')} />)}
           {ent.convs.length > 0 && <SecaoBusca titulo="Conversas" />}
-          {ent.convs.map(c => <ItemBusca key={'c-' + c.id} ic={c.is_group ? 'i-users' : 'i-chat'} principal={nomeConv(c)} sec={c.is_group ? 'Grupo' : 'WhatsApp'} onClick={() => go('chat')} />)}
+          {ent.convs.map(c => <ItemBusca key={'c-' + c.id} ic={c.is_group ? 'i-users' : 'i-chat'} principal={nomeConv(c)} sec={c.is_group ? 'Grupo' : 'WhatsApp'} onClick={() => go('chat', { convId: c.id })} />)}
         </div>
       )}
     </div>
@@ -730,7 +730,9 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
 
   const navWithParams = useCallback((novaTela, params) => {
     if (params?.customerId !== undefined) setDeepLinkCustomerId(params.customerId);
-    if (params?.convId !== undefined) setDeepLinkConvId(params.convId);
+    // objeto com ts: muda a referência a cada clique, mesmo p/ o mesmo convId,
+    // garantindo que o efeito de seleção no ChatAoVivoV2 dispare sempre.
+    if (params?.convId !== undefined) setDeepLinkConvId({ convId: params.convId, ts: Date.now() });
     setTela(novaTela);
   }, []);
 
@@ -882,7 +884,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
               </button>
               <span className="crumb">Console › <b>{LABELS[tela] || tela}</b></span>
-              <GlobalSearch tenantDbId={tenantDbId} onNavigate={setTela} />
+              <GlobalSearch tenantDbId={tenantDbId} onNavigate={navWithParams} />
               {(!allowedModules || allowedModules.has('creditos-ia')) && (
                 <span className="cv2-pill" title={`Plano freemium · ${CREDITOS_MES.toLocaleString('pt-BR')} créditos/mês · 1 por execução de IA · ${runs ?? 0} usados`}>
                   <Ico name="i-zap" size={13} /> Créditos IA <b>{creditosTxt}</b>

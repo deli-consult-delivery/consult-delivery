@@ -43,7 +43,9 @@ export default function ConvItem({ conv, ativo, onClick }) {
       title={conv.nome}
     >
       <div className="ccv-av" style={{ background: corAvatar(conv.nome) }}>
-        {inicial(conv.nome)}
+        {conv.foto
+          ? <img className="ccv-av-img" src={conv.foto} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+          : inicial(conv.nome)}
         <span className={`ccv-chan${conv.isChan ? ' internal' : ''}`} aria-hidden="true" />
       </div>
 

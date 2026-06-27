@@ -115,6 +115,41 @@
   font-weight: 500;
 }
 
+/* FASE 3: indicador de carregamento de histórico (topo da thread) / busca (lista) */
+.cv2-main .ccv-hist {
+  padding: 8px 12px;
+  text-align: center;
+  color: var(--tx2);
+  font-size: 11.5px;
+  font-weight: 600;
+  opacity: .85;
+}
+
+/* FASE 3: indicador de digitação (placeholder — exibido quando aplicável) */
+.cv2-main .ccv-typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+  color: var(--tx2);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.cv2-main .ccv-typing i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--tx2);
+  display: inline-block;
+  animation: ccvTyping 1.2s infinite ease-in-out;
+}
+.cv2-main .ccv-typing i:nth-child(2) { animation-delay: .15s; }
+.cv2-main .ccv-typing i:nth-child(3) { animation-delay: .3s; }
+@keyframes ccvTyping {
+  0%, 60%, 100% { opacity: .3; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-2px); }
+}
+
 .cv2-main .ccv-conv {
   display: flex;
   align-items: center;
@@ -149,6 +184,14 @@
   font-weight: 700;
 }
 .cv2-main .ccv-av.sm { width: 34px; height: 34px; min-width: 34px; font-size: 13px; }
+/* FASE 3: foto WhatsApp cobre o círculo inteiro; herda o border-radius do .ccv-av */
+.cv2-main .ccv-av-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
 .cv2-main .ccv-chan {
   position: absolute;
   right: -1px;
@@ -479,6 +522,34 @@
 .cv2-main .ccv-acao-btn:hover { border-color: var(--red); color: var(--red); }
 .cv2-main .ccv-acao-btn .cv2-ico { color: var(--red); }
 
+/* FASE 3: transferir para departamento (campo no painel) */
+.cv2-main .ccv-transfer-field { display: flex; flex-direction: column; gap: 5px; }
+.cv2-main .ccv-transfer-lb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--tx2);
+}
+.cv2-main .ccv-transfer-lb .cv2-ico { color: var(--red); }
+.cv2-main .ccv-transfer {
+  width: 100%;
+  background: #faf9f8;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--tx);
+  cursor: pointer;
+  font-family: inherit;
+}
+.cv2-main .ccv-transfer:hover:not(:disabled) { border-color: var(--red); }
+.cv2-main .ccv-transfer:disabled { opacity: .55; cursor: not-allowed; }
+/* variação compacta no header da Thread */
+.cv2-main .ccv-th-actions .ccv-transfer { width: auto; max-width: 150px; padding: 5px 10px; font-size: 11.5px; }
+
 /* collapses (Perfil / Notas / Endereço / Negócio) */
 .cv2-main .ccv-collapse { border-top: 1px solid var(--line); }
 .cv2-main .ccv-collapse-hd {
@@ -676,3 +747,193 @@
   justify-content: center;
 }
 .cv2-main .ccv-lightbox-close:hover { background: rgba(0, 0, 0, .75); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FASE 3 — interações de mensagem (reply / reagir / encaminhar / apagar)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── barra de ações no hover do balão ─────────────────────────────────────── */
+.cv2-main .ccv-acts {
+  position: absolute;
+  top: -12px;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .12);
+  z-index: 3;
+}
+.cv2-main .ccv-msg:hover > .ccv-acts { display: inline-flex; }
+.cv2-main .ccv-acts button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--tx2);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.cv2-main .ccv-acts button:hover { background: #f0eeec; color: var(--ink); }
+.cv2-main .ccv-acts button.del:hover { background: var(--red-soft); color: var(--red); }
+
+/* ── mini emoji picker de reação ──────────────────────────────────────────── */
+.cv2-main .ccv-emoji-bar {
+  position: absolute;
+  top: -42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 3px 5px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .16);
+  z-index: 4;
+}
+.cv2-main .ccv-emoji-bar button {
+  border: none;
+  background: transparent;
+  font-size: 17px;
+  line-height: 1;
+  padding: 3px 4px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform .1s;
+}
+.cv2-main .ccv-emoji-bar button:hover { transform: scale(1.25); background: #f0eeec; }
+
+/* ── reações agrupadas abaixo do balão ────────────────────────────────────── */
+.cv2-main .ccv-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+}
+.cv2-main .ccv-reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.cv2-main .ccv-reaction b { font-size: 10.5px; font-weight: 700; color: var(--tx2); }
+
+/* ── modal de encaminhamento ──────────────────────────────────────────────── */
+.cv2-main .ccv-fwd-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: rgba(0, 0, 0, .5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.cv2-main .ccv-fwd-modal {
+  width: 100%;
+  max-width: 380px;
+  max-height: 80vh;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, .3);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.cv2-main .ccv-fwd-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.cv2-main .ccv-fwd-title { font-size: 14px; font-weight: 700; color: var(--ink); }
+.cv2-main .ccv-fwd-preview {
+  margin: 10px 14px 0;
+  padding: 8px 10px;
+  background: #faf9f8;
+  border-left: 3px solid var(--red);
+  border-radius: 4px;
+  font-size: 12.5px;
+  color: var(--tx2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cv2-main .ccv-fwd-search {
+  margin: 10px 14px;
+  background: #faf9f8;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--tx);
+  font-family: inherit;
+  outline: none;
+}
+.cv2-main .ccv-fwd-search:focus { border-color: var(--red); background: #fff; }
+.cv2-main .ccv-fwd-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 0 6px 6px;
+}
+.cv2-main .ccv-fwd-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+.cv2-main .ccv-fwd-item:hover { background: #faf9f8; }
+.cv2-main .ccv-fwd-item.sel { background: var(--red-soft); }
+.cv2-main .ccv-fwd-item-nm {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cv2-main .ccv-fwd-check {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  border: 2px solid var(--line);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+}
+.cv2-main .ccv-fwd-check.on { background: var(--red); border-color: var(--red); }
+.cv2-main .ccv-fwd-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--line);
+}

@@ -86,8 +86,21 @@ const toConvShape = (c, lastMsg) => {
     deptId: c.department_id || null,
     customerId: c.customer_id || null,
     unread: c.unread_count || 0,
+    foto: c.push_photo_url || null, // FASE 3: foto WhatsApp já persistida (apenas exibir)
   };
 };
+
+const SELECT_CONV =
+  'id, whatsapp_chat_id, group_name, contact_name, push_name, push_photo_url, is_group, updated_at, status, status_v2, department_id, customer_id, unread_count';
+
+// sanitiza termo p/ o filtro .or() do PostgREST.
+// Remove os metacaracteres do parser de or()/ilike: vírgula e parênteses (separadores de
+// cláusula), curinga (% *), aspas duplas (delimitam o valor), e ponto/dois-pontos
+// (delimitadores de operador como `ilike.` / `eq.`) — fecha injeção de cláusula extra.
+const sanitizeBusca = (q) => q.trim().replace(/[%,()*".:]/g, '');
+const MIN_BUSCA_SERVER = 3;   // >=3 chars → busca server-side
+const DEBOUNCE_BUSCA = 300;   // ms
+const LIMIT_BUSCA = 100;
 
 // ─── hook ────────────────────────────────────────────────────────────────────
 export function useConversas(tenantDbId) {
@@ -95,6 +108,9 @@ export function useConversas(tenantDbId) {
   const [loading, setLoading] = useState(true);
   const [filtro, setFiltro] = useState('inbox');
   const [busca, setBusca] = useState('');
+  // resultado da busca server-side (>=3 chars). null = sem busca server ativa.
+  const [buscaServer, setBuscaServer] = useState(null);
+  const [buscandoServer, setBuscandoServer] = useState(false);
 
   const activeIdRef = useRef(null); // a UI registra a conversa ativa aqui (via setActiveRef)
 
@@ -104,7 +120,7 @@ export function useConversas(tenantDbId) {
     setLoading(true);
     const { data, error } = await supabase
       .from('conversations')
-      .select('id, whatsapp_chat_id, group_name, contact_name, push_name, is_group, updated_at, status, status_v2, department_id, customer_id, unread_count')
+      .select(SELECT_CONV)
       .eq('tenant_id', tenantDbId)
       .order('updated_at', { ascending: false })
       .limit(LIMIT_CONVS);
@@ -164,6 +180,37 @@ export function useConversas(tenantDbId) {
     return () => { supabase.removeChannel(ch); };
   }, [tenantDbId]);
 
+  // ── busca server-side (>=3 chars, debounce) ─────────────────────────────────
+  // ILIKE em push_name/contact_name/group_name/whatsapp_chat_id (.eq tenant, limit 100).
+  // Abaixo de 3 chars, zera o resultado server e cai no filtro client-side atual.
+  useEffect(() => {
+    const safe = sanitizeBusca(busca);
+    if (safe.length < MIN_BUSCA_SERVER || !tenantDbId) {
+      setBuscaServer(null);
+      setBuscandoServer(false);
+      return;
+    }
+    let vivo = true;
+    setBuscandoServer(true);
+    const t = setTimeout(async () => {
+      // valor entre aspas duplas conforme spec do PostgREST: trata o termo como
+      // literal mesmo se algum metacaractere escapar do sanitizeBusca.
+      const like = `"%${safe}%"`;
+      const { data, error } = await supabase
+        .from('conversations')
+        .select(SELECT_CONV)
+        .eq('tenant_id', tenantDbId)
+        .or(`push_name.ilike.${like},contact_name.ilike.${like},group_name.ilike.${like},whatsapp_chat_id.ilike.${like}`)
+        .order('updated_at', { ascending: false })
+        .limit(LIMIT_BUSCA);
+      if (!vivo) return;
+      // sem preview aqui (busca é leve): preview vem do convShape sem lastMsg.
+      setBuscaServer(error ? [] : (data || []).map((c) => toConvShape(c, null)));
+      setBuscandoServer(false);
+    }, DEBOUNCE_BUSCA);
+    return () => { vivo = false; clearTimeout(t); };
+  }, [busca, tenantDbId]);
+
   // ── contadores (derivados de convs) ─────────────────────────────────────────
   const contadores = useMemo(() => {
     const acc = { ...CONTADOR_ZERO };
@@ -175,9 +222,17 @@ export function useConversas(tenantDbId) {
   }, [convs]);
 
   // ── lista filtrada (estado + busca) ─────────────────────────────────────────
+  // Com busca server-side ativa (>=3 chars) usa a base ampla retornada do banco;
+  // senão usa a janela local (convs) + filtro client-side por substring.
   const convsFiltradas = useMemo(() => {
     const def = FILTROS.find((f) => f.id === filtro) || FILTROS[0];
     const q = busca.trim().toLowerCase();
+
+    if (buscaServer != null) {
+      // base server já casa o termo; aplica só o filtro de estado por consistência da aba
+      return buscaServer.filter((c) => def.sv2.includes(c.status_v2 || 'open'));
+    }
+
     return (convs || [])
       .filter((c) => def.sv2.includes(c.status_v2 || 'open'))
       .filter((c) => {
@@ -188,7 +243,7 @@ export function useConversas(tenantDbId) {
           (c.telefone || '').includes(q)
         );
       });
-  }, [convs, filtro, busca]);
+  }, [convs, filtro, busca, buscaServer]);
 
   // ── mutadores otimistas expostos p/ UI (status local + unread) ──────────────
   const setActiveRef = useCallback((id) => { activeIdRef.current = id; }, []);
@@ -209,6 +264,7 @@ export function useConversas(tenantDbId) {
     setFiltro,
     busca,
     setBusca,
+    buscandoServer,
     reload: loadConvs,
     convsFiltradas,
     // helpers de integração com a thread/UI

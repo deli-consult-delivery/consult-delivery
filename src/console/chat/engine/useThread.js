@@ -43,13 +43,21 @@ const SELECT_COLS =
 export function useThread(activeId, tenantDbId) {
   const [msgs, setMsgs] = useState([]);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
+  // paginação (FASE 3): temMais = ainda há histórico anterior; carregandoOlder = fetch em curso
+  const [temMais, setTemMais] = useState(false);
+  const [carregandoOlder, setCarregandoOlder] = useState(false);
 
   // guarda o id corrente p/ descartar respostas async de conversas já trocadas
   const activeRef = useRef(activeId);
   useEffect(() => { activeRef.current = activeId; }, [activeId]);
+  // created_at da mensagem mais antiga em tela (cursor de paginação)
+  const oldestTsRef = useRef(null);
+  // guarda de concorrência do loadOlderMsgs (ref evita recriar o callback a cada fetch)
+  const carregandoOlderRef = useRef(false);
 
   const loadMsgs = useCallback(async (convId) => {
-    if (!convId || !tenantDbId) { setMsgs([]); return; }
+    carregandoOlderRef.current = false; // troca de conversa libera a guarda de paginação
+    if (!convId || !tenantDbId) { setMsgs([]); setTemMais(false); oldestTsRef.current = null; return; }
     setLoadingMsgs(true);
     const { data, error } = await supabase
       .from('messages')
@@ -60,17 +68,57 @@ export function useThread(activeId, tenantDbId) {
       .limit(LIMIT_MSGS);
     // descarta se a conversa ativa mudou durante o await
     if (activeRef.current !== convId) { setLoadingMsgs(false); return; }
-    if (error) { setMsgs([]); setLoadingMsgs(false); return; }
+    if (error) { setMsgs([]); setTemMais(false); oldestTsRef.current = null; setLoadingMsgs(false); return; }
+    const rows = data || [];
     // …e reinverte p/ ordem ascendente (mais antiga no topo)
-    setMsgs((data || []).map(toMsgShape).reverse());
+    const asc = rows.map(toMsgShape).reverse();
+    setMsgs(asc);
+    setTemMais(rows.length === LIMIT_MSGS); // veio página cheia → provável haver mais
+    oldestTsRef.current = asc.length ? asc[0].ts : null;
     setLoadingMsgs(false);
+  }, [tenantDbId]);
+
+  // carrega 30 mensagens anteriores à mais antiga em tela e faz prepend imutável
+  const loadOlderMsgs = useCallback(async () => {
+    const convId = activeRef.current;
+    const cursor = oldestTsRef.current;
+    // guarda de concorrência via ref: o state (carregandoOlder) é só p/ UI
+    if (!convId || !tenantDbId || !cursor || carregandoOlderRef.current) return;
+    carregandoOlderRef.current = true;
+    setCarregandoOlder(true);
+    const { data, error } = await supabase
+      .from('messages')
+      .select(SELECT_COLS)
+      .eq('tenant_id', tenantDbId)
+      .eq('conversation_id', convId)
+      .lt('created_at', cursor)               // estritamente anteriores ao cursor
+      .order('created_at', { ascending: false })
+      .limit(LIMIT_MSGS);
+    if (activeRef.current !== convId) { carregandoOlderRef.current = false; setCarregandoOlder(false); return; }
+    if (error) { carregandoOlderRef.current = false; setCarregandoOlder(false); return; }
+    const rows = data || [];
+    const older = rows.map(toMsgShape).reverse(); // ascendente (mais antiga primeiro)
+    setTemMais(rows.length === LIMIT_MSGS);
+    if (older.length) {
+      oldestTsRef.current = older[0].ts;
+      // prepend imutável + dedup por id (realtime pode ter inserido algo no intervalo)
+      setMsgs((prev) => {
+        const vistos = new Set(prev.map((x) => x.id));
+        const novos = older.filter((x) => !vistos.has(x.id));
+        return [...novos, ...prev];
+      });
+    }
+    carregandoOlderRef.current = false;
+    setCarregandoOlder(false);
   }, [tenantDbId]);
 
   const reloadMsgs = useCallback(() => loadMsgs(activeRef.current), [loadMsgs]);
 
   useEffect(() => {
-    if (!activeId) { setMsgs([]); return; }
+    if (!activeId) { setMsgs([]); setTemMais(false); oldestTsRef.current = null; return; }
     setMsgs([]);
+    setTemMais(false);
+    oldestTsRef.current = null;
     loadMsgs(activeId);
 
     const ch = supabase
@@ -92,5 +140,5 @@ export function useThread(activeId, tenantDbId) {
     return () => { supabase.removeChannel(ch); };
   }, [activeId, loadMsgs, tenantDbId]);
 
-  return { msgs, loadingMsgs, reloadMsgs };
+  return { msgs, loadingMsgs, reloadMsgs, loadOlderMsgs, temMais, carregandoOlder };
 }
