@@ -30,8 +30,10 @@ export default function ListaConversas({
   buscandoServer,
   activeId,
   onSelect,
+  favMute,
 }) {
   const lista = convsFiltradas || [];
+  const fm = favMute || {};
 
   return (
     <div className="ccv-col1">
@@ -69,6 +71,10 @@ export default function ListaConversas({
             conv={c}
             ativo={c.id === activeId}
             onClick={() => onSelect(c.id)}
+            fav={fm.isFav ? fm.isFav(c.id) : false}
+            muted={fm.isMuted ? fm.isMuted(c.id) : false}
+            onToggleFav={() => fm.toggleFav?.(c.id)}
+            onToggleMute={() => fm.toggleMute?.(c.id)}
           />
         ))}
       </div>

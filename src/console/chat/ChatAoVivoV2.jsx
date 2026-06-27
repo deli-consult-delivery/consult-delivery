@@ -28,6 +28,13 @@ import { useStatusAtend } from './engine/useStatusAtend.js';
 import { useEnvio } from './engine/useEnvio.js';
 import { useAcoesMsg } from './engine/useAcoesMsg.js';
 import { useContato } from './engine/useContato.js';
+import { useFavMute } from './engine/useFavMute.js';
+import { useCanaisInternos } from './engine/useCanaisInternos.js';
+import { useQuickReplies } from './engine/useQuickReplies.js';
+import { useBreno } from './engine/useBreno.js';
+import { useEvolutionHealth } from './engine/useEvolutionHealth.js';
+import { useIA } from './engine/useIA.js';
+import { useTranscricao } from './engine/useTranscricao.js';
 import ListaConversas from './parts/ListaConversas.jsx';
 import Thread from './parts/Thread.jsx';
 import PainelContato from './parts/PainelContato.jsx';
@@ -42,6 +49,15 @@ export default function ChatAoVivoV2({ tenant, tenantDbId, userId, onNavigate, d
 
   // deepLinkConvId chega como { convId, ts } (ts muda a cada clique → reseleciona o mesmo id)
   const dlConvId = deepLinkConvId?.convId || null;
+
+  // activeId precede useConversas: canais internos (useCanaisInternos) dependem dele
+  // e entram como extraConvs na lista combinada.
+  const [activeId, setActiveId] = useState(dlConvId);
+
+  // FASE 4 — favoritos/silenciados (localStorage) + canais internos da EQUIPE
+  const favMute = useFavMute();
+  const { canais, chanMsgs, enviarNoCanal } = useCanaisInternos(tenantDbId, activeId, userId);
+  const { quickReplies, buscarPorShortcut } = useQuickReplies(tenantDbId);
 
   const {
     loading,
@@ -58,9 +74,8 @@ export default function ChatAoVivoV2({ tenant, tenantDbId, userId, onNavigate, d
     zerarUnread,
     patchConv,
     FILTROS,
-  } = useConversas(tenantDbId);
+  } = useConversas(tenantDbId, { extraConvs: canais, favs: favMute.favs, mutes: favMute.mutes });
 
-  const [activeId, setActiveId] = useState(dlConvId);
   const [customer, setCustomer] = useState(null);
   const [instance, setInstance] = useState(null);
   const [lightboxUrl, setLightboxUrl] = useState(null); // FASE 2 — overlay de imagem
@@ -72,7 +87,33 @@ export default function ChatAoVivoV2({ tenant, tenantDbId, userId, onNavigate, d
   // errada quando convsFiltradas troca de filtro com a seleção limpa.
   const jaSelecionouRef = useRef(!!dlConvId);
 
-  const { msgs, loadingMsgs, loadOlderMsgs, temMais, carregandoOlder } = useThread(activeId, tenantDbId);
+  // FASE 4 (IA) — camada de IA (modo/copiloto/híbrido/IA) + transcrição/tradução.
+  // Instanciadas ANTES do useThread porque seu callback de inbound usa estes hooks.
+  const ia = useIA({ instancia: instance, userId });
+  const transcricao = useTranscricao();
+
+  // conv atual via ref p/ o callback de inbound (estável; não recria o canal)
+  const convRef = useRef(null);
+
+  // callback de mensagem de ENTRADA na conversa ativa (useThread) — dispara:
+  //  - híbrido: gera sugestão (não envia);
+  //  - ia: gera e ENVIA resposta automática (nunca em canal interno);
+  //  - auto-transcrição de áudio/vídeo (respeita a flag).
+  // Deps = funções estáveis (useCallback nos hooks), NÃO os objetos ia/transcricao
+  // (literais a cada render → recriariam onInbound → re-subscrição do realtime).
+  const onInbound = useCallback((nm) => {
+    const c = convRef.current;
+    if (!c || c.isChan) return; // canal interno não tem IA/transcrição de WhatsApp
+    transcricao.autoTranscrever(nm);
+    const modo = ia.getModo(c.id);
+    if (modo === 'hibrido') {
+      setTimeout(() => ia.triggerHibridoSuggestion(c), 900);
+    } else if (modo === 'ia') {
+      setTimeout(() => ia.triggerIaAutoReply(c), 1000);
+    }
+  }, [ia.getModo, ia.triggerHibridoSuggestion, ia.triggerIaAutoReply, transcricao.autoTranscrever]);
+
+  const { msgs, loadingMsgs, loadOlderMsgs, temMais, carregandoOlder } = useThread(activeId, tenantDbId, onInbound);
   const { finalizar, reabrir, atualizando } = useStatusAtend(tenantDbId, userId);
   const { deps, transferir, transferindo } = useContato(tenantDbId);
   const {
@@ -86,7 +127,36 @@ export default function ChatAoVivoV2({ tenant, tenantDbId, userId, onNavigate, d
   } = useEnvio({ tenantDbId, userId, instancia: instance });
   const { reagir, apagar, encaminhar } = useAcoesMsg({ tenantDbId, instancia: instance });
 
+  // FASE 4 — sugestão do BRENO da conversa ativa + saúde da Evolution
+  const { brenoSugestao, usarSugestao, dispensar: dispensarBreno } = useBreno(activeId, tenantDbId);
+  const { evolutionOffline } = useEvolutionHealth(tenantDbId, instance);
+
   const conv = (convs || []).find((c) => c.id === activeId) || null;
+  const isCanalAtivo = !!conv?.isChan;
+
+  // ── IA: mantém convRef e informa a conversa ativa ao hook (aiMode da UI) ────
+  useEffect(() => { convRef.current = conv; }, [conv]);
+  useEffect(() => { ia.setConvAtiva(activeId); }, [activeId, ia]);
+
+  // ── mensagens exibidas: WhatsApp (useThread) ou canal interno (useCanaisInternos) ──
+  // canal interno não tem linha em `messages`; mapeia chanMsgs → msgShape.
+  const msgsExibidas = isCanalAtivo
+    ? (chanMsgs || []).map((m) => ({
+        id: m.id,
+        out: !!m.sender_id && m.sender_id === userId,
+        txt: m.text || '',
+        mtype: m.media_type || null,
+        murl: m.media_url || null,
+        who: m.sender_name || null,
+        tm: m.created_at ? new Date(m.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
+        ts: m.created_at || null,
+        reactions: [],
+        quoted: null,
+        ds: null,
+        del: false,
+        waId: null,
+      }))
+    : msgs;
 
   // ── registra a conversa ativa no engine (realtime inbox não bumpa a aberta) ──
   useEffect(() => { setActiveRef(activeId); }, [activeId, setActiveRef]);
@@ -149,7 +219,8 @@ export default function ChatAoVivoV2({ tenant, tenantDbId, userId, onNavigate, d
     setReplyTo(null);      // troca de conversa encerra resposta/encaminhamento pendentes
     setForwardMsg(null);
     zerarUnread(convId);
-    if (!tenantDbId) return;
+    // canais internos (chan-) não vivem em `conversations` (id é uuid) → pular o UPDATE
+    if (!tenantDbId || (typeof convId === 'string' && convId.startsWith('chan-'))) return;
     // P1: .select('id') + await garante que a falha (RLS/0 linhas) não seja
     // silenciada como promessa descartada; o erro é capturado e ignorado de
     // forma explícita (o zerarUnread local já refletiu o estado na UI).
@@ -162,9 +233,23 @@ export default function ChatAoVivoV2({ tenant, tenantDbId, userId, onNavigate, d
     void error; // best-effort: unread no banco; UI local é a fonte imediata
   }, [tenantDbId, zerarUnread]);
 
+  // ── BRENO p/ o composer: onUsar retorna o texto (Composer preenche o draft) ──
+  // usarSugestao() (do hook) chama onUsar(text)+dispensar; aqui montamos o objeto
+  // que o Composer consome: onUsar retorna a sugestão e dispensa em seguida.
+  const brenoComposer = brenoSugestao
+    ? {
+        sugestao: brenoSugestao,
+        onUsar: () => { const t = brenoSugestao.breno_response || ''; dispensarBreno(); return t; },
+        onDispensar: dispensarBreno,
+      }
+    : null;
+  void usarSugestao; // exposto pelo hook; a UI usa o onUsar do brenoComposer
+
   // ── envio de texto (FASE 3: inclui quoted_content quando há replyTo) ────────
+  // Canal interno: roteia p/ enviarNoCanal (sem Evolution/messages).
   const enviar = useCallback(async (texto) => {
     if (!conv || !texto || !tenantDbId) return;
+    if (conv.isChan) { enviarNoCanal(texto); return; }
     const quoting = replyTo; // captura a resposta ativa antes de limpar
     const quotedContent = quoting
       ? { waMsgId: quoting.waId, from: quoting.out ? 'out' : 'in', text: quoting.txt || '', mediaType: quoting.mtype || undefined }
@@ -193,7 +278,7 @@ export default function ChatAoVivoV2({ tenant, tenantDbId, userId, onNavigate, d
         instance.api_key,
       ).catch(() => { /* Evolution offline: msg já está no banco/realtime */ });
     }
-  }, [conv, tenantDbId, instance, replyTo]);
+  }, [conv, tenantDbId, instance, replyTo, enviarNoCanal]);
 
   // ── envio de mídia / áudio (FASE 2) — vinculam a conversa ativa ─────────────
   const onEnviarMidia = useCallback((file) => {
@@ -290,7 +375,36 @@ export default function ChatAoVivoV2({ tenant, tenantDbId, userId, onNavigate, d
     transferindo,
   };
 
-  const podeEnviar = !!instance && !!conv && !conv.isChan;
+  // canal interno: pode enviar sem instância Evolution (vai p/ channel_messages).
+  // WhatsApp: exige instância conectada.
+  const podeEnviar = !!conv && (conv.isChan || !!instance);
+
+  const composer = {
+    quickReplies,
+    buscarPorShortcut,
+    breno: brenoComposer,
+  };
+
+  // ── bundle de IA p/ a Thread (FASE 4 · IA) ──────────────────────────────────
+  // A sugestão híbrida só aparece se for da conversa ativa (o hook guarda convId).
+  const setModo = useCallback((modo) => {
+    if (activeId) ia.setModoConversa(activeId, modo);
+  }, [activeId, ia]);
+
+  const sugestaoAtiva = ia.sugestao && ia.sugestao.convId === activeId ? ia.sugestao : null;
+
+  const iaProp = {
+    aiMode: ia.aiMode,
+    setModo,
+    copilot: ia.copilot,
+    tenantId: tenantDbId,
+    sugestao: sugestaoAtiva,
+    descartarSugestao: ia.limparSugestao,
+    transcrever: transcricao.transcrever,
+    traduzir: transcricao.traduzir,
+    transcriptions: transcricao.transcriptions,
+    translations: transcricao.translations,
+  };
 
   return (
     <div className="ccv">
@@ -306,12 +420,13 @@ export default function ChatAoVivoV2({ tenant, tenantDbId, userId, onNavigate, d
         buscandoServer={buscandoServer}
         activeId={activeId}
         onSelect={abrirConv}
+        favMute={favMute}
       />
 
       <Thread
         conv={conv}
-        msgs={msgs}
-        loadingMsgs={loadingMsgs}
+        msgs={msgsExibidas}
+        loadingMsgs={isCanalAtivo ? false : loadingMsgs}
         onFinalizar={onFinalizar}
         onReabrir={onReabrir}
         onEnviar={enviar}
@@ -321,9 +436,12 @@ export default function ChatAoVivoV2({ tenant, tenantDbId, userId, onNavigate, d
         envio={envio}
         acoes={acoes}
         loadOlderMsgs={loadOlderMsgs}
-        temMais={temMais}
-        carregandoOlder={carregandoOlder}
+        temMais={isCanalAtivo ? false : temMais}
+        carregandoOlder={isCanalAtivo ? false : carregandoOlder}
         transfer={transfer}
+        composer={composer}
+        evolutionOffline={evolutionOffline}
+        ia={iaProp}
       />
 
       <PainelContato conv={conv} customer={customer} transfer={transfer} />

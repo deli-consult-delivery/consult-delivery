@@ -31,6 +31,12 @@
  *  - onApagar: (msg) => void
  *  - onEncaminhar: (msg) => void   (abre o ForwardModal; FASE 3)
  *
+ * FASE 4 (IA) — transcrição de áudio + tradução por mensagem:
+ *  - onTranscrever: (msg) => void  (dispara Whisper; só em áudio/vídeo inbound)
+ *  - transcription: { loading, text, error }|undefined
+ *  - onTraduzir: (msg) => void     (tradução da DELI; só em texto inbound)
+ *  - translation: { loading, text, lang, error }|undefined
+ *
  * Toda a aparência mora em chat-cv2.css (escopo .cv2-main .ccv-*).
  */
 
@@ -233,6 +239,50 @@ function Reactions({ reactions }) {
   );
 }
 
+// ── transcrição (áudio/vídeo) e tradução (texto) abaixo do balão de entrada ──
+function IaExtras({ msg, transcription, translation, onTranscrever, onTraduzir }) {
+  const ehAudioVideo = msg.mtype && (msg.mtype.includes('audio') || msg.mtype === 'video');
+  // só faz sentido em mensagens de entrada (do cliente)
+  if (msg.out || msg.del) return null;
+
+  return (
+    <>
+      {/* transcrição de áudio/vídeo */}
+      {ehAudioVideo && (
+        <div className="ccv-transcricao">
+          {!transcription && onTranscrever && (
+            <button type="button" className="ccv-ia-link" onClick={() => onTranscrever(msg)}>
+              ✍️ Transcrever áudio
+            </button>
+          )}
+          {transcription?.loading && <span className="ccv-ia-load">Transcrevendo…</span>}
+          {transcription?.error && <span className="ccv-ia-err">Transcrição indisponível</span>}
+          {transcription?.text && <div className="ccv-ia-text">{transcription.text}</div>}
+        </div>
+      )}
+
+      {/* tradução de texto */}
+      {!!msg.txt && (
+        <div className="ccv-traducao">
+          {!translation && onTraduzir && (
+            <button type="button" className="ccv-ia-link" onClick={() => onTraduzir(msg)}>
+              🌐 Traduzir
+            </button>
+          )}
+          {translation?.loading && <span className="ccv-ia-load">Traduzindo…</span>}
+          {translation?.error && <span className="ccv-ia-err">Tradução indisponível</span>}
+          {translation?.text && (
+            <div className="ccv-ia-text">
+              {translation.text}
+              {translation.lang && <sub className="ccv-ia-lang">{translation.lang}</sub>}
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function MsgBubble({
   msg,
   prevMsg,
@@ -241,6 +291,10 @@ export default function MsgBubble({
   onReagir,
   onApagar,
   onEncaminhar,
+  transcription,
+  translation,
+  onTranscrever,
+  onTraduzir,
 }) {
   const auto = ehAutomacao(msg.who);
   const sep = mudouDia(msg.ts, prevMsg?.ts);
@@ -330,6 +384,14 @@ export default function MsgBubble({
           {msg.tm}
           {msg.out && !msg.del && <Tick s={msg.ds} />}
         </div>
+
+        <IaExtras
+          msg={msg}
+          transcription={transcription}
+          translation={translation}
+          onTranscrever={onTranscrever}
+          onTraduzir={onTraduzir}
+        />
 
         {temAcoes && (
           <Acts

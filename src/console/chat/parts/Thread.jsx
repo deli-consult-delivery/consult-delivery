@@ -25,15 +25,23 @@
  * Toda a aparência mora em chat-cv2.css (escopo .cv2-main .ccv-*).
  */
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Ico } from '../../CvIcons.jsx';
 import { corAvatar, inicial } from './avatar.js';
 import MsgBubble from './MsgBubble.jsx';
 import Composer from './Composer.jsx';
 import ForwardModal from './ForwardModal.jsx';
+import AiCopilot from './AiCopilot.jsx';
 
 // protocolo = últimos 6 da UUID, maiúsculo
 const protocolo = (id) => (id ? String(id).slice(-6).toUpperCase() : '');
+
+// modos de IA do atendimento (seletor no header)
+const MODOS_IA = [
+  { id: 'humano',  ico: 'i-users', label: 'Humano' },
+  { id: 'hibrido', ico: 'i-zap',   label: 'Híbrido' },
+  { id: 'ia',      ico: 'i-bot',   label: 'IA total' },
+];
 
 export default function Thread({
   conv,
@@ -51,10 +59,16 @@ export default function Thread({
   temMais,
   carregandoOlder,
   transfer,
+  composer,
+  evolutionOffline = false,
+  ia = null,
 }) {
   const env = envio || {};
   const act = acoes || {};
   const tr = transfer || {};
+  const cmp = composer || {}; // FASE 4: quickReplies / buscarPorShortcut / breno
+  const iaP = ia || {};       // FASE 4 (IA): modo/seletor/copiloto/sugestão/transcrição
+  const [copilotAberto, setCopilotAberto] = useState(false);
   const msgsRef = useRef(null);
   const lista = msgs || [];
 
@@ -130,6 +144,39 @@ export default function Thread({
         </div>
 
         <div className="ccv-th-actions">
+          {/* ─── seletor de modo IA (humano / híbrido / IA) — só em WhatsApp ─── */}
+          {!isCanal && iaP.setModo && (
+            <div className="ccv-aimode" role="group" aria-label="Modo de atendimento IA">
+              {MODOS_IA.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  className={`ccv-aimode-btn${iaP.aiMode === m.id ? ' on' : ''}`}
+                  title={m.label}
+                  aria-pressed={iaP.aiMode === m.id}
+                  onClick={() => {
+                    if (m.id === 'ia' && !window.confirm('A DELI vai responder automaticamente todas as mensagens desta conversa neste modo. Confirmar?')) return;
+                    iaP.setModo(m.id);
+                  }}
+                >
+                  <Ico name={m.ico} size={12} />
+                  <span className="ccv-aimode-lbl">{m.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {/* ─── abrir copiloto DELI ─────────────────────────────────────── */}
+          {!isCanal && iaP.copilot && (
+            <button
+              type="button"
+              className={`ccv-cbtn${copilotAberto ? ' on' : ''}`}
+              title="Copiloto DELI"
+              aria-label="Abrir copiloto DELI"
+              onClick={() => setCopilotAberto((v) => !v)}
+            >
+              <Ico name="i-bot" size={16} />
+            </button>
+          )}
           {!isCanal && Array.isArray(tr.deps) && tr.deps.length > 0 && (
             <select
               className="ccv-transfer"
@@ -173,6 +220,44 @@ export default function Thread({
         </div>
       </div>
 
+      {/* ─── aviso discreto: Evolution offline (FASE 4) ──────────────────── */}
+      {!isCanal && evolutionOffline && (
+        <div className="ccv-offline" role="status">
+          <Ico name="i-radio" size={13} />
+          <span>WhatsApp pode estar offline — sem mensagens recebidas recentemente. As respostas ficam salvas e são enviadas ao reconectar.</span>
+        </div>
+      )}
+
+      {/* ─── sugestão híbrida da DELI (FASE 4 · IA) — enviar / descartar ──── */}
+      {!isCanal && iaP.sugestao && (
+        <div className="ccv-ia-suggest" role="status">
+          <span className="ccv-ia-suggest-ic" aria-hidden="true"><Ico name="i-zap" size={14} /></span>
+          <div className="ccv-ia-suggest-body">
+            <div className="ccv-ia-suggest-tit">Sugestão da DELI</div>
+            <div className="ccv-ia-suggest-txt">{iaP.sugestao.texto}</div>
+          </div>
+          <div className="ccv-ia-suggest-acts">
+            <button
+              type="button"
+              className="ccv-ia-suggest-use"
+              disabled={!podeEnviar}
+              onClick={() => { onEnviar(iaP.sugestao.texto); iaP.descartarSugestao?.(); }}
+            >
+              Enviar
+            </button>
+            <button
+              type="button"
+              className="ccv-ia-suggest-dis"
+              title="Descartar"
+              aria-label="Descartar sugestão"
+              onClick={() => iaP.descartarSugestao?.()}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ─── mensagens ──────────────────────────────────────────────────── */}
       <div className="ccv-msgs" ref={msgsRef} onScroll={onScroll}>
         {carregandoOlder && <div className="ccv-hist">Carregando histórico…</div>}
@@ -190,6 +275,10 @@ export default function Thread({
             onReagir={act.onReagir}
             onApagar={act.onApagar}
             onEncaminhar={act.onEncaminhar}
+            transcription={iaP.transcriptions?.[m.id]}
+            translation={iaP.translations?.[m.id]}
+            onTranscrever={isCanal ? null : iaP.transcrever}
+            onTraduzir={isCanal ? null : iaP.traduzir}
           />
         ))}
       </div>
@@ -198,7 +287,8 @@ export default function Thread({
       <Composer
         onEnviar={onEnviar}
         onEnviarMidia={env.onEnviarMidia}
-        disabled={isCanal || !podeEnviar}
+        disabled={!podeEnviar}
+        mediaDisabled={isCanal}
         gravando={env.gravando}
         segundos={env.segundos}
         iniciarGravacao={env.iniciarGravacao}
@@ -207,6 +297,9 @@ export default function Thread({
         enviandoMidia={env.enviandoMidia}
         replyTo={act.replyTo}
         onCancelReply={act.onCancelReply}
+        quickReplies={cmp.quickReplies}
+        buscarPorShortcut={cmp.buscarPorShortcut}
+        breno={cmp.breno}
       />
 
       {/* ─── modal de encaminhamento (FASE 3) ───────────────────────────── */}
@@ -216,6 +309,17 @@ export default function Thread({
           convs={act.convs}
           onConfirmar={act.onConfirmarForward}
           onClose={act.onFecharForward}
+        />
+      )}
+
+      {/* ─── drawer do copiloto DELI (FASE 4 · IA) ──────────────────────── */}
+      {!isCanal && copilotAberto && iaP.copilot && (
+        <AiCopilot
+          conv={conv}
+          msgs={lista}
+          tenantId={iaP.tenantId}
+          copilot={iaP.copilot}
+          onClose={() => setCopilotAberto(false)}
         />
       )}
     </div>
