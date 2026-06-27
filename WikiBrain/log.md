@@ -1387,3 +1387,32 @@ Wandson apontou que o Blueprint AI-First (FASE 1 — Loop ponta-a-ponta) não fo
 ### Próxima ação
 - Testar no browser após deploy (~3 min do merge): identidade visual, abas, bulk, Breno banner
 - Se algum detalhe visual precisar de ajuste, abrir nova sessão
+
+## 2026-06-27 — Sessão 95: Chat ao Vivo F1 Reskin + Hooks de contexto automático
+
+**Contexto:** Continuação de sessão anterior (mystifying-poitras-f24059) que planejou o reskin do Chat ao Vivo embedado no Console V2.
+
+**Descoberta importante:**
+- O main já tinha o `ChatAoVivo.jsx` — reescrita completa do Chat ao Vivo com identidade light cv2, importando `chat-ao-vivo.css`. Nossa F1-A/B foi supersedida por essa abordagem.
+- F0 (silent-fail fixes) confirmado 100% feito nos PRs #582/#584.
+
+**Implementado (PR #589, mergeado):**
+- `ChatScreen.jsx`: prop `onToggleMenu` + hamburger `.lc-ham-embedded` nos dois `lc-fullhead` quando `embedded=true`; `background` inline usa `var(--lc-bg, #0E0E0E)` em vez de valor hardcoded
+- `console.css`: bloco `.cv2-main .livechat` com 8 tokens dark→light + overrides para rail/fullhead/tabs/botões/balões/composer (dead CSS na prática pois ChatAoVivo não usa `.livechat`, mas não quebra nada)
+- `ConsoleV2.jsx`: resolução de conflito de merge usando `ChatAoVivo` do main
+
+**Hooks de contexto automático (incluídos no PR #589):**
+- `context-watchdog.cjs`: nos thresholds 40/60/80+ tool calls salva snapshot automático (git state + último checkpoint gstack) em disco; mensagem muda de "execute /context-save" para "snapshot preservado automaticamente"
+- `handoff-pre-compact.cjs`: agora inclui último checkpoint gstack no snapshot pré-compactação, garantindo que PostCompact restaure contexto rico sem ação manual
+
+**Limpeza (PR #590, mergeado):**
+- Removeu import `ChatScreen` não usado no ConsoleV2 (código morto do PR #589)
+
+**Decisão arquitetural:**
+- Chat ao Vivo no cv2 = `ChatAoVivo` (componente dedicado, identidade light nativa)
+- `ChatScreen` clássico permanece para rota `/chat` standalone (dark theme)
+- CSS overrides `.cv2-main .livechat` em `console.css` ficam para eventual necessidade futura
+
+**Follow-up pendente (não urgente):**
+- F1-C: 8 overlays `position:fixed; zIndex:9999` no ChatScreen escapam do shell cv2 — adiar para PR dedicado
+- Avaliar se CSS morto em `console.css` deve ser removido ou mantido
