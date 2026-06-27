@@ -102,7 +102,7 @@ export const brenoResponder = task({
 
     const { data: conv } = await sb
       .from("conversations")
-      .select("id, contact_name, phone_number, customer_id, whatsapp_chat_id, instance_id")
+      .select("id, contact_name, customer_id, whatsapp_chat_id, instance_id")
       .eq("id", input.conversation_id)
       .eq("tenant_id", input.tenant_id)
       .maybeSingle();
