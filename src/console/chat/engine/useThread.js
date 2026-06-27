@@ -40,7 +40,7 @@ const toMsgShape = (m) => ({
 const SELECT_COLS =
   'id, direction, content, body, created_at, sender_name, media_type, media_url, reactions, quoted_content, delivery_status, deleted_at, whatsapp_msg_id';
 
-export function useThread(activeId, tenantDbId) {
+export function useThread(activeId, tenantDbId, onInbound) {
   const [msgs, setMsgs] = useState([]);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   // paginação (FASE 3): temMais = ainda há histórico anterior; carregandoOlder = fetch em curso
@@ -50,6 +50,10 @@ export function useThread(activeId, tenantDbId) {
   // guarda o id corrente p/ descartar respostas async de conversas já trocadas
   const activeRef = useRef(activeId);
   useEffect(() => { activeRef.current = activeId; }, [activeId]);
+  // callback de mensagem nova de ENTRADA (FASE 4 · IA): híbrido/IA/auto-transcrição.
+  // Ref estável p/ não recriar o canal de realtime quando o callback muda.
+  const onInboundRef = useRef(onInbound);
+  useEffect(() => { onInboundRef.current = onInbound; }, [onInbound]);
   // created_at da mensagem mais antiga em tela (cursor de paginação)
   const oldestTsRef = useRef(null);
   // guarda de concorrência do loadOlderMsgs (ref evita recriar o callback a cada fetch)
@@ -57,7 +61,10 @@ export function useThread(activeId, tenantDbId) {
 
   const loadMsgs = useCallback(async (convId) => {
     carregandoOlderRef.current = false; // troca de conversa libera a guarda de paginação
-    if (!convId || !tenantDbId) { setMsgs([]); setTemMais(false); oldestTsRef.current = null; return; }
+    // FASE 4: canais internos (chan-<id>) não vivem em `messages` (conversation_id é uuid);
+    // suas mensagens vêm do useCanaisInternos. Pular evita query que erra no cast de tipo.
+    const isCanal = typeof convId === 'string' && convId.startsWith('chan-');
+    if (!convId || !tenantDbId || isCanal) { setMsgs([]); setTemMais(false); oldestTsRef.current = null; return; }
     setLoadingMsgs(true);
     const { data, error } = await supabase
       .from('messages')
@@ -129,6 +136,9 @@ export function useThread(activeId, tenantDbId) {
         if (p.new.tenant_id !== tenantDbId) return;
         const nm = toMsgShape(p.new);
         setMsgs((prev) => (prev.some((x) => x.id === nm.id) ? prev : [...prev, nm]));
+        // FASE 4 (IA): mensagem de entrada na conversa ativa → dispara o callback
+        // (híbrido/IA/auto-transcrição). 'Bot' = automação, não aciona auto-reply.
+        if (nm.out === false && nm.who !== 'Bot') onInboundRef.current?.(nm);
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `conversation_id=eq.${activeId}` }, (p) => {
         if (p.new.tenant_id !== tenantDbId) return;

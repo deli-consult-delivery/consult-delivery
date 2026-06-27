@@ -35,10 +35,13 @@ export const FILTROS = [
   { id: 'resolvidos', label: 'Resolvidos',       ico: 'i-check',  tone: 'green', sv2: ['closed'] },
   { id: 'falha',      label: 'Falha',            ico: 'i-flag',   tone: 'red',   sv2: ['falha'] },
   { id: 'arquivados', label: 'Arquivados',       ico: 'i-box',    tone: 'tx2',   sv2: ['archived'] },
+  // EQUIPE (FASE 4): canais internos. Convs de canal têm isChan:true e status_v2:'interno';
+  // só aparecem aqui (excluídas das demais abas — espelha o Bug-2 fix do legado).
+  { id: 'interno',    label: 'Equipe',           ico: 'i-users',  tone: 'tx2',   sv2: ['interno'] },
 ];
 
 // chave do contador a partir do status_v2 de uma conversa (1 conversa conta em 1+ buckets)
-const CONTADOR_ZERO = { inbox: 0, aguardando: 0, abertos: 0, automacao: 0, resolvidos: 0, falha: 0, arquivados: 0 };
+const CONTADOR_ZERO = { inbox: 0, aguardando: 0, abertos: 0, automacao: 0, resolvidos: 0, falha: 0, arquivados: 0, interno: 0 };
 
 // ─── utilitários puros ───────────────────────────────────────────────────────
 const previewTxt = (m) => {
@@ -103,7 +106,11 @@ const DEBOUNCE_BUSCA = 300;   // ms
 const LIMIT_BUSCA = 100;
 
 // ─── hook ────────────────────────────────────────────────────────────────────
-export function useConversas(tenantDbId) {
+// opts (FASE 4):
+//  - extraConvs: convShape[] de canais internos (isChan) a mesclar na lista.
+//  - favs/mutes: Set<convId> (favoritos sobem ao topo; mudas zeram o badge visual).
+export function useConversas(tenantDbId, opts = {}) {
+  const { extraConvs = [], favs = null, mutes = null } = opts;
   const [convs, setConvs] = useState(null);   // null = carregando inicial
   const [loading, setLoading] = useState(true);
   const [filtro, setFiltro] = useState('inbox');
@@ -211,15 +218,22 @@ export function useConversas(tenantDbId) {
     return () => { vivo = false; clearTimeout(t); };
   }, [busca, tenantDbId]);
 
-  // ── contadores (derivados de convs) ─────────────────────────────────────────
+  // ── lista combinada: whatsapp (convs) + canais internos (extraConvs) ────────
+  // Canais vêm de useCanaisInternos (estado separado); aqui só mesclamos p/ a UI.
+  const convsAll = useMemo(
+    () => [...(convs || []), ...(extraConvs || [])],
+    [convs, extraConvs],
+  );
+
+  // ── contadores (derivados da lista combinada) ───────────────────────────────
   const contadores = useMemo(() => {
     const acc = { ...CONTADOR_ZERO };
-    (convs || []).forEach((c) => {
+    convsAll.forEach((c) => {
       const sv = c.status_v2 || 'open';
       FILTROS.forEach((f) => { if (f.sv2.includes(sv)) acc[f.id] += 1; });
     });
     return acc;
-  }, [convs]);
+  }, [convsAll]);
 
   // ── lista filtrada (estado + busca) ─────────────────────────────────────────
   // Com busca server-side ativa (>=3 chars) usa a base ampla retornada do banco;
@@ -228,12 +242,26 @@ export function useConversas(tenantDbId) {
     const def = FILTROS.find((f) => f.id === filtro) || FILTROS[0];
     const q = busca.trim().toLowerCase();
 
+    // FASE 4: conversa silenciada tem o badge de não-lidas zerado só na exibição
+    // (o estado real em `convs` é preservado). Sem muda → retorna o mesmo objeto.
+    const decorar = (c) => {
+      const muted = !!mutes && mutes.has(c.id);
+      return muted && c.unread > 0 ? { ...c, unread: 0 } : c;
+    };
+    // favoritos primeiro, mantendo a ordem relativa original (sort estável)
+    const ordenarFav = (arr) => {
+      if (!favs || favs.size === 0) return arr;
+      return [...arr].sort((a, b) => (favs.has(b.id) ? 1 : 0) - (favs.has(a.id) ? 1 : 0));
+    };
+
     if (buscaServer != null) {
       // base server já casa o termo; aplica só o filtro de estado por consistência da aba
-      return buscaServer.filter((c) => def.sv2.includes(c.status_v2 || 'open'));
+      return ordenarFav(
+        buscaServer.filter((c) => def.sv2.includes(c.status_v2 || 'open')).map(decorar),
+      );
     }
 
-    return (convs || [])
+    const base = convsAll
       .filter((c) => def.sv2.includes(c.status_v2 || 'open'))
       .filter((c) => {
         if (!q) return true;
@@ -242,8 +270,10 @@ export function useConversas(tenantDbId) {
           (c.prev || '').toLowerCase().includes(q) ||
           (c.telefone || '').includes(q)
         );
-      });
-  }, [convs, filtro, busca, buscaServer]);
+      })
+      .map(decorar);
+    return ordenarFav(base);
+  }, [convsAll, filtro, busca, buscaServer, favs, mutes]);
 
   // ── mutadores otimistas expostos p/ UI (status local + unread) ──────────────
   const setActiveRef = useCallback((id) => { activeIdRef.current = id; }, []);
@@ -257,7 +287,7 @@ export function useConversas(tenantDbId) {
   }, []);
 
   return {
-    convs: convs || [],
+    convs: convsAll, // inclui canais internos (extraConvs) p/ o lookup da conversa ativa
     loading,
     contadores,
     filtro,
