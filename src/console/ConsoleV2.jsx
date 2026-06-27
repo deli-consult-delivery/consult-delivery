@@ -58,7 +58,7 @@ import AvaliacaoConfig from './AvaliacaoConfig.jsx';
 import ControleAtendimentos from './ControleAtendimentos.jsx';
 // telas reusadas do console clássico (funcionais — visual convertido nas ondas 2-3)
 import TarefasClientesScreen from '../screens/TarefasClientesScreen.jsx';
-import ChatScreen from '../screens/ChatScreen.jsx';
+import ChatAoVivo from './chat/ChatAoVivo.jsx';
 import AgentBuilderScreen from '../screens/AgentBuilderScreen.jsx';
 import DeliHub from './DeliHub.jsx';
 import './console.css';
@@ -90,11 +90,11 @@ const GRUPOS = [
     { id: 'cora', ic: 'i-cash', label: 'Cobrança' },
     { id: 'defesa', ic: 'i-shield', label: 'Defesa Comercial' },
     { id: 'radar', ic: 'i-radio', label: 'Dashboard iFood' },
-    { id: 'avaliacoes', ic: 'i-chart', label: 'Avaliações' },
-    { id: 'csat', ic: 'i-chart', label: 'CSAT — Atendimento' },
-    { id: 'nps', ic: 'i-chart', label: 'NPS — Marca' },
+    { id: 'avaliacoes', ic: 'i-eye', label: 'Avaliações' },
+    { id: 'csat', ic: 'i-check', label: 'CSAT — Atendimento' },
+    { id: 'nps', ic: 'i-target', label: 'NPS — Marca' },
     { id: 'controle-atendimentos', ic: 'i-chart', label: 'Controle Atend.' },
-    { id: 'avaliacao-config', ic: 'i-settings', label: 'Configurar Avaliação' },
+    { id: 'avaliacao-config', ic: 'i-gear', label: 'Configurar Avaliação' },
     { id: 'espacos', ic: 'i-layers', label: 'Espaços' },
     { id: 'ativar', ic: 'i-plug', label: 'Ativar loja' },
     { id: 'campanhas', ic: 'i-flag', label: 'Campanhas' },
@@ -249,8 +249,14 @@ const fmtK = n => (n >= 1000 ? (n / 1000).toFixed(1).replace('.', ',') + 'k' : S
 
 // lista de tenants do usuário + seleção (seletor de tenant da topbar)
 function useTenants(userId, fallback) {
+  const savedId = (() => { try { return localStorage.getItem('cv2_tenant') || null; } catch { return null; } })();
   const [list, setList] = useState(fallback?.dbId ? [fallback] : []);
-  const [sel, setSel] = useState(fallback?.dbId ? fallback : null);
+  const [sel, setSelRaw] = useState(fallback?.dbId ? fallback : null);
+  // Persiste o tenant escolhido para sobreviver ao refresh.
+  const setSel = (t) => {
+    setSelRaw(t);
+    try { if (t?.dbId) localStorage.setItem('cv2_tenant', t.dbId); } catch { /* localStorage indisponível */ }
+  };
   useEffect(() => {
     if (!userId) return;
     let alive = true;
@@ -261,7 +267,12 @@ function useTenants(userId, fallback) {
       const uniq = [...new Map(mapped.map(m => [m.dbId, m])).values()];
       if (uniq.length) {
         setList(uniq);
-        setSel(prev => (prev && uniq.find(u => u.dbId === prev.dbId)) || uniq[0]);
+        // Prioridade: tenant salvo (se ainda for membro) → seleção atual → primeiro.
+        setSelRaw(prev => {
+          const salvo = savedId && uniq.find(u => u.dbId === savedId);
+          if (salvo) return salvo;
+          return (prev && uniq.find(u => u.dbId === prev.dbId)) || uniq[0];
+        });
       }
     })();
     return () => { alive = false; };
@@ -281,7 +292,7 @@ function useTopbar(tenantDbId, userId) {
         const [{ count: runs }, notifRes] = await Promise.all([
           supabase.from('agent_runs').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantDbId).gte('created_at', ini.toISOString()),
           userId
-            ? supabase.from('internal_notifications').select('*', { count: 'exact', head: true }).eq('recipient_user_id', userId).is('read_at', null)
+            ? supabase.from('internal_notifications').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantDbId).is('read_at', null).or(`recipient_user_id.eq.${userId},recipient_user_id.is.null`)
             : Promise.resolve({ count: 0 }),
         ]);
         if (alive) setS({ runs: runs ?? 0, notif: notifRes?.count ?? 0 });
@@ -667,6 +678,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
     try { return localStorage.getItem('cv2_sb_collapsed') === '1'; } catch { return false; }
   });
   const [deepLinkCustomerId, setDeepLinkCustomerId] = useState(null);
+  const [deepLinkConvId, setDeepLinkConvId] = useState(null);
   const [tenantsList, sel, setSel] = useTenants(userId, { dbId: propDbId, slug: tenantInfo?.id, nome: tenantInfo?.name });
 
   // tenant ativo = selecionado no topo (todas as telas seguem isto)
@@ -718,11 +730,13 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
 
   const navWithParams = useCallback((novaTela, params) => {
     if (params?.customerId !== undefined) setDeepLinkCustomerId(params.customerId);
+    if (params?.convId !== undefined) setDeepLinkConvId(params.convId);
     setTela(novaTela);
   }, []);
 
   useEffect(() => {
     if (tela !== 'espacos') setDeepLinkCustomerId(null);
+    if (tela !== 'chat') setDeepLinkConvId(null);
   }, [tela]);
 
   // hambúrguer: no mobile (≤1023px) abre/fecha o drawer; no desktop recolhe/expande a sidebar fixa (persiste)
@@ -858,7 +872,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
               <span className="crumb">Console › <b>{LABELS[tela] || tela}</b></span>
             </div>
             <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-              <ChatScreen tenant={tenantSlug} tenantDbId={tenantDbId} userId={userId} onNavigate={navWithParams} deepLinkConvId={null} />
+              <ChatAoVivo tenant={tenantSlug} tenantDbId={tenantDbId} userId={userId} onNavigate={navWithParams} deepLinkConvId={deepLinkConvId} />
             </div>
           </>
         ) : (
@@ -869,9 +883,11 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
               </button>
               <span className="crumb">Console › <b>{LABELS[tela] || tela}</b></span>
               <GlobalSearch tenantDbId={tenantDbId} onNavigate={setTela} />
-              <span className="cv2-pill" title={`Plano freemium · ${CREDITOS_MES.toLocaleString('pt-BR')} créditos/mês · 1 por execução de IA · ${runs ?? 0} usados`}>
-                <Ico name="i-zap" size={13} /> Créditos IA <b>{creditosTxt}</b>
-              </span>
+              {(!allowedModules || allowedModules.has('creditos-ia')) && (
+                <span className="cv2-pill" title={`Plano freemium · ${CREDITOS_MES.toLocaleString('pt-BR')} créditos/mês · 1 por execução de IA · ${runs ?? 0} usados`}>
+                  <Ico name="i-zap" size={13} /> Créditos IA <b>{creditosTxt}</b>
+                </span>
+              )}
               {tenantsList.length > 1 ? (
                 <select value={tenantDbId || ''} onChange={e => { const t = tenantsList.find(x => x.dbId === e.target.value); if (t) setSel(t); }}
                   style={{ background: '#fff', color: 'var(--tx)', border: '1px solid var(--line)', borderRadius: 4, padding: '7px 9px', fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit', maxWidth: 180 }}>
@@ -880,7 +896,10 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
               ) : (
                 <span className="cv2-pill">Cliente <b>{tenantNome}</b></span>
               )}
-              <span className="cv2-pill" title="Notificações não lidas">
+              <span className="cv2-pill" title="Ver notificações" role="button" tabIndex={0}
+                style={{ cursor: 'pointer' }}
+                onClick={() => setTela('notificacoes')}
+                onKeyDown={e => { if (e.key === 'Enter') setTela('notificacoes'); }}>
                 <Ico name="i-bell" size={13} /><b style={notif > 0 ? { color: 'var(--red)' } : { color: 'var(--tx2)' }}>{notif}</b>
               </span>
               <span className="cv2-avatar">{inicial}</span>

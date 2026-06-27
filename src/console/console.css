@@ -173,3 +173,65 @@
 @media (max-width:1023px){
   .cv2-grid-estudio{grid-template-columns:1fr}
 }
+
+/* ===================================================================
+   CHAT AO VIVO — RESKIN LIGHT (cv2 embedded)
+   Sobrescreve os tokens dark do ChatScreen clássico quando ele está
+   embedado no Console V2 (escopo: .cv2-main .livechat).
+   NÃO tocar em src/index.css — esses overrides são aditivos aqui.
+   =================================================================== */
+.cv2-main .livechat {
+  --lc-bg:       #f5f5f4;
+  --lc-panel:    #ffffff;
+  --lc-panel-2:  #f0f0ef;
+  --lc-border:   rgba(0,0,0,0.08);
+  --lc-border-2: rgba(0,0,0,0.12);
+  --lc-text:     #1a1a1a;
+  --lc-text-2:   #555555;
+  --lc-text-3:   #888888;
+  color: #1a1a1a;
+  background: #f5f5f4;
+}
+
+/* Elementos com background hardcoded (não usam token — override explícito) */
+.cv2-main .lc-rail    { background: #ffffff; border-right: 1px solid rgba(0,0,0,0.08); }
+.cv2-main .lc-fullhead { background: #ffffff; border-bottom: 1px solid rgba(0,0,0,0.08); }
+
+/* Tabs de navegação (Caixa de entrada / Departamentos / Bots / …) */
+.cv2-main .lc-tab           { color: #555; }
+.cv2-main .lc-tab:hover     { background: rgba(0,0,0,0.04); color: #1a1a1a; }
+.cv2-main .lc-tab.on        { background: rgba(183,12,0,0.08); color: #B70C00; }
+
+/* Botões de ação (Finalizar, Transferir, …) */
+.cv2-main .lc-action-btn         { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.12); color: #1a1a1a; }
+.cv2-main .lc-action-btn:hover   { background: rgba(0,0,0,0.08); }
+.cv2-main .lc-action-btn.primary { background: rgba(183,12,0,0.10); border-color: rgba(183,12,0,0.25); color: #B70C00; }
+
+/* Balões de mensagem (in = recebida) */
+.cv2-main .lc-bubble.in { background: #f0f0ef; color: #1a1a1a; border-color: rgba(0,0,0,0.08); }
+
+/* Área do compositor de mensagem */
+.cv2-main .lc-composer { background: rgba(0,0,0,0.03); border-color: rgba(0,0,0,0.10); }
+
+/* Mensagens de sistema e separadores de dia */
+.cv2-main .lc-system      { color: #888; background: rgba(0,0,0,0.03); border-color: rgba(0,0,0,0.08); }
+.cv2-main .lc-day-sep span { color: #888; background: #f5f5f4; border-color: rgba(0,0,0,0.08); }
+
+/* Painel de protocolo (sidebar direita) */
+.cv2-main .lc-protocol { color: #888; border-right-color: rgba(0,0,0,0.08); }
+
+/* Hamburger embedado — base (qualquer contexto) + override cv2 */
+.lc-ham-embedded {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  padding: 4px;
+  flex-shrink: 0;
+  transition: color 150ms, background 150ms;
+}
+.cv2-main .lc-ham-embedded       { color: #555; }
+.cv2-main .lc-ham-embedded:hover { color: #1a1a1a; background: rgba(0,0,0,0.05); }

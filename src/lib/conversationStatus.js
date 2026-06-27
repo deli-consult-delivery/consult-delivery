@@ -97,20 +97,30 @@ export function useConversationStatus(conversationId, tenantDbId, currentUserId)
       payload.assigned_to = null;
     }
 
-    // Filtra apenas por ID — RLS já garante isolamento multi-tenant
-    const { error } = await supabase
+    // Filtra apenas por ID — RLS já garante isolamento multi-tenant.
+    // .select('id') é OBRIGATÓRIO: sem ele um UPDATE que casa 0 linhas
+    // (RLS barrou) retorna error:null e mascara a falha (silent-fail / Bug B).
+    const { data, error } = await supabase
       .from('conversations')
       .update(payload)
-      .eq('id', conversationId);
+      .eq('id', conversationId)
+      .select('id');
 
-    if (!error) {
-      setStatus(newStatus);
-      if ('assigned_to' in payload) setAssignedTo(payload.assigned_to);
-      if (notes !== null) setInternalNotes(notes);
+    if (error) {
+      setLoading(false);
+      return { error };
+    }
+    if (!data || data.length === 0) {
+      setLoading(false);
+      return { error: 'Sem permissão para alterar esta conversa (0 linhas afetadas — verifique o vínculo de tenant).' };
     }
 
+    setStatus(newStatus);
+    if ('assigned_to' in payload) setAssignedTo(payload.assigned_to);
+    if (notes !== null) setInternalNotes(notes);
+
     setLoading(false);
-    return { error };
+    return { error: null };
   }, [conversationId, currentUserId, status]);
 
   const finish  = useCallback(async () => changeStatus('finalizado'),       [changeStatus]);

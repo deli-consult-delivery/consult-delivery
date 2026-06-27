@@ -1,0 +1,529 @@
+/* ====================================================================
+   Chat ao Vivo — novo layout cv2 (escopo .cav)
+   Tokens herdados do .cv2 em console.css
+   ==================================================================== */
+
+/* Layout raiz */
+.cav {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  background: var(--panel);
+  overflow: hidden;
+}
+
+/* ── COL1 — lista de conversas ──────────────────────────────────── */
+.cav-col1 {
+  width: 290px;
+  min-width: 290px;
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+}
+
+.cav-col1-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.cav-title {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: -.2px;
+}
+.cav-sel-toggle {
+  font-size: 11px;
+  font-weight: 700;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 10px;
+  cursor: pointer;
+  color: var(--tx2);
+  font-family: inherit;
+}
+.cav-sel-toggle.on {
+  background: var(--red-soft);
+  color: var(--red);
+  border-color: #ecc7c2;
+}
+.cav-sel-toggle:hover { background: #f5f5f4; }
+
+.cav-search-wrap { padding: 9px 12px; border-bottom: 1px solid var(--line); }
+.cav-search {
+  width: 100%;
+  background: #faf9f8;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 500;
+  color: var(--tx);
+  outline: none;
+}
+.cav-search:focus { border-color: var(--red); }
+
+/* Abas de status */
+.cav-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.cav-tabs::-webkit-scrollbar { display: none; }
+.cav-tab {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-family: inherit;
+  color: var(--tx2);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: color .1s, border-color .1s;
+}
+.cav-tab:hover { color: var(--ink); background: #faf9f8; }
+.cav-tab.on { color: var(--red); border-bottom-color: var(--red); background: var(--red-soft); }
+.cav-tab-badge {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--red);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.cav-tab.on .cav-tab-badge { background: var(--red-dark); }
+
+/* Barra de seleção bulk */
+.cav-bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  background: var(--amber-soft);
+  border-bottom: 1px solid #e8d8a0;
+  flex-wrap: wrap;
+}
+.cav-bulk-selall {
+  font-size: 11px;
+  font-weight: 700;
+  background: none;
+  border: 1px solid #c8a840;
+  border-radius: 4px;
+  padding: 3px 9px;
+  cursor: pointer;
+  color: var(--amber);
+  font-family: inherit;
+}
+.cav-bulk-action {
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--red);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.cav-bulk-action:disabled { opacity: .6; cursor: not-allowed; }
+.cav-bulk-feedback { font-size: 11px; font-weight: 600; color: var(--amber); }
+
+/* Lista de conversas */
+.cav-list { flex: 1; overflow-y: auto; }
+.cav-conv {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid #f1efed;
+}
+.cav-conv:hover { background: #fbfaf9; }
+.cav-conv.on { background: var(--red-soft); }
+.cav-conv.sel { background: #fbeee8; }
+.cav-conv.unread .cav-nm { font-weight: 800; }
+.cav-conv.unread .cav-pv { color: var(--tx); font-weight: 600; }
+
+.cav-check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--red);
+  cursor: pointer;
+}
+.cav-av {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #fff;
+  font-size: 14px;
+  flex: none;
+}
+.cav-av.sm { width: 32px; height: 32px; font-size: 12px; }
+.cav-info { flex: 1; min-width: 0; }
+.cav-nm { font-size: 12.5px; font-weight: 700; color: var(--ink); }
+.cav-pv {
+  font-size: 11.5px;
+  color: var(--tx2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+  font-weight: 500;
+}
+.cav-mt {
+  margin-left: auto;
+  text-align: right;
+  font-size: 10px;
+  color: var(--tx2);
+  font-weight: 600;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.cav-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--red);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cav-empty {
+  color: var(--tx2);
+  font-size: 13px;
+  padding: 32px;
+  text-align: center;
+  font-weight: 500;
+}
+
+/* ── COL2 — thread ──────────────────────────────────────────────── */
+.cav-col2 {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #faf9f8;
+  min-width: 0;
+}
+
+.cav-col2-hd {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  min-height: 54px;
+}
+.cav-hd-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.cav-hd-info b { font-size: 13px; font-weight: 700; color: var(--ink); }
+.cav-hd-info span { font-size: 11px; color: var(--tx2); font-weight: 600; }
+
+/* Bug 3 fix: Breno banner — topo da área de thread, compacto, fora do scroll */
+.cav-breno {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  background: #f0f7f2;
+  border-bottom: 1px solid #c3dcc9;
+  flex-shrink: 0;
+}
+.cav-breno-ico { font-size: 15px; flex: none; }
+.cav-breno-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.cav-breno-label { font-size: 10px; font-weight: 700; color: var(--green); text-transform: uppercase; letter-spacing: .4px; }
+.cav-breno-txt {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--tx);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 340px;
+}
+.cav-breno-usar {
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--green);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-family: inherit;
+  flex: none;
+}
+.cav-breno-dis {
+  font-size: 12px;
+  font-weight: 700;
+  background: none;
+  border: 1px solid #c3dcc9;
+  border-radius: 4px;
+  padding: 3px 8px;
+  cursor: pointer;
+  color: var(--tx2);
+  font-family: inherit;
+  flex: none;
+}
+
+/* Thread scroll area */
+.cav-thread {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Mensagens */
+.cav-msg {
+  max-width: 62%;
+  margin-bottom: 8px;
+  padding: 9px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  width: fit-content;
+  font-weight: 500;
+  color: var(--tx);
+}
+.cav-msg.me {
+  margin-left: auto;
+  background: var(--red-soft);
+  border-color: #ecd0cb;
+}
+.cav-who {
+  font-size: 10px;
+  color: var(--tx2);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+  margin-bottom: 3px;
+}
+.cav-quoted {
+  margin-bottom: 5px;
+  padding: 4px 9px;
+  border-left: 3px solid var(--red);
+  background: rgba(0,0,0,0.04);
+  border-radius: 0 5px 5px 0;
+  font-size: 11px;
+  max-width: 260px;
+  overflow: hidden;
+}
+.cav-quoted-who { color: var(--red); font-weight: 700; margin-bottom: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cav-quoted-txt { color: var(--tx2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cav-reactions { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+.cav-react {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0 6px;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.cav-react b { font-size: 10px; font-weight: 700; color: var(--tx2); }
+.cav-tm {
+  font-size: 9.5px;
+  color: var(--tx2);
+  text-align: right;
+  margin-top: 4px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+/* Ações hover na bolha */
+.cav-acts {
+  position: absolute;
+  top: -10px;
+  right: 6px;
+  display: flex;
+  gap: 2px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 4px;
+  opacity: 0;
+  transition: opacity .12s;
+}
+.cav-msg:hover .cav-acts { opacity: 1; }
+.cav-acts button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 3px;
+  color: var(--tx2);
+}
+.cav-emoji-bar {
+  position: absolute;
+  top: -34px;
+  display: flex;
+  gap: 2px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.12);
+  z-index: 5;
+}
+.cav-emoji-bar button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 1px;
+}
+
+/* Toast / aviso */
+.cav-aviso {
+  padding: 5px 14px;
+  font-size: 11.5px;
+  color: var(--red);
+  font-weight: 600;
+  background: var(--red-soft);
+  border-top: 1px solid #ecd0cb;
+}
+
+/* Barra de reply */
+.cav-reply-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-top: 1px solid var(--line);
+  background: #faf9f8;
+  font-size: 11.5px;
+}
+.cav-reply-content { border-left: 3px solid var(--red); padding-left: 8px; flex: 1; min-width: 0; }
+.cav-reply-who { color: var(--red); font-weight: 700; }
+.cav-reply-txt { color: var(--tx2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cav-reply-cancel { background: none; border: none; cursor: pointer; font-size: 14px; color: var(--tx2); }
+
+/* Composer */
+.cav-composer {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  padding: 11px 14px;
+}
+.cav-input {
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 9px 16px;
+  font-size: 13px;
+  outline: none;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--tx);
+  background: #faf9f8;
+}
+.cav-input:focus { border-color: var(--red); }
+.cav-cbtn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  cursor: pointer;
+  color: var(--tx2);
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cav-cbtn.send, .cav-cbtn.mic { background: var(--red); color: #fff; border: none; }
+.cav-cbtn.mic.on { background: #c0392b; }
+.cav-cbtn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ── COL3 — painel lead ─────────────────────────────────────────── */
+.cav-col3 {
+  width: 260px;
+  min-width: 260px;
+  border-left: 1px solid var(--line);
+  overflow-y: auto;
+  padding: 15px;
+  background: var(--panel);
+}
+.cav-c3-head {
+  font-size: 10px;
+  color: var(--tx2);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 0 0 8px;
+  font-weight: 700;
+}
+.cav-c3-head:not(:first-child) { margin-top: 16px; }
+.cav-kv {
+  font-size: 12px;
+  padding: 4px 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 500;
+  border-bottom: 1px solid #f5f3f0;
+}
+.cav-kv span { color: var(--tx2); }
+.cav-kv b { font-weight: 700; color: var(--ink); text-align: right; }
+.cav-notes {
+  font-size: 11.5px;
+  color: var(--tx2);
+  margin-top: 8px;
+  line-height: 1.5;
+  font-weight: 500;
+}
+
+/* ── Responsivo ──────────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .cav-col3 { display: none; }
+}
+@media (max-width: 700px) {
+  .cav { flex-direction: column; }
+  .cav-col1 { width: 100%; min-width: 0; height: 50%; border-right: none; border-bottom: 1px solid var(--line); }
+  .cav-col2 { height: 50%; }
+}
