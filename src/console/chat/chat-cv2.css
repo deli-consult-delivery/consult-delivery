@@ -292,6 +292,8 @@
   background: var(--panel);
   border-bottom: 1px solid var(--line);
   min-height: 58px;
+  /* FASE 6 — âncora p/ o dropdown ⋮ posicionado no mobile */
+  position: relative;
 }
 .cv2-main .ccv-th-info { flex: 1; min-width: 0; }
 .cv2-main .ccv-th-name {
@@ -440,25 +442,34 @@
 /* ─── COL2 · composer ──────────────────────────────────────────────────────── */
 .cv2-main .ccv-composer {
   display: flex;
-  align-items: center;
+  /* FASE 6 — flex-end: os botões circulares acompanham a base do textarea quando ele cresce */
+  align-items: flex-end;
   gap: 8px;
   padding: 10px 14px;
   /* FASE 5 — respeita a home-bar do iPhone (env zera no desktop) */
   padding-bottom: calc(11px + env(safe-area-inset-bottom));
   background: var(--panel);
   border-top: 1px solid var(--line);
+  /* FASE 6 (iOS): composer nunca é comprimido pelo flex da coluna */
+  flex-shrink: 0;
 }
 .cv2-main .ccv-input {
   flex: 1;
   background: #faf9f8;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  /* FASE 6 — raio 18px (era 999px): textarea multilinha mantém cantos suaves sem virar pílula deformada */
+  border-radius: 18px;
   padding: 9px 16px;
   font-size: 13.5px;
   font-weight: 500;
   color: var(--tx);
   font-family: inherit;
   outline: none;
+  /* FASE 6 — textarea auto-expansível: 1 linha por padrão, cresce até 160px e rola */
+  resize: none;
+  max-height: 160px;
+  overflow-y: auto;
+  line-height: 1.4;
 }
 .cv2-main .ccv-input:focus { border-color: var(--red); background: #fff; }
 .cv2-main .ccv-input::placeholder { color: var(--tx2); }
@@ -603,9 +614,12 @@
 }
 
 /* ─── responsivo ───────────────────────────────────────────────────────────── */
-/* botões só-mobile (voltar / ver contato): escondidos no desktop */
+/* botões só-mobile (voltar / ver contato / menu ⋮): escondidos no desktop */
 .cv2-main .ccv-back,
-.cv2-main .ccv-info { display: none; }
+.cv2-main .ccv-info,
+.cv2-main .ccv-th-menu { display: none; }
+/* Finalizar/Reabrir agora é irmão de .ccv-th-actions — encolhe ao lado no desktop */
+.cv2-main .ccv-th-fin { flex-shrink: 0; padding: 5px 12px; font-size: 11.5px; }
 
 /* tablet 721-1100px: esconde a col3 (painel de contato), mantém col1+col2.
    min-width:721px garante que o pane mobile (<=720px) NÃO seja afetado por esta
@@ -637,7 +651,8 @@
 
   /* botões só-mobile aparecem; alvos de toque >= 40x40 */
   .cv2-main .ccv-back,
-  .cv2-main .ccv-info {
+  .cv2-main .ccv-info,
+  .cv2-main .ccv-th-menu {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -651,9 +666,55 @@
     flex-shrink: 0;
   }
   .cv2-main .ccv-back:hover,
-  .cv2-main .ccv-info:hover { background: #f0eeec; color: var(--ink); }
+  .cv2-main .ccv-info:hover,
+  .cv2-main .ccv-th-menu:hover { background: #f0eeec; color: var(--ink); }
   .cv2-main .ccv-back { margin-left: -6px; }
-  .cv2-main .ccv-info { margin-right: -4px; }
+  .cv2-main .ccv-th-menu { margin-right: -4px; }
+
+  /* FASE 6 — header compacto: cabe [←][avatar][nome/meta][Finalizar][⋮] sem sobrepor */
+  .cv2-main .ccv-thread-head { gap: 6px; padding: 9px 10px; }
+  .cv2-main .ccv-th-fin { padding: 5px 10px; font-size: 11px; }
+
+  /* FASE 6 — ações secundárias viram dropdown sob o ⋮ (escondido até abrir) */
+  .cv2-main .ccv-th-actions {
+    display: none;
+    position: absolute;
+    top: calc(100% - 4px);
+    right: 8px;
+    z-index: 40;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .16);
+  }
+  .cv2-main .ccv-th-actions.aberto { display: flex; }
+  /* dentro do dropdown: o seletor de modo IA volta a mostrar os labels e empilha confortável */
+  .cv2-main .ccv-th-actions .ccv-aimode { flex-wrap: wrap; }
+  .cv2-main .ccv-th-actions .ccv-aimode-lbl { display: inline; }
+  .cv2-main .ccv-th-actions .ccv-info {
+    display: inline-flex;
+    align-self: flex-start;
+    min-width: 40px;
+    margin: 0;
+  }
+  .cv2-main .ccv-th-actions .ccv-transfer { width: 100%; }
+
+  /* FASE 6 — banner BRENO compacto: 1 linha de texto, botões sempre visíveis */
+  .cv2-main .ccv-breno { padding: 8px 12px; align-items: center; }
+  .cv2-main .ccv-breno-txt {
+    -webkit-line-clamp: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cv2-main .ccv-breno-acts { flex-shrink: 0; }
+
+  /* FASE 6 — espaço extra ao fim das mensagens p/ não colar no composer/home-bar */
+  .cv2-main .ccv-msgs { padding-bottom: 12px; scroll-padding-bottom: 12px; }
 
   /* alvos de toque dos botões do header/composer */
   .cv2-main .ccv-th-actions .ccv-cbtn,
@@ -1103,6 +1164,8 @@
   background: linear-gradient(0deg, #f6f3ff, #faf9ff);
   border-top: 1px solid var(--line);
   border-left: 3px solid #6d28d9;
+  /* FASE 6 (iOS) — banner nunca comprimido pelo flex da coluna */
+  flex-shrink: 0;
 }
 .cv2-main .ccv-breno-ic {
   display: inline-flex;

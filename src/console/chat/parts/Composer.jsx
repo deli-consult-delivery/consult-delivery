@@ -75,6 +75,13 @@ export default function Composer({
   const [qrAberto, setQrAberto] = useState(false);
   const fileRef = useRef(null);
   const qrRef = useRef(null);
+  const taRef = useRef(null);
+
+  // auto-resize do textarea: cresce até 160px e depois rola (portado de ChatScreen.jsx:3858-3866)
+  const autoResize = () => {
+    const el = taRef.current;
+    if (el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 160) + 'px'; }
+  };
 
   // fecha o menu de quick replies ao clicar fora
   useEffect(() => {
@@ -92,6 +99,7 @@ export default function Composer({
     if (qr?.content) texto = qr.content;
     onEnviar(texto);
     setDraft('');
+    if (taRef.current) taRef.current.style.height = 'auto'; // reseta altura após enviar
   };
 
   const onKeyDown = (e) => {
@@ -147,13 +155,48 @@ export default function Composer({
     if (f && !disabled) onEnviarMidia?.(f);
   };
 
-  // colar imagem do clipboard
+  // colar do clipboard: imagem → mídia; texto → preserva quebras de linha
   const onPaste = (e) => {
-    if (midiaOff) return;
-    const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'));
-    if (!item) return;
-    const f = item.getAsFile();
-    if (f) { e.preventDefault(); onEnviarMidia?.(f); }
+    // 1) imagem colada (só quando mídia habilitada) → envia como anexo
+    if (!midiaOff) {
+      const img = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'));
+      if (img) {
+        const f = img.getAsFile();
+        if (f) { e.preventDefault(); onEnviarMidia?.(f); return; }
+      }
+    }
+    // 2) texto: só intercepta quando a normalização REALMENTE muda o conteúdo
+    // (HTML rico ou \r\n). Texto puro segue o paste nativo — preserva o undo.
+    if (disabled) return;
+    const plain = e.clipboardData?.getData('text/plain') || '';
+    const types = e.clipboardData?.types || [];
+    let text = plain;
+    if (!text.includes('\n') && types.includes('text/html')) {
+      const html = e.clipboardData.getData('text/html');
+      text = html
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n')
+        .replace(/<\/div>/gi, '\n')
+        .replace(/<\/li>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+        .replace(/&nbsp;/g, ' ').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+    }
+    const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    // nada a normalizar (texto puro idêntico ao nativo) → deixa o browser colar
+    if (normalized === plain) return;
+    e.preventDefault();
+    const el = taRef.current;
+    if (!el) { setDraft((d) => d + normalized); return; }
+    // usa el.value (valor atual do DOM) em vez de draft p/ evitar stale closure
+    const current = el.value;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const next = current.slice(0, start) + normalized + current.slice(end);
+    setDraft(next);
+    // reposiciona o cursor após o texto colado e redimensiona
+    const pos = start + normalized.length;
+    setTimeout(() => { el.focus(); el.setSelectionRange(pos, pos); autoResize(); }, 0);
   };
 
   const podeEnviarTexto = !disabled && draft.trim().length > 0;
@@ -247,11 +290,13 @@ export default function Composer({
         {qrMenu}
       </div>
 
-      <input
+      <textarea
+        ref={taRef}
         className="ccv-input"
+        rows={1}
         placeholder={disabled ? 'Selecione uma conversa para responder' : (enviandoMidia ? 'Enviando mídia…' : 'Mensagem…')}
         value={draft}
-        onChange={(e) => setDraft(e.target.value)}
+        onChange={(e) => { setDraft(e.target.value); autoResize(); }}
         onKeyDown={onKeyDown}
         onPaste={onPaste}
         disabled={disabled}
