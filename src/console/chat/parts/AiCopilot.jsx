@@ -115,7 +115,7 @@ export default function AiCopilot({ conv, msgs, tenantId, copilot, onClose }) {
         )}
 
         {history.map((m, i) => (
-          <div key={i} className={`ccv-copilot-msg ${m.role}`}>
+          <div key={`${m.role}-${i}`} className={`ccv-copilot-msg ${m.role}`}>
             {m.role === 'ai' && <span className="ccv-copilot-mav" aria-hidden="true"><Ico name="i-bot" size={11} /></span>}
             <div className="ccv-copilot-bubble">{m.text}</div>
           </div>

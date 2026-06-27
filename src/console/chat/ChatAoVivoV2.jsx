@@ -54,6 +54,11 @@ export default function ChatAoVivoV2({ tenant, tenantDbId, userId, onNavigate, d
   // e entram como extraConvs na lista combinada.
   const [activeId, setActiveId] = useState(dlConvId);
 
+  // FASE 5 — pane mobile ('list' | 'chat' | 'contato'). No desktop o CSS ignora
+  // estas classes (as 3 colunas seguem visíveis); no mobile (<=720px) escolhe
+  // qual coluna mostrar. Sem listener de resize / window.innerWidth: é só CSS.
+  const [mobilePane, setMobilePane] = useState('list');
+
   // FASE 4 — favoritos/silenciados (localStorage) + canais internos da EQUIPE
   const favMute = useFavMute();
   const { canais, chanMsgs, enviarNoCanal } = useCanaisInternos(tenantDbId, activeId, userId);
@@ -90,7 +95,7 @@ export default function ChatAoVivoV2({ tenant, tenantDbId, userId, onNavigate, d
   // FASE 4 (IA) — camada de IA (modo/copiloto/híbrido/IA) + transcrição/tradução.
   // Instanciadas ANTES do useThread porque seu callback de inbound usa estes hooks.
   const ia = useIA({ instancia: instance, userId });
-  const transcricao = useTranscricao();
+  const transcricao = useTranscricao(activeId);
 
   // conv atual via ref p/ o callback de inbound (estável; não recria o canal)
   const convRef = useRef(null);
@@ -167,6 +172,7 @@ export default function ChatAoVivoV2({ tenant, tenantDbId, userId, onNavigate, d
     if (!dlConvId) return;
     jaSelecionouRef.current = true;
     setActiveId(dlConvId);
+    setMobilePane('chat'); // FASE 5 — deep-link pós-mount precisa trocar p/ a thread no mobile
     // dep no objeto (não no id): clicar 2x na mesma conversa muda o ts e redispara.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deepLinkConvId]);
@@ -216,6 +222,7 @@ export default function ChatAoVivoV2({ tenant, tenantDbId, userId, onNavigate, d
   const abrirConv = useCallback(async (convId) => {
     jaSelecionouRef.current = true;
     setActiveId(convId);
+    setMobilePane('chat');  // FASE 5 — no mobile, abrir conversa troca p/ a thread
     setReplyTo(null);      // troca de conversa encerra resposta/encaminhamento pendentes
     setForwardMsg(null);
     zerarUnread(convId);
@@ -407,7 +414,7 @@ export default function ChatAoVivoV2({ tenant, tenantDbId, userId, onNavigate, d
   };
 
   return (
-    <div className="ccv">
+    <div className={`ccv ccv-m-${mobilePane}`}>
       <ListaConversas
         convsFiltradas={convsFiltradas}
         loading={loading}
@@ -442,9 +449,16 @@ export default function ChatAoVivoV2({ tenant, tenantDbId, userId, onNavigate, d
         composer={composer}
         evolutionOffline={evolutionOffline}
         ia={iaProp}
+        onVoltarLista={() => setMobilePane('list')}
+        onAbrirContato={() => setMobilePane('contato')}
       />
 
-      <PainelContato conv={conv} customer={customer} transfer={transfer} />
+      <PainelContato
+        conv={conv}
+        customer={customer}
+        transfer={transfer}
+        onVoltarChat={() => setMobilePane('chat')}
+      />
 
       {lightboxUrl && <Lightbox url={lightboxUrl} onClose={fecharLightbox} />}
     </div>

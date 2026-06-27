@@ -158,6 +158,15 @@
   border-bottom: 1px solid #f1efed;
   cursor: pointer;
   position: relative;
+  /* reset de <button> nativo (FASE 5): full-width, texto à esquerda, sem chrome */
+  width: 100%;
+  text-align: left;
+  background: var(--panel);
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  font: inherit;
+  color: inherit;
 }
 .cv2-main .ccv-conv:hover { background: #faf9f8; }
 .cv2-main .ccv-conv.on { background: var(--red-soft); }
@@ -434,6 +443,8 @@
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
+  /* FASE 5 — respeita a home-bar do iPhone (env zera no desktop) */
+  padding-bottom: calc(11px + env(safe-area-inset-bottom));
   background: var(--panel);
   border-top: 1px solid var(--line);
 }
@@ -592,20 +603,64 @@
 }
 
 /* ─── responsivo ───────────────────────────────────────────────────────────── */
-@media (max-width: 1100px) {
+/* botões só-mobile (voltar / ver contato): escondidos no desktop */
+.cv2-main .ccv-back,
+.cv2-main .ccv-info { display: none; }
+
+/* tablet 721-1100px: esconde a col3 (painel de contato), mantém col1+col2.
+   min-width:721px garante que o pane mobile (<=720px) NÃO seja afetado por esta
+   regra — lá a col3 é o pane 'contato' e precisa poder aparecer. */
+@media (min-width: 721px) and (max-width: 1100px) {
   .cv2-main .ccv-col3 { display: none; }
+  /* col3 oculta → o botão "Ver contato" levaria a um pane inexistente: esconder */
+  .cv2-main .ccv-info { display: none; }
 }
-@media (max-width: 700px) {
-  .cv2-main .ccv { flex-direction: column; }
-  .cv2-main .ccv-col1 {
+
+/* mobile <=720px: "uma tela por vez" — list → chat → contato.
+   O JS só escolhe a classe ccv-m-*; o CSS faz todo o layout. */
+@media (max-width: 720px) {
+  .cv2-main .ccv-col1,
+  .cv2-main .ccv-col2,
+  .cv2-main .ccv-col3 {
     width: 100%;
     min-width: 0;
-    max-height: 42vh;
+    height: 100%;
     border-right: none;
-    border-bottom: 1px solid var(--line);
+    border-left: none;
+    display: none;
   }
-  .cv2-main .ccv-col2 { min-height: 0; }
+  .cv2-main .ccv.ccv-m-list .ccv-col1 { display: flex; }
+  .cv2-main .ccv.ccv-m-chat .ccv-col2 { display: flex; }
+  .cv2-main .ccv.ccv-m-contato .ccv-col3 { display: flex; }
+
   .cv2-main .ccv-msg { max-width: 86%; }
+
+  /* botões só-mobile aparecem; alvos de toque >= 40x40 */
+  .cv2-main .ccv-back,
+  .cv2-main .ccv-info {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 40px;
+    min-height: 40px;
+    border: none;
+    background: transparent;
+    color: var(--tx2);
+    cursor: pointer;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .cv2-main .ccv-back:hover,
+  .cv2-main .ccv-info:hover { background: #f0eeec; color: var(--ink); }
+  .cv2-main .ccv-back { margin-left: -6px; }
+  .cv2-main .ccv-info { margin-right: -4px; }
+
+  /* alvos de toque dos botões do header/composer */
+  .cv2-main .ccv-th-actions .ccv-cbtn,
+  .cv2-main .ccv-composer .ccv-cbtn {
+    min-width: 40px;
+    min-height: 40px;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

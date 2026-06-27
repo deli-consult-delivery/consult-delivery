@@ -1,10 +1,10 @@
 /**
  * PainelContato — coluna 3 do Chat ao Vivo (cv2 redesign / FASE 1)
  *
- * Cabeçalho (avatar + nome + sub) · bloco "Ações" (+ Adicionar negócio /
- * + Executar automação — placeholders) · collapses Perfil / Negócio. Some em
- * telas <=1100px (regra no CSS). Dados do contato vêm do convShape e do
- * registro `customer` (lookup no container).
+ * Cabeçalho (avatar + nome + sub) · bloco "Ações" (transferir departamento) ·
+ * collapses Perfil / Negócio. Some em telas 721-1100px (regra no CSS); em
+ * <=720px vira o pane 'contato' do fluxo mobile. Dados do contato vêm do
+ * convShape e do registro `customer` (lookup no container).
  *
  * Props:
  *  - conv: convShape|null
@@ -46,7 +46,7 @@ function Linha({ rotulo, valor }) {
   );
 }
 
-export default function PainelContato({ conv, customer, transfer }) {
+export default function PainelContato({ conv, customer, transfer, onVoltarChat }) {
   const tr = transfer || {};
   const [abertos, setAbertos] = useState({ perfil: true, negocio: false });
   const toggle = (k) => setAbertos((s) => ({ ...s, [k]: !s[k] }));
@@ -55,6 +55,10 @@ export default function PainelContato({ conv, customer, transfer }) {
     return (
       <div className="ccv-col3">
         <div className="ccv-panel">
+          {/* FASE 5 (mobile): voltar mesmo sem conversa, p/ não prender o usuário neste pane */}
+          <button type="button" className="ccv-back" onClick={onVoltarChat} title="Voltar" aria-label="Voltar para a conversa">
+            <Ico name="i-reply" size={18} />
+          </button>
           <div className="ccv-empty">Selecione uma conversa.</div>
         </div>
       </div>
@@ -69,6 +73,11 @@ export default function PainelContato({ conv, customer, transfer }) {
   return (
     <div className="ccv-col3">
       <div className="ccv-panel">
+        {/* FASE 5 (mobile): voltar p/ a thread — escondido no desktop via CSS */}
+        <button type="button" className="ccv-back" onClick={onVoltarChat} title="Voltar" aria-label="Voltar para a conversa">
+          <Ico name="i-reply" size={18} />
+        </button>
+
         {/* cabeçalho */}
         <div className="ccv-panel-av">
           <div className="ccv-av" style={{ background: corAvatar(nome), width: 56, height: 56, minWidth: 56, fontSize: 20 }}>
@@ -98,12 +107,6 @@ export default function PainelContato({ conv, customer, transfer }) {
               </select>
             </label>
           )}
-          <button type="button" className="ccv-acao-btn" title="Adicionar negócio (em breve)" disabled>
-            <Ico name="i-folder" size={15} /> Adicionar negócio
-          </button>
-          <button type="button" className="ccv-acao-btn" title="Executar automação (em breve)" disabled>
-            <Ico name="i-bot" size={15} /> Executar automação
-          </button>
         </div>
 
         {/* collapses */}

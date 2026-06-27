@@ -62,6 +62,8 @@ export default function Thread({
   composer,
   evolutionOffline = false,
   ia = null,
+  onVoltarLista,   // FASE 5 (mobile): volta p/ a lista de conversas
+  onAbrirContato,  // FASE 5 (mobile): abre o painel de contato
 }) {
   const env = envio || {};
   const act = acoes || {};
@@ -125,6 +127,11 @@ export default function Thread({
     <div className="ccv-col2">
       {/* ─── header ─────────────────────────────────────────────────────── */}
       <div className="ccv-thread-head">
+        {/* FASE 5 (mobile): voltar p/ a lista — escondido no desktop via CSS */}
+        <button type="button" className="ccv-back" onClick={onVoltarLista} title="Voltar" aria-label="Voltar para a lista">
+          <Ico name="i-reply" size={18} />
+        </button>
+
         <div className="ccv-av sm" style={{ background: corAvatar(conv.nome) }}>
           {conv.foto
             ? <img className="ccv-av-img" src={conv.foto} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
@@ -214,8 +221,9 @@ export default function Thread({
               Reabrir
             </button>
           )}
-          <button type="button" className="ccv-cbtn" title="Mais opções (em breve)" disabled aria-label="Mais opções">
-            <Ico name="i-list" size={16} />
+          {/* FASE 5 (mobile): abrir painel de contato — escondido no desktop via CSS */}
+          <button type="button" className="ccv-info" onClick={onAbrirContato} title="Contato" aria-label="Ver contato">
+            <Ico name="i-eye" size={16} />
           </button>
         </div>
       </div>
