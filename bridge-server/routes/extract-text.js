@@ -1,13 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const dns = require('node:dns').promises;
-const os = require('node:os');
-const path = require('node:path');
-const fs = require('node:fs/promises');
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024; // 20 MB
 const FETCH_TIMEOUT_MS = 30_000;
 
+// Mesma whitelist do whisper.js — só Supabase Storage e Evolution API
 const ALLOWED_HOSTS = [
   /\.evolutionapi\.com$/i,
   /^api\.evolutionapi\.com$/i,
@@ -17,16 +15,30 @@ const ALLOWED_HOSTS = [
 
 const PRIVATE_IP_RE = /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|::1$|^fc|^fd|^fe80)/i;
 
-const SUPPORTED_MIMES = new Set([
-  'application/pdf',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-excel',
-  'text/plain',
-  'text/markdown',
-  'text/csv',
-]);
+// MIME aceitos — mapa para parser (não expor ao cliente para controlar)
+const MIME_TO_PARSER = {
+  'application/pdf': 'pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/msword': 'docx',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/vnd.ms-excel': 'xlsx',
+  'text/plain': 'text',
+  'text/markdown': 'text',
+  'text/csv': 'text',
+};
+
+// Assinaturas de magic bytes para validação independente de MIME
+const MAGIC = [
+  { bytes: Buffer.from([0x25, 0x50, 0x44, 0x46]), parser: 'pdf' },       // %PDF
+  { bytes: Buffer.from([0x50, 0x4b, 0x03, 0x04]), parser: 'zip-based' }, // PK (docx/xlsx são zip)
+];
+
+function detectMagic(buffer) {
+  for (const { bytes, parser } of MAGIC) {
+    if (buffer.slice(0, bytes.length).equals(bytes)) return parser;
+  }
+  return null;
+}
 
 async function validateUrl(raw) {
   let parsed;
@@ -63,12 +75,12 @@ async function fetchSafe(url) {
     let total = 0;
     for await (const chunk of res.body) {
       total += chunk.length;
-      if (total > MAX_FILE_BYTES) throw new Error('arquivo excede limite de 20 MB durante download');
+      if (total > MAX_FILE_BYTES) throw new Error('arquivo excede 20 MB durante download');
       chunks.push(chunk);
     }
-    const mimeRaw = res.headers.get('content-type') || '';
-    const mime = mimeRaw.split(';')[0].trim().toLowerCase();
-    return { buffer: Buffer.concat(chunks), mime };
+    // Content-Type do servidor é fonte primária — mime_type do cliente só como fallback
+    const serverMime = (res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+    return { buffer: Buffer.concat(chunks), serverMime };
   } finally {
     clearTimeout(timer);
   }
@@ -91,26 +103,23 @@ async function extractXlsx(buffer) {
   const wb = XLSX.read(buffer, { type: 'buffer' });
   const lines = [];
   for (const sheetName of wb.SheetNames) {
-    const ws = wb.Sheets[sheetName];
     lines.push(`## ${sheetName}`);
-    lines.push(XLSX.utils.sheet_to_csv(ws));
+    lines.push(XLSX.utils.sheet_to_csv(wb.Sheets[sheetName]));
   }
   return lines.join('\n');
 }
 
-async function extractText(buffer, mime) {
-  if (mime === 'application/pdf') return extractPdf(buffer);
-  if (mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-      mime === 'application/msword') return extractDocx(buffer);
-  if (mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-      mime === 'application/vnd.ms-excel') return extractXlsx(buffer);
-  if (mime.startsWith('text/')) return buffer.toString('utf8');
-  throw new Error(`tipo não suportado: ${mime}`);
+async function runParser(parser, buffer) {
+  if (parser === 'pdf') return extractPdf(buffer);
+  if (parser === 'docx') return extractDocx(buffer);
+  if (parser === 'xlsx') return extractXlsx(buffer);
+  if (parser === 'text') return buffer.toString('utf8');
+  throw new Error(`parser interno desconhecido: ${parser}`);
 }
 
 // POST /api/documents/extract-text
 // Body: { url: string, mime_type?: string }
-// Returns: { markdown: string, chars: number, mime: string, source: string }
+// Returns: { markdown: string, chars: number, mime: string }
 router.post('/extract-text', async (req, res) => {
   try {
     const { url, mime_type } = req.body ?? {};
@@ -119,25 +128,32 @@ router.post('/extract-text', async (req, res) => {
     }
 
     const parsed = await validateUrl(url);
-    const { buffer, mime: detectedMime } = await fetchSafe(parsed.href);
+    const { buffer, serverMime } = await fetchSafe(parsed.href);
 
-    const effectiveMime = (mime_type || detectedMime || '').toLowerCase();
-    if (!SUPPORTED_MIMES.has(effectiveMime)) {
+    // Servidor tem precedência; cliente só preenche lacuna quando servidor omite MIME
+    const effectiveMime = (serverMime || (mime_type ?? '').toLowerCase()).trim();
+
+    const parser = MIME_TO_PARSER[effectiveMime];
+    if (!parser) {
       return res.status(422).json({
-        error: `tipo de arquivo não suportado: ${effectiveMime}`,
-        supported: [...SUPPORTED_MIMES],
+        error: `tipo de arquivo não suportado: ${effectiveMime || '(desconhecido)'}`,
+        supported: Object.keys(MIME_TO_PARSER),
       });
     }
 
-    const text = await extractText(buffer, effectiveMime);
+    // Validação de magic bytes: impede que cliente force parser errado
+    const magic = detectMagic(buffer);
+    if (magic === 'pdf' && parser !== 'pdf') {
+      return res.status(422).json({ error: 'conteúdo parece PDF mas MIME indica outro formato' });
+    }
+    if (magic === 'zip-based' && parser === 'pdf') {
+      return res.status(422).json({ error: 'conteúdo parece ZIP/Office mas MIME indica PDF' });
+    }
+
+    const text = await runParser(parser, buffer);
     const markdown = text.trim();
 
-    return res.json({
-      markdown,
-      chars: markdown.length,
-      mime: effectiveMime,
-      source: url,
-    });
+    return res.json({ markdown, chars: markdown.length, mime: effectiveMime });
   } catch (err) {
     const status = err.message?.includes('não autorizado') ? 403
       : err.message?.includes('inválida') ? 400
