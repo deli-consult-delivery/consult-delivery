@@ -120,6 +120,7 @@ function SmartImage({ src, alt, onAbrir }) {
     const isHeic = /(^data:image\/(heic|heif)|\.(heic|heif)(\?|$))/i.test(src);
     if (!isHeic) { setDisplaySrc(src); return undefined; }
     let cancelado = false;
+    const ctrl = new AbortController();
     import('heic2any')
       .then(async ({ default: h2a }) => {
         let blob;
@@ -128,7 +129,7 @@ function SmartImage({ src, alt, onAbrir }) {
           const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
           blob = new Blob([bytes], { type: 'image/heic' });
         } else {
-          blob = await (await fetch(src)).blob();
+          blob = await (await fetch(src, { signal: ctrl.signal })).blob();
         }
         const out = await h2a({ blob, toType: 'image/jpeg', quality: 0.85 });
         const jpeg = Array.isArray(out) ? out[0] : out;
@@ -136,9 +137,10 @@ function SmartImage({ src, alt, onAbrir }) {
         blobUrlRef.current = url;
         if (!cancelado) setDisplaySrc(url);
       })
-      .catch(() => { if (!cancelado) setDisplaySrc(src); });
+      .catch((e) => { if (!cancelado && e?.name !== 'AbortError') setDisplaySrc(src); });
     return () => {
       cancelado = true;
+      ctrl.abort();
       // zera o src antes de revogar p/ o <img> não renderizar URL já revogada
       if (blobUrlRef.current) {
         setDisplaySrc(null);

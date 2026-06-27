@@ -54,7 +54,7 @@ async function authHeader() {
   return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
 }
 
-export function useTranscricao() {
+export function useTranscricao(activeId) {
   const [transcriptions, setTranscriptions] = useState({}); // { msgId: { loading, text, error } }
   const [translations, setTranslations] = useState({});     // { msgId: { loading, text, lang, error } }
   const [autoTranscribe, setAutoTranscribe] = useState(() => lerAuto());
@@ -64,6 +64,14 @@ export function useTranscricao() {
   useEffect(() => { autoRef.current = autoTranscribe; }, [autoTranscribe]);
   // ids já enviados p/ transcrição (evita duplo-envio em INSERT + UPDATE do realtime)
   const transcritosRef = useRef(new Set());
+
+  // FASE 5 — guarda anti-leak: fetches do Bridge resolvem async; ao desmontar ou
+  // trocar de conversa, não aplicar setState (evita warning + estado órfão).
+  const vivoRef = useRef(true);
+  useEffect(() => () => { vivoRef.current = false; }, []);
+
+  // troca de conversa: zera os ids deduplicados (a nova thread recomeça do zero)
+  useEffect(() => { transcritosRef.current.clear(); }, [activeId]);
 
   // ── transcrição via Whisper (Bridge) ───────────────────────────────────────
   const transcrever = useCallback(async (msg) => {
@@ -90,8 +98,10 @@ export function useTranscricao() {
       }
       if (!r.ok) throw new Error(`status ${r.status}`);
       const data = await r.json();
+      if (!vivoRef.current) return;
       setTranscriptions((t) => ({ ...t, [msgId]: { loading: false, text: data.text || '' } }));
     } catch {
+      if (!vivoRef.current) return;
       setTranscriptions((t) => ({ ...t, [msgId]: { loading: false, error: true } }));
     }
   }, []);
@@ -120,6 +130,7 @@ export function useTranscricao() {
         body: JSON.stringify({ command: '/traduzir', messages: [{ direction: 'inbound', content: texto }] }),
       });
       const data = await r.json();
+      if (!vivoRef.current) return;
       if (data?.ok && data.bullets?.length) {
         const trad = (data.bullets[0] || '').replace(/^Tradu[çc][ãa]o:\s*/i, '');
         const lang = (data.bullets[1] || '').replace(/^Idioma detectado:\s*/i, '');
@@ -128,6 +139,7 @@ export function useTranscricao() {
         setTranslations((t) => ({ ...t, [msgId]: { loading: false, error: true } }));
       }
     } catch {
+      if (!vivoRef.current) return;
       setTranslations((t) => ({ ...t, [msgId]: { loading: false, error: true } }));
     }
   }, []);

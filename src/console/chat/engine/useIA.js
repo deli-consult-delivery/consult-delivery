@@ -118,6 +118,11 @@ export function useIA({ instancia, userId } = {}) {
   const hibridoPend = useRef(new Set());
   const iaPend = useRef(new Set());
 
+  // FASE 5 — guarda anti-leak: a sugestão híbrida resolve async; ao desmontar,
+  // não aplicar setState (evita warning + estado órfão após sair do chat).
+  const vivoRef = useRef(true);
+  useEffect(() => () => { vivoRef.current = false; }, []);
+
   const aiMode = convAtiva ? (mapaModos[convAtiva] || 'humano') : 'humano';
 
   const getModo = useCallback((convId) => mapaRef.current[convId] || 'humano', []);
@@ -142,7 +147,7 @@ export function useIA({ instancia, userId } = {}) {
     try {
       const lista = Array.isArray(msgs) && msgs.length ? msgs : await carregarMsgsRecentes(convId);
       const data = await postChatAi({ command: '/resposta', messages: lista, conversation_id: convId });
-      if (data?.ok && data.text) {
+      if (vivoRef.current && data?.ok && data.text) {
         setSugestao({ convId, texto: data.text });
       }
     } catch {

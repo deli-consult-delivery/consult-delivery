@@ -41,14 +41,15 @@ export default function ConvItem({ conv, ativo, onClick, fav = false, muted = fa
   // ações de hover não devem selecionar a conversa
   const onFav = (e) => { e.stopPropagation(); onToggleFav?.(); };
   const onMute = (e) => { e.stopPropagation(); onToggleMute?.(); };
+  // Enter/Espaço aciona o span (HTML inválido aninhar <button> em <button>,
+  // por isso as ações são <span role="button"> e precisam do handler de teclado).
+  const onKey = (fn) => (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(e); } };
 
   return (
-    <div
+    <button
+      type="button"
       className={`ccv-conv${ativo ? ' on' : ''}${conv.unread > 0 ? ' unread' : ''}${fav ? ' fav' : ''}${muted ? ' muted' : ''}`}
       onClick={onClick}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); } }}
       title={conv.nome}
     >
       <div className="ccv-av" style={{ background: corAvatar(conv.nome) }}>
@@ -66,22 +67,26 @@ export default function ConvItem({ conv, ativo, onClick, fav = false, muted = fa
           {/* ações (favoritar / silenciar) — só p/ conversas reais, não canais internos */}
           {!conv.isChan && (
             <span className="ccv-conv-acts">
-              <button
-                type="button"
+              <span
+                role="button"
+                tabIndex={0}
                 className={`ccv-fav${fav ? ' on' : ''}`}
                 onClick={onFav}
+                onKeyDown={onKey(onFav)}
                 title={fav ? 'Remover dos favoritos' : 'Favoritar'}
                 aria-label={fav ? 'Remover dos favoritos' : 'Favoritar'}
-              >★</button>
-              <button
-                type="button"
+              >★</span>
+              <span
+                role="button"
+                tabIndex={0}
                 className={`ccv-muted${muted ? ' on' : ''}`}
                 onClick={onMute}
+                onKeyDown={onKey(onMute)}
                 title={muted ? 'Reativar notificações' : 'Silenciar'}
                 aria-label={muted ? 'Reativar notificações' : 'Silenciar'}
               >
                 <Ico name="i-bell" size={13} />
-              </button>
+              </span>
             </span>
           )}
         </div>
@@ -100,6 +105,6 @@ export default function ConvItem({ conv, ativo, onClick, fav = false, muted = fa
           </div>
         )}
       </div>
-    </div>
+    </button>
   );
 }
