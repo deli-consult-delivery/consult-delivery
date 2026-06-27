@@ -58,7 +58,8 @@ import AvaliacaoConfig from './AvaliacaoConfig.jsx';
 import ControleAtendimentos from './ControleAtendimentos.jsx';
 // telas reusadas do console clássico (funcionais — visual convertido nas ondas 2-3)
 import TarefasClientesScreen from '../screens/TarefasClientesScreen.jsx';
-import ChatScreen from '../screens/ChatScreen.jsx';
+import ChatScreen from '../screens/ChatScreen.jsx'; // mantido como fallback
+import ChatAoVivo from './chat/ChatAoVivo.jsx';
 import AgentBuilderScreen from '../screens/AgentBuilderScreen.jsx';
 import DeliHub from './DeliHub.jsx';
 import './console.css';
@@ -678,6 +679,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
     try { return localStorage.getItem('cv2_sb_collapsed') === '1'; } catch { return false; }
   });
   const [deepLinkCustomerId, setDeepLinkCustomerId] = useState(null);
+  const [deepLinkConvId, setDeepLinkConvId] = useState(null);
   const [tenantsList, sel, setSel] = useTenants(userId, { dbId: propDbId, slug: tenantInfo?.id, nome: tenantInfo?.name });
 
   // tenant ativo = selecionado no topo (todas as telas seguem isto)
@@ -729,11 +731,13 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
 
   const navWithParams = useCallback((novaTela, params) => {
     if (params?.customerId !== undefined) setDeepLinkCustomerId(params.customerId);
+    if (params?.convId !== undefined) setDeepLinkConvId(params.convId);
     setTela(novaTela);
   }, []);
 
   useEffect(() => {
     if (tela !== 'espacos') setDeepLinkCustomerId(null);
+    if (tela !== 'chat') setDeepLinkConvId(null);
   }, [tela]);
 
   // hambúrguer: no mobile (≤1023px) abre/fecha o drawer; no desktop recolhe/expande a sidebar fixa (persiste)
@@ -861,9 +865,17 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
       </aside>
       <div className="cv2-main">
         {ehChat ? (
-          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-            <ChatScreen tenant={tenantSlug} tenantDbId={tenantDbId} userId={userId} onNavigate={navWithParams} deepLinkConvId={null} embedded onToggleMenu={toggleMenu} />
-          </div>
+          <>
+            <div className="cv2-tb-chat">
+              <button className="cv2-ham" onClick={toggleMenu} title="Abrir ou recolher o menu" aria-label="Abrir ou recolher o menu">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
+              </button>
+              <span className="crumb">Console › <b>{LABELS[tela] || tela}</b></span>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <ChatAoVivo tenant={tenantSlug} tenantDbId={tenantDbId} userId={userId} onNavigate={navWithParams} deepLinkConvId={deepLinkConvId} />
+            </div>
+          </>
         ) : (
           <>
             <div className="cv2-tb">

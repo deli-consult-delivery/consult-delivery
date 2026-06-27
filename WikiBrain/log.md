@@ -1367,3 +1367,23 @@ Wandson apontou que o Blueprint AI-First (FASE 1 — Loop ponta-a-ponta) não fo
 - FASE 3 Telegram (semáforo): já funcionava ✅
 - FASE 1 Loop: `executar-tarefa` executa VendaERP (read-only); Asaas = placeholder; `responder-conclusao` cria draft
 - Próximo: testar loop ponta-a-ponta com número próprio do Wandson
+
+## 2026-06-27 — Sessão: Novo Chat ao Vivo cv2 (#585/#587)
+
+### O que foi feito
+- Construído `src/console/chat/ChatAoVivo.jsx` do zero na identidade cv2 (layout 3 colunas claro: lista · thread · lead)
+- Criado `src/console/chat-ao-vivo.css` com CSS escopado em `.cav` usando tokens do Console V2 (`--bg`, `--panel`, `--red`, etc.)
+- Atualizado `ConsoleV2.jsx`: substituiu embed do `ChatScreen` (dark) pelo novo `ChatAoVivo` + corrigiu `deepLinkConvId={null}` hardcoded
+
+### Bugs corrigidos nativamente
+- **Bug 1 (bulk finalizar)**: query real ao banco com `.select('id')`, exclui `chan-*` da seleção, reporta count real
+- **Bug 2 (canal geral vazando)**: filtro corrigido — canais com `id.startsWith('chan-')` só aparecem na aba "Chat interno"
+- **Bug 3 (Breno posição errada)**: banner fixo no topo da área de conversa, compacto, fora do scroll
+
+### Contexto
+- Sessão anterior (também nesta worktree) já tinha corrigido o banco: migration `20260626_002` (trigger 42P10 ON CONFLICT parcial) e frontend silent-fail (`.select('id')` + tratamento 0 linhas)
+- PR #587 squash-merged → build limpo, deploy GitHub Pages iniciado
+
+### Próxima ação
+- Testar no browser após deploy (~3 min do merge): identidade visual, abas, bulk, Breno banner
+- Se algum detalhe visual precisar de ajuste, abrir nova sessão
