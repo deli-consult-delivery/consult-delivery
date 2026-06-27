@@ -59,6 +59,8 @@ function getIfoodConfig(_tenantId) {
 const TOKEN_PATH = '/authentication/v1.0/oauth/token';
 const RENEW_SKEW_MS = 5 * 60 * 1000; // renova com 5 min de folga
 const tokenCache = { token: null, expiresAt: 0 };
+// ponytail: single-flight global, 1 credencial na F1 (getIfoodConfig ignora tenantId);
+// trocar por Map<tenantId,Promise> na F4 multi-loja, quando cada tenant tiver seu par.
 let tokenInFlight = null; // single-flight: 1 Promise compartilhada sob concorrência
 
 async function requestNewToken(tenantId) {
@@ -132,8 +134,10 @@ async function withRetry(fn, maxAttempts = 3) {
     try {
       return await fn();
     } catch (err) {
+      // erro não-HTTP (Zod/config/programação) não é transitório → não retenta
+      if (!(err instanceof IfoodApiError)) throw err;
       lastError = err;
-      if (err instanceof IfoodApiError && !shouldRetry(err.status)) throw err;
+      if (!shouldRetry(err.status)) throw err;
       if (attempt === maxAttempts - 1) throw err;
     }
   }
