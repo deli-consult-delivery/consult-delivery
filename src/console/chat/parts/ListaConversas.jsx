@@ -27,6 +27,7 @@ export default function ListaConversas({
   FILTROS,
   busca,
   setBusca,
+  buscandoServer,
   activeId,
   onSelect,
 }) {
@@ -53,6 +54,8 @@ export default function ListaConversas({
 
       <div className="ccv-list">
         {loading && <div className="ccv-empty">Carregando conversas…</div>}
+
+        {!loading && buscandoServer && <div className="ccv-hist">Buscando…</div>}
 
         {!loading && lista.length === 0 && (
           <div className="ccv-empty">

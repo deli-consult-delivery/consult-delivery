@@ -16,10 +16,20 @@
  *  - video: <video controls>; audio: <audio controls>;
  *  - document: botão de download com o nome do arquivo.
  *
+ * FASE 3 — interações de mensagem:
+ *  - barra de ações no hover (.ccv-acts): responder (↩), reagir (😊 abre
+ *    mini-picker), encaminhar (↪) e apagar (🗑️ só em saída);
+ *  - mini emoji picker (.ccv-emoji-bar) com ~6 emojis;
+ *  - reações agrupadas abaixo do balão (.ccv-reactions / .ccv-reaction).
+ *
  * Props:
- *  - msg: msgShape { id, out, txt, mtype, murl, who, tm, ts, quoted, ds, del }
+ *  - msg: msgShape { id, out, txt, mtype, murl, who, tm, ts, quoted, ds, del, reactions, waId }
  *  - prevMsg: msgShape|null  (msg imediatamente anterior, p/ separador de dia)
  *  - onAbrirImagem: (url) => void  (abre o lightbox; FASE 2)
+ *  - onReply: (msg) => void        (ativa a barra de resposta; FASE 3)
+ *  - onReagir: (msg, emoji) => void
+ *  - onApagar: (msg) => void
+ *  - onEncaminhar: (msg) => void   (abre o ForwardModal; FASE 3)
  *
  * Toda a aparência mora em chat-cv2.css (escopo .cv2-main .ccv-*).
  */
@@ -30,6 +40,16 @@ import { formatWA } from './formatWA.jsx';
 // remetentes considerados "automação" (badge roxo + estilo sys)
 const RE_AUTO = /(deli|lara|vera|breno|cora|sofia|max|bot|autom)/i;
 const ehAutomacao = (who) => !!who && RE_AUTO.test(who);
+
+// emojis do mini-picker de reação (mesmo conjunto do legado)
+const REACOES = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
+// agrupa as reações por emoji → [[emoji, contagem], ...] (imutável)
+function agruparReacoes(reactions) {
+  const g = {};
+  (reactions || []).forEach((r) => { if (r.emoji) g[r.emoji] = (g[r.emoji] || 0) + 1; });
+  return Object.entries(g);
+}
 
 // rótulo do separador de dia: "Hoje" / "Ontem" / DD/MM/AAAA
 function rotuloDia(ts) {
@@ -169,16 +189,76 @@ function Media({ mtype, murl, txt, onAbrirImagem }) {
   );
 }
 
-export default function MsgBubble({ msg, prevMsg, onAbrirImagem }) {
+// ── barra de ações no hover (reply / reagir / encaminhar / apagar) ──────────
+// `lado` posiciona a barra do lado oposto ao balão (out → esquerda; in → direita).
+function Acts({ msg, lado, onReply, onAbrirPicker, onEncaminhar, onApagar }) {
+  return (
+    <div className="ccv-acts" style={{ [lado]: 6 }}>
+      {onReply && (
+        <button type="button" title="Responder" aria-label="Responder" onClick={() => onReply(msg)}>↩</button>
+      )}
+      {onAbrirPicker && (
+        <button type="button" title="Reagir" aria-label="Reagir" onClick={onAbrirPicker}>😊</button>
+      )}
+      {onEncaminhar && (
+        <button type="button" title="Encaminhar" aria-label="Encaminhar" onClick={() => onEncaminhar(msg)}>↪</button>
+      )}
+      {msg.out && onApagar && (
+        <button
+          type="button"
+          className="del"
+          title="Apagar para todos"
+          aria-label="Apagar mensagem"
+          onClick={() => onApagar(msg)}
+        >
+          🗑️
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── reações agrupadas abaixo do balão ───────────────────────────────────────
+function Reactions({ reactions }) {
+  const entries = agruparReacoes(reactions);
+  if (!entries.length) return null;
+  return (
+    <div className="ccv-reactions">
+      {entries.map(([emoji, n]) => (
+        <span key={emoji} className="ccv-reaction">
+          {emoji}{n > 1 && <b>{n}</b>}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+export default function MsgBubble({
+  msg,
+  prevMsg,
+  onAbrirImagem,
+  onReply,
+  onReagir,
+  onApagar,
+  onEncaminhar,
+}) {
   const auto = ehAutomacao(msg.who);
   const sep = mudouDia(msg.ts, prevMsg?.ts);
+  const [picker, setPicker] = useState(false);
+
+  // fecha o mini-picker ao sair do balão (evita ficar aberto após o hover)
+  const fecharPicker = () => setPicker(false);
+  const temAcoes = !msg.del && (onReply || onReagir || onApagar || onEncaminhar);
+  const lado = msg.out ? 'left' : 'right';
+
+  const reagir = (emoji) => { setPicker(false); onReagir?.(msg, emoji); };
 
   // mensagem de automação → balão central de sistema
   if (auto && !msg.out) {
     return (
       <>
         {sep && <div className="ccv-day">{rotuloDia(msg.ts)}</div>}
-        <div className="ccv-msg sys">
+        <div className="ccv-msg sys" onMouseLeave={fecharPicker}>
           <span className="ccv-autobadge">Automação</span>{' '}
           {msg.del ? (
             '🚫 mensagem apagada'
@@ -188,7 +268,26 @@ export default function MsgBubble({ msg, prevMsg, onAbrirImagem }) {
                 <Media mtype={msg.mtype} murl={msg.murl} txt={msg.txt} onAbrirImagem={onAbrirImagem} />
               )}
               {formatWA(msg.txt)}
+              <Reactions reactions={msg.reactions} />
             </>
+          )}
+
+          {temAcoes && onReagir && (
+            <Acts
+              msg={msg}
+              lado={lado}
+              onReply={onReply}
+              onAbrirPicker={() => setPicker((v) => !v)}
+              onEncaminhar={onEncaminhar}
+              onApagar={onApagar}
+            />
+          )}
+          {picker && (
+            <div className="ccv-emoji-bar" style={{ [lado]: 6 }}>
+              {REACOES.map((e) => (
+                <button key={e} type="button" onClick={() => reagir(e)}>{e}</button>
+              ))}
+            </div>
           )}
         </div>
       </>
@@ -200,7 +299,7 @@ export default function MsgBubble({ msg, prevMsg, onAbrirImagem }) {
   return (
     <>
       {sep && <div className="ccv-day">{rotuloDia(msg.ts)}</div>}
-      <div className={`ccv-msg ${cls}`}>
+      <div className={`ccv-msg ${cls}`} onMouseLeave={fecharPicker}>
         {!msg.out && msg.who && <div className="ccv-who">{msg.who}</div>}
 
         {msg.quoted && !msg.del && (
@@ -223,6 +322,7 @@ export default function MsgBubble({ msg, prevMsg, onAbrirImagem }) {
                 {formatWA(msg.txt)}
               </div>
             )}
+            <Reactions reactions={msg.reactions} />
           </>
         )}
 
@@ -230,6 +330,24 @@ export default function MsgBubble({ msg, prevMsg, onAbrirImagem }) {
           {msg.tm}
           {msg.out && !msg.del && <Tick s={msg.ds} />}
         </div>
+
+        {temAcoes && (
+          <Acts
+            msg={msg}
+            lado={lado}
+            onReply={onReply}
+            onAbrirPicker={onReagir ? () => setPicker((v) => !v) : null}
+            onEncaminhar={onEncaminhar}
+            onApagar={onApagar}
+          />
+        )}
+        {picker && (
+          <div className="ccv-emoji-bar" style={{ [lado]: 6 }}>
+            {REACOES.map((e) => (
+              <button key={e} type="button" onClick={() => reagir(e)}>{e}</button>
+            ))}
+          </div>
+        )}
       </div>
     </>
   );

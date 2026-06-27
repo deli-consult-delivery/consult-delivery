@@ -18,15 +18,19 @@
  *  - envio: handlers/estado do useEnvio (mídia + áudio — FASE 2):
  *      { onEnviarMidia, gravando, segundos, iniciarGravacao, pararEnviar,
  *        cancelar, enviandoMidia }
+ *  - acoes: handlers de interação da mensagem (FASE 3):
+ *      { onReply, onReagir, onApagar, onEncaminhar, convs, replyTo, onCancelReply,
+ *        forwardMsg, onConfirmarForward, onFecharForward }
  *
  * Toda a aparência mora em chat-cv2.css (escopo .cv2-main .ccv-*).
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { Ico } from '../../CvIcons.jsx';
 import { corAvatar, inicial } from './avatar.js';
 import MsgBubble from './MsgBubble.jsx';
 import Composer from './Composer.jsx';
+import ForwardModal from './ForwardModal.jsx';
 
 // protocolo = últimos 6 da UUID, maiúsculo
 const protocolo = (id) => (id ? String(id).slice(-6).toUpperCase() : '');
@@ -42,15 +46,51 @@ export default function Thread({
   podeEnviar,
   onAbrirImagem,
   envio,
+  acoes,
+  loadOlderMsgs,
+  temMais,
+  carregandoOlder,
+  transfer,
 }) {
   const env = envio || {};
+  const act = acoes || {};
+  const tr = transfer || {};
   const msgsRef = useRef(null);
   const lista = msgs || [];
 
-  // auto-scroll ao fim a cada nova mensagem / troca de conversa
+  // qtd anterior p/ distinguir "prepend de histórico" (preserva posição) de
+  // "append de msg nova" (auto-scroll ao fim).
+  const prevLenRef = useRef(0);
+  // scrollHeight salvo antes do prepend, p/ restaurar a posição visual depois.
+  const anchorRef = useRef(null);
+
+  // salva âncora ANTES do paint quando o topo dispara loadOlderMsgs
+  const onScroll = useCallback(() => {
+    const el = msgsRef.current;
+    if (!el || carregandoOlder || !temMais) return;
+    if (el.scrollTop <= 24) {
+      anchorRef.current = el.scrollHeight; // referência p/ restaurar posição após prepend
+      loadOlderMsgs?.();
+    }
+  }, [carregandoOlder, temMais, loadOlderMsgs]);
+
+  // auto-scroll ao fim em msg nova / troca de conversa; ao carregar histórico
+  // (prepend), preserva a posição em vez de pular pro fim.
   useEffect(() => {
     const el = msgsRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    const cresceuNoTopo = anchorRef.current != null && msgs.length > prevLenRef.current;
+    if (cresceuNoTopo) {
+      // restaura posição: novo scrollHeight - altura salva = deslocamento dos itens prepended
+      el.scrollTop = el.scrollHeight - anchorRef.current;
+      anchorRef.current = null;
+      // sincroniza o comprimento APÓS a restauração — prepends rápidos sucessivos não
+      // herdam um prevLen defasado que faria o próximo ciclo cair no auto-scroll ao fundo.
+      prevLenRef.current = msgs.length;
+    } else {
+      el.scrollTop = el.scrollHeight;
+      prevLenRef.current = msgs.length;
+    }
   }, [msgs, conv?.id]);
 
   if (!conv) {
@@ -72,7 +112,9 @@ export default function Thread({
       {/* ─── header ─────────────────────────────────────────────────────── */}
       <div className="ccv-thread-head">
         <div className="ccv-av sm" style={{ background: corAvatar(conv.nome) }}>
-          {inicial(conv.nome)}
+          {conv.foto
+            ? <img className="ccv-av-img" src={conv.foto} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+            : inicial(conv.nome)}
           <span className={`ccv-chan${isCanal ? ' internal' : ''}`} aria-hidden="true" />
         </div>
 
@@ -88,6 +130,21 @@ export default function Thread({
         </div>
 
         <div className="ccv-th-actions">
+          {!isCanal && Array.isArray(tr.deps) && tr.deps.length > 0 && (
+            <select
+              className="ccv-transfer"
+              value=""
+              disabled={tr.transferindo}
+              title="Transferir para departamento"
+              aria-label="Transferir para departamento"
+              onChange={(e) => { const v = e.target.value; e.target.value = ''; if (v) tr.transferir?.(v); }}
+            >
+              <option value="">Transferir…</option>
+              {tr.deps.map((d) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+          )}
           {!isCanal && !isFinalizado && (
             <button
               type="button"
@@ -117,7 +174,8 @@ export default function Thread({
       </div>
 
       {/* ─── mensagens ──────────────────────────────────────────────────── */}
-      <div className="ccv-msgs" ref={msgsRef}>
+      <div className="ccv-msgs" ref={msgsRef} onScroll={onScroll}>
+        {carregandoOlder && <div className="ccv-hist">Carregando histórico…</div>}
         {loadingMsgs && <div className="ccv-empty">Carregando mensagens…</div>}
         {!loadingMsgs && lista.length === 0 && (
           <div className="ccv-empty">Sem mensagens nesta conversa.</div>
@@ -128,6 +186,10 @@ export default function Thread({
             msg={m}
             prevMsg={i > 0 ? lista[i - 1] : null}
             onAbrirImagem={onAbrirImagem}
+            onReply={act.onReply}
+            onReagir={act.onReagir}
+            onApagar={act.onApagar}
+            onEncaminhar={act.onEncaminhar}
           />
         ))}
       </div>
@@ -143,7 +205,19 @@ export default function Thread({
         pararEnviar={env.pararEnviar}
         cancelar={env.cancelar}
         enviandoMidia={env.enviandoMidia}
+        replyTo={act.replyTo}
+        onCancelReply={act.onCancelReply}
       />
+
+      {/* ─── modal de encaminhamento (FASE 3) ───────────────────────────── */}
+      {act.forwardMsg && (
+        <ForwardModal
+          msg={act.forwardMsg}
+          convs={act.convs}
+          onConfirmar={act.onConfirmarForward}
+          onClose={act.onFecharForward}
+        />
+      )}
     </div>
   );
 }
