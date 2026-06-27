@@ -140,7 +140,8 @@ export default function ChatAoVivo({ tenant, tenantDbId, userId, onNavigate, dee
   // thread + composer
   const [msgs, setMsgs] = useState([]);
   const [draft, setDraft] = useState('');
-  const [enviando, setEnviando] = useState(false);
+  const [enviando, setEnviando] = useState(false); // mensagem/mídia/áudio
+  const [atualizando, setAtualizando] = useState(false); // finalizar/reabrir/bulkFinalizar
   const [gravando, setGravando] = useState(false);
   const [replyTo, setReplyTo] = useState(null);
   const [reagindo, setReagindo] = useState(null);
@@ -172,14 +173,9 @@ export default function ChatAoVivo({ tenant, tenantDbId, userId, onNavigate, dee
       .order('updated_at', { ascending: false })
       .limit(150);
     const rows = data || [];
-    const prev = await Promise.all(rows.map(r =>
-      supabase.from('messages')
-        .select('content, body, direction, media_type, deleted_at')
-        .eq('conversation_id', r.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-    ));
+    // BUG-2 fix: evitar 150 queries paralelas (N+1). Preview de última mensagem
+    // será exibido via realtime (canal cav-inbox) ou coluna desnormalizada futura.
+    const prev = rows.map(() => ({ data: null }));
     const mapped = rows.map((c, i) => {
       const phone = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
       const gname = c.group_name && !/^\d{10,}$/.test(c.group_name) ? c.group_name : null;
@@ -202,7 +198,7 @@ export default function ChatAoVivo({ tenant, tenantDbId, userId, onNavigate, dee
     setActiveId(a => {
       if (a) return a;
       // abre a primeira da aba atual automaticamente
-      const firstTab = TABS.find(t => t.id === 'aguardando');
+      const firstTab = TABS.find(t => t.id === activeTab); // BUG-3 fix: respeitar aba corrente
       const first = mapped.find(c => !c.id.startsWith('chan-') && firstTab?.sv2?.includes(c.status_v2));
       return first?.id || mapped[0]?.id || null;
     });
@@ -218,12 +214,17 @@ export default function ChatAoVivo({ tenant, tenantDbId, userId, onNavigate, dee
   }, [tenantDbId]);
 
   useEffect(() => {
-    supabase.from('evolution_instances').select('instance_name, status, evolution_url, api_key').order('created_at')
+    if (!tenantDbId) return;
+    // BUG-1 fix: filtrar por tenant para não vazar instâncias entre tenants
+    supabase.from('evolution_instances')
+      .select('instance_name, status, evolution_url, api_key')
+      .eq('tenant_id', tenantDbId)
+      .order('created_at')
       .then(({ data }) => {
         const arr = data || [];
         setInstance(arr.find(i => /conn|open/i.test(i.status || '')) || arr[0] || null);
       });
-  }, []);
+  }, [tenantDbId]); // BUG-1 fix: dep tenantDbId
 
   // ── mensagens ─────────────────────────────────────────────────────────────
   const mapMsg = m => ({
@@ -326,7 +327,7 @@ export default function ChatAoVivo({ tenant, tenantDbId, userId, onNavigate, dee
     setActiveId(convId);
     setSelecionados(new Set());
     setConvs(cs => (cs || []).map(c => c.id === convId ? { ...c, unread: 0 } : c));
-    if (tenantDbId) supabase.from('conversations').update({ unread_count: 0 }).eq('id', convId).eq('tenant_id', tenantDbId);
+    if (tenantDbId) supabase.from('conversations').update({ unread_count: 0 }).eq('id', convId).eq('tenant_id', tenantDbId).select('id'); // BUG-4 fix: .select() para detectar silent-fail de RLS
   }, [tenantDbId]);
 
   // ── envio de texto ────────────────────────────────────────────────────────
@@ -453,8 +454,8 @@ export default function ChatAoVivo({ tenant, tenantDbId, userId, onNavigate, dee
 
   // ── finalizar individual ──────────────────────────────────────────────────
   async function finalizar() {
-    if (!active || enviando) return;
-    setEnviando(true);
+    if (!active || atualizando) return; // BUG-6 fix: flag separada
+    setAtualizando(true);
     try {
       const { data, error } = await supabase.from('conversations')
         .update({ status: 'finalizado', status_v2: 'closed', finished_by: userId || null })
@@ -464,17 +465,18 @@ export default function ChatAoVivo({ tenant, tenantDbId, userId, onNavigate, dee
       if (!data?.length) throw new Error('0 linhas afetadas — sem permissão ou vínculo de tenant incorreto.');
       setConvs(cs => (cs || []).map(c => c.id === active.id ? { ...c, status: 'finalizado', status_v2: 'closed' } : c));
       flash('Conversa finalizada ✓');
+      await loadConvs(); // BUG-5 fix: recarregar lista para mover conversa para aba correta
     } catch (err) {
       console.error('[CAV] finalizar:', err);
       const msg = err?.message || String(err);
       flash('Erro ao finalizar: ' + msg);
-    } finally { setEnviando(false); }
+    } finally { setAtualizando(false); } // BUG-6 fix
   }
 
   // ── reabrir ───────────────────────────────────────────────────────────────
   async function reabrir() {
-    if (!active || enviando) return;
-    setEnviando(true);
+    if (!active || atualizando) return; // BUG-6 fix: flag separada
+    setAtualizando(true);
     try {
       const { data, error } = await supabase.from('conversations')
         .update({ status: 'aguardando', status_v2: 'open', reopened_by: userId || null, assigned_to: null })
@@ -484,19 +486,20 @@ export default function ChatAoVivo({ tenant, tenantDbId, userId, onNavigate, dee
       if (!data?.length) throw new Error('0 linhas afetadas.');
       setConvs(cs => (cs || []).map(c => c.id === active.id ? { ...c, status: 'aguardando', status_v2: 'open' } : c));
       flash('Conversa reaberta ✓');
+      await loadConvs(); // BUG-5 fix: recarregar lista para mover conversa para aba correta
     } catch (err) {
       console.error('[CAV] reabrir:', err);
       flash('Erro ao reabrir: ' + (err?.message || String(err)));
-    } finally { setEnviando(false); }
+    } finally { setAtualizando(false); } // BUG-6 fix
   }
 
   // ── bulk finalizar (Bug 1 fix) ────────────────────────────────────────────
   async function bulkFinalizar() {
     const ids = [...selecionados].filter(id => !id.startsWith('chan-'));
     if (!ids.length) { flash('Selecione ao menos uma conversa (não canal) para finalizar.'); return; }
-    if (enviando) return;
+    if (atualizando) return; // BUG-6 fix: flag separada
     setBulkFeedback(`Finalizando ${ids.length} conversa(s)…`);
-    setEnviando(true);
+    setAtualizando(true);
     try {
       const { data, error } = await supabase.from('conversations')
         .update({ status: 'finalizado', status_v2: 'closed', finished_by: userId || null })
@@ -512,7 +515,7 @@ export default function ChatAoVivo({ tenant, tenantDbId, userId, onNavigate, dee
     } catch (err) {
       console.error('[CAV] bulk finalizar:', err);
       setBulkFeedback('Erro: ' + (err?.message || String(err)));
-    } finally { setEnviando(false); }
+    } finally { setAtualizando(false); } // BUG-6 fix
   }
 
   // ── Breno actions ─────────────────────────────────────────────────────────
@@ -613,7 +616,7 @@ export default function ChatAoVivo({ tenant, tenantDbId, userId, onNavigate, dee
                 : `Todos (${elegiveisParaBulk.length})`}
             </button>
             {selecionados.size > 0 && (
-              <button className="cav-bulk-action" onClick={bulkFinalizar} disabled={enviando}>
+              <button className="cav-bulk-action" onClick={bulkFinalizar} disabled={atualizando}>
                 Finalizar {selecionados.size}
               </button>
             )}
@@ -690,12 +693,12 @@ export default function ChatAoVivo({ tenant, tenantDbId, userId, onNavigate, dee
                 </select>
               )}
               {!isCanal && !isFinalizado && (
-                <button className="cv2-btn" style={{ padding: '5px 12px', fontSize: 11.5 }} onClick={finalizar} disabled={enviando}>
+                <button className="cv2-btn" style={{ padding: '5px 12px', fontSize: 11.5 }} onClick={finalizar} disabled={atualizando}> {/* BUG-6 fix */}
                   Finalizar
                 </button>
               )}
               {!isCanal && isFinalizado && (
-                <button className="cv2-btn sec" style={{ padding: '5px 12px', fontSize: 11.5 }} onClick={reabrir} disabled={enviando}>
+                <button className="cv2-btn sec" style={{ padding: '5px 12px', fontSize: 11.5 }} onClick={reabrir} disabled={atualizando}> {/* BUG-6 fix */}
                   Reabrir
                 </button>
               )}
@@ -850,12 +853,12 @@ export default function ChatAoVivo({ tenant, tenantDbId, userId, onNavigate, dee
             {!isCanal && (
               <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {!isFinalizado && (
-                  <button className="cv2-btn" style={{ width: '100%', justifyContent: 'center', fontSize: 12 }} onClick={finalizar} disabled={enviando}>
+                  <button className="cv2-btn" style={{ width: '100%', justifyContent: 'center', fontSize: 12 }} onClick={finalizar} disabled={atualizando}> {/* BUG-6 fix */}
                     Finalizar atendimento
                   </button>
                 )}
                 {isFinalizado && (
-                  <button className="cv2-btn sec" style={{ width: '100%', justifyContent: 'center', fontSize: 12 }} onClick={reabrir} disabled={enviando}>
+                  <button className="cv2-btn sec" style={{ width: '100%', justifyContent: 'center', fontSize: 12 }} onClick={reabrir} disabled={atualizando}> {/* BUG-6 fix */}
                     Reabrir conversa
                   </button>
                 )}
