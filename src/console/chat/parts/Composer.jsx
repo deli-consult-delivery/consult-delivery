@@ -42,6 +42,11 @@ import { Ico } from '../../CvIcons.jsx';
 
 const ACCEPT = 'image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt,audio/*';
 
+// detecção de toque: pointer:coarse = celular/tablet. No touch o Enter quebra linha
+// (teclado virtual não tem Shift à mão); envio só pelo botão.
+const detectTouch = () =>
+  typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+
 // formata segundos → mm:ss
 const fmtTempo = (s) => {
   const m = Math.floor(s / 60);
@@ -71,6 +76,8 @@ export default function Composer({
 }) {
   // mídia/áudio indisponível em canal interno (mediaDisabled) ou composer desabilitado
   const midiaOff = disabled || mediaDisabled;
+  // lazy: avalia no 1º render (não no module load) — seguro p/ SSR-import e mock de matchMedia em teste
+  const [isTouch] = useState(detectTouch);
   const [draft, setDraft] = useState('');
   const [qrAberto, setQrAberto] = useState(false);
   const fileRef = useRef(null);
@@ -103,6 +110,9 @@ export default function Composer({
   };
 
   const onKeyDown = (e) => {
+    // touch: nunca interceptar Enter — deixa quebrar linha; envio é só pelo botão vermelho.
+    if (isTouch) return;
+    // desktop/mouse: Enter envia, Shift+Enter quebra linha (nativo).
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       enviar();
@@ -182,9 +192,16 @@ export default function Composer({
         .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
         .replace(/&nbsp;/g, ' ').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
     }
-    const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    // nada a normalizar (texto puro idêntico ao nativo) → deixa o browser colar
-    if (normalized === plain) return;
+    // U+2028 (line sep) e U+2029 (paragraph sep) chegam do iOS/Safari — viram \n
+    const normLineBreaks = (s) => s
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      .replace(/[\u2028\u2029]/g, '\n');
+    const normalized = normLineBreaks(text);
+    // só intercepta quando o conteúdo difere ALÉM da normalização de quebra de linha
+    // (i.e. HTML rico foi stripado). CRLF/CR/U+2028 puro o <textarea> já normaliza no
+    // paste nativo → deixa o browser colar e preserva o undo.
+    if (normalized === normLineBreaks(plain)) return;
     e.preventDefault();
     const el = taRef.current;
     if (!el) { setDraft((d) => d + normalized); return; }

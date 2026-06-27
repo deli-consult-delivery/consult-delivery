@@ -59,6 +59,8 @@ import ControleAtendimentos from './ControleAtendimentos.jsx';
 // telas reusadas do console clássico (funcionais — visual convertido nas ondas 2-3)
 import TarefasClientesScreen from '../screens/TarefasClientesScreen.jsx';
 import ChatAoVivoV2 from './chat/ChatAoVivoV2.jsx';
+// ponytail: temporário — Chat ao Vivo legado p/ o Wandson comparar; remover quando concluir.
+import ChatScreen from '../screens/ChatScreen.jsx';
 import AgentBuilderScreen from '../screens/AgentBuilderScreen.jsx';
 import DeliHub from './DeliHub.jsx';
 import './console.css';
@@ -81,6 +83,8 @@ const GRUPOS = [
     { id: 'crm', ic: 'i-users', label: 'Clientes' },
     { id: 'lojas', ic: 'i-store', label: 'Lojas' },
     { id: 'chat',             ic: 'i-chat',  label: 'Chat ao Vivo' },
+    // ponytail: temporário — remover quando o Wandson terminar de comparar legado x cv2
+    { id: 'chat-legado',      ic: 'i-clock', label: 'Chat ao Vivo (legado)' },
     { id: 'respostas-rapidas', ic: 'i-reply', label: 'Respostas Rápidas' },
     { id: 'mia', ic: 'i-eye', label: 'Conversas · MIA' },
     { id: 'aprovacoes', ic: 'i-check', label: 'Aprovações' },
@@ -240,7 +244,8 @@ function GlobalSearch({ tenantDbId, onNavigate }) {
 }
 
 // telas reusadas do clássico (dark) — renderizadas em área cheia até converter
-const LEGADO = new Set([]);
+// ponytail: temporário — 'chat-legado' aqui só p/ o Wandson comparar o Chat antigo; remover depois
+const LEGADO = new Set(['chat-legado']);
 
 const OK_STATUSES = ['ok', 'completed', 'success'];
 const CREDITOS_MES = 10000; // freemium: 10k créditos/mês, 1 por execução de IA
@@ -828,6 +833,8 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
       case 'automacoes': return <Automacoes tenantDbId={tenantDbId} userId={userId} onNavigate={nav} />;
       case 'relatorios': return <Relatorios tenantDbId={tenantDbId} userId={userId} />;
       case 'onboarding': return <Onboarding tenantDbId={tenantDbId} userId={userId} />;
+      // ponytail: temporário — Chat ao Vivo legado p/ comparação; sem onToggleMenu (a .cv2-tb da tela legada já tem hambúrguer)
+      case 'chat-legado': return <ChatScreen tenant={tenantSlug} tenantDbId={tenantDbId} userId={userId} onNavigate={navWithParams} deepLinkConvId={deepLinkConvId} embedded />;
       default: return <div className="cv2-card">Tela não encontrada.</div>;
     }
   }
@@ -906,9 +913,8 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
               </span>
               <span className="cv2-avatar">{inicial}</span>
             </div>
-            {ehLegado ? (
-              <div className="cv2-legado">{render()}</div>
-            ) : ehEspacos ? (
+            {ehEspacos || ehLegado ? (
+              // telas full-height (Espaços, Chat legado): pai bounded p/ o filho height:100% funcionar
               <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>{render()}</div>
             ) : (
               <div className="cv2-ct">{render()}</div>
