@@ -58,7 +58,7 @@ import AvaliacaoConfig from './AvaliacaoConfig.jsx';
 import ControleAtendimentos from './ControleAtendimentos.jsx';
 // telas reusadas do console clássico (funcionais — visual convertido nas ondas 2-3)
 import TarefasClientesScreen from '../screens/TarefasClientesScreen.jsx';
-import ChatAoVivo from './chat/ChatAoVivo.jsx';
+import ChatAoVivoV2 from './chat/ChatAoVivoV2.jsx';
 import AgentBuilderScreen from '../screens/AgentBuilderScreen.jsx';
 import DeliHub from './DeliHub.jsx';
 import './console.css';
@@ -872,7 +872,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
               <span className="crumb">Console › <b>{LABELS[tela] || tela}</b></span>
             </div>
             <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-              <ChatAoVivo tenant={tenantSlug} tenantDbId={tenantDbId} userId={userId} onNavigate={navWithParams} deepLinkConvId={deepLinkConvId} />
+              <ChatAoVivoV2 tenant={tenantSlug} tenantDbId={tenantDbId} userId={userId} onNavigate={navWithParams} deepLinkConvId={deepLinkConvId} />
             </div>
           </>
         ) : (
