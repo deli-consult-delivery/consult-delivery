@@ -38,9 +38,19 @@ export const brenoProcessarWebhook = task({
     const input = InputSchema.parse(payload);
     const start = Date.now();
 
+    // Ler config do tenant antes do gate off-hours (bypass_offhours pode desativá-lo)
+    const sbEarly = getSupabase();
+    const { data: configEarly } = await sbEarly
+      .from("tenant_agent_config")
+      .select("modo_override, config")
+      .eq("tenant_id", input.tenant_id)
+      .eq("agent_id", "breno")
+      .maybeSingle();
+    const bypassOffhours = (configEarly?.config as Record<string, unknown> | null)?.bypass_offhours === true;
+
     // Gate off-hours: se fora do expediente, triagem em vez de resposta
     const offCheck = isBrenoOffHours();
-    if (offCheck.offHours) {
+    if (offCheck.offHours && !bypassOffhours) {
       logger.info("breno-processar-webhook: off-hours detectado, acionando triagem", {
         tenant_id:  input.tenant_id,
         motivo:     offCheck.motivo,
@@ -172,26 +182,19 @@ export const brenoProcessarWebhook = task({
       return result;
     }
 
-    // 3. Verificar modo BRENO no tenant_agent_config
-    const sb = getSupabase();
+    // 3. Modo BRENO — já lido no topo (configEarly); reusar sem nova query
+    const sb = sbEarly;
 
     logger.info("breno-processar-webhook: consultando modo do agente", {
       tenant_id: input.tenant_id,
     });
 
-    const { data: config } = await sb
-      .from("tenant_agent_config")
-      .select("modo_override")
-      .eq("tenant_id", input.tenant_id)
-      .eq("agent_id", "breno")
-      .maybeSingle();
-
-    const modo: string = config?.modo_override ?? "hibrido"; // default hibrido
+    const modo: string = configEarly?.modo_override ?? "hibrido"; // default hibrido
 
     logger.info("breno-processar-webhook: modo resolvido", {
       tenant_id:      input.tenant_id,
       modo,
-      from_override:  config?.modo_override != null,
+      from_override:  configEarly?.modo_override != null,
     });
 
     // 4a. Modo "humano" — só registra, não age
