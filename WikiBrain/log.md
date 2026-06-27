@@ -1451,3 +1451,16 @@ Wandson apontou que o Blueprint AI-First (FASE 1 — Loop ponta-a-ponta) não fo
 **Smoke consolidado em produção:** OK — modos IA, banner BRENO real, traduzir, transferir, lista/thread/contadores todos visíveis e funcionais. Identidade cv2 (vermelho #B70C00/light) + layout DataCrazy.
 
 **Aprendizado:** envio de mensagem WhatsApp no browser é bloqueado pelo classifier de segurança (outward-facing) — validação no browser fica visual. Polish pendente não-bloqueante: a11y, upload mídia p/ Storage (hoje data-URI), AbortController.
+
+## 2026-06-27 — Sessão 98: Chat ao Vivo responsivo (iPhone) + ajustes finos (FASE 5)
+
+**Contexto:** Após o redesign completo (F1–F4), o Wandson pediu para finalizar os ajustes pendentes e tornar o Chat ao Vivo responsivo para iPhone (ele dá suporte pelo celular).
+
+**Entregue (PR #608, worktree+workflow build→review→fix):**
+- **Mobile "uma tela por vez"** (padrão `mobilePane` portado do legado ChatScreen.jsx): estado list/chat/contato só escolhe a classe `.ccv-m-*`; layout 100% CSS (`@media max-width:720px`, sem listener de resize). Botões voltar (←) e info (ver contato) no header da Thread + voltar no PainelContato, escondidos no desktop. `safe-area-inset-bottom` no composer (home-bar do iPhone), alvos de toque ≥40px, col3 vira o pane 'contato'. Desktop 3 colunas intacto.
+- **Ajustes finos:** AbortController no fetch HEIC (SmartImage), `vivoRef` anti-leak em useIA/useTranscricao, `transcritosRef.clear()` ao trocar conversa; ConvItem → `<button>` nativo (`.ccv-fav`/`.ccv-muted` viraram `<span role=button>` p/ evitar button aninhado); removidos botões placeholder "(em breve)"; key estável no AiCopilot.
+- Review adversarial: 1 CRITICAL (button aninhado) + 4 HIGH corrigidos.
+
+**Validação:** build verde, ESLint 0 erros. Responsividade validada via **CSSOM + DOM** (matchMedia/getComputedStyle), pois o `resize_window` do Claude-in-Chrome não muda o viewport de render (innerWidth fica desktop). Confirmado no ar: `@media 720px` com panes ccv-m-*, botões ccv-back(2)/ccv-info(1) no DOM, classe inicial `ccv ccv-m-list`, safe-area no composer. Teste visual definitivo: o Wandson no iPhone dele.
+
+Redesign Chat ao Vivo agora em **5 fases**: F1 #601 · F2 #604 · F3 #605 · F4 #606 · F5 #608.
