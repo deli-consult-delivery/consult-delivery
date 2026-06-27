@@ -1478,3 +1478,20 @@ Redesign Chat ao Vivo agora em **5 fases**: F1 #601 · F2 #604 · F3 #605 · F4 
 **Validação (produção):** build verde, ESLint limpo. C/D **testados funcionalmente no browser** (textarea cresce 39→112px; paste com text/html preserva 2 quebras de linha — caso exato do print do PIX). A/B validados via **CSSOM/DOM** (menu colapsa, banner nowrap, 100dvh, ccv-th-menu no DOM). Teste visual final no iPhone: Wandson.
 
 Redesign Chat ao Vivo agora em **6 fases**: F1 #601 · F2 #604 · F3 #605 · F4 #606 · F5 #608 · F6 #610.
+
+## 2026-06-27 — Sessão 100: Chat ao Vivo — Enter mobile + paste iOS + aba legado (FASE 7)
+
+**Pedidos do Wandson (teste no iPhone):**
+- No celular, Enter envia em vez de quebrar linha (não consegue separar parágrafos).
+- Colar texto da internet preservando formatação.
+- Aba temporária para acessar o console legado e comparar funções.
+
+**Entregue (PR #612, worktree+workflow build→review→fix):**
+- **Enter quebra linha no touch:** Composer detecta `isTouch` (`pointer:coarse` via `useState(detectTouch)`); no celular Enter pula linha, envio só pelo botão. Desktop mantém Enter=enviar / Shift+Enter=quebra. (Confirmado em prod: pointerCoarse=false no desktop → Enter envia.)
+- **Paste iOS:** normaliza ` / →\n`; early-return compara contra `normLineBreaks(plain)` (CRLF puro preserva undo nativo); insere via `taRef.current.value`. O fluxo já preservava `\n` de ponta a ponta (banco→Evolution→WhatsApp; formatWA renderiza `<br>`).
+- **Aba temporária "Chat ao Vivo (legado)":** item de menu (i-clock) monta `ChatScreen` clássico embedded no ConsoleV2 (wrapper full-height flex:1/minHeight:0/overflow:hidden; tema light via `.cv2-main .livechat`). Para comparar funções que talvez não vieram (Departamentos/Bots/Protocolos/Visualização/Demandas). **Remover quando não precisar mais** (marcado ponytail no código). Nota: resíduo de tema escuro em balão/composer — aceitável por ser temporário.
+- Review adversarial + fix de 3 HIGH (wrapper de altura, isTouch congelado no module-load, paste CRLF undo).
+
+**Validação (prod):** build verde, ESLint limpo. Confirmado no browser: aba legado no menu + ChatScreen renderiza (.livechat); pointerCoarse=false no desktop. Teste do Enter/paste no iPhone: Wandson.
+
+Redesign Chat ao Vivo em **7 fases**: F1 #601 · F2 #604 · F3 #605 · F4 #606 · F5 #608 · F6 #610 · F7 #612.
