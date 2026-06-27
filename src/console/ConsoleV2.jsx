@@ -58,7 +58,6 @@ import AvaliacaoConfig from './AvaliacaoConfig.jsx';
 import ControleAtendimentos from './ControleAtendimentos.jsx';
 // telas reusadas do console clássico (funcionais — visual convertido nas ondas 2-3)
 import TarefasClientesScreen from '../screens/TarefasClientesScreen.jsx';
-import ChatScreen from '../screens/ChatScreen.jsx'; // mantido como fallback
 import ChatAoVivo from './chat/ChatAoVivo.jsx';
 import AgentBuilderScreen from '../screens/AgentBuilderScreen.jsx';
 import DeliHub from './DeliHub.jsx';
