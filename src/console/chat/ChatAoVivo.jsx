@@ -173,10 +173,21 @@ export default function ChatAoVivo({ tenant, tenantDbId, userId, onNavigate, dee
       .order('updated_at', { ascending: false })
       .limit(150);
     const rows = data || [];
-    // BUG-2 fix: evitar 150 queries paralelas (N+1). Preview de última mensagem
-    // será exibido via realtime (canal cav-inbox) ou coluna desnormalizada futura.
-    const prev = rows.map(() => ({ data: null }));
-    const mapped = rows.map((c, i) => {
+    // Batch preview: 1 query para todas as conversas (sem N+1)
+    const convIds = rows.map(r => r.id);
+    let lastMsgMap = {};
+    if (convIds.length > 0) {
+      const { data: msgs } = await supabase
+        .from('messages')
+        .select('conversation_id, content, body, direction, media_type, deleted_at')
+        .in('conversation_id', convIds)
+        .order('created_at', { ascending: false })
+        .limit(convIds.length * 2);
+      (msgs || []).forEach(m => {
+        if (!lastMsgMap[m.conversation_id]) lastMsgMap[m.conversation_id] = m;
+      });
+    }
+    const mapped = rows.map((c) => {
       const phone = c.whatsapp_chat_id ? c.whatsapp_chat_id.split('@')[0] : '';
       const gname = c.group_name && !/^\d{10,}$/.test(c.group_name) ? c.group_name : null;
       const nome = c.contact_name || gname || c.push_name || phone || 'Conversa';
@@ -185,7 +196,7 @@ export default function ChatAoVivo({ tenant, tenantDbId, userId, onNavigate, dee
         nome,
         chatId: c.whatsapp_chat_id,
         isGroup: c.is_group,
-        prev: previewTxt(prev[i]?.data),
+        prev: previewTxt(lastMsgMap[c.id] || null),
         hora: hora(c.updated_at),
         status: c.status,
         status_v2: c.status_v2 || 'open',
