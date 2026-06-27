@@ -1551,6 +1551,15 @@ app.use('/api', require('./routes/vendaerp')({
   erp: require('./lib/vendaerp'),
 }));
 
+// iFood — leitura (Console via JWT, Hermes via x-internal-token).
+// Ponto único de contato com a API do iFood; credencial (client_credentials)
+// só no env do Bridge. merchantId resolvido por query/tenant/env.
+app.use('/api', require('./routes/ifood')({
+  requireJwtOrInternal,
+  ifood: require('./lib/ifood'),
+  supabaseSelect,
+}));
+
 // Whisper — transcrição de áudio/vídeo recebidos no chat
 app.use('/api/whisper', requireJwt, require('./routes/whisper'));
 
