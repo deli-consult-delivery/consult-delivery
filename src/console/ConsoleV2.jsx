@@ -861,17 +861,9 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
       </aside>
       <div className="cv2-main">
         {ehChat ? (
-          <>
-            <div className="cv2-tb-chat">
-              <button className="cv2-ham" onClick={toggleMenu} title="Abrir ou recolher o menu" aria-label="Abrir ou recolher o menu">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
-              </button>
-              <span className="crumb">Console › <b>{LABELS[tela] || tela}</b></span>
-            </div>
-            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-              <ChatScreen tenant={tenantSlug} tenantDbId={tenantDbId} userId={userId} onNavigate={navWithParams} deepLinkConvId={null} embedded />
-            </div>
-          </>
+          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            <ChatScreen tenant={tenantSlug} tenantDbId={tenantDbId} userId={userId} onNavigate={navWithParams} deepLinkConvId={null} embedded onToggleMenu={toggleMenu} />
+          </div>
         ) : (
           <>
             <div className="cv2-tb">
