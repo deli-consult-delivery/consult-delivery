@@ -71,19 +71,35 @@ export default function Thread({
   const cmp = composer || {}; // FASE 4: quickReplies / buscarPorShortcut / breno
   const iaP = ia || {};       // FASE 4 (IA): modo/seletor/copiloto/sugestão/transcrição
   const [copilotAberto, setCopilotAberto] = useState(false);
+  const [menuAberto, setMenuAberto] = useState(false); // FASE 6 (mobile): dropdown de ações do header
   const msgsRef = useRef(null);
+  const headRef = useRef(null);
   const lista = msgs || [];
+
+  // FASE 6: fecha o menu ⋮ ao clicar fora do header (mobile)
+  useEffect(() => {
+    if (!menuAberto) return;
+    const onDoc = (e) => { if (headRef.current && !headRef.current.contains(e.target)) setMenuAberto(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [menuAberto]);
 
   // qtd anterior p/ distinguir "prepend de histórico" (preserva posição) de
   // "append de msg nova" (auto-scroll ao fim).
   const prevLenRef = useRef(0);
   // scrollHeight salvo antes do prepend, p/ restaurar a posição visual depois.
   const anchorRef = useRef(null);
+  // true quando o usuário rolou p/ cima p/ ler histórico — suprime auto-scroll
+  // ao fim quando chega sugestão de IA/BRENO (FASE 6).
+  const userScrolledUpRef = useRef(false);
 
-  // salva âncora ANTES do paint quando o topo dispara loadOlderMsgs
+  // salva âncora ANTES do paint quando o topo dispara loadOlderMsgs;
+  // marca se o usuário está longe do fim (p/ não puxar o scroll na sua cara).
   const onScroll = useCallback(() => {
     const el = msgsRef.current;
-    if (!el || carregandoOlder || !temMais) return;
+    if (!el) return;
+    userScrolledUpRef.current = el.scrollTop < el.scrollHeight - el.clientHeight - 40;
+    if (carregandoOlder || !temMais) return;
     if (el.scrollTop <= 24) {
       anchorRef.current = el.scrollHeight; // referência p/ restaurar posição após prepend
       loadOlderMsgs?.();
@@ -106,8 +122,17 @@ export default function Thread({
     } else {
       el.scrollTop = el.scrollHeight;
       prevLenRef.current = msgs.length;
+      userScrolledUpRef.current = false; // troca de conversa / msg nova reancora no fim
     }
   }, [msgs, conv?.id]);
+
+  // FASE 6: o banner IA/BRENO empurra a lista p/ cima — re-scrolla ao fim SÓ se o
+  // usuário já estava no fim (não rouba o scroll de quem lê o histórico).
+  useEffect(() => {
+    const el = msgsRef.current;
+    if (!el || userScrolledUpRef.current) return;
+    el.scrollTop = el.scrollHeight;
+  }, [iaP.sugestao, cmp.breno?.sugestao]);
 
   if (!conv) {
     return (
@@ -126,7 +151,7 @@ export default function Thread({
   return (
     <div className="ccv-col2">
       {/* ─── header ─────────────────────────────────────────────────────── */}
-      <div className="ccv-thread-head">
+      <div className="ccv-thread-head" ref={headRef}>
         {/* FASE 5 (mobile): voltar p/ a lista — escondido no desktop via CSS */}
         <button type="button" className="ccv-back" onClick={onVoltarLista} title="Voltar" aria-label="Voltar para a lista">
           <Ico name="i-reply" size={18} />
@@ -150,7 +175,8 @@ export default function Thread({
           </div>
         </div>
 
-        <div className="ccv-th-actions">
+        {/* ações secundárias: no desktop, em linha; no mobile (≤720px), dropdown sob o ⋮ */}
+        <div className={`ccv-th-actions${menuAberto ? ' aberto' : ''}`}>
           {/* ─── seletor de modo IA (humano / híbrido / IA) — só em WhatsApp ─── */}
           {!isCanal && iaP.setModo && (
             <div className="ccv-aimode" role="group" aria-label="Modo de atendimento IA">
@@ -164,6 +190,7 @@ export default function Thread({
                   onClick={() => {
                     if (m.id === 'ia' && !window.confirm('A DELI vai responder automaticamente todas as mensagens desta conversa neste modo. Confirmar?')) return;
                     iaP.setModo(m.id);
+                    setMenuAberto(false);
                   }}
                 >
                   <Ico name={m.ico} size={12} />
@@ -179,7 +206,7 @@ export default function Thread({
               className={`ccv-cbtn${copilotAberto ? ' on' : ''}`}
               title="Copiloto DELI"
               aria-label="Abrir copiloto DELI"
-              onClick={() => setCopilotAberto((v) => !v)}
+              onClick={() => { setCopilotAberto((v) => !v); setMenuAberto(false); }}
             >
               <Ico name="i-bot" size={16} />
             </button>
@@ -191,7 +218,7 @@ export default function Thread({
               disabled={tr.transferindo}
               title="Transferir para departamento"
               aria-label="Transferir para departamento"
-              onChange={(e) => { const v = e.target.value; e.target.value = ''; if (v) tr.transferir?.(v); }}
+              onChange={(e) => { const v = e.target.value; e.target.value = ''; if (v) { tr.transferir?.(v); setMenuAberto(false); } }}
             >
               <option value="">Transferir…</option>
               {tr.deps.map((d) => (
@@ -199,33 +226,45 @@ export default function Thread({
               ))}
             </select>
           )}
-          {!isCanal && !isFinalizado && (
-            <button
-              type="button"
-              className="cv2-btn sec"
-              style={{ padding: '5px 12px', fontSize: 11.5 }}
-              onClick={onFinalizar}
-              disabled={atualizando}
-            >
-              Finalizar
-            </button>
-          )}
-          {!isCanal && isFinalizado && (
-            <button
-              type="button"
-              className="cv2-btn sec"
-              style={{ padding: '5px 12px', fontSize: 11.5 }}
-              onClick={onReabrir}
-              disabled={atualizando}
-            >
-              Reabrir
-            </button>
-          )}
           {/* FASE 5 (mobile): abrir painel de contato — escondido no desktop via CSS */}
-          <button type="button" className="ccv-info" onClick={onAbrirContato} title="Contato" aria-label="Ver contato">
+          <button type="button" className="ccv-info" onClick={() => { onAbrirContato?.(); setMenuAberto(false); }} title="Contato" aria-label="Ver contato">
             <Ico name="i-eye" size={16} />
           </button>
         </div>
+
+        {/* Finalizar/Reabrir — SEMPRE visível no header (fora do menu ⋮) */}
+        {!isCanal && !isFinalizado && (
+          <button
+            type="button"
+            className="cv2-btn sec ccv-th-fin"
+            onClick={onFinalizar}
+            disabled={atualizando}
+          >
+            Finalizar
+          </button>
+        )}
+        {!isCanal && isFinalizado && (
+          <button
+            type="button"
+            className="cv2-btn sec ccv-th-fin"
+            onClick={onReabrir}
+            disabled={atualizando}
+          >
+            Reabrir
+          </button>
+        )}
+
+        {/* FASE 6 (mobile): ⋮ abre/fecha o dropdown de ações — escondido no desktop via CSS */}
+        <button
+          type="button"
+          className="ccv-th-menu"
+          onClick={() => setMenuAberto((v) => !v)}
+          title="Mais ações"
+          aria-label="Mais ações"
+          aria-expanded={menuAberto}
+        >
+          <span aria-hidden="true" style={{ fontSize: 20, lineHeight: 1, fontWeight: 700 }}>⋮</span>
+        </button>
       </div>
 
       {/* ─── aviso discreto: Evolution offline (FASE 4) ──────────────────── */}
