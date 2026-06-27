@@ -1435,3 +1435,19 @@ Wandson apontou que o Blueprint AI-First (FASE 1 — Loop ponta-a-ponta) não fo
 ### Próxima ação
 - Decidir se mantém `bypass_offhours=true` permanentemente ou remove após testes
 - Plano Karina Doceria pendente (`silly-tinkering-sundae.md`)
+
+## 2026-06-27 — Sessão 97: Redesign completo do Chat ao Vivo (ChatAoVivoV2) em 4 fases
+
+**Contexto:** O Chat ao Vivo do Console V2 estava quebrado/incompleto (ChatAoVivo do PR #587 perdeu ~70% das funções do legado). Wandson pediu reconstrução: redesign visual inspirado no **DataCrazy** (`crm2.datacrazy.io/multiservice` — estudado ao vivo no browser), reusando a lógica comprovada do legado, na identidade cv2.
+
+**Entregue — 4 fases, cada uma worktree+workflow (build→review adversarial→fix) → merge → deploy → smoke browser:**
+- **F1** (#601): núcleo — engine (useConversas/useThread/useStatusAtend) + UI cv2 (StatusCounters, ConvItem, Thread, MsgBubble, Composer, PainelContato), envio texto, finalizar/reabrir. Substituiu ChatAoVivo por ChatAoVivoV2 no ConsoleV2.
+- **F2** (#604): mídia/áudio — useEnvio, Lightbox, render de imagem/vídeo/áudio/documento, gravação PTT, ticks. Fix de 6 HIGH (media_url ausente, blob URL, a11y).
+- **F3** (#605): avançado — reações, reply, encaminhar (ForwardModal), paginação, foto WhatsApp, transferir departamento, busca server-side, deep-link CRM. Fix de 5 HIGH incl. **injeção PostgREST** na busca.
+- **F4** (#606): paridade total — BRENO, quick replies, canais internos, favoritar/muting, health-check, IA copiloto DELI, modos humano/híbrido/IA, transcrição Whisper, tradução. Removeu ChatAoVivo.jsx + chat-ao-vivo.css antigos. Fix de 4 HIGH (loop Bridge JWT, auto-reply conversa trocada, cross-tenant).
+
+**Arquitetura:** `src/console/chat/` — ChatAoVivoV2.jsx + engine/ (13 hooks) + parts/ + chat-cv2.css (escopo .ccv-*). Plano: `~/.claude/plans/cozy-popping-trinket.md`. Memória: `redesign-chat-ao-vivo-v2`.
+
+**Smoke consolidado em produção:** OK — modos IA, banner BRENO real, traduzir, transferir, lista/thread/contadores todos visíveis e funcionais. Identidade cv2 (vermelho #B70C00/light) + layout DataCrazy.
+
+**Aprendizado:** envio de mensagem WhatsApp no browser é bloqueado pelo classifier de segurança (outward-facing) — validação no browser fica visual. Polish pendente não-bloqueante: a11y, upload mídia p/ Storage (hoje data-URI), AbortController.
