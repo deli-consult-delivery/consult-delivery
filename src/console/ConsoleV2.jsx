@@ -249,8 +249,14 @@ const fmtK = n => (n >= 1000 ? (n / 1000).toFixed(1).replace('.', ',') + 'k' : S
 
 // lista de tenants do usuário + seleção (seletor de tenant da topbar)
 function useTenants(userId, fallback) {
+  const savedId = (() => { try { return localStorage.getItem('cv2_tenant') || null; } catch { return null; } })();
   const [list, setList] = useState(fallback?.dbId ? [fallback] : []);
-  const [sel, setSel] = useState(fallback?.dbId ? fallback : null);
+  const [sel, setSelRaw] = useState(fallback?.dbId ? fallback : null);
+  // Persiste o tenant escolhido para sobreviver ao refresh.
+  const setSel = (t) => {
+    setSelRaw(t);
+    try { if (t?.dbId) localStorage.setItem('cv2_tenant', t.dbId); } catch { /* localStorage indisponível */ }
+  };
   useEffect(() => {
     if (!userId) return;
     let alive = true;
@@ -261,7 +267,12 @@ function useTenants(userId, fallback) {
       const uniq = [...new Map(mapped.map(m => [m.dbId, m])).values()];
       if (uniq.length) {
         setList(uniq);
-        setSel(prev => (prev && uniq.find(u => u.dbId === prev.dbId)) || uniq[0]);
+        // Prioridade: tenant salvo (se ainda for membro) → seleção atual → primeiro.
+        setSelRaw(prev => {
+          const salvo = savedId && uniq.find(u => u.dbId === savedId);
+          if (salvo) return salvo;
+          return (prev && uniq.find(u => u.dbId === prev.dbId)) || uniq[0];
+        });
       }
     })();
     return () => { alive = false; };
