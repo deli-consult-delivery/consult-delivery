@@ -1818,7 +1818,7 @@ function VisualizacaoScreen({ tenantDbId }) {
 // ═══════════════════════════════════════════════════════════════
 // CHAT SCREEN — componente principal
 // ═══════════════════════════════════════════════════════════════
-export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, deepLinkConvId, embedded = false }) {
+export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, deepLinkConvId, embedded = false, onToggleMenu }) {
   // ── Dados e instâncias ────────────────────────────────────
   const [instances, setInstances]            = useState([]);
   const [selectedInstance, setSelectedInstance] = useState(null);
@@ -4046,7 +4046,11 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
       <div className="route-enter livechat lc-tabbed" style={{ height: embedded ? '100%' : '100vh', display: 'flex', flexDirection: 'column' }}>
         <header className="lc-fullhead" style={{ flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
-            {/* Breadcrumb escondido quando embutido no Console V2 (já há topbar .cv2-tb-chat) — ver estudo §1.3-f */}
+            {embedded && onToggleMenu && (
+              <button className="cv2-ham lc-ham-embedded" onClick={onToggleMenu} title="Abrir ou recolher o menu" aria-label="Abrir ou recolher o menu">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
+              </button>
+            )}
             {!embedded && (<>
             <div className="lc-breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>
               <span>Plataforma</span>
@@ -4091,7 +4095,7 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
         gridTemplateRows: '36px 1fr',
         gridTemplateAreas: '"header header header" "list chat inspector"',
         height: '100%',
-        background: '#0E0E0E',
+        background: 'var(--lc-bg, #0E0E0E)',
         overflow: 'hidden',
       }}
     >
@@ -4099,7 +4103,11 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
       {/* ─── HEADER full-width ────────────────────────────────── */}
       <header className="lc-fullhead" style={{ gridArea: 'header' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
-          {/* Breadcrumb escondido quando embutido no Console V2 (já há topbar .cv2-tb-chat) — ver estudo §1.3-f */}
+          {embedded && onToggleMenu && (
+            <button className="cv2-ham lc-ham-embedded" onClick={onToggleMenu} title="Abrir ou recolher o menu" aria-label="Abrir ou recolher o menu">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
+            </button>
+          )}
           {!embedded && (<>
           <div className="lc-breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>
             <span>Plataforma</span>
