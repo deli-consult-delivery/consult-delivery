@@ -1,9 +1,11 @@
 const express = require('express');
 const router = express.Router();
+const crypto = require('node:crypto');
 
 const HF_API = 'https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell';
 const PROMPT_MAX = 500;
-const IMAGE_TIMEOUT_MS = 60_000; // FLUX schnell leva ~10-30s no free tier
+const IMAGE_TIMEOUT_MS = 60_000;
+const IMAGE_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 
 function getHfToken() {
   const token = process.env.HF_TOKEN;
@@ -31,7 +33,7 @@ async function gerarImagem(prompt) {
       },
       body: JSON.stringify({
         inputs: prompt,
-        parameters: { num_inference_steps: 4 }, // schnell padrão — rápido
+        parameters: { num_inference_steps: 4 },
       }),
     });
 
@@ -41,45 +43,68 @@ async function gerarImagem(prompt) {
       throw new Error(`modelo carregando — tente novamente em ${Math.ceil(wait)}s`);
     }
     if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`HuggingFace erro ${res.status}: ${body.slice(0, 200)}`);
+      // Não expõe corpo da resposta HF ao cliente
+      console.error('[images] HF erro', res.status);
+      throw new Error(`falha na geração de imagem (${res.status})`);
     }
 
-    return Buffer.from(await res.arrayBuffer());
+    // Validar que a resposta é realmente uma imagem
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.startsWith('image/')) {
+      console.error('[images] HF retornou content-type inesperado:', contentType);
+      throw new Error('resposta inesperada do modelo de imagem');
+    }
+
+    const buffer = Buffer.from(await res.arrayBuffer());
+    if (buffer.length > IMAGE_MAX_BYTES) throw new Error('imagem gerada excede limite de 10 MB');
+
+    // Validar magic bytes PNG (89 50 4E 47)
+    if (buffer[0] !== 0x89 || buffer[1] !== 0x50 || buffer[2] !== 0x4e || buffer[3] !== 0x47) {
+      throw new Error('imagem gerada não é PNG válido');
+    }
+
+    return buffer;
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function salvarNoStorage(imageBuffer, filename) {
+async function salvarNoStorage(imageBuffer, tenantId, label) {
   const { url, key } = getSupabaseStorage();
-  const storageUrl = `${url}/storage/v1/object/marketing/${filename}`;
 
+  // Path namespaced por tenant + UUID não adivinhável — sem upsert (não sobrescreve)
+  const uniqueId = crypto.randomUUID();
+  const safeLabel = label.replace(/[^a-z0-9_-]/gi, '-').slice(0, 40);
+  const storagePath = `${tenantId}/${safeLabel}-${uniqueId}.png`;
+
+  const storageUrl = `${url}/storage/v1/object/marketing/${storagePath}`;
   const res = await fetch(storageUrl, {
-    method: 'POST',
+    method: 'POST', // POST sem x-upsert = não sobrescreve arquivo existente
     headers: {
       Authorization: `Bearer ${key}`,
       'Content-Type': 'image/png',
-      'x-upsert': 'true',
     },
     body: imageBuffer,
   });
 
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`falha ao salvar imagem: ${body.slice(0, 200)}`);
+    console.error('[images] falha ao salvar no Storage', res.status);
+    throw new Error('falha ao salvar imagem');
   }
 
-  // URL pública do Supabase Storage
-  return `${url}/storage/v1/object/public/marketing/${filename}`;
+  return `${url}/storage/v1/object/public/marketing/${storagePath}`;
 }
 
 // POST /api/images/generate
-// Body: { prompt: string, filename?: string }
+// Body: { prompt: string, label?: string }
 // Returns: { url: string, prompt: string, model: string }
+// Requer: req.user.tenant_id (via requireJwt)
 router.post('/generate', async (req, res) => {
   try {
-    const { prompt, filename } = req.body ?? {};
+    const tenantId = req.user?.tenant_id;
+    if (!tenantId) return res.status(403).json({ error: 'tenant não identificado' });
+
+    const { prompt, label } = req.body ?? {};
 
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
       return res.status(400).json({ error: 'campo prompt obrigatório' });
@@ -89,21 +114,13 @@ router.post('/generate', async (req, res) => {
     }
 
     const imageBuffer = await gerarImagem(prompt.trim());
+    const publicUrl = await salvarNoStorage(imageBuffer, tenantId, label || 'img');
 
-    const ts = Date.now();
-    const safeName = (filename || `img-${ts}`).replace(/[^a-z0-9_-]/gi, '-');
-    const storagePath = `${safeName}-${ts}.png`;
-
-    const publicUrl = await salvarNoStorage(imageBuffer, storagePath);
-
-    return res.json({
-      url: publicUrl,
-      prompt: prompt.trim(),
-      model: 'FLUX.1-schnell',
-    });
+    return res.json({ url: publicUrl, prompt: prompt.trim(), model: 'FLUX.1-schnell' });
   } catch (err) {
     const status = err.message?.includes('carregando') ? 503
       : err.message?.includes('obrigatório') || err.message?.includes('excede') ? 400
+      : err.message?.includes('tenant') ? 403
       : 500;
     return res.status(status).json({ error: err.message });
   }
