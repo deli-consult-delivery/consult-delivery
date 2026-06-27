@@ -1416,3 +1416,22 @@ Wandson apontou que o Blueprint AI-First (FASE 1 — Loop ponta-a-ponta) não fo
 **Follow-up pendente (não urgente):**
 - F1-C: 8 overlays `position:fixed; zIndex:9999` no ChatScreen escapam do shell cv2 — adiar para PR dedicado
 - Avaliar se CSS morto em `console.css` deve ser removido ou mantido
+
+## 2026-06-27 — Sessão 96: Fix end-to-end Breno WhatsApp
+
+**Branch:** `claude/hungry-goldstine-1a513d` → mergeado em main via PRs #592 e #594
+
+### O que foi feito
+- Diagnosticado por que Breno não criava draft nem enviava mensagem ao WhatsApp
+- **Bug 1 (gate off-hours):** mensagens à noite (21h Belém) caíam em `triagem_offhours` — `breno-responder` nunca era chamado. Fix: `bypass_offhours=true` em `tenant_agent_config.config` + leitura antes do gate em `processar-webhook.ts`
+- **Bug 2 (P1 phone_number):** `breno-responder` fazia `.select("..., phone_number, ...")` mas coluna não existe em `conversations` → Supabase retornava `conv=null` → `whatsapp_chat_id=null` no draft → bridge sem destino. Fix: remover `phone_number` do select
+- Deploy Trigger.dev com código correto da worktree (não do main desatualizado)
+- Fluxo completo testado e confirmado funcionando: mensagem → draft amarelo → aprovação → entrega WhatsApp
+
+### PRs
+- #592: bypass off-hours + bridge breno-aprovacao + wiring front
+- #594: fix phone_number inexistente (P1)
+
+### Próxima ação
+- Decidir se mantém `bypass_offhours=true` permanentemente ou remove após testes
+- Plano Karina Doceria pendente (`silly-tinkering-sundae.md`)
