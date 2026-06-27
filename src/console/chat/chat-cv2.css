@@ -536,3 +536,143 @@
   .cv2-main .ccv-col2 { min-height: 0; }
   .cv2-main .ccv-msg { max-width: 86%; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FASE 2 — mídia, áudio e lightbox
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── mídia no balão ───────────────────────────────────────────────────────── */
+.cv2-main .ccv-media-img {
+  max-width: 240px;
+  max-height: 240px;
+  border-radius: 8px;
+  display: block;
+  cursor: zoom-in;
+  margin-bottom: 4px;
+  object-fit: cover;
+}
+.cv2-main .ccv-media-video {
+  max-width: 260px;
+  max-height: 260px;
+  border-radius: 8px;
+  display: block;
+  margin-bottom: 4px;
+  background: #000;
+}
+.cv2-main .ccv-audio {
+  height: 38px;
+  max-width: 240px;
+  width: 240px;
+  margin: 2px 0;
+}
+.cv2-main .ccv-media-loading {
+  display: inline-flex;
+  align-items: center;
+  min-width: 160px;
+  min-height: 90px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, .04);
+  font-size: 11.5px;
+  color: var(--tx2);
+}
+
+/* documento — botão de download com nome */
+.cv2-main .ccv-doc {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  background: rgba(0, 0, 0, .04);
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: var(--ink);
+  text-decoration: none;
+  max-width: 240px;
+  cursor: pointer;
+}
+.cv2-main .ccv-doc:hover { background: rgba(0, 0, 0, .08); }
+.cv2-main .ccv-doc-ico { font-size: 18px; line-height: 1; }
+.cv2-main .ccv-doc-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cv2-main .ccv-doc-dl { color: var(--red); font-weight: 700; }
+
+/* ── composer: anexar/mic ativos + estado de gravação ─────────────────────── */
+.cv2-main .ccv-cbtn.mic:hover:not(:disabled) { background: #fbeaea; color: var(--red); }
+
+.cv2-main .ccv-composer.ccv-rec {
+  gap: 10px;
+  background: #fff;
+}
+.cv2-main .ccv-rec-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--red);
+  flex: 0 0 auto;
+  animation: ccv-pulse 1s ease-in-out infinite;
+}
+@keyframes ccv-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: .35; transform: scale(.82); }
+}
+.cv2-main .ccv-rec-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ink);
+  min-width: 46px;
+}
+.cv2-main .ccv-rec-hint {
+  flex: 1;
+  font-size: 12.5px;
+  color: var(--tx2);
+}
+.cv2-main .ccv-rec-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── lightbox (overlay de imagem em tela cheia) ───────────────────────────── */
+.cv2-main .ccv-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, .88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+.cv2-main .ccv-lightbox-img {
+  max-width: 90vw;
+  max-height: 90vh;
+  border-radius: 4px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, .6);
+  transform-origin: center;
+  pointer-events: none;
+}
+.cv2-main .ccv-lightbox-close {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .5);
+  border: 1px solid rgba(255, 255, 255, .2);
+  color: #fff;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cv2-main .ccv-lightbox-close:hover { background: rgba(0, 0, 0, .75); }

@@ -14,6 +14,10 @@
  *  - onEnviar: (texto) => void
  *  - atualizando: boolean   (finalizar/reabrir em curso)
  *  - podeEnviar: boolean     (instância conectada + conversa não-canal)
+ *  - onAbrirImagem: (url) => void  (abre o lightbox — FASE 2)
+ *  - envio: handlers/estado do useEnvio (mídia + áudio — FASE 2):
+ *      { onEnviarMidia, gravando, segundos, iniciarGravacao, pararEnviar,
+ *        cancelar, enviandoMidia }
  *
  * Toda a aparência mora em chat-cv2.css (escopo .cv2-main .ccv-*).
  */
@@ -36,7 +40,10 @@ export default function Thread({
   onEnviar,
   atualizando,
   podeEnviar,
+  onAbrirImagem,
+  envio,
 }) {
+  const env = envio || {};
   const msgsRef = useRef(null);
   const lista = msgs || [];
 
@@ -116,12 +123,27 @@ export default function Thread({
           <div className="ccv-empty">Sem mensagens nesta conversa.</div>
         )}
         {!loadingMsgs && lista.map((m, i) => (
-          <MsgBubble key={m.id} msg={m} prevMsg={i > 0 ? lista[i - 1] : null} />
+          <MsgBubble
+            key={m.id}
+            msg={m}
+            prevMsg={i > 0 ? lista[i - 1] : null}
+            onAbrirImagem={onAbrirImagem}
+          />
         ))}
       </div>
 
       {/* ─── composer ───────────────────────────────────────────────────── */}
-      <Composer onEnviar={onEnviar} disabled={isCanal || !podeEnviar} />
+      <Composer
+        onEnviar={onEnviar}
+        onEnviarMidia={env.onEnviarMidia}
+        disabled={isCanal || !podeEnviar}
+        gravando={env.gravando}
+        segundos={env.segundos}
+        iniciarGravacao={env.iniciarGravacao}
+        pararEnviar={env.pararEnviar}
+        cancelar={env.cancelar}
+        enviandoMidia={env.enviandoMidia}
+      />
     </div>
   );
 }

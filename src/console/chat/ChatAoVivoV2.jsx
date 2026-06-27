@@ -25,9 +25,11 @@ import { sendTextMessage } from '../../lib/evolution.js';
 import { useConversas } from './engine/useConversas.js';
 import { useThread } from './engine/useThread.js';
 import { useStatusAtend } from './engine/useStatusAtend.js';
+import { useEnvio } from './engine/useEnvio.js';
 import ListaConversas from './parts/ListaConversas.jsx';
 import Thread from './parts/Thread.jsx';
 import PainelContato from './parts/PainelContato.jsx';
+import Lightbox from './parts/Lightbox.jsx';
 import './chat-cv2.css';
 
 // colunas reais da tabela customers (Padrão P1 — nunca selecionar coluna inexistente)
@@ -55,6 +57,7 @@ export default function ChatAoVivoV2({ tenant, tenantDbId, userId, onNavigate, d
   const [activeId, setActiveId] = useState(deepLinkConvId || null);
   const [customer, setCustomer] = useState(null);
   const [instance, setInstance] = useState(null);
+  const [lightboxUrl, setLightboxUrl] = useState(null); // FASE 2 — overlay de imagem
 
   // rastreia se já houve qualquer seleção (deep-link ou manual): a auto-seleção
   // da 1ª conversa só vale enquanto NUNCA houve seleção — evita flash de conversa
@@ -63,6 +66,15 @@ export default function ChatAoVivoV2({ tenant, tenantDbId, userId, onNavigate, d
 
   const { msgs, loadingMsgs } = useThread(activeId, tenantDbId);
   const { finalizar, reabrir, atualizando } = useStatusAtend(tenantDbId, userId);
+  const {
+    enviarMidia,
+    iniciarGravacao,
+    pararGravacaoEEnviar,
+    cancelarGravacao,
+    gravando,
+    segundos,
+    enviandoMidia,
+  } = useEnvio({ tenantDbId, userId, instancia: instance });
 
   const conv = (convs || []).find((c) => c.id === activeId) || null;
 
@@ -153,6 +165,30 @@ export default function ChatAoVivoV2({ tenant, tenantDbId, userId, onNavigate, d
     }
   }, [conv, tenantDbId, instance]);
 
+  // ── envio de mídia / áudio (FASE 2) — vinculam a conversa ativa ─────────────
+  const onEnviarMidia = useCallback((file) => {
+    if (!conv) return;
+    enviarMidia(file, conv); // erro tratado no hook (retorno { error }); realtime reflete
+  }, [conv, enviarMidia]);
+
+  const pararEnviarAudio = useCallback(() => {
+    if (!conv) return;
+    pararGravacaoEEnviar(conv);
+  }, [conv, pararGravacaoEEnviar]);
+
+  // referência estável p/ o Lightbox não re-vincular o listener de Escape a cada render
+  const fecharLightbox = useCallback(() => setLightboxUrl(null), []);
+
+  const envio = {
+    onEnviarMidia,
+    iniciarGravacao,
+    pararEnviar: pararEnviarAudio,
+    cancelar: cancelarGravacao,
+    gravando,
+    segundos,
+    enviandoMidia,
+  };
+
   // ── finalizar / reabrir (reload move a conversa de filtro) ──────────────────
   const onFinalizar = useCallback(async () => {
     if (!conv) return;
@@ -196,9 +232,13 @@ export default function ChatAoVivoV2({ tenant, tenantDbId, userId, onNavigate, d
         onEnviar={enviar}
         atualizando={atualizando}
         podeEnviar={podeEnviar}
+        onAbrirImagem={setLightboxUrl}
+        envio={envio}
       />
 
       <PainelContato conv={conv} customer={customer} />
+
+      {lightboxUrl && <Lightbox url={lightboxUrl} onClose={fecharLightbox} />}
     </div>
   );
 }

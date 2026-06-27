@@ -11,13 +11,20 @@
  *  - mídia como placeholder "📎 mídia" nesta fase;
  *  - hora + tick de entrega (saída).
  *
+ * FASE 2 — renderiza mídia real (image / video / audio / document):
+ *  - image: thumbnail clicável → onAbrirImagem(url) (lightbox); HEIC→JPEG via heic2any;
+ *  - video: <video controls>; audio: <audio controls>;
+ *  - document: botão de download com o nome do arquivo.
+ *
  * Props:
  *  - msg: msgShape { id, out, txt, mtype, murl, who, tm, ts, quoted, ds, del }
  *  - prevMsg: msgShape|null  (msg imediatamente anterior, p/ separador de dia)
+ *  - onAbrirImagem: (url) => void  (abre o lightbox; FASE 2)
  *
  * Toda a aparência mora em chat-cv2.css (escopo .cv2-main .ccv-*).
  */
 
+import { useState, useEffect, useRef } from 'react';
 import { formatWA } from './formatWA.jsx';
 
 // remetentes considerados "automação" (badge roxo + estilo sys)
@@ -77,7 +84,92 @@ function Tick({ s }) {
 const quotedTexto = (q) =>
   (typeof q === 'string' ? q : q?.text) || '📎 Mídia';
 
-export default function MsgBubble({ msg, prevMsg }) {
+// ── imagem com conversão HEIC→JPEG sob demanda (portado do legado SmartImage) ─
+function SmartImage({ src, alt, onAbrir }) {
+  const [displaySrc, setDisplaySrc] = useState(null);
+  const blobUrlRef = useRef(null);
+
+  useEffect(() => {
+    if (!src) { setDisplaySrc(null); return undefined; }
+    const isHeic = /(^data:image\/(heic|heif)|\.(heic|heif)(\?|$))/i.test(src);
+    if (!isHeic) { setDisplaySrc(src); return undefined; }
+    let cancelado = false;
+    import('heic2any')
+      .then(async ({ default: h2a }) => {
+        let blob;
+        if (src.startsWith('data:')) {
+          const b64 = src.split(',')[1] || '';
+          const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+          blob = new Blob([bytes], { type: 'image/heic' });
+        } else {
+          blob = await (await fetch(src)).blob();
+        }
+        const out = await h2a({ blob, toType: 'image/jpeg', quality: 0.85 });
+        const jpeg = Array.isArray(out) ? out[0] : out;
+        const url = URL.createObjectURL(jpeg);
+        blobUrlRef.current = url;
+        if (!cancelado) setDisplaySrc(url);
+      })
+      .catch(() => { if (!cancelado) setDisplaySrc(src); });
+    return () => {
+      cancelado = true;
+      // zera o src antes de revogar p/ o <img> não renderizar URL já revogada
+      if (blobUrlRef.current) {
+        setDisplaySrc(null);
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
+    };
+  }, [src]);
+
+  if (!displaySrc) {
+    return <span className="ccv-media-loading">{src ? 'Convertendo imagem…' : '🖼️ carregando…'}</span>;
+  }
+  return (
+    <img
+      className="ccv-media-img"
+      src={displaySrc}
+      alt={alt || 'imagem'}
+      onClick={() => onAbrir?.(displaySrc)}
+    />
+  );
+}
+
+// ── render de mídia real conforme media_type ────────────────────────────────
+function Media({ mtype, murl, txt, onAbrirImagem }) {
+  if (!mtype) return null;
+
+  if (mtype === 'image') {
+    return <SmartImage src={murl} alt={txt} onAbrir={onAbrirImagem} />;
+  }
+  if (mtype === 'video') {
+    return murl
+      ? <video className="ccv-media-video" src={murl} controls />
+      : <span className="ccv-media-loading">🎬 carregando…</span>;
+  }
+  if (mtype === 'audio') {
+    return murl
+      ? <audio className="ccv-audio" src={murl} controls />
+      : <span className="ccv-media-loading">🎙️ carregando…</span>;
+  }
+  // document (ou desconhecido)
+  return (
+    <a
+      className="ccv-doc"
+      href={murl || undefined}
+      download={txt || 'arquivo'}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => { if (!murl) e.preventDefault(); }}
+    >
+      <span className="ccv-doc-ico" aria-hidden="true">📄</span>
+      <span className="ccv-doc-name">{txt || 'Documento'}</span>
+      {murl && <span className="ccv-doc-dl" aria-hidden="true">⬇</span>}
+    </a>
+  );
+}
+
+export default function MsgBubble({ msg, prevMsg, onAbrirImagem }) {
   const auto = ehAutomacao(msg.who);
   const sep = mudouDia(msg.ts, prevMsg?.ts);
 
@@ -88,7 +180,16 @@ export default function MsgBubble({ msg, prevMsg }) {
         {sep && <div className="ccv-day">{rotuloDia(msg.ts)}</div>}
         <div className="ccv-msg sys">
           <span className="ccv-autobadge">Automação</span>{' '}
-          {msg.del ? '🚫 mensagem apagada' : (formatWA(msg.txt) || '📎 mídia')}
+          {msg.del ? (
+            '🚫 mensagem apagada'
+          ) : (
+            <>
+              {msg.mtype && (
+                <Media mtype={msg.mtype} murl={msg.murl} txt={msg.txt} onAbrirImagem={onAbrirImagem} />
+              )}
+              {formatWA(msg.txt)}
+            </>
+          )}
         </div>
       </>
     );
@@ -114,9 +215,10 @@ export default function MsgBubble({ msg, prevMsg }) {
         ) : (
           <>
             {msg.mtype && (
-              <div style={{ color: 'var(--tx2)', fontSize: 12.5, fontWeight: 600 }}>📎 mídia</div>
+              <Media mtype={msg.mtype} murl={msg.murl} txt={msg.txt} onAbrirImagem={onAbrirImagem} />
             )}
-            {msg.txt && (
+            {/* o nome do arquivo já aparece no balão do documento — não duplicar como texto */}
+            {msg.txt && msg.mtype !== 'document' && msg.mtype !== 'audio' && (
               <div style={{ wordBreak: 'break-word', marginTop: msg.mtype ? 4 : 0 }}>
                 {formatWA(msg.txt)}
               </div>
