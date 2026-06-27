@@ -1557,6 +1557,9 @@ app.use('/api/whisper', requireJwt, require('./routes/whisper'));
 // Extract Text — converte PDF/Word/Excel em markdown (reduz ~70% de tokens ao usar com Claude)
 app.use('/api/documents', requireJwt, require('./routes/extract-text'));
 
+// Scraping — análise competitiva de restaurantes no iFood (Scrapling)
+app.use('/api/scraping', requireJwt, require('./routes/scraping'));
+
 // Cora — aprovação e rejeição de drafts de cobrança (envia via Evolution API)
 app.use('/api', requireJwt, require('./routes/cora-aprovacao')({ sbFetch, supabaseInsert }));
 
