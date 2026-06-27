@@ -1560,6 +1560,9 @@ app.use('/api/documents', requireJwt, require('./routes/extract-text'));
 // Scraping — análise competitiva de restaurantes no iFood (Scrapling)
 app.use('/api/scraping', requireJwt, require('./routes/scraping'));
 
+// Images — geração de imagens via FLUX.1-schnell (HuggingFace free)
+app.use('/api/images', requireJwt, require('./routes/images'));
+
 // Cora — aprovação e rejeição de drafts de cobrança (envia via Evolution API)
 app.use('/api', requireJwt, require('./routes/cora-aprovacao')({ sbFetch, supabaseInsert }));
 
