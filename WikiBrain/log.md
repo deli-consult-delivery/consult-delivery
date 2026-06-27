@@ -1464,3 +1464,17 @@ Wandson apontou que o Blueprint AI-First (FASE 1 — Loop ponta-a-ponta) não fo
 **Validação:** build verde, ESLint 0 erros. Responsividade validada via **CSSOM + DOM** (matchMedia/getComputedStyle), pois o `resize_window` do Claude-in-Chrome não muda o viewport de render (innerWidth fica desktop). Confirmado no ar: `@media 720px` com panes ccv-m-*, botões ccv-back(2)/ccv-info(1) no DOM, classe inicial `ccv ccv-m-list`, safe-area no composer. Teste visual definitivo: o Wandson no iPhone dele.
 
 Redesign Chat ao Vivo agora em **5 fases**: F1 #601 · F2 #604 · F3 #605 · F4 #606 · F5 #608.
+
+## 2026-06-27 — Sessão 99: Chat ao Vivo — correções de campo do iPhone (FASE 6)
+
+**Contexto:** Wandson testou no iPhone e mandou prints com 4 problemas reais.
+
+**Entregue (PR #610, worktree+workflow build→review→fix):**
+- **C+D — campo de digitar:** `<input>` → `<textarea>` auto-resize (cresce até 160px, reseta após enviar; Enter envia, Shift+Enter quebra). `onPaste` preserva quebras de linha — inclusive de apps de texto rico (text/plain sem `\n` → fallback text/html `<br>/<p>`→`\n`); texto puro mantém undo nativo. Padrão portado de ChatScreen.jsx.
+- **A — header mobile:** em ≤720px as ações secundárias (modo IA, copiloto, transferir, ver contato) colapsam num menu **⋮** (`.ccv-th-menu`); Finalizar fica sempre visível; fecha ao clicar fora. Acaba a sobreposição.
+- **B — banner Breno + altura iOS:** banner compacto (1 linha) no mobile; `.cv2 height:100dvh` em ≤1023px (composer não fica atrás da barra do Safari); auto-scroll re-dispara quando o banner IA/BRENO surge **só se o usuário estava no fim** (`userScrolledUpRef` — não rouba o scroll de quem lê histórico).
+- Review adversarial: 5 HIGH corrigidos (auto-scroll roubando scroll, paste quebrando undo, stale closure, especificidade do menu, !important removido).
+
+**Validação (produção):** build verde, ESLint limpo. C/D **testados funcionalmente no browser** (textarea cresce 39→112px; paste com text/html preserva 2 quebras de linha — caso exato do print do PIX). A/B validados via **CSSOM/DOM** (menu colapsa, banner nowrap, 100dvh, ccv-th-menu no DOM). Teste visual final no iPhone: Wandson.
+
+Redesign Chat ao Vivo agora em **6 fases**: F1 #601 · F2 #604 · F3 #605 · F4 #606 · F5 #608 · F6 #610.
