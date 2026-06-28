@@ -50,8 +50,14 @@ function loadConfig() {
     // trilha de auditoria (§5 "não-negociável").
     auditTenantId: req('CD_AUDIT_TENANT_ID'),
 
-    // Bridge de produção, só pra checagem de saúde (cd_status). Loopback por padrão.
+    // Bridge de produção: cd_status (/health) + despacho do loop (/loop/despachar).
+    // Loopback por padrão.
     bridgeUrl: opt('BRIDGE_URL', 'http://127.0.0.1:3001'),
+
+    // Token interno para chamar rotas protegidas do Bridge (ex.: /loop/despachar).
+    // Opcional aqui: se ausente, só a tool de despacho falha (fail-closed, mensagem
+    // clara), o resto do admin-mcp segue. Wandson injeta via Infisical no env do MCP.
+    internalBridgeToken: opt('INTERNAL_BRIDGE_TOKEN', null),
 
     // Identidade gravada no audit_log.agent_name e em agent_drafts.agent_name.
     principal: opt('CD_MCP_PRINCIPAL', 'ceo_agent'),
