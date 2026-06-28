@@ -45,6 +45,13 @@ if ! node "${SRC}routing/gen-describe.cjs" --check; then
   exit 1
 fi
 
+# Barra deploy se a PERSONA (SOUL.md/SKILL.md) contiver valor de negócio (R$/%/prazos).
+# Regra de negócio vive em tools MCP no Bridge, nunca na persona (Blueprint v2 §3/FASE 4).
+if ! node "${SRC}routing/lint-persona.cjs"; then
+  echo "[deploy-hermes] persona com valor de negócio — mova p/ tools MCP no Bridge. Abortando." >&2
+  exit 1
+fi
+
 if [[ "$APPLY" -eq 1 ]]; then
   echo "[deploy-hermes] APLICANDO (rsync)…"
   rsync -av "${EXCLUDES[@]}" "$SRC" "$DEST"
