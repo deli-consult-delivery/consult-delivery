@@ -5,6 +5,7 @@ import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 import { createLoopTask } from "../_shared/loop-tasks";
 import { agentExecutarTarefa } from "../agents/executar-tarefa";
+import { criarDraftIfood, IFOOD_OPERACOES } from "../ifood/criar-draft";
 
 const InputSchema = z.object({
   tenant_id: z.string().uuid(),
@@ -23,7 +24,7 @@ const TarefaSchema = z.object({
   titulo: z.string(),
   descricao: z.string(),
   prioridade: z.enum(["urgent", "high", "normal", "low"]),
-  sistema_alvo: z.enum(["vendaerp", "asaas", "nenhum"]),
+  sistema_alvo: z.enum(["vendaerp", "asaas", "ifood", "nenhum"]),
   operacao: z.string().nullable().optional(),
   parametros: z.record(z.unknown()).nullable().optional(),
 });
@@ -152,11 +153,27 @@ Quando acao="criar_tarefa", preencha tarefa:
     "titulo": "...",
     "descricao": "...",
     "prioridade": "urgent|high|normal|low",
-    "sistema_alvo": "vendaerp|asaas|nenhum",
+    "sistema_alvo": "vendaerp|asaas|ifood|nenhum",
     "operacao": null,
     "parametros": null
   }
 }
+
+iFood — quando o cliente pedir para PAUSAR ou REABRIR um item/produto no iFood
+(ex.: "pausa o X-Bacon no iFood", "tira o X-Salada do ar", "reabre o X-Bacon"):
+{
+  "tarefa": {
+    "titulo": "...",
+    "descricao": "...",
+    "prioridade": "high",
+    "sistema_alvo": "ifood",
+    "operacao": "ifood.pausar_item" | "ifood.reabrir_item",
+    "parametros": { "item_nome": "nome do item exatamente como o cliente falou" }
+  }
+}
+- "pausar" / "tirar do ar" / "esgotou" / "acabou" → operacao "ifood.pausar_item".
+- "reabrir" / "voltar" / "ativar" → operacao "ifood.reabrir_item".
+- Sempre extraia item_nome com o nome humano do item; NUNCA invente IDs.
 
 REGRAS:
 - resolver: problema simples, resposta imediata em até 3 linhas curtas.
@@ -177,7 +194,7 @@ REGRAS:
         titulo: string;
         descricao: string;
         prioridade: "urgent" | "high" | "normal" | "low";
-        sistema_alvo: "vendaerp" | "asaas" | "nenhum";
+        sistema_alvo: "vendaerp" | "asaas" | "ifood" | "nenhum";
         operacao?: string | null;
         parametros?: Record<string, unknown> | null;
       } | null;
@@ -196,6 +213,80 @@ REGRAS:
       };
     }
 
+    // Branch iFood — intenção pausar/reabrir item: cria DRAFT amarelo via Bridge.
+    // Puramente aditivo: só dispara quando sistema_alvo='ifood'. Qualquer outra
+    // intenção cai no fluxo normal abaixo, idêntico ao comportamento anterior.
+    if (
+      parsed.acao === "criar_tarefa" &&
+      parsed.tarefa?.sistema_alvo === "ifood" &&
+      (IFOOD_OPERACOES as readonly string[]).includes(parsed.tarefa.operacao ?? "")
+    ) {
+      const itemNome =
+        typeof parsed.tarefa.parametros?.item_nome === "string"
+          ? parsed.tarefa.parametros.item_nome
+          : "";
+
+      if (!itemNome) {
+        logger.warn("breno-responder: intenção iFood sem item_nome — tratando como demanda normal", {
+          conversation_id: input.conversation_id,
+        });
+      } else {
+        const draftRes = await criarDraftIfood({
+          tenantId: input.tenant_id,
+          intent: {
+            operacao: parsed.tarefa.operacao as (typeof IFOOD_OPERACOES)[number],
+            parametros: { item_nome: itemNome },
+          },
+        });
+
+        await sb.from("breno_interactions").insert({
+          tenant_id: input.tenant_id,
+          conversation_id: input.conversation_id,
+          inbound_message_id: input.message_id,
+          outbound_message_id: null,
+          mode,
+          breno_response: parsed.resposta || "",
+          action_taken: "suggested",
+          agent_run_id: null,
+          requires_review: true,
+        });
+
+        if (lojaId) {
+          await logTimeline(
+            lojaId, input.tenant_id, "breno", "ifood_draft_created",
+            draftRes.ok
+              ? `Draft iFood (${parsed.tarefa.operacao}) criado: ${draftRes.content ?? itemNome}`
+              : `Intenção iFood (${parsed.tarefa.operacao}) não resolvida: ${draftRes.error ?? draftRes.motivo}`,
+            { payload: { conversation_id: input.conversation_id, draft_id: draftRes.draftId ?? null, item_nome: itemNome, run_id: ctx.run.id } }
+          );
+        }
+
+        await logAgentRun({
+          runId: ctx.run.id, agentSlug: "breno-responder",
+          input: { conversation_id: input.conversation_id, message_id: input.message_id },
+          output: { ok: draftRes.ok, action_taken: "suggested", draft_id: draftRes.draftId, operacao: parsed.tarefa.operacao, mode },
+          tenantId: input.tenant_id, triggeredBy: input.triggered_by,
+          durationMs: Date.now() - start, status: "success",
+          explanation: draftRes.ok
+            ? `Intenção iFood detectada (${parsed.tarefa.operacao}). Draft amarelo criado para "${itemNome}" — aguarda aprovação humana.`
+            : `Intenção iFood detectada (${parsed.tarefa.operacao}) mas item "${itemNome}" não resolveu: ${draftRes.motivo ?? draftRes.error}. Nenhuma escrita realizada.`,
+          confidenceScore: draftRes.ok ? 0.85 : 0.5,
+          pipelineStage: "criacao_draft_ifood",
+        });
+
+        return OutputSchema.parse({
+          ok: draftRes.ok,
+          resposta: parsed.resposta || "",
+          tom: parsed.tom || "amigavel",
+          draft_id: draftRes.draftId,
+          precisa_humano: !draftRes.ok,
+          motivo_humano: draftRes.ok ? undefined : (draftRes.error ?? "Item iFood ambíguo ou não encontrado"),
+          action_taken: "suggested",
+          mode,
+        });
+      }
+    }
+
     // Branch criar_tarefa — abre client_task e encerra sem draft
     if (parsed.acao === "criar_tarefa" && parsed.tarefa && conv?.customer_id) {
       let taskId: string | undefined;
@@ -209,7 +300,9 @@ REGRAS:
           titulo:        tarefaData.titulo,
           descricao:     tarefaData.descricao,
           prioridade:    tarefaData.prioridade,
-          sistemaAlvo:   tarefaData.sistema_alvo,
+          // iFood já foi tratado e retornado na branch acima — inalcançável aqui;
+          // mapeado p/ 'nenhum' só para satisfazer LoopTargetSystem (vendaerp|asaas|nenhum).
+          sistemaAlvo:   tarefaData.sistema_alvo === "ifood" ? "nenhum" : tarefaData.sistema_alvo,
           operacao:      tarefaData.operacao ?? null,
           parametros:    tarefaData.parametros ?? null,
         });
