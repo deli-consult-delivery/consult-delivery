@@ -8,6 +8,7 @@
 'use strict';
 
 const { z } = require('zod');
+const { assertTenantExists, assertLojaInTenant } = require('../authz');
 
 module.exports = {
   write: true,
@@ -34,6 +35,11 @@ module.exports = {
       .describe('Semáforo da proposta (default amarelo: propõe, humano aprova)'),
   },
   async handler(args, { sb, cfg }) {
+    // Authz server-side ANTES de escrever (service_role bypassa RLS): o tenant tem
+    // que existir e a loja (se houver) tem que ser dele. Fail-closed.
+    await assertTenantExists(sb, args.tenant_id);
+    if (args.loja_id) await assertLojaInTenant(sb, args.loja_id, args.tenant_id);
+
     const row = {
       tenant_id: args.tenant_id,
       agent_name: 'hermes',
