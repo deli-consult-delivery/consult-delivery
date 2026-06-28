@@ -15,6 +15,10 @@ module.exports = {
     'Recusa propostas inexistentes, expiradas (TTL 10 min) ou já processadas — uso único.',
   inputShape: {
     proposal_id: z.string().min(1).describe('proposal_id devolvido pela tool erp_propor_* correspondente'),
+    codigo: z.string().min(4).describe(
+      'Código de confirmação que o CEO recebeu por canal OUT-OF-BAND (ex.: Telegram). ' +
+      'Obrigatório: sem ele a proposta não executa. O agente NÃO tem este código — só o CEO.'
+    ),
   },
   async handler(args, { erp, cfg, proposals }) {
     const id = args.proposal_id;
@@ -40,11 +44,22 @@ module.exports = {
         tenantIds, data: { ok: false, motivo: 'expired' } };
     }
 
-    // pending: tenta ganhar a corrida (uso único atômico).
-    const claimed = await proposals.claim(id);
+    // Lock anti-brute-force: chega no limite de tentativas erradas → não confirma mais.
+    if ((row.confirm_attempts ?? 0) >= proposals.MAX_ATTEMPTS) {
+      return { summary: 'Proposta bloqueada por excesso de tentativas de confirmação. Proponha de novo.',
+        tenantIds, data: { ok: false, motivo: 'bloqueada_tentativas' } };
+    }
+
+    // pending: claim ATÔMICO condicionado ao código out-of-band (só o CEO o tem).
+    const claimed = await proposals.claim(id, args.codigo);
     if (!claimed) {
-      return { summary: 'Essa proposta já está sendo processada ou já foi usada. Não executei de novo.',
-        tenantIds, data: { ok: false, motivo: 'claim_perdido' } };
+      // código errado (ou corrida/expiração): conta a tentativa e recusa, sem executar.
+      await proposals.bumpAttempts(id, row.confirm_attempts).catch(() => {});
+      const restantes = Math.max(0, proposals.MAX_ATTEMPTS - ((row.confirm_attempts ?? 0) + 1));
+      return {
+        summary: `Código de confirmação inválido — não executei. Tentativas restantes: ${restantes}.`,
+        tenantIds, data: { ok: false, motivo: 'codigo_invalido', tentativas_restantes: restantes },
+      };
     }
 
     // executa no Bridge (que injeta a credencial e fala com o ERP).
