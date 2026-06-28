@@ -1599,6 +1599,14 @@ app.use('/loop', require('./routes/loop-despachar')({
   supabaseInsert,
 }));
 
+// Loop AI-First — entrega out-of-band do código de confirmação do ERP (GATE 0).
+// POST /loop/erp-confirm-code: vendaerp-mcp gera o código, guarda o hash e chama aqui;
+// o Bridge entrega ao CEO (sino + Telegram), nunca de volta ao agente.
+app.use('/loop', require('./routes/loop-erp-confirm-code')({
+  requireInternalToken,
+  supabaseInsert,
+}));
+
 // iFood — leitura (Console via JWT, Hermes via x-internal-token).
 // Ponto único de contato com a API do iFood; credencial (client_credentials)
 // só no env do Bridge. merchantId resolvido por query/tenant/env.
