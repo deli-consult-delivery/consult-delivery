@@ -143,6 +143,14 @@ module.exports = function ({ requireJwtOrInternal, ifood, supabaseSelect, assert
     return ifood.listarCatalogos(ctx.merchantId, ctx.tenantId);
   }));
 
+  // ── Cardápio AGREGADO — catálogos→categorias→itens com disponibilidade efetiva ─
+  // Alimenta a tela de Cardápio iFood. Read-only, sem draft.
+  router.get('/ifood/cardapio', requireJwtOrInternal, handle(async (req, res) => {
+    const ctx = await resolveContext(req, res);
+    if (!ctx) return;
+    return ifood.getCardapio(ctx.merchantId, ctx.tenantId);
+  }));
+
   // ── Status da loja — aberta/fechada agora ────────────────────────────────────
   router.get('/ifood/status', requireJwtOrInternal, handle(async (req, res) => {
     const ctx = await resolveContext(req, res);

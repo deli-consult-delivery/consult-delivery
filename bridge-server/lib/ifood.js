@@ -437,11 +437,87 @@ async function buscarItemPorNomeOuExternalCode(merchantId, categoryId, { nome, e
   };
 }
 
+// ---------------------------------------------------------------------------
+// Cardápio AGREGADO — monta a árvore completa catálogo→categoria→item para a
+// tela de Cardápio iFood. Read-only (só GETs já existentes), 1 request por nó.
+//
+// REGRA CRÍTICA (descoberta real da API Catalog v2.0): a disponibilidade EFETIVA
+// do item (pausado/disponível) NÃO está em `item.status` (top-level, sempre
+// AVAILABLE no shape real) — está em `item.contextModifiers[].status` POR CANAL.
+// Usamos o contextModifier do catalogContext 'DEFAULT' (ou o 1º como fallback).
+// O NOME vive em products[] (item carrega productId → cruzar). Preço em
+// contextModifiers[].price.value (canal) com fallback item.price.value.
+// ---------------------------------------------------------------------------
+function pickContextModifier(item) {
+  const mods = Array.isArray(item?.contextModifiers) ? item.contextModifiers : [];
+  return mods.find((m) => m?.catalogContext === 'DEFAULT') ?? mods[0] ?? null;
+}
+
+function montarItem(item, productById) {
+  const mod = pickContextModifier(item);
+  const status = mod?.status ?? item?.status ?? null; // efetivo: canal manda
+  const prod = item?.productId ? productById.get(String(item.productId)) : null;
+  const preco = mod?.price?.value ?? item?.price?.value ?? null;
+  return {
+    itemId: item?.id ? String(item.id) : null,
+    nome: prod?.name ? String(prod.name) : '',
+    descricao: prod?.description ? String(prod.description) : '',
+    preco,
+    externalCode: item?.externalCode != null ? String(item.externalCode) : null,
+    disponivel: status === 'AVAILABLE',
+    status,
+  };
+}
+
+async function getCardapio(merchantId, tenantId) {
+  assertPathId(merchantId, 'merchantId');
+
+  const catalogosRaw = await listarCatalogos(merchantId, tenantId);
+  const catalogos = Array.isArray(catalogosRaw) ? catalogosRaw : (catalogosRaw?.catalogs ?? catalogosRaw?.items ?? []);
+
+  const out = [];
+  for (const cat of catalogos) {
+    const catalogId = cat?.catalogId ?? cat?.id;
+    if (!catalogId) continue;
+
+    const categoriasRaw = await listarCategorias(merchantId, String(catalogId), tenantId);
+    const categorias = Array.isArray(categoriasRaw) ? categoriasRaw : (categoriasRaw?.categories ?? categoriasRaw?.items ?? []);
+
+    const categoriasOut = [];
+    for (const c of categorias) {
+      const categoryId = c?.id ?? c?.categoryId;
+      if (!categoryId) continue;
+
+      const itensRaw = await listarItensCategoria(merchantId, String(categoryId), tenantId);
+      const items = Array.isArray(itensRaw) ? itensRaw : (itensRaw?.items ?? []);
+      const products = Array.isArray(itensRaw?.products) ? itensRaw.products : [];
+      const productById = new Map(products.map((p) => [String(p?.id ?? ''), p]));
+
+      categoriasOut.push({
+        categoryId: String(categoryId),
+        nome: c?.name ? String(c.name) : '',
+        status: c?.status ?? null,
+        itens: items.map((it) => montarItem(it, productById)),
+      });
+    }
+
+    out.push({
+      catalogId: String(catalogId),
+      groupId: cat?.groupId ? String(cat.groupId) : null,
+      status: cat?.status ?? null,
+      categorias: categoriasOut,
+    });
+  }
+
+  return { catalogos: out };
+}
+
 module.exports = {
   IfoodApiError,
   getIfoodConfig,
   getAccessToken,
   buscarItemPorNomeOuExternalCode,
+  getCardapio,
   // leitura
   listarMerchants,
   listarCatalogos,
