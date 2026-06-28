@@ -1559,6 +1559,8 @@ app.use('/api', require('./routes/ifood')({
   ifood: require('./lib/ifood'),
   supabaseSelect,
   assertTenantMember,
+  sbFetch,
+  supabaseInsert,
 }));
 
 // Whisper — transcrição de áudio/vídeo recebidos no chat

@@ -263,10 +263,185 @@ async function listarVendas(merchantId, { dataInicio, dataFim } = {}, tenantId) 
   ).then(tolerant);
 }
 
+// ---------------------------------------------------------------------------
+// Validação defensiva de IDs ANTES de interpolar na URL (anti path-traversal /
+// injeção de path). Mesma regra do routes/ifood.js: só hex/alfanum + hífens
+// (formato UUID do iFood). Vazio/com barra/com espaço → IfoodApiError status 0
+// (erro de programação, NÃO retentável). Reusa o padrão MERCHANT_ID_RE.
+// ---------------------------------------------------------------------------
+const MERCHANT_ID_RE = /^[0-9A-Za-z-]+$/;
+
+function assertPathId(value, label) {
+  if (typeof value !== 'string' || !MERCHANT_ID_RE.test(value)) {
+    throw new IfoodApiError(`${label} inválido (esperado UUID/alfanumérico): ${value}`, 0, null);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Métodos de ESCRITA (Catalog v2.0) — POST/PUT/PATCH/DELETE.
+// Regra: escrita NÃO passa por withRetry (não idempotente em rede; reenvio
+// cego pode duplicar/conflitar). Só GET usa withRetry. PUT /items é idempotente
+// no servidor do iFood (substitui o item inteiro), mas mesmo assim sem retry de
+// rede — o chamador decide reenviar.
+// ---------------------------------------------------------------------------
+
+// Categorias — lista as categorias do catálogo (leitura auxiliar; usa GET+retry).
+async function listarCategorias(merchantId, catalogId, tenantId) {
+  assertPathId(merchantId, 'merchantId');
+  assertPathId(catalogId, 'catalogId');
+  return withRetry(() =>
+    ifoodFetch(
+      `/catalog/v2.0/merchants/${merchantId}/catalogs/${catalogId}/categories`,
+      {},
+      tenantId
+    )
+  ).then(tolerant);
+}
+
+// Cria categoria no catálogo. template: DEFAULT (itens comuns) ou PIZZA.
+async function criarCategoria(merchantId, catalogId, { name, template = 'DEFAULT' } = {}, tenantId) {
+  assertPathId(merchantId, 'merchantId');
+  assertPathId(catalogId, 'catalogId');
+  if (typeof name !== 'string' || name.trim() === '') {
+    throw new IfoodApiError('criarCategoria: name é obrigatório', 0, null);
+  }
+  const body = { name, status: 'AVAILABLE', template };
+  return ifoodFetch(
+    `/catalog/v2.0/merchants/${merchantId}/catalogs/${catalogId}/categories`,
+    { method: 'POST', body },
+    tenantId
+  ).then(tolerant);
+}
+
+// Cria ou atualiza um item (idempotente — substitui o item inteiro).
+// payload = { item, products, optionGroups, options } (os 4 sempre presentes).
+async function criarOuAtualizarItem(merchantId, payload, tenantId) {
+  assertPathId(merchantId, 'merchantId');
+  if (!payload || typeof payload !== 'object') {
+    throw new IfoodApiError('criarOuAtualizarItem: payload é obrigatório', 0, null);
+  }
+  return ifoodFetch(
+    `/catalog/v2.0/merchants/${merchantId}/items`,
+    { method: 'PUT', body: payload },
+    tenantId
+  ).then(tolerant);
+}
+
+// Lista os itens de uma categoria (leitura; GET+retry).
+async function listarItensCategoria(merchantId, categoryId, tenantId) {
+  assertPathId(merchantId, 'merchantId');
+  assertPathId(categoryId, 'categoryId');
+  return withRetry(() =>
+    ifoodFetch(
+      `/catalog/v2.0/merchants/${merchantId}/categories/${categoryId}/items`,
+      {},
+      tenantId
+    )
+  ).then(tolerant);
+}
+
+// Pausa um item (status UNAVAILABLE) via PATCH (JSON Merge Patch).
+async function pausarItem(merchantId, itemId, tenantId) {
+  assertPathId(merchantId, 'merchantId');
+  assertPathId(itemId, 'itemId');
+  return ifoodFetch(
+    `/catalog/v2.0/merchants/${merchantId}/items/${itemId}`,
+    { method: 'PATCH', body: { status: 'UNAVAILABLE' } },
+    tenantId
+  ).then(tolerant);
+}
+
+// Reabre um item (status AVAILABLE) via PATCH (JSON Merge Patch).
+async function reabrirItem(merchantId, itemId, tenantId) {
+  assertPathId(merchantId, 'merchantId');
+  assertPathId(itemId, 'itemId');
+  return ifoodFetch(
+    `/catalog/v2.0/merchants/${merchantId}/items/${itemId}`,
+    { method: 'PATCH', body: { status: 'AVAILABLE' } },
+    tenantId
+  ).then(tolerant);
+}
+
+// Deleta uma categoria (cleanup). DELETE sem corpo → tolerant() ignora null.
+async function deletarCategoria(merchantId, categoryId, tenantId) {
+  assertPathId(merchantId, 'merchantId');
+  assertPathId(categoryId, 'categoryId');
+  return ifoodFetch(
+    `/catalog/v2.0/merchants/${merchantId}/categories/${categoryId}`,
+    { method: 'DELETE' },
+    tenantId
+  ).then(tolerant);
+}
+
+// ---------------------------------------------------------------------------
+// Resolução item_nome|externalCode → { itemId, productId, nome } contra o
+// cardápio REAL da categoria. NUNCA chuta: 0 ou >1 match devolve candidatos
+// para o humano desambiguar (regra §5.5 do PLANO — pausar o item errado
+// prejudica o lojista). Match exato case-insensitive por nome OU por externalCode.
+//
+// Catalog v2.0: GET /categories/{categoryId}/items devolve item[] onde o nome
+// vive em products[] (o item carrega productId/externalCode, não o name). Aceita
+// também o nome direto no item (resposta tolerante a variações de shape).
+// ---------------------------------------------------------------------------
+function norm(s) {
+  return typeof s === 'string' ? s.trim().toLowerCase() : '';
+}
+
+async function buscarItemPorNomeOuExternalCode(merchantId, categoryId, { nome, externalCode } = {}) {
+  assertPathId(merchantId, 'merchantId');
+  assertPathId(categoryId, 'categoryId');
+  const alvoNome = norm(nome);
+  const alvoExt = typeof externalCode === 'string' ? externalCode.trim() : '';
+  if (!alvoNome && !alvoExt) {
+    throw new IfoodApiError('buscarItem: informe nome ou externalCode', 0, null);
+  }
+
+  const raw = await listarItensCategoria(merchantId, categoryId);
+  // resposta pode ser { items, products } ou só um array de items
+  const items = Array.isArray(raw) ? raw : (raw?.items ?? []);
+  const products = Array.isArray(raw?.products) ? raw.products : [];
+  const productById = new Map(products.map((p) => [String(p?.id ?? ''), p]));
+
+  const nomeDoItem = (it) => {
+    if (it?.name) return String(it.name); // shape com name no próprio item
+    const prod = it?.productId ? productById.get(String(it.productId)) : null;
+    return prod?.name ? String(prod.name) : '';
+  };
+
+  const candidatos = items.map((it) => ({
+    itemId: it?.id ? String(it.id) : null,
+    productId: it?.productId ? String(it.productId) : null,
+    nome: nomeDoItem(it),
+    externalCode: it?.externalCode != null ? String(it.externalCode) : null,
+  }));
+
+  const matches = candidatos.filter((c) => {
+    const porExt = alvoExt && c.externalCode === alvoExt;
+    const porNome = alvoNome && norm(c.nome) === alvoNome;
+    return porExt || porNome;
+  });
+
+  if (matches.length === 1) {
+    const { itemId, productId, nome: n } = matches[0];
+    return { ok: true, item: { itemId, productId, nome: n } };
+  }
+  return {
+    ok: false,
+    motivo: matches.length === 0 ? 'nao_encontrado' : 'ambiguo',
+    // em ambíguo devolve os que casaram; em não-encontrado, a lista toda p/ o humano escolher
+    candidatos: (matches.length === 0 ? candidatos : matches).map((c) => ({
+      itemId: c.itemId,
+      nome: c.nome,
+      externalCode: c.externalCode,
+    })),
+  };
+}
+
 module.exports = {
   IfoodApiError,
   getIfoodConfig,
   getAccessToken,
+  buscarItemPorNomeOuExternalCode,
   // leitura
   listarMerchants,
   listarCatalogos,
@@ -274,4 +449,12 @@ module.exports = {
   getStatusLoja,
   listarReviews,
   listarVendas,
+  // escrita (Catalog v2.0) — sem retry
+  listarCategorias,
+  criarCategoria,
+  criarOuAtualizarItem,
+  listarItensCategoria,
+  pausarItem,
+  reabrirItem,
+  deletarCategoria,
 };
