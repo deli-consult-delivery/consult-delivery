@@ -1,276 +1,164 @@
 # BLUEPRINT AI-FIRST — Consult Delivery
-Versão: 1 (2026-06-22) | Status: PROPOSTA (aguardando 🛑 CHECKPOINT do Wandson para iniciar a construção)
-Autor: sessão Claude | Modelo de redação: claude-opus-4-8
+Versão: **2 (2026-06-28)** | Status: **APROVADO** (plano-mestre Hermes-first aprovado pelo Wandson)
+Autor: sessão Claude | Modelo de redação: claude-opus-4-8[1m]
+Validação: verificação adversarial (23 claims técnicos do Hermes, 37 achados de arquitetura/segurança) — correções incorporadas.
 
-> **Doc autoritativo de visão AI-First.** Estende `PLANO-MESTRE.md` (raiz) e respeita `RESTRUCTURE.md`. Em divergência: RESTRUCTURE > PLANO-MESTRE > este blueprint. Nada aqui reabre decisões já travadas — apenas as costura num plano de execução faseado.
-
----
-
-## 0. Como usar este documento
-
-1. **Ler primeiro**, antes de qualquer build do tema AI-First.
-2. O blueprint é **faseado**: cada fase tem objetivo, peças reusadas, peças novas, fatias verificáveis e critério de aceite. Nada de fase pulada em silêncio.
-3. Status só vira ✅ **com evidência** (output bruto: SQL executado, JSON do run, print do painel, string da feature no bundle).
-4. **🛑 CHECKPOINT** = a construção só começa após o Wandson aprovar. Este doc é o "blueprint completo primeiro" que ele pediu.
+> **Doc autoritativo de visão AI-First.** Estende `PLANO-MESTRE.md` (raiz) e respeita `RESTRUCTURE.md`. Em divergência: RESTRUCTURE > PLANO-MESTRE > este blueprint. A v2 reenquadra a v1 sobre o **Hermes Agent (Nous Research)** como runtime, mantendo a máquina de estados do loop (agora confirmada como **estado no Supabase = fonte única**).
 
 ---
 
-## 1. Visão (o que o Wandson pediu, em uma frase)
+## 0. O que mudou da v1 → v2
 
-> Transformar a Consult Delivery numa empresa **AI-First**: um **cérebro (DELI) com memória**, acessado primeiro pelo **Telegram**, que orquestra **agentes especialistas**. Os especialistas atendem clientes no **live chat**; o que não resolvem na hora **vira tarefa num pipeline visível em tempo real**, é executado **dentro do sistema externo necessário** (ERP, Asaas, etc.), e o resultado **volta como resposta ao cliente** — sempre respeitando aprovação humana onde o modo do tenant exigir.
+A v1 modelava o AI-First como "1 cérebro (DELI) + 1 loop + 1 tela" **dentro da plataforma CD** (Trigger.dev/Supabase/React), com o Hermes como copiloto-CEO no Telegram. A v2 reenquadra: **"Hermes" = Hermes Agent (Nous Research)**, runtime self-hosted (concorrente do OpenClaw) já na VPS como `hermes-gateway`. A estratégia do Wandson: **montar toda a organização de agentes dentro do Hermes primeiro e, depois, integrar progressivamente à plataforma CD** o que fizer sentido.
 
-Três pilares:
-
-- **(A) Cérebro + memória** — DELI como Oráculo único, Memory-First (`client_facts`, `client_timeline`, `agent_memories`). Acesso via Telegram (Hermes/`@DeliConsultBot`).
-- **(B) Loop cliente→especialista→tarefa→resolução→resposta** — a máquina de estados que faz a empresa "rodar sozinha".
-- **(C) Pipeline em tempo real** — uma tela no Console v2 onde toda tarefa de todo agente é visível ao vivo.
-
-### Decisões travadas que este blueprint honra
-
-| # | Decisão | Origem |
-|---|---------|--------|
-| AF-1 | **Blueprint completo primeiro**, depois construir por fases. | AskUserQuestion (sessão anterior) |
-| AF-2 | **"Ernesto" = a própria DELI.** Não existe agente Ernesto separado. O cérebro É a DELI (evolução do copiloto DELI/Hermes). | Wandson, verbatim |
-| AF-3 | **DELI começa no Telegram primeiro** (não WhatsApp). | Wandson, verbatim |
-| AF-4 | **Primeira fase a construir = o Loop** cliente→especialista→tarefa→resposta. | AskUserQuestion |
-| AF-5 | **Reusar tudo que já existe**; estender via `ALTER ADD COLUMN IF NOT EXISTS`, nunca recriar. | PLANO-MESTRE §reusar-não-recriar |
-| AF-6 | **Motor EvoNexus PROIBIDO em prod.** Re-implementar só o *paradigma* na stack CD. | RESTRUCTURE §3.3 |
+A v1 continua válida onde descreve a **máquina de estados do loop** (§3) — ela é agora a **fonte única da verdade no Supabase** (decisão D11), e o Hermes a lê/escreve via MCP. As migrations `20260624_003_loop_core` / `20260624_004_pipeline_live` **já cabearam** esse loop no banco.
 
 ---
 
-## 2. O que JÁ existe (inventário — não recriar)
+## 1. Visão
 
-A plataforma já tem a maioria dos blocos. O AI-First é **costura + 1 loop + 1 tela**, não um greenfield.
+> Consult Delivery **AI-First**: a **DELI** (agente principal/orquestradora) comanda um time de **especialistas** (acionáveis individualmente), tudo rodando dentro do **Hermes Agent**. Especialistas atendem clientes no WhatsApp; o que não resolvem vira **tarefa** num loop com estado no Supabase, é **executado** no sistema externo via **MCP**, **verificado** por um agente revisor, e **volta ao cliente** sempre via draft + aprovação (semáforo). O **CEO comanda** o Hermes (Telegram/Console) e **autoriza demandas** que o cliente pediu.
 
-| Bloco | Onde vive | Estado | Papel no AI-First |
-|-------|-----------|--------|-------------------|
-| Cérebro de memória | `client_facts`, `client_timeline`, `loja_metricas`, `agent_memories` (`20260504_002/003`) | ✅ em prod | Memory-First do Oráculo e dos especialistas |
-| Runtime de agente | `src/agents/shared/runtime.ts` (`executeAgent`, `getClientContext`, `recordFact`, `logTimeline`, `getPrompt`) | ✅ | Motor de execução de todo especialista |
-| Wrapper Claude | `trigger/_shared/claude.ts` (`runClaudeWithWebSearch`) | ✅ | LLM com `web_search_20250305` |
-| Especialistas | `trigger/breno/*`, `trigger/cora/*`, `trigger/lara/*`, `trigger/vera/*` | ✅/POC | Quem atende e resolve |
-| Orquestrador DELI | `trigger/deli/orchestrator-5min.ts` (cron 5min) | ✅ (com `notifyBridge` comentado) | O "coração" do cérebro |
-| DELI no Telegram | Hermes gateway → `@DeliConsultBot` → admin-mcp (`cd-admin`) → banco | ✅ | Canal AF-3 do Oráculo |
-| Oracle agent-builder | `bridge-server/routes/oracle.js` (`oracle_drafts`) | ✅ | Paradigma "peça à DELI e ela cria" |
-| Drafts + aprovação | `agent_drafts`, `deli_pending_approvals`, `deli-approvals.js` | ✅ | Guard-rail: nada vai ao cliente sem aprovação |
-| Pipeline de tarefas | `client_tasks` (modelo ClickUp: `column_id`/`is_done`, `20260620_003`) | ✅ | A "tarefa" do loop |
-| Semáforo / modo | `tenant_agent_config.mode`, `getTenantAgentConfig` | ✅ | Verde/amarelo/vermelho por tenant |
-| Escrita gated ERP | `vendaerp_proposals` (`20260614_003`) + Bridge `lib/vendaerp.js` | ✅ Fase read-only em prod | Especialista executa no ERP com confirmação |
-| Console v2 | `src/console/ConsoleV2.jsx` (5 grupos `.cv2-*`) | ✅ | Onde a tela Pipeline entra |
-| Realtime | `agent_runs`/`agent_drafts` na publication (sem `REPLICA IDENTITY FULL`) | ⚠️ parcial | Base do tempo-real do pipeline |
-
-### Gaps confirmados (o que falta — escopo deste blueprint)
-
-1. **Loop ponta-a-ponta não está cabeado** — `conversations` não tem link a tarefa/loop; especialista não cria `client_tasks` nem responde de volta.
-2. **Tela Pipeline não existe** no Console v2.
-3. **Realtime incompleto** — `client_tasks` e `deli_pending_approvals` fora da publication; faltam `REPLICA IDENTITY FULL`.
-4. **`POST /agents/deli/notify` não existe** no Bridge; `notifyBridge` está comentado (bug de spam de 2026-05-26).
-5. **DELI no Telegram é copiloto de admin**, ainda não despacha especialista para o loop nem traz retorno por tenant.
+### Decisões travadas
+| # | Decisão |
+|---|---------|
+| AF-1..6 | (v1) blueprint primeiro · Ernesto = DELI · Telegram primeiro · loop primeiro · reusar tudo · motor EvoNexus proibido (só paradigma) |
+| **D1** | Hermes (Nous) = runtime/cérebro; **DELI = orquestradora** |
+| **D10** | Lógica nativa no Hermes (persona/skills/orquestração) + **sistemas via MCP** |
+| **D11** | **Supabase = fonte única do estado do loop**; Kanban do Hermes = cache descartável |
+| **D12** | **GATE de segurança P0 bloqueante** antes de expandir a org |
+| **D7** | SaaS multi-tenant desde o design · **D8** um agente por função · **D6** verificação por agente revisor + CEO no risco |
 
 ---
 
-## 3. Arquitetura do Loop (o coração do AI-First)
+## 2. Correções técnicas do Hermes (verificadas em docs primárias)
 
-### 3.1 Máquina de estados
+- **Roteamento (Kanban):** board SQLite (`~/.hermes/kanban.db`) roteia entre profiles via **LLM decompositor** que lê as **descrições textuais** dos profiles → grafo de tarefas JSON. `hermes profile describe --text/--auto` **define** a descrição; não é o mecanismo de seleção. Roteamento é **não-determinístico (LLM)**.
+- **Skills:** `~/.hermes/skills/<categoria>/<skill>/SKILL.md`; `requires_toolsets`/`category`/`tags`/`config` sob **`metadata.hermes`** (só `name`/`description` no topo).
+- **terminal.backend:** `local|docker|ssh|modal|daytona|singularity` (6).
+- **Canais:** ~21; WhatsApp via bridge **Baileys não-oficial** (WhatsApp Web, não Business API). **`require_mention` é só do Telegram** (controle de grupo WhatsApp = feature request aberto, issue #7992).
+- **Deploy:** Node v22; config `~/.hermes/`; **existe** `hermes gateway install` (systemd/launchd).
+- Confirmados: profiles persistentes (`hermes profile create`, isolam SOUL.md/skills/memória/mcp.json), `hermes -p <nome> chat -q`, `delegate_task` efêmero, MEMORY.md/USER.md bounded + episódica `state.db` FTS5, `hermes mcp add/serve`, OAuth 2.1, `approvals.mode manual|smart|off`, checkpoints shadow-git.
 
-A conversa (`conversations`) e a tarefa (`client_tasks`) carregam o estado do loop. Estados:
+---
+
+## 3. Arquitetura central (síntese D10/D11)
+
+| Camada | Onde mora | Portável p/ plataforma CD? |
+|---|---|---|
+| Persona/identidade/tom | Nativo Hermes (`SOUL.md`) | Não — **descartável** (reescreve persona) |
+| Skills = playbook de persona/tom | Nativo Hermes (`SKILL.md`) | Não — descartável; **proibido conter regra de negócio** |
+| Memória política/working | Nativo Hermes (`MEMORY.md`/`state.db`) | Não — descartável; **dado de negócio nunca aqui** |
+| Orquestração em runtime | Nativo Hermes (Kanban **efêmero**) | Não — cache, **não** system-of-record |
+| **Estado do loop** (loop_status/loop_state/execution_result/autorização) | **Supabase** (via MCP) | ✅ **Fonte única (D11)** |
+| **Roteamento** (quem→quem) | **Dado no Supabase** (`agents`/`tenant_agents` + capacidades; `profile describe` é **gerado** disso) | ✅ consumido por Hermes **e** Trigger.dev |
+| **Ações reais** (Supabase/iFood/Asaas/VendaERP/WhatsApp) | **MCP → Bridge → sistema** | ✅ **Bridge = API estável**; MCP é wrapper |
+| Execução pesada/determinística | Trigger.dev (via MCP) | ✅ |
+| Dado de negócio | Supabase (via MCP) | ✅ |
+
+**Lock-in (honestidade):** config-como-código mitiga lock-in de **infra** (recriar a VPS), **não** de **plataforma**. O anteparo real ao lock-in de plataforma é manter **estado/decisões/ações fora do Hermes** (Supabase+Bridge); persona/skill são camada descartável. **O orquestrador será reescrito na integração** — por isso roteamento vira **dado** e o roteador-LLM é isolado como **um classificador de intenção reutilizável** (chamável por Hermes e Trigger.dev), com decisões logadas em `audit_log`.
+
+---
+
+## 4. Máquina de estados do loop (v1, agora canônica no Supabase)
 
 ```
-              cliente escreve no live chat
-                        │
-                        ▼
-              ┌───────────────────┐
-              │  ATENDIMENTO      │  especialista lê contexto (client_facts/timeline)
-              │  (loop_status=    │  e decide: resolver agora ou abrir tarefa
-              │   'attending')    │
-              └─────────┬─────────┘
-            resolve         │  não resolve
-            agora           ▼
-              │     ┌───────────────────┐
-              │     │  TAREFA ABERTA    │  cria client_tasks (loop_state='open')
-              │     │  (loop_status=    │  vincula conversation_id ↔ active_task_id
-              │     │   'task_pending') │
-              │     └─────────┬─────────┘
-              │               ▼
-              │     ┌───────────────────┐
-              │     │  EXECUÇÃO         │  especialista age no sistema externo
-              │     │  (loop_state=     │  (VendaERP via proposta, Asaas, etc.)
-              │     │   'executing')    │  grava execution_run_id/execution_result
-              │     └─────────┬─────────┘
-              │               ▼
-              │     ┌───────────────────┐
-              │     │  CONCLUSÃO        │  especialista monta resposta ao cliente
-              │     │  (loop_state=     │  → agent_drafts (pending)
-              │     │   'done')         │
-              │     └─────────┬─────────┘
-              ▼               ▼
-       ┌────────────────────────────────┐
-       │  RESPOSTA AO CLIENTE           │  respeita semáforo/modo do tenant:
-       │  (loop_status='replied')       │  ia→envia · hibrido→aprova · humano→trava
-       └────────────────────────────────┘
+cliente escreve (WhatsApp PV/grupo)
+  → resolução de identidade (PV: telefone→loja · grupo: remetente→loja · tratar client_id=null)
+  → ATENDIMENTO (conversations.loop_status='attending')  especialista lê contexto (client_facts/timeline via MCP)
+      ├─ resolve agora ─────────────────────────────────────────────┐
+      └─ exige execução real → AUTORIZAÇÃO (fluxo C, ver §5)         │
+            → TAREFA (client_tasks.loop_state='open', conversation_id↔active_task_id)
+            → EXECUÇÃO (loop_state='executing', via MCP→Bridge; grava execution_run_id/execution_result)
+            → VERIFICA (revisor: grounding do texto + checagem do EFEITO real reconsultando o sistema-alvo)
+            → CONCLUSÃO (loop_state='done') → agent_drafts (pending)                      │
+  → RESPOSTA AO CLIENTE (loop_status='replied') ◄────────────────────────────────────────┘
+      semáforo: ia→envia · hibrido→aprova com `ok` · humano→trava   (gate ANTES do envio = idempotente)
+      privacidade: resposta sensível (cobrança/financeiro) vai por PV mesmo se o pedido veio do grupo
 ```
 
-**Regra de ouro (AF-6 + drafts):** o agente **nunca** envia direto ao cliente. A resposta sempre nasce como `agent_drafts` (pending) e o envio é gated pelo modo do tenant. Exceção herdada: canais `telegram_interno`/`painel` (equipe interna) vão direto.
+**Regra de ouro:** o agente **nunca** envia direto ao cliente. Resposta nasce como `agent_drafts` pending; envio gated pelo modo do tenant. Exceção: `telegram_interno`/`painel`.
 
-### 3.2 Mapa modo → semáforo (já existente, reusar)
-
-| `tenant_agent_config.mode` | Semáforo | Comportamento no loop |
-|----------------------------|----------|------------------------|
-| `ia` | 🟢 Verde | especialista executa e envia (draft auto-aprovado/log) |
-| `hibrido` | 🟡 Amarelo | especialista propõe; humano aprova com `ok` no painel/Telegram |
-| `humano` | 🔴 Vermelho | especialista só rascunha; humano conduz |
-
-Mapeamento canônico já implementado em `trigger/cora/processar-cobranca.ts` (linha ~60) — **reusar, não reescrever**.
-
-### 3.3 Onde a execução externa acontece
-
-- **VendaERP**: especialista → `vendaerp_proposals` (escrita gated) → confirmação Telegram → Bridge `lib/vendaerp.js` executa. Agente **nunca** toca a credencial de 3 headers (vive só no env do Bridge via Infisical).
-- **Asaas** (cobrança/CORA): mesmo padrão de proposta+confirmação.
-- **`sistema_alvo='nenhum'`**: tarefa resolvida só com conhecimento/memória, sem sistema externo.
+**Mapa modo→semáforo** (reusar `tenant_agent_config.mode`): `ia`🟢 envia · `hibrido`🟡 aprova · `humano`🔴 trava. **GATE 0 codifica isso no servidor** (hoje `autonomy_level` é só campo default 'amarelo').
 
 ---
 
-## 4. Plano faseado
+## 5. Os três fluxos
 
-> Ordem deriva do design do loop. Cada fatia é verificável isoladamente (output bruto). Migrations são **aditivas/reversíveis** → autônomas (versionar em git antes · 1 arquivo por vez · parar no 1º erro · teste de isolamento ao tocar RLS).
+**A. Loop do cliente** — §4 (Supabase = estado).
 
-### FASE 1 — O Loop ponta-a-ponta *(primeira construção, AF-4)*
+**B. Comando do CEO** — Wandson no Telegram/Console. Acionamento **direto** de um especialista por menção (`@cora cobre a loja X`) **vs roteado** pela DELI (desambiguar; registrar em `agent_runs` com `agent_name` correto). **Pesquisa/benchmark** (dono `sofia`/`vera`): aceite ≥3 URLs reais. **Monitoramento** (dono `vera`/`deli`, cron): heartbeats Bridge / runs falhos / inadimplência / SLA do loop → alerta proativo no Telegram.
 
-**Objetivo:** cliente no live chat → especialista atende → o que não resolve vira `client_tasks` → especialista executa (começando read-only no ERP) → responde via draft respeitando o semáforo.
-
-#### Fatia 1.1 — Schema do loop (migration aditiva)
-`supabase/migrations/20260623_001_loop_core.sql`
-```sql
--- conversations: estado do loop + ponteiros
-ALTER TABLE public.conversations
-  ADD COLUMN IF NOT EXISTS loop_status text,
-  ADD COLUMN IF NOT EXISTS active_task_id uuid REFERENCES public.client_tasks(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS attending_agent_id text;
-
--- client_tasks: vínculo de volta + execução
-ALTER TABLE public.client_tasks
-  ADD COLUMN IF NOT EXISTS conversation_id  uuid REFERENCES public.conversations(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS loop_state       text,
-  ADD COLUMN IF NOT EXISTS target_system    text,
-  ADD COLUMN IF NOT EXISTS execution_run_id text,
-  ADD COLUMN IF NOT EXISTS execution_result jsonb,
-  ADD COLUMN IF NOT EXISTS proposal_id      uuid REFERENCES public.vendaerp_proposals(id) ON DELETE SET NULL;
-```
-**Aceite:** colunas existem (`\d+ conversations` / `\d+ client_tasks`); nenhuma policy RLS quebrada (teste de isolamento por tenant).
-
-#### Fatia 1.2 — `createLoopTask()` + branch `criar_tarefa`
-- Novo helper `trigger/_shared/loop-tasks.ts`: `createLoopTask({tenantId, conversationId, lojaId, agentId, titulo, descricao, prioridade, sistemaAlvo})` → insere `client_tasks` (respeitando `customer_id` NOT NULL) na coluna inicial do board ClickUp, seta `loop_state='open'`, e atualiza `conversations.loop_status='task_pending'` + `active_task_id`.
-- Nova task discriminada `respond_or_classify` no especialista (estender `trigger/breno/responder.ts`): a saída Zod decide `acao: 'resolver' | 'criar_tarefa'`:
-```ts
-{
-  acao: 'resolver' | 'criar_tarefa',
-  resposta?: string, tom?: string,
-  tarefa?: { titulo, descricao, prioridade:'urgent'|'high'|'normal'|'low',
-             sistema_alvo:'vendaerp'|'asaas'|'nenhum', operacao?, parametros? },
-  precisa_humano: boolean, motivo_humano?: string
-}
-```
-**Aceite:** mensagem de teste que o agente não resolve cria uma `client_tasks` vinculada à conversa (SELECT mostrando `conversation_id` + `active_task_id` casados).
-
-#### Fatia 1.3 — `agent-executar-tarefa` (execução read-only)
-- Nova task `trigger/agents/executar-tarefa.ts` (id `agent-executar-tarefa`): pega tarefa `open`, seta `loop_state='executing'`, executa a operação no sistema-alvo **começando por leitura no VendaERP** (via vendaerp-mcp/Bridge — nunca toca segredo), grava `execution_run_id`/`execution_result`, seta `loop_state='done'`.
-**Aceite:** run real lendo dado do ERP; `execution_result` populado (JSON bruto do run).
-
-#### Fatia 1.4 — `agent-responder-conclusao` (draft + semáforo)
-- Nova task `trigger/agents/responder-conclusao.ts` (id `agent-responder-conclusao`): monta resposta ao cliente a partir de `execution_result` + contexto, cria `agent_drafts` (campo **`content`**, não `body`), lê `tenant_agent_config.mode` e aplica o mapa do §3.2. Atualiza `conversations.loop_status='replied'` quando enviado/aprovado.
-**Aceite:** draft criado com `content` correto; em tenant `ia` o envio dispara; em `hibrido` fica `pending` aguardando `ok`.
-
-#### Fatia 1.5 — Escrita no ERP via proposta *(gated)*
-- Quando `operacao` é de escrita: especialista cria `vendaerp_proposals` + confirmação Telegram antes de executar (padrão `20260614_003`). POST sem retry (não idempotente).
-**Aceite:** proposta criada; execução só após confirmação; `proposal_id` linkado na tarefa.
-
-> **Multi-tenant de credencial (Fase 3)** fica fora da Fase 1: `getVendaErpConfig` ignora `tenantId` hoje (mono-credencial). Ponto de extensão: tabela `vendaerp_instances` + fallback env.
+**C. CEO autoriza demanda do cliente (NOVO):** triagem detecta pedido que exige execução real → cria `client_tasks` em **`aguardando_autorizacao_ceo`** **antes** de executar → notifica o CEO (pedido original + ação proposta + custo/risco + `proposal_id` imutável) → executa **só** após `ok` vinculado ao `proposal_id` (não a "ok" em linguagem natural) → recusa encerra sem efeito.
 
 ---
 
-### FASE 2 — Pipeline em tempo real (Console v2)
+## 6. Org-chart → profiles do Hermes (um por função, D8)
 
-**Objetivo:** uma tela onde toda tarefa de todo agente é visível ao vivo, com o estado do loop.
+Slug = chave real (`agents.id`, `agent_runs.agent_name`, profile Hermes, despachador). **Resolver os 5 novos antes da FASE 1** (decisão do Wandson):
 
-#### Fatia 2.1 — Realtime (migration aditiva, gated por `ok` por mexer em publication)
-`supabase/migrations/20260623_002_pipeline_realtime.sql`
-```sql
-ALTER TABLE public.agent_runs              REPLICA IDENTITY FULL;
-ALTER TABLE public.agent_drafts            REPLICA IDENTITY FULL;
-ALTER TABLE public.deli_pending_approvals  REPLICA IDENTITY FULL;
-ALTER TABLE public.client_tasks            REPLICA IDENTITY FULL;
-DO $$ BEGIN
-  ALTER PUBLICATION supabase_realtime ADD TABLE public.client_tasks;
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN
-  ALTER PUBLICATION supabase_realtime ADD TABLE public.deli_pending_approvals;
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-```
-**Aceite:** `SELECT * FROM pg_publication_tables WHERE pubname='supabase_realtime'` lista as 4 tabelas.
+| Função | Slug (proposto) | MCP toolset (least-privilege) | Semáforo |
+|---|---|---|---|
+| Orquestração (COO) | `deli` (`role: orchestrator`) | cd-admin | — |
+| Atendimento | `breno` | evolution (read+draft), cd-admin | Amarelo |
+| Suporte de sistema | `max` | vendaerp (read), cd-admin | Amarelo |
+| Consultoria iFood | `analista-ifood` | ifood (read), cd-admin | Verde interno |
+| Marketing | `lara` | cd-admin, web | Amarelo |
+| Financeiro/Cobrança | `cora` | asaas, cd-admin | **Vermelho** |
+| Prospecção (SDR) | `sofia` | web, cd-admin | Amarelo |
+| BI/Relatórios/Monitoramento | `vera` | cd-admin | Verde interno |
+| **Verificação/QA** | `revisor` *(novo)* | cd-admin + read do sistema-alvo | gate |
+| Planejamento | `pedro` *(novo, a confirmar)* | web, cd-admin | Amarelo |
+| Estratégia | `estela` *(novo, a confirmar)* | web, cd-admin | Amarelo |
+| Vendas/Closing | `vitor` *(novo, a confirmar)* | vendaerp, cd-admin | **Vermelho** |
 
-#### Fatia 2.2 — Tela Pipeline
-- `src/console/PipelineScreen.jsx` + hook `src/console/usePipelineRealtime.js` (padrão de subscription de `src/console/Deli.jsx` linhas 448-472: `supabase.channel(...).on('postgres_changes', {filter:'tenant_id=eq.<id>'}).subscribe()` + cleanup `removeChannel`).
-- Registrar no `ConsoleV2.jsx`: item `{ id:'pipeline', ic:'i-activity', label:'Pipeline ao Vivo' }` no grupo "Operação" + case no switch + import.
-- Colunas/visão: por `loop_state` (open → executing → done → replied) + cartões mostrando agente, cliente, sistema-alvo, e aprovações pendentes.
-**Aceite:** abrir a tela no browser (app.consultdelivery.com.br) e ver uma tarefa mudar de coluna ao vivo sem refresh; string da feature confirmada no bundle deployado.
+**Despachador:** `admin-mcp/src/tools/cd_despachar_especialista.js` tem enum travado em 6. **Substituir por lookup em `tenant_agents`** (12) e **mover a regra para `POST /loop/despachar` no Bridge** (Hermes e Trigger.dev chamam) — tool MCP vira CRUD/RPC sem decisão.
+
+**Config como código:** versionar em `hermes/` no repo (`config.yaml`, `profiles/<slug>/SOUL.md`, `skills/<cat>/<skill>/SKILL.md`, `mcp/*.json` sem segredo, `deploy-hermes.sh`, `gen-describe.js`). **gitleaks no pre-commit/CI** (token já vazou uma vez).
 
 ---
 
-### FASE 3 — DELI Oráculo no Telegram (cérebro de comando)
+## 7. Plano faseado
 
-**Objetivo:** o Wandson conversa com a DELI pelo Telegram; ela aciona o especialista certo, acompanha o loop e traz o retorno (por tenant).
+### GATE 0 — Segurança P0 (BLOQUEANTE, D12)
+**Cowork (autônomo, código):** Bridge **fail-closed** + **constant-time** ✅ (feito: `index.js` `safeTokenEqual` + boot check) · proteger endpoints de escrita VendaERP (`routes/vendaerp.js`) atrás de auth forte separada · `erp_confirmar` estrutural (confirmação out-of-band vinculada a `proposal_id`) · autorização por tenant server-side (hoje `service_role` bypassa RLS; `tenant_id` é arg livre) · auditoria fail-closed + antes do efeito · atribuição por profile no `audit_log` · semáforo codificado no servidor · threat-model prompt-injection (canal confiável CEO vs não-confiável cliente; allow-list por origem) · bind/CORS + redação PII + TTL de proposta alinhado ao SLA.
+**Wandson (VPS):** root→`claudedev` · `terminal.backend: docker` · `checkpoints.enabled` · `approvals.mode: manual` · **rotacionar `VENDAERP_TOKEN`** (vazado) · 2 comandos que ligam `cd-admin` live (de-para `SUPABASE_SERVICE_KEY`↔`SUPABASE_SERVICE_ROLE_KEY`).
+**Aceite:** Bridge nega sem token; escrita exige auth forte; `erp_confirmar` não executa sem confirmação out-of-band; cross-tenant negado; Hermes não-root; `hermes mcp list` mostra cd-admin+vendaerp; gitleaks verde.
 
-#### Fatia 3.1 — `cd_despachar_especialista` (admin-mcp)
-- Nova tool `admin-mcp/src/tools/cd_despachar_especialista.js` (assinatura `async handler(args, {sb, cfg})`, modelo `cd_propor_draft.js`): a DELI, a pedido do Wandson, dispara um especialista para uma demanda → cria `client_tasks` no loop (reusa `createLoopTask` via Bridge). Registrada em `registry.js` como writeTool (auditoria automática via `server.js`).
-**Aceite:** comando no `@DeliConsultBot` cria tarefa real e responde com o id; `audit_log` registra.
+### FASE 1 — Roteamento-como-dado + DELI + especialistas como profiles
+Catálogo de roteamento no Supabase; `gen-describe.js` gera `profile describe`; `POST /loop/despachar` (Bridge) cobre os 12 slugs (lookup `tenant_agents`); criar profiles (`deli` orchestrator + 12) a partir do `hermes/` versionado; **teste de escalonamento por delegação** (profile não alcança tool fora do seu `mcp.json`).
+**Aceite:** `hermes -p <12> chat` ok; despacho aceita 12 slugs; DELI roteia certo; roteamento logado em `audit_log`.
 
-#### Fatia 3.2 — Retorno do loop ao Telegram
-- Bridge: criar `POST /agents/deli/notify` (não existe hoje) e **reativar `notifyBridge`** no `orchestrator-5min.ts` com dedup por `dedup_key` (evita o spam de 2026-05-26). Padrão trigger→poll de `routes/analises.js` (`pollRunUntilDone`) para acompanhar o run até a conclusão.
-**Aceite:** ao concluir uma tarefa despachada, a DELI manda no Telegram o resultado uma única vez (sem spam); log do dedup.
+### FASE 2 — MCPs de ação (4 prioritárias) — Bridge primeiro
+`ifood-mcp`, `asaas-mcp`, `evolution-mcp` (manter Evolution API, **não Baileys**), `web`. Padrão `vendaerp-mcp` (fino → Bridge; credenciais distintas/menor escopo por MCP; audit fail-closed; nenhuma escrita direta sem rota Bridge).
+**Aceite:** cada ação via `hermes -p <agente>` com `run_id`/JSON em `agent_runs`; escrita só como draft pending; audit com profile correto.
 
-> **Por que Telegram primeiro (AF-3):** o canal Hermes/`@DeliConsultBot` já existe e já fala com o banco via admin-mcp. É o caminho mais curto para o "cérebro de comando" sem tocar WhatsApp. WhatsApp do Wandson fica para uma fase posterior.
+### FASE 3 — Loop + fluxo C + canais (Supabase = estado)
+Hermes lê/escreve `conversations.loop_status`/`client_tasks.loop_state` via MCP (Kanban=cache; contrato 1:1). Implementar fluxo C (`aguardando_autorizacao_ceo`) + VERIFICA 2 camadas. Identidade PV vs grupo + privacidade. **Contexto mínimo já aqui** (≥1 fato real da loja via MCP antes de responder).
+**Aceite:** msg real percorre o loop; pedido que exige execução para em `aguardando_autorizacao_ceo` e só executa após `ok` vinculado ao `proposal_id`; revisor barra falha silenciosa; 1 envio único; `SELECT` confirma estado no Supabase.
 
----
+### FASE 4 — Skills (persona) + write-back de memória
+`SKILL.md` = só persona/tom; **lint no `deploy-hermes.sh`** falha se contiver valor de negócio (R$/%/prazos). **Resolver TD#52**: job Trigger.dev consolida `client_facts`/`client_timeline`/`agent_memories`; profiles stateless entre sessões exceto pelo Supabase.
+**Aceite:** lint ativo; ≥1 fato consolidado a partir de interação real.
 
-### FASE 4 — Autonomia ampliada (heartbeats + memória ativa)
-
-**Objetivo:** a empresa "roda sozinha" — agentes proativos, não só reativos.
-
-- Heartbeats: o `orchestrator-5min` varre sinais (cliente sumiu, cobrança vencendo, tarefa parada) e **abre tarefas no loop sozinho**, respeitando semáforo.
-- Memória ativa: especialistas escrevem `client_facts`/`client_timeline` após cada loop (confidence, expires_at), alimentando o próximo atendimento.
-- Métrica de saúde do pipeline: tarefas paradas > X, taxa de auto-resolução, % que precisou de humano.
-
-**Aceite:** uma tarefa nascida de heartbeat (sem cliente escrever) percorre o loop e aparece no pipeline.
-
----
-
-## 5. Arquivos do blueprint (a criar/estender)
-
-| Arquivo | Tipo | Fase |
-|---------|------|------|
-| `supabase/migrations/20260623_001_loop_core.sql` | novo (aditivo) | 1.1 |
-| `supabase/migrations/20260623_002_pipeline_realtime.sql` | novo (aditivo, gated) | 2.1 |
-| `trigger/_shared/loop-tasks.ts` | novo | 1.2 |
-| `trigger/breno/responder.ts` | estender (branch `criar_tarefa`) | 1.2 |
-| `trigger/agents/executar-tarefa.ts` | novo (`agent-executar-tarefa`) | 1.3 |
-| `trigger/agents/responder-conclusao.ts` | novo (`agent-responder-conclusao`) | 1.4 |
-| `admin-mcp/src/tools/cd_despachar_especialista.js` | novo | 3.1 |
-| `bridge-server` `POST /agents/deli/notify` + reativar `notifyBridge` | novo/edição | 3.2 |
-| `src/console/PipelineScreen.jsx` + `usePipelineRealtime.js` | novo | 2.2 |
-| `src/console/ConsoleV2.jsx` | estender (item Pipeline) | 2.2 |
+### FASE 5 — Integração com a plataforma CD (cutover testável)
+Console chat/pipeline ao vivo, dashboards, onboarding multi-tenant SaaS. **Teste de equivalência + shadow:** N casos → exigir equivalência de drafts/ações entre os dois motores; plataforma roteia em shadow comparando contra o Hermes; **só desligar o Hermes quando equivalência passar**; drenar aprovações pendentes antes do cutover.
+**Aceite:** harness de equivalência verde; 2º tenant isolado por RLS.
 
 ---
 
-## 6. Guard-rails (inviolável)
-
-- **Branch sempre**, nunca commit direto em `main`.
-- **Nenhuma mensagem a cliente sem aprovação** (drafts + semáforo). Exceção: `telegram_interno`/`painel`.
-- **Motor EvoNexus PROIBIDO** em prod — só o paradigma.
-- **SQL aditivo/reversível = autônomo**; DROP/DELETE/TRUNCATE em massa / DDL destrutivo sobre dados reais = confirmar com o Wandson.
+## 8. Guard-rails (inviolável)
+- Branch sempre; nunca commit direto em `main`.
+- Nenhuma mensagem a cliente sem aprovação (drafts+semáforo). Exceção: `telegram_interno`/`painel`.
+- Motor EvoNexus proibido em prod — só o paradigma.
+- SQL aditivo/reversível = autônomo; DDL destrutivo sobre dados reais = confirmar com o Wandson.
 - **Agente nunca toca segredo** — credenciais só no env do Bridge via Infisical.
-- **Output bruto > resumo**; testar no browser antes de declarar pronto.
+- **Revisor (LLM) é controle de qualidade, não de segurança** — efeito cliente-facing sempre gated por humano out-of-band.
+- Output bruto > resumo; testar antes de declarar pronto.
 
----
+## 9. Governança (Mandato Cowork D5)
+- **Autônomo (Cowork), não bloqueia esperando a VPS:** estrutura `hermes/` versionada, código dos MCPs (ifood/asaas/evolution), `/loop/despachar` + despachador por `tenant_agents`, fixes de segurança do Bridge, SQL aditivo (enum de autorização, catálogo de roteamento, RBAC seed), lints/gitleaks.
+- **Reservado ao Wandson:** comandos na VPS, `hermes profile create`/`mcp add`, credenciais/`service_role`/Infisical, claudedev/systemd, rotação de token, DDL destrutivo, envio a cliente.
 
-## 7. 🛑 PRÓXIMA AÇÃO
-
-**Aguardando aprovação do Wandson para iniciar a FASE 1 (o Loop).** Ao aprovar, a primeira fatia é `20260623_001_loop_core.sql` (migration aditiva, autônoma) + `createLoopTask()`. Nada de produção/cliente é tocado até lá.
+## 10. 🛑 PRÓXIMA AÇÃO
+**GATE 0 em andamento.** Feito nesta sessão: Bridge fail-closed + constant-time (`bridge-server/index.js`) + Blueprint v2. Próximo: proteger endpoints de escrita do VendaERP, `erp_confirmar` estrutural, e a estrutura `hermes/` versionada (config como código). Itens da VPS aguardam o Wandson (rotação de token, claudedev, ligar `cd-admin` live).
