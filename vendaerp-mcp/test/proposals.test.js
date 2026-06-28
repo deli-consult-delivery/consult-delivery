@@ -2,7 +2,7 @@
 'use strict';
 
 const assert = require('node:assert');
-const { makeProposals } = require('../src/proposals');
+const { makeProposals, hashCode } = require('../src/proposals');
 
 let failures = 0;
 function check(label, fn) {
@@ -31,7 +31,7 @@ function fakeSb(initialRow) {
   };
 }
 
-const cfg = { auditTenantId: 'tenant-cd', principal: 'ceo_agent' };
+const cfg = { auditTenantId: 'tenant-cd', principal: 'ceo_agent', bridgeUrl: 'http://127.0.0.1:1', internalToken: 't' };
 
 (async () => {
   // create
@@ -74,18 +74,40 @@ const cfg = { auditTenantId: 'tenant-cd', principal: 'ceo_agent' };
     check('classify executed => already', () => assert.strictEqual(c.state, 'already'));
   }
 
-  // claim atômico: pending => confirmed
+  // claim atômico condicionado ao CÓDIGO out-of-band: pending + código certo => confirmed
   {
     const future = new Date(Date.now() + 60_000).toISOString();
-    const sb = fakeSb({ id: 'p1', status: 'pending', expires_at: future, endpoint: '/oportunidade', payload: { a: 1 } });
+    const sb = fakeSb({ id: 'p1', status: 'pending', expires_at: future, endpoint: '/oportunidade',
+      payload: { a: 1 }, confirm_code_hash: hashCode('ABC234'), confirm_attempts: 0 });
     const p = makeProposals({ sb, cfg });
-    const claimed = await p.claim('p1');
-    check('claim devolve a proposta com endpoint/payload', () => {
+    const errado = await p.claim('p1', 'WRONG9');
+    check('claim com código ERRADO => null (não confirma)', () => assert.strictEqual(errado, null));
+    const claimed = await p.claim('p1', 'abc234'); // case-insensitive
+    check('claim com código certo devolve a proposta', () => {
+      assert.ok(claimed, 'devolveu a linha');
       assert.strictEqual(claimed.endpoint, '/oportunidade');
-      assert.deepStrictEqual(claimed.payload, { a: 1 });
     });
-    const again = await p.claim('p1'); // segunda tentativa: já confirmed
+    const again = await p.claim('p1', 'ABC234'); // já confirmed
     check('claim é uso único (2ª vez => null)', () => assert.strictEqual(again, null));
+  }
+
+  // create gera + guarda o hash do código (e NÃO devolve o código ao agente)
+  {
+    const sb = fakeSb(null);
+    const p = makeProposals({ sb, cfg });
+    const out = await p.create({ tipo: 'boleto', endpoint: '/boleto', payload: {}, resumo: 'X' });
+    check('create guarda confirm_code_hash e não vaza o código', () => {
+      assert.ok(sb.inserted.r.confirm_code_hash, 'hash gravado');
+      assert.strictEqual(out.confirm_code, undefined, 'código não retornado ao agente');
+    });
+  }
+
+  // bumpAttempts incrementa o contador
+  {
+    const sb = fakeSb({ id: 'p1', status: 'pending', confirm_attempts: 2 });
+    const p = makeProposals({ sb, cfg });
+    const r = await p.bumpAttempts('p1', 2);
+    check('bumpAttempts incrementa (2 => 3)', () => assert.strictEqual(r.confirm_attempts, 3));
   }
 
   // markExecuted só transiciona o vencedor do claim (status=confirmed)

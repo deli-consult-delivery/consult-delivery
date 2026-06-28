@@ -14,11 +14,13 @@ const cfg = { auditTenantId: 'tenant-cd', principal: 'ceo_agent' };
 
 // proposals falso parametrizável por estado.
 // markResult: o que markExecuted/markFailed/markExpired devolvem (linha ou null).
-function fakeProposals({ classifyState, claimResult, markResult = { id: 'p1' } }) {
+function fakeProposals({ classifyState, claimResult, markResult = { id: 'p1' }, attempts = 0 }) {
   return {
     log: [],
-    async classify() { return { state: classifyState, row: { id: 'p1', resumo: 'Criar X' } }; },
+    MAX_ATTEMPTS: 5,
+    async classify() { return { state: classifyState, row: { id: 'p1', resumo: 'Criar X', confirm_attempts: attempts } }; },
     async claim() { return claimResult; },
+    async bumpAttempts(id, cur) { this.log.push(['bump', id, cur]); return { confirm_attempts: (cur ?? 0) + 1 }; },
     async markExecuted(id, r) { this.log.push(['executed', id, r]); return markResult; },
     async markFailed(id, e) { this.log.push(['failed', id, e]); return markResult; },
     async markExpired(id) { this.log.push(['expired', id]); return markResult; },
@@ -39,7 +41,7 @@ async function captureStderr(fn) {
   {
     const proposals = fakeProposals({ classifyState: 'not_found' });
     const erp = { post: async () => { throw new Error('NÃO DEVIA CHAMAR'); } };
-    const res = await tool.handler({ proposal_id: 'x' }, { erp, cfg, proposals });
+    const res = await tool.handler({ proposal_id: 'x', codigo: 'ABC234' }, { erp, cfg, proposals });
     check('not_found não executa', () => assert.match(res.summary, /não encontrei|não existe/i));
     check('not_found ainda vincula tenantIds à auditoria', () => assert.deepStrictEqual(res.tenantIds, ['tenant-cd']));
   }
@@ -48,7 +50,7 @@ async function captureStderr(fn) {
   {
     const proposals = fakeProposals({ classifyState: 'expired' });
     const erp = { post: async () => { throw new Error('NÃO DEVIA CHAMAR'); } };
-    const res = await tool.handler({ proposal_id: 'p1' }, { erp, cfg, proposals });
+    const res = await tool.handler({ proposal_id: 'p1', codigo: 'ABC234' }, { erp, cfg, proposals });
     check('expirada marca expired e não executa', () => {
       assert.ok(proposals.log.some((l) => l[0] === 'expired'));
       assert.match(res.summary, /expir/i);
@@ -59,16 +61,25 @@ async function captureStderr(fn) {
   {
     const proposals = fakeProposals({ classifyState: 'already' });
     const erp = { post: async () => { throw new Error('NÃO DEVIA CHAMAR'); } };
-    const res = await tool.handler({ proposal_id: 'p1' }, { erp, cfg, proposals });
+    const res = await tool.handler({ proposal_id: 'p1', codigo: 'ABC234' }, { erp, cfg, proposals });
     check('já processada não re-executa', () => assert.match(res.summary, /já/i));
   }
 
-  // pending, claim perdido (corrida) => não executa
+  // pending, código inválido (claim null) => conta tentativa e não executa
   {
     const proposals = fakeProposals({ classifyState: 'pending', claimResult: null });
     const erp = { post: async () => { throw new Error('NÃO DEVIA CHAMAR'); } };
-    const res = await tool.handler({ proposal_id: 'p1' }, { erp, cfg, proposals });
-    check('claim perdido não executa', () => assert.match(res.summary, /já|process/i));
+    const res = await tool.handler({ proposal_id: 'p1', codigo: 'WRONG9' }, { erp, cfg, proposals });
+    check('código inválido não executa', () => assert.match(res.summary, /inválido|código/i));
+    check('código inválido conta tentativa (bump)', () => assert.ok(proposals.log.some((l) => l[0] === 'bump')));
+  }
+
+  // pending, mas já no limite de tentativas => bloqueada
+  {
+    const proposals = fakeProposals({ classifyState: 'pending', claimResult: null, attempts: 5 });
+    const erp = { post: async () => { throw new Error('NÃO DEVIA CHAMAR'); } };
+    const res = await tool.handler({ proposal_id: 'p1', codigo: 'WRONG9' }, { erp, cfg, proposals });
+    check('bloqueada por tentativas não executa', () => assert.match(res.summary, /bloquead/i));
   }
 
   // pending, claim ok => executa e marca executed
@@ -79,7 +90,7 @@ async function captureStderr(fn) {
     });
     let posted = null;
     const erp = { post: async (path, body) => { posted = { path, body }; return { Codigo: 99 }; } };
-    const res = await tool.handler({ proposal_id: 'p1' }, { erp, cfg, proposals });
+    const res = await tool.handler({ proposal_id: 'p1', codigo: 'ABC234' }, { erp, cfg, proposals });
     check('executa o endpoint guardado com o payload', () => {
       assert.strictEqual(posted.path, '/oportunidade');
       assert.deepStrictEqual(posted.body, { a: 1 });
@@ -100,7 +111,7 @@ async function captureStderr(fn) {
       claimResult: { id: 'p1', endpoint: '/oportunidade', payload: { a: 1 }, resumo: 'Criar X' },
     });
     const erp = { post: async () => { const e = new Error('ERP 500'); e.status = 500; throw e; } };
-    const res = await tool.handler({ proposal_id: 'p1' }, { erp, cfg, proposals });
+    const res = await tool.handler({ proposal_id: 'p1', codigo: 'ABC234' }, { erp, cfg, proposals });
     check('falha do Bridge marca failed', () => assert.ok(proposals.log.some((l) => l[0] === 'failed')));
     check('summary avisa para verificar no ERP', () => assert.match(res.summary, /verifi|não confirm|falh/i));
   }
@@ -115,7 +126,7 @@ async function captureStderr(fn) {
     const erp = { post: async () => ({ Codigo: 99 }) };
     let res;
     const err = await captureStderr(async () => {
-      res = await tool.handler({ proposal_id: 'p1' }, { erp, cfg, proposals });
+      res = await tool.handler({ proposal_id: 'p1', codigo: 'ABC234' }, { erp, cfg, proposals });
     });
     check('markExecuted null avisa em stderr (não lança)', () => {
       assert.match(err, /anomalia.*markExecuted/i);
@@ -133,7 +144,7 @@ async function captureStderr(fn) {
     const erp = { post: async () => { throw new Error('ERP 500'); } };
     let res;
     const err = await captureStderr(async () => {
-      res = await tool.handler({ proposal_id: 'p1' }, { erp, cfg, proposals });
+      res = await tool.handler({ proposal_id: 'p1', codigo: 'ABC234' }, { erp, cfg, proposals });
     });
     check('markFailed null avisa em stderr (não lança)', () => {
       assert.match(err, /anomalia.*markFailed/i);
@@ -147,7 +158,7 @@ async function captureStderr(fn) {
     const erp = { post: async () => { throw new Error('NÃO DEVIA CHAMAR'); } };
     let res;
     const err = await captureStderr(async () => {
-      res = await tool.handler({ proposal_id: 'p1' }, { erp, cfg, proposals });
+      res = await tool.handler({ proposal_id: 'p1', codigo: 'ABC234' }, { erp, cfg, proposals });
     });
     check('markExpired null avisa em stderr (não lança)', () => {
       assert.match(err, /anomalia.*markExpired/i);
