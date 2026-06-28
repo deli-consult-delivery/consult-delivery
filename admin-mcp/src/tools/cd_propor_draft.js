@@ -10,6 +10,7 @@
 const { z } = require('zod');
 
 module.exports = {
+  write: true,
   name: 'cd_propor_draft',
   title: 'Propor draft (proposta)',
   description:

@@ -14,6 +14,7 @@ const SUPABASE_URL           = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY      = process.env.SUPABASE_ANON_KEY;
 const SUPABASE_SERVICE_KEY   = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const INTERNAL_BRIDGE_TOKEN  = process.env.INTERNAL_BRIDGE_TOKEN;
+const VENDAERP_WRITE_TOKEN   = process.env.VENDAERP_WRITE_TOKEN;
 const NEXUS_CALLBACK_SECRET  = process.env.NEXUS_CALLBACK_SECRET;
 const NEXUS_BASE_URL         = process.env.NEXUS_BASE_URL;
 const NEXUS_API_KEY          = process.env.NEXUS_API_KEY;
@@ -96,6 +97,22 @@ async function requireJwtOrInternal(req, res, next) {
     return next();
   }
   return requireJwt(req, res, next);
+}
+
+// ── Middleware: escrita VendaERP — token dedicado, fail-closed (GATE 0) ────────
+// Escrita no ERP (boleto/NFE/lançamento/oportunidade/estoque) é mais sensível que
+// leitura. Em vez do mesmo token de leitura, exige um VENDAERP_WRITE_TOKEN próprio
+// (header x-vendaerp-write-token) ALÉM do token interno. Sem token configurado →
+// 503 (bloqueia escrita por padrão). Constant-time em ambos. Assim quem só tem o
+// token interno de leitura NÃO consegue mutar o ERP fora do fluxo de confirmação.
+function requireErpWrite(req, res, next) {
+  if (!INTERNAL_BRIDGE_TOKEN || !VENDAERP_WRITE_TOKEN)
+    return res.status(503).json({ error: 'erp write auth not configured' });
+  if (!safeTokenEqual(req.headers['x-internal-token'], INTERNAL_BRIDGE_TOKEN))
+    return res.status(401).json({ error: 'unauthorized' });
+  if (!safeTokenEqual(req.headers['x-vendaerp-write-token'], VENDAERP_WRITE_TOKEN))
+    return res.status(403).json({ error: 'erp write forbidden' });
+  next();
 }
 
 // ── Helper: Supabase REST write (service role) ────────────────────────────────
@@ -1569,6 +1586,7 @@ app.use('/api', require('./routes/mia-vinculos')({
 // Ponto único de contato com o ERP; credencial (3 headers) só no env do Bridge.
 app.use('/api', require('./routes/vendaerp')({
   requireJwtOrInternal,
+  requireErpWrite,
   erp: require('./lib/vendaerp'),
 }));
 
