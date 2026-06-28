@@ -14,6 +14,7 @@ const SUPABASE_URL           = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY      = process.env.SUPABASE_ANON_KEY;
 const SUPABASE_SERVICE_KEY   = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const INTERNAL_BRIDGE_TOKEN  = process.env.INTERNAL_BRIDGE_TOKEN;
+const VENDAERP_WRITE_TOKEN   = process.env.VENDAERP_WRITE_TOKEN;
 const NEXUS_CALLBACK_SECRET  = process.env.NEXUS_CALLBACK_SECRET;
 const NEXUS_BASE_URL         = process.env.NEXUS_BASE_URL;
 const NEXUS_API_KEY          = process.env.NEXUS_API_KEY;
@@ -65,10 +66,22 @@ async function requireJwt(req, res, next) {
   }
 }
 
-// ── Middleware: internal token ───────────────────────────────────────────────
+// ── Helper: comparação de token constant-time (anti timing side-channel) ──────
+// GATE 0: usar timingSafeEqual como o HMAC do nexus já faz; nunca `!==` puro.
+function safeTokenEqual(provided, expected) {
+  if (typeof provided !== 'string' || typeof expected !== 'string') return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
+// ── Middleware: internal token (FAIL-CLOSED) ──────────────────────────────────
+// GATE 0: sem token configurado, recusar TUDO (antes: `return next()` = fail-open).
 function requireInternalToken(req, res, next) {
-  if (!INTERNAL_BRIDGE_TOKEN) return next();
-  if (req.headers['x-internal-token'] !== INTERNAL_BRIDGE_TOKEN)
+  if (!INTERNAL_BRIDGE_TOKEN)
+    return res.status(503).json({ error: 'internal auth not configured' });
+  if (!safeTokenEqual(req.headers['x-internal-token'], INTERNAL_BRIDGE_TOKEN))
     return res.status(401).json({ error: 'unauthorized' });
   next();
 }
@@ -77,11 +90,29 @@ function requireInternalToken(req, res, next) {
 async function requireJwtOrInternal(req, res, next) {
   const internalToken = req.headers['x-internal-token'];
   if (internalToken) {
-    if (!INTERNAL_BRIDGE_TOKEN || internalToken !== INTERNAL_BRIDGE_TOKEN)
+    if (!INTERNAL_BRIDGE_TOKEN)
+      return res.status(503).json({ error: 'internal auth not configured' });
+    if (!safeTokenEqual(internalToken, INTERNAL_BRIDGE_TOKEN))
       return res.status(401).json({ error: 'unauthorized' });
     return next();
   }
   return requireJwt(req, res, next);
+}
+
+// ── Middleware: escrita VendaERP — token dedicado, fail-closed (GATE 0) ────────
+// Escrita no ERP (boleto/NFE/lançamento/oportunidade/estoque) é mais sensível que
+// leitura. Em vez do mesmo token de leitura, exige um VENDAERP_WRITE_TOKEN próprio
+// (header x-vendaerp-write-token) ALÉM do token interno. Sem token configurado →
+// 503 (bloqueia escrita por padrão). Constant-time em ambos. Assim quem só tem o
+// token interno de leitura NÃO consegue mutar o ERP fora do fluxo de confirmação.
+function requireErpWrite(req, res, next) {
+  if (!INTERNAL_BRIDGE_TOKEN || !VENDAERP_WRITE_TOKEN)
+    return res.status(503).json({ error: 'erp write auth not configured' });
+  if (!safeTokenEqual(req.headers['x-internal-token'], INTERNAL_BRIDGE_TOKEN))
+    return res.status(401).json({ error: 'unauthorized' });
+  if (!safeTokenEqual(req.headers['x-vendaerp-write-token'], VENDAERP_WRITE_TOKEN))
+    return res.status(403).json({ error: 'erp write forbidden' });
+  next();
 }
 
 // ── Helper: Supabase REST write (service role) ────────────────────────────────
@@ -1555,6 +1586,7 @@ app.use('/api', require('./routes/mia-vinculos')({
 // Ponto único de contato com o ERP; credencial (3 headers) só no env do Bridge.
 app.use('/api', require('./routes/vendaerp')({
   requireJwtOrInternal,
+  requireErpWrite,
   erp: require('./lib/vendaerp'),
 }));
 
@@ -1671,6 +1703,14 @@ app.post('/breno/triage-test', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ── GATE 0: INTERNAL_BRIDGE_TOKEN obrigatório (fail-closed no boot) ────────────
+// Sem ele, requireInternalToken/requireJwtOrInternal deixariam endpoints internos
+// (incl. escrita VendaERP/loop) expostos. Abortar em vez de subir inseguro.
+if (!INTERNAL_BRIDGE_TOKEN) {
+  console.error('[bridge] FATAL: INTERNAL_BRIDGE_TOKEN ausente — endpoints internos ficariam expostos. Abortando boot.');
+  process.exit(1);
+}
 
 const server = app.listen(PORT, '0.0.0.0', () => {
   // D2: timeout do servidor > 60s para suportar polling síncrono do loja-gpt

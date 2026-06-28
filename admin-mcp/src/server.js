@@ -37,6 +37,17 @@ function buildServer({ cfg, sb, auditor }) {
       async (args) => {
         const safeArgs = args || {};
         try {
+          if (tool.write) {
+            // GATE 0: auditar a INTENÇÃO antes do efeito; fail-closed
+            // (se a trilha não grava, a escrita NÃO executa).
+            await auditor.recordCritical({
+              tool: tool.name,
+              args: safeArgs,
+              tenantIds: safeArgs.tenant_id ? [safeArgs.tenant_id] : [],
+              summary: 'attempt (pré-execução)',
+              phase: 'attempt',
+            });
+          }
           const { summary, tenantIds, data } = await tool.handler(safeArgs, ctx);
           await auditor.record({
             tool: tool.name,

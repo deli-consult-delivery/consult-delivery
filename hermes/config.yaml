@@ -1,0 +1,51 @@
+# config.yaml — Hermes Agent (Nous Research) gateway da Consult Delivery.
+# Config como código (SEM segredos). Sincronizado para ~/.hermes/config.yaml via deploy-hermes.sh.
+# Endurecido conforme GATE 0 (Blueprint AI-First v2 §7). Segredos vão em ~/.hermes/.env (não versionado).
+#
+# ⚠️ Aplicar só após o hardening de VPS reservado ao Wandson (root→claudedev, token rotacionado).
+
+# ── Human-in-the-loop / aprovação (GATE 0: nunca off em prod) ──────────────────
+approvals:
+  mode: manual          # manual | smart | off  — em prod use manual (semáforo Amarelo/Vermelho)
+  mcp_reload_confirm: true
+
+# ── Sandbox de terminal (GATE 0: docker, não local) ───────────────────────────
+terminal:
+  backend: docker       # local | docker | ssh | modal | daytona | singularity
+
+# ── Checkpoints / rollback (GATE 0: ligado) ───────────────────────────────────
+checkpoints:
+  enabled: true
+
+# ── Delegação (sub-agentes efêmeros para fan-out DENTRO de um especialista) ────
+# A org NÃO é montada via delegate_task; é montada via profiles persistentes.
+delegation:
+  max_concurrent_children: 3
+  max_spawn_depth: 1          # DELI (orchestrator) pode subir p/ >1 quando precisar de multi-estágio
+  orchestrator_enabled: true
+
+# ── Skills = playbooks de persona/tom (regra de negócio é PROIBIDA aqui) ───────
+skills:
+  write_approval: true        # toda escrita de skill stageada p/ revisão humana
+
+# ── Memória local (curta; dado de negócio fica no Supabase via MCP) ───────────
+memory:
+  memory_enabled: true
+  user_profile_enabled: true
+  # limites bounded do Hermes (MEMORY.md ~2200 / USER.md ~1375) — não espremer estado de cliente aqui
+
+# ── MCP servers (least-privilege por server via include/exclude) ──────────────
+# Segredos (SUPABASE_SERVICE_KEY, etc.) entram via `hermes mcp add ... --env` na VPS,
+# NUNCA aqui. Este bloco documenta o filtro de tools desejado por server.
+mcp_servers:
+  cd-admin:
+    enabled: true
+    # leitura ampla + 2 writes gated (cd_propor_draft / cd_despachar_especialista)
+    resources: false
+    prompts: false
+  vendaerp:
+    enabled: true
+    # Fase 1 = só leitura no ERP. Escrita só pelo fluxo propor→confirmar (erp_confirmar),
+    # e o Bridge exige VENDAERP_WRITE_TOKEN dedicado (GATE 0 fatia A).
+    resources: false
+    prompts: false

@@ -28,12 +28,13 @@ function makeAuditor({ sbInsert, auditTenantId, principal }) {
    * @param {string} [p.summary]   resumo legível do que foi feito/retornado
    * @param {string} [p.error]     mensagem de erro, se ok=false
    */
-  async function record({ tool, args, tenantIds, ok, summary, error }) {
+  function buildRows({ tool, args, tenantIds, ok, summary, error, phase }) {
     const now = new Date().toISOString();
     const action = `mcp:${tool}`;
     const baseMeta = {
       args: args || {},
       ok: ok !== false,
+      phase: phase || 'result',
       summary: summary || null,
       error: error || null,
     };
@@ -43,7 +44,7 @@ function makeAuditor({ sbInsert, auditTenantId, principal }) {
         ? [...new Set(tenantIds)].map((tid) => ({ tenant_id: tid, scope: 'tenant' }))
         : [{ tenant_id: auditTenantId, scope: 'platform' }];
 
-    const rows = targets.map((t) => ({
+    return targets.map((t) => ({
       tenant_id: t.tenant_id,
       agent_name: principal,
       action,
@@ -51,19 +52,27 @@ function makeAuditor({ sbInsert, auditTenantId, principal }) {
       metadata: { ...baseMeta, scope: t.scope },
       created_at: now,
     }));
+  }
 
+  // Best-effort: uma falha de auditoria não engole o resultado já produzido (reads),
+  // mas grita no stderr.
+  async function record(p) {
     try {
-      // PostgREST aceita array → insere todas as linhas numa chamada.
-      await sbInsert('audit_log', rows);
+      await sbInsert('audit_log', buildRows(p));
     } catch (e) {
-      // Nunca derruba a resposta da tool por causa do audit, mas grita no log.
       process.stderr.write(
-        `[cd-admin-mcp][AUDIT-FAIL] tool=${tool} err=${e.message}\n`
+        `[cd-admin-mcp][AUDIT-FAIL] tool=${p.tool} err=${e.message}\n`
       );
     }
   }
 
-  return { record };
+  // Fail-closed (GATE 0): usado ANTES de uma escrita. Se a trilha não grava, LANÇA —
+  // a tool de escrita não deve executar sem auditoria registrada (sem write não-auditada).
+  async function recordCritical(p) {
+    await sbInsert('audit_log', buildRows(p));
+  }
+
+  return { record, recordCritical };
 }
 
 module.exports = { makeAuditor };

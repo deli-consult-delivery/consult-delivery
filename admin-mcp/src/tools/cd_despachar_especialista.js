@@ -6,6 +6,7 @@
 const { z } = require('zod');
 
 module.exports = {
+  write: true,
   name: 'cd_despachar_especialista',
   title: 'Despachar especialista para demanda de cliente',
   description:
@@ -16,8 +17,9 @@ module.exports = {
     tenant_id: z.string().uuid().describe('Tenant alvo (obrigatório)'),
     loja_id: z.string().uuid().describe('UUID da loja/cliente alvo (tabela lojas)'),
     especialista: z
-      .enum(['breno', 'cora', 'lara', 'vera', 'sofia', 'max'])
-      .describe('Slug do agente especialista a despachar'),
+      .string()
+      .regex(/^[a-z0-9_-]+$/, 'slug inválido')
+      .describe('Slug do agente especialista (validado contra tenant_agents habilitados)'),
     descricao: z
       .string()
       .min(10)
@@ -41,6 +43,20 @@ module.exports = {
       throw new Error(
         `loja ${args.loja_id} (${loja.nome ?? 'sem nome'}) não tem customer vinculado (client_id=null). ` +
           'Vincule a loja a um customer antes de despachar especialista.'
+      );
+    }
+
+    // 1b. Validar especialista contra o catálogo habilitado do tenant (tenant_agents).
+    //     Substitui o enum fixo de 6 agentes — cobre os 12 do org-chart via catálogo,
+    //     sem hardcode, e impede despachar agente não habilitado para o tenant.
+    const habilitado = await sb.sbGet(
+      'tenant_agents',
+      `tenant_id=eq.${args.tenant_id}&agent_id=eq.${args.especialista}&enabled=eq.true&select=agent_id&limit=1`
+    );
+    if (!habilitado || habilitado.length === 0) {
+      throw new Error(
+        `especialista '${args.especialista}' não habilitado para o tenant ${args.tenant_id} ` +
+          '(verifique tenant_agents.enabled).'
       );
     }
 
