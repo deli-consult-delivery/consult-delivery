@@ -188,7 +188,7 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
       const [{ data: dr, error: e1 }, { data: ca, error: e2 }] = await Promise.all([
         supabase
           .from('agent_drafts')
-          .select('id, agent_name, channel, target_id, subject, content, status, created_at')
+          .select('id, agent_name, channel, target_id, subject, content, status, metadata, created_at')
           .eq('tenant_id', tenantDbId)
           .in('status', DRAFT_STATUS_APROVAVEL)
           .order('created_at', { ascending: false })
@@ -221,6 +221,35 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
   async function aprovarDraft(item, content) {
     const id = item.id;
     setAgindo(id);
+
+    // Drafts de ESCRITA no iFood (operacao 'ifood.*'): o Bridge é a única porta de
+    // escrita e exige o draft AINDA em 'pending' (amarelo) — ele mesmo marca
+    // sent/failed. Por isso NÃO marcamos 'approved' aqui: isso quebraria o /aprovar
+    // (Draft não está pendente → 409). metadata vem como objeto (jsonb) ou string JSON.
+    const meta = typeof item.metadata === 'string'
+      ? (() => { try { return JSON.parse(item.metadata); } catch { return null; } })()
+      : item.metadata;
+    if (meta?.operacao?.startsWith?.('ifood.')) {
+      try {
+        const token = (await supabase.auth.getSession()).data.session?.access_token;
+        const res = await fetch(`${BRIDGE}/api/ifood/aprovar/${id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ tenant_id: tenantDbId }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          // Bridge deixou o draft como failed (ou inalterado); não forçamos 'approved'.
+          setErro(`Falha ao executar no iFood: ${err.error || err.details?.message || res.status}`);
+        }
+      } catch (e) {
+        setErro(`Falha ao executar no iFood: ${e.message}`);
+      }
+      setAgindo(null);
+      await carregar(); // some da fila em sucesso (vira 'sent'); permanece se 'failed'/erro
+      return;
+    }
+
     const { error } = await supabase
       .from('agent_drafts')
       .update({ status: 'approved', content, reviewer_id: userId ?? null, reviewed_at: new Date().toISOString() })
