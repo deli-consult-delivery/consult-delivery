@@ -1085,6 +1085,13 @@ async function sbFetch(path, { method = 'GET', body, prefer, headers: xh = {} } 
 
 // Helper: verifica se req.user é membro do tenant_id solicitado
 async function assertTenantMember(req, res, tenant_id) {
+  // Guard: caminho interno (x-internal-token) não popula req.user. Nenhum caller
+  // atual chega aqui sem req.user, mas sem isto um futuro caller interno crasharia
+  // com TypeError ao ler req.user.id. Responde 401 explícito em vez de estourar.
+  if (!req.user?.id) {
+    res.status(401).json({ error: 'Autenticação de usuário obrigatória para esta verificação' });
+    return false;
+  }
   const rows = await sbFetch(
     `tenant_members?tenant_id=eq.${encodeURIComponent(tenant_id)}&user_id=eq.${encodeURIComponent(req.user.id)}&select=tenant_id&limit=1`
   );
