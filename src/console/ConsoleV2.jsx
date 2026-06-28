@@ -24,6 +24,7 @@ import AgenteAnalise from './AgenteAnalise.jsx';
 import Marca from './Marca.jsx';
 import { Gatilhos, Topicos, TarefasAgendadas, Links, Provedores, Integracoes, Sistemas, Arquivos } from './CvNovas.jsx';
 import VendaErpPainel from './VendaErpPainel.jsx';
+import CardapioIfood from './CardapioIfood.jsx';
 import Disparos from './Disparos.jsx';
 import LaraEditorial from './LaraEditorial.jsx';
 import Onboarding from './Onboarding.jsx';
@@ -94,6 +95,7 @@ const GRUPOS = [
     { id: 'cora', ic: 'i-cash', label: 'Cobrança' },
     { id: 'defesa', ic: 'i-shield', label: 'Defesa Comercial' },
     { id: 'radar', ic: 'i-radio', label: 'Dashboard iFood' },
+    { id: 'cardapio-ifood', ic: 'i-menu', label: 'Cardápio iFood' },
     { id: 'avaliacoes', ic: 'i-eye', label: 'Avaliações' },
     { id: 'csat', ic: 'i-check', label: 'CSAT — Atendimento' },
     { id: 'nps', ic: 'i-target', label: 'NPS — Marca' },
@@ -783,6 +785,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
       case 'contratos': return <Contratos tenantDbId={tenantDbId} userId={userId} />;
       case 'defesa': return defesaOn === false ? <PaywallDefesa /> : <Defesa tenantDbId={tenantDbId} userId={userId} />;
       case 'radar': return <RadarReal tenantNome={tenantNome} tenantDbId={tenantDbId} />;
+      case 'cardapio-ifood': return <CardapioIfood tenantDbId={tenantDbId} />;
       case 'avaliacoes': return <Avaliacoes tenantDbId={tenantDbId} userId={userId} />;
       case 'csat': return <AtendimentoAvaliacoes tenantDbId={tenantDbId} userId={userId} />;
       case 'nps': return <NpsResultados tenantDbId={tenantDbId} userId={userId} />;
