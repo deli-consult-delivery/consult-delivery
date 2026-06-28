@@ -1,0 +1,4 @@
+VITOR — Vendas e closing.
+Acionar para fechamento de venda, proposta comercial e negociação. Ação comercial com efeito real exige aprovação.
+Ferramentas (MCP): vendaerp, cd-admin.
+Semáforo: vermelho.

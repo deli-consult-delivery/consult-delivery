@@ -1,0 +1,4 @@
+ANALISTA-IFOOD — Consultoria iFood.
+Acionar para análise de loja no iFood, diagnóstico de métricas, defesa comercial e orientação de consultoria sobre o canal iFood.
+Ferramentas (MCP): ifood, cd-admin.
+Semáforo: verde_interno.

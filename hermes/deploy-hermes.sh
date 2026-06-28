@@ -30,17 +30,38 @@ EXCLUDES=(
   --exclude 'README.md'
   --exclude 'deploy-hermes.sh'
   --exclude '.gitkeep'
+  --exclude 'routing/'
+  --exclude 'describe.txt'
 )
 
 echo "[deploy-hermes] origem: $SRC"
 echo "[deploy-hermes] destino: $DEST"
 mkdir -p "$DEST"
 
+# Garante que os describe.txt estão em sincronia com o roteamento-como-dado (roster.json)
+# ANTES de aplicar — barra deploy de describe defasado.
+if ! node "${SRC}routing/gen-describe.cjs" --check; then
+  echo "[deploy-hermes] describe.txt fora de sincronia com roster.json — rode 'node hermes/routing/gen-describe.cjs' e commite. Abortando." >&2
+  exit 1
+fi
+
 if [[ "$APPLY" -eq 1 ]]; then
   echo "[deploy-hermes] APLICANDO (rsync)…"
   rsync -av "${EXCLUDES[@]}" "$SRC" "$DEST"
+
+  # Aplica o `profile describe` de cada agente (roteamento) via CLI do Hermes.
+  # describe.txt não é rsyncado — é fonte aplicada pelo CLI (profile describe não é um arquivo em ~/.hermes).
+  echo "[deploy-hermes] aplicando profile describe (roteamento)…"
+  for d in "${SRC}profiles"/*/describe.txt; do
+    [[ -f "$d" ]] || continue
+    slug="$(basename "$(dirname "$d")")"
+    echo "  - $slug"
+    hermes -p "$slug" profile describe --text "$(cat "$d")"
+  done
+
   echo "[deploy-hermes] OK. Rode:  hermes gateway restart   (para recarregar config.yaml)"
 else
   echo "[deploy-hermes] DRY-RUN (nada alterado). Use --apply para efetivar."
   rsync -avn "${EXCLUDES[@]}" "$SRC" "$DEST"
+  echo "[deploy-hermes] (no --apply: aplicaria 'hermes profile describe' para $(ls "${SRC}profiles"/*/describe.txt 2>/dev/null | wc -l) agente(s))"
 fi
