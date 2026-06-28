@@ -20,7 +20,14 @@
 // ANTES de interpolar na URL (anti path traversal / injeção de path).
 const MERCHANT_ID_RE = /^[0-9A-Za-z-]+$/;
 
-module.exports = function ({ requireJwtOrInternal, ifood, supabaseSelect, assertTenantMember }) {
+// Operações de ESCRITA suportadas no MVP gated (F2 onda 1). Cada uma mapeia para
+// um método SEM retry do lib/ifood.js, despachado SÓ no /aprovar.
+const OPERACOES_ESCRITA = {
+  'ifood.pausar_item': { metodo: 'pausarItem', verbo: 'Pausar', agent: 'BRENO' },
+  'ifood.reabrir_item': { metodo: 'reabrirItem', verbo: 'Reabrir', agent: 'BRENO' },
+};
+
+module.exports = function ({ requireJwtOrInternal, ifood, supabaseSelect, assertTenantMember, sbFetch, supabaseInsert }) {
   const router = require('express').Router();
 
   // Wrapper: executa um método do iFood e devolve JSON padronizado.
@@ -156,6 +163,206 @@ module.exports = function ({ requireJwtOrInternal, ifood, supabaseSelect, assert
     if (!ctx) return;
     const { dataInicio, dataFim } = req.query;
     return ifood.listarVendas(ctx.merchantId, { dataInicio, dataFim }, ctx.tenantId);
+  }));
+
+  // ── Resolve item_nome|externalCode → itemId varrendo as categorias do merchant ─
+  // O cardápio não é sincronizado ainda (F1 read-only), então resolvemos ao vivo:
+  // catálogos → categorias → buscarItemPorNomeOuExternalCode. NUNCA chuta: agrega
+  // candidatos de TODAS as categorias e exige match único (regra §5.5).
+  async function resolverItem(merchantId, tenantId, { item_nome, external_code }) {
+    const catalogos = await ifood.listarCatalogos(merchantId, tenantId);
+    const cats = Array.isArray(catalogos) ? catalogos : (catalogos?.catalogs ?? catalogos?.items ?? []);
+    const catalogIds = cats
+      .map((c) => (c?.catalogId ?? c?.groupId ?? c?.id))
+      .filter(Boolean)
+      .map(String);
+
+    const candidatosGlobais = [];
+    for (const catalogId of catalogIds) {
+      let categorias;
+      try {
+        categorias = await ifood.listarCategorias(merchantId, catalogId, tenantId);
+      } catch (_) {
+        continue; // catálogo sem categorias legíveis não derruba a busca
+      }
+      const lista = Array.isArray(categorias) ? categorias : (categorias?.categories ?? categorias?.items ?? []);
+      for (const cat of lista) {
+        const categoryId = cat?.id ?? cat?.categoryId;
+        if (!categoryId) continue;
+        const r = await ifood.buscarItemPorNomeOuExternalCode(merchantId, String(categoryId), {
+          nome: item_nome,
+          externalCode: external_code,
+        });
+        if (r.ok) candidatosGlobais.push({ match: r.item, categoryId: String(categoryId) });
+        else if (r.motivo === 'ambiguo') {
+          // ambiguidade dentro de uma categoria já é desambiguação obrigatória
+          return { ok: false, motivo: 'ambiguo', candidatos: r.candidatos };
+        }
+      }
+    }
+
+    if (candidatosGlobais.length === 1) return { ok: true, item: candidatosGlobais[0].match };
+    if (candidatosGlobais.length === 0) return { ok: false, motivo: 'nao_encontrado', candidatos: [] };
+    return {
+      ok: false,
+      motivo: 'ambiguo',
+      candidatos: candidatosGlobais.map((c) => ({ itemId: c.match.itemId, nome: c.match.nome })),
+    };
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // POST /ifood/acao — cria o DRAFT amarelo (NÃO executa a escrita).
+  //   body { operacao, parametros:{ item_nome?|external_code? } }
+  //   operacao ∈ ifood.pausar_item | ifood.reabrir_item.
+  //   Resolve merchant pelo tenant, resolve o item ao vivo. Ambíguo/não-encontrado
+  //   → 422 com candidatos (sem criar draft). Resolvido → INSERT agent_drafts
+  //   (autonomy_level='amarelo', status='pending'). A escrita real só ocorre no
+  //   /aprovar — aqui nada toca a API de escrita do iFood.
+  // ════════════════════════════════════════════════════════════════════════════
+  router.post('/ifood/acao', requireJwtOrInternal, handle(async (req, res) => {
+    const { operacao, parametros } = req.body || {};
+    const spec = OPERACOES_ESCRITA[operacao];
+    if (!spec) {
+      res.status(400).json({ ok: false, error: `operacao inválida: ${operacao ?? '(ausente)'}` });
+      return;
+    }
+    const item_nome = parametros?.item_nome ? String(parametros.item_nome) : null;
+    const external_code = parametros?.external_code ? String(parametros.external_code) : null;
+    if (!item_nome && !external_code) {
+      res.status(400).json({ ok: false, error: 'parametros.item_nome ou parametros.external_code obrigatório' });
+      return;
+    }
+
+    const ctx = await resolveContext(req, res);
+    if (!ctx) return; // resposta (400/403) já enviada pelo gate de tenant
+    if (!ctx.tenantId) {
+      res.status(400).json({ ok: false, error: 'tenant_id obrigatório para criar draft' });
+      return;
+    }
+
+    const resolved = await resolverItem(ctx.merchantId, ctx.tenantId, { item_nome, external_code });
+    if (!resolved.ok) {
+      // NÃO cria draft: devolve candidatos p/ o humano desambiguar (nunca chuta)
+      res.status(422).json({
+        ok: false,
+        error: resolved.motivo === 'ambiguo'
+          ? 'Mais de um item casou — desambigue.'
+          : 'Nenhum item casou com o nome/externalCode informado.',
+        motivo: resolved.motivo,
+        candidatos: resolved.candidatos,
+      });
+      return;
+    }
+
+    const alvo = item_nome || external_code;
+    const content = `${spec.verbo} ${resolved.item.nome || alvo} no iFood`;
+    const draft = await sbFetch('agent_drafts', {
+      method: 'POST',
+      prefer: 'return=representation',
+      body: {
+        tenant_id: ctx.tenantId,
+        agent_name: spec.agent,
+        channel: 'painel',
+        autonomy_level: 'amarelo', // valor EXATO — CHECK constraint
+        status: 'pending',
+        content,
+        metadata: {
+          operacao,
+          merchant_id: ctx.merchantId,
+          item_id: resolved.item.itemId,
+          product_id: resolved.item.productId ?? null,
+          item_nome: resolved.item.nome ?? null,
+          tenant_id: ctx.tenantId,
+        },
+      },
+    });
+    const row = Array.isArray(draft) ? draft[0] : draft;
+    if (!row?.id) {
+      throw new ifood.IfoodApiError('falha ao criar draft (insert sem retorno)', 0, null);
+    }
+    return { draft_id: row.id, operacao, item_id: resolved.item.itemId, content };
+  }));
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // POST /ifood/aprovar/:draftId — COMMIT: a ÚNICA porta de escrita real no iFood.
+  //   assertTenantMember (anti-IDOR), lê o draft (amarelo/pending), despacha por
+  //   metadata.operacao → lib.pausarItem/reabrirItem (SEM retry), marca o draft
+  //   sent/failed e grava audit_log.
+  // ════════════════════════════════════════════════════════════════════════════
+  router.post('/ifood/aprovar/:draftId', requireJwtOrInternal, handle(async (req, res) => {
+    const { draftId } = req.params;
+    const tenantId = req.body?.tenant_id ? String(req.body.tenant_id) : null;
+    if (!tenantId) {
+      res.status(400).json({ ok: false, error: 'tenant_id obrigatório no body' });
+      return;
+    }
+    // anti-IDOR cross-tenant: usuário tem que pertencer ao tenant (interno = req.user ausente, pula)
+    if (req.user && !(await assertTenantMember(req, res, tenantId))) return;
+
+    const drafts = await sbFetch(
+      `agent_drafts?id=eq.${encodeURIComponent(draftId)}&tenant_id=eq.${encodeURIComponent(tenantId)}&select=id,content,metadata,status,autonomy_level&limit=1`
+    );
+    const draft = Array.isArray(drafts) ? drafts[0] : null;
+    if (!draft) {
+      res.status(404).json({ ok: false, error: 'Draft não encontrado' });
+      return;
+    }
+    if (draft.autonomy_level !== 'amarelo' || draft.status !== 'pending') {
+      res.status(409).json({ ok: false, error: 'Draft não está pendente de aprovação (amarelo/pending)' });
+      return;
+    }
+
+    const meta = draft.metadata || {};
+    const spec = OPERACOES_ESCRITA[meta.operacao];
+    if (!spec) {
+      res.status(400).json({ ok: false, error: `operacao do draft inválida: ${meta.operacao ?? '(ausente)'}` });
+      return;
+    }
+    const merchantId = meta.merchant_id ? String(meta.merchant_id) : null;
+    const itemId = meta.item_id ? String(meta.item_id) : null;
+    if (!merchantId || !itemId) {
+      res.status(400).json({ ok: false, error: 'metadata incompleto: merchant_id/item_id ausente' });
+      return;
+    }
+
+    let resultado;
+    try {
+      resultado = await ifood[spec.metodo](merchantId, itemId, tenantId); // escrita SEM retry
+    } catch (err) {
+      // marca failed + grava o erro (só campos seguros — não o body cru do iFood)
+      const lastError = String(err?.message || 'erro desconhecido').slice(0, 400);
+      await sbFetch(
+        `agent_drafts?id=eq.${encodeURIComponent(draftId)}&tenant_id=eq.${encodeURIComponent(tenantId)}`,
+        { method: 'PATCH', body: { status: 'failed', metadata: { ...meta, last_error: lastError, last_error_at: new Date().toISOString() } } }
+      );
+      if (supabaseInsert) {
+        await supabaseInsert('audit_log', {
+          tenant_id: tenantId,
+          user_id: req.user?.id ?? null,
+          agent_name: spec.agent,
+          action: `${meta.operacao}.falhou`,
+          resource: `ifood:item:${itemId}`,
+          metadata: { draft_id: draftId, merchant_id: merchantId, error: lastError },
+        }).catch((e) => console.error('[ifood/aprovar] audit_log falhou:', e.message));
+      }
+      throw err; // handle() devolve {ok:false,...} sem vazar err.body cru
+    }
+
+    await sbFetch(
+      `agent_drafts?id=eq.${encodeURIComponent(draftId)}&tenant_id=eq.${encodeURIComponent(tenantId)}`,
+      { method: 'PATCH', body: { status: 'sent', sent_at: new Date().toISOString() } }
+    );
+    if (supabaseInsert) {
+      await supabaseInsert('audit_log', {
+        tenant_id: tenantId,
+        user_id: req.user?.id ?? null,
+        agent_name: spec.agent,
+        action: meta.operacao,
+        resource: `ifood:item:${itemId}`,
+        metadata: { draft_id: draftId, merchant_id: merchantId, content: draft.content },
+      }).catch((e) => console.error('[ifood/aprovar] audit_log falhou:', e.message));
+    }
+    return { draft_id: draftId, operacao: meta.operacao, resultado };
   }));
 
   return router;
