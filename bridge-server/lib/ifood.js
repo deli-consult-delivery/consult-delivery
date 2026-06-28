@@ -217,6 +217,13 @@ const tolerant = (raw) => {
 // Financial /financial/v3.0, Review /review/v2.0).
 // ---------------------------------------------------------------------------
 
+// Lojas — lista os merchants vinculados ao app (cada um: id + nome).
+async function listarMerchants(tenantId) {
+  return withRetry(() =>
+    ifoodFetch(`/merchant/v1.0/merchants`, {}, tenantId)
+  ).then(tolerant);
+}
+
 // Catálogo — lista catálogos do merchant (→ catalogId/groupId).
 async function listarCatalogos(merchantId, tenantId) {
   return withRetry(() =>
@@ -261,6 +268,7 @@ module.exports = {
   getIfoodConfig,
   getAccessToken,
   // leitura
+  listarMerchants,
   listarCatalogos,
   listarSellableItems,
   getStatusLoja,

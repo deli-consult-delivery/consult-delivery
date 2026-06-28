@@ -169,6 +169,20 @@ O critério do iFood **não é "quem é dono da loja"** — é a natureza do app
 
 **O que sobra por tenant** (tabela `ifood_merchants`, ver §5.4): só o mapa `tenant_id → merchant_id` (qual loja iFood pertence a qual restaurante da CD). Sem token/refresh por loja.
 
+### Como cada loja-cliente entra (vínculo no centralizado) — CONFIRMADO na doc ("Solicitar acessos", 2026-06-28)
+
+A dúvida "cada cliente não precisa autenticar a própria loja?" é legítima — **sim, cada loja passa por aprovação do dono**, mas no centralizado isso **não gera credencial por loja**. Fluxo oficial:
+1. A CD acessa **Meus Apps → app (C) Centralizado → aba Permissões** no Portal do Desenvolvedor.
+2. Localiza a loja do cliente por **ID ou CNPJ** e envia a solicitação.
+3. **O responsável pela loja aprova no Portal do Parceiro.**
+4. A CD **gera um novo accessToken** (a mesma credencial única) e passa a acessar a loja conforme os módulos cadastrados.
+
+Ou seja: **a CD inicia o vínculo** (por CNPJ), o cliente **aprova uma vez**, e a loja entra no `merchant_scope` da chave única — nunca um token/refresh por loja. (No distribuído seria o inverso: o cliente clica um botão *no app da CD* e faz o OAuth, gerando token próprio — modelo self-service de app público.)
+
+⚠️ **Vincular lojas REAIS exige homologação concluída** (doc: *"Para solicitar acessos é necessário ter concluído o processo de homologação"*). Para F1/F2 antes da homologação, usar a **loja de teste** do app de teste.
+
+**Implicação no onboarding da CD:** o centralizado encaixa num modelo de onboarding **assistido** (a CD adiciona a loja do cliente pelo CNPJ; o cliente só aprova). Se a CD quisesse onboarding 100% self-service (cliente clica "conectar iFood" sozinho no painel da CD), aí o distribuído seria mais natural — mas custaria gerir N refresh tokens. Para o volume atual, centralizado é o certo.
+
 ---
 
 ## 4. Guia de homologação passo a passo

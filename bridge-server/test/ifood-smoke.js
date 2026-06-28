@@ -28,18 +28,34 @@ const ifood = require('../lib/ifood');
     process.exit(1);
   }
 
-  // 2. listarCatalogos
-  if (!merchantId) {
-    process.stdout.write('[2] listarCatalogos   : PULADO — defina IFOOD_MERCHANT_ID (loja piloto).\n');
+  // 2. listarMerchants — lista as lojas vinculadas (id + nome) ANTES do catálogo.
+  let merchants = [];
+  try {
+    merchants = await ifood.listarMerchants();
+    const lista = Array.isArray(merchants) ? merchants : [];
+    process.stdout.write(`[2] listarMerchants   : OK (${lista.length} loja(s))\n`);
+    for (const m of lista) {
+      process.stdout.write(`      - ${m?.id ?? '(sem id)'}  ${m?.name ?? '(sem nome)'}\n`);
+    }
+  } catch (err) {
+    process.stdout.write(`[2] listarMerchants   : FALHOU — status ${err.status ?? '?'}: ${err.message}\n`);
+    if (err.body) process.stdout.write(`    body: ${JSON.stringify(err.body).slice(0, 800)}\n`);
     process.exit(1);
+  }
+
+  // 3. listarCatalogos — só se IFOOD_MERCHANT_ID estiver definido.
+  if (!merchantId) {
+    process.stdout.write('\n[3] listarCatalogos   : PULADO — defina IFOOD_MERCHANT_ID com um dos ids acima e rode de novo.\n');
+    process.stdout.write('\nSmoke OK (lojas listadas; catálogo aguarda IFOOD_MERCHANT_ID).\n');
+    return;
   }
   try {
     const catalogos = await ifood.listarCatalogos(merchantId);
     const n = Array.isArray(catalogos) ? catalogos.length : 'objeto';
-    process.stdout.write(`[2] listarCatalogos   : OK (${n} catálogo(s))\n`);
+    process.stdout.write(`\n[3] listarCatalogos   : OK (${n} catálogo(s))\n`);
     process.stdout.write(`    raw: ${JSON.stringify(catalogos).slice(0, 800)}\n`);
   } catch (err) {
-    process.stdout.write(`[2] listarCatalogos   : FALHOU — status ${err.status ?? '?'}: ${err.message}\n`);
+    process.stdout.write(`\n[3] listarCatalogos   : FALHOU — status ${err.status ?? '?'}: ${err.message}\n`);
     if (err.body) process.stdout.write(`    body: ${JSON.stringify(err.body).slice(0, 800)}\n`);
     process.exit(1);
   }
