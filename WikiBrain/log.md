@@ -1495,3 +1495,26 @@ Redesign Chat ao Vivo agora em **6 fases**: F1 #601 · F2 #604 · F3 #605 · F4 
 **Validação (prod):** build verde, ESLint limpo. Confirmado no browser: aba legado no menu + ChatScreen renderiza (.livechat); pointerCoarse=false no desktop. Teste do Enter/paste no iPhone: Wandson.
 
 Redesign Chat ao Vivo em **7 fases**: F1 #601 · F2 #604 · F3 #605 · F4 #606 · F5 #608 · F6 #610 · F7 #612.
+
+## 2026-06-28 — Sessão 101: Integração iFood completa (estudo → F1 → F2 → tela → ponta a ponta)
+
+**Contexto:** Pergunta inicial — como os agentes recebem demanda no WhatsApp e EXECUTAM no iFood (ex.: pausar produto). A sessão entregou a integração iFood inteira, em produção, confirmada visualmente pelo Wandson.
+
+**Estudo:** API oficial iFood mapeada do portal logado (Super Integradora). Doc-mestre `docs/integracoes/ifood/PLANO-INTEGRACAO-IFOOD.md` (9 seções) + `_fontes-portal-ifood/`. Auth = **Centralized** (client_credentials; Bridge é backend privado — confirmado na doc), não Distributed. Vínculo de loja: Meus Apps→Permissões (por CNPJ, dono aprova no Portal do Parceiro).
+
+**F1 leitura (PR #614):** `lib/ifood.js` (centralized, cache+single-flight de token, retry, Zod) + `routes/ifood.js` GETs + migration `ifood_merchants`. Provada live.
+
+**F2 escrita gated:**
+- Onda 1 (#615): `POST /api/ifood/acao` (cria draft amarelo) + `/aprovar/:draftId` (única porta de escrita; assertTenantMember). Migration +`failed` no CHECK agent_drafts.status. X-Burger de teste criado/pausado/reaberto live (disponibilidade em `contextModifiers[].status`).
+- Onda 2 (#616): BRENO detecta intenção iFood no WhatsApp → cria draft. Deploy Trigger.dev v20260628.7.
+- Fix aprovação (#618): tela AprovacoesUnificadas dispara `/api/ifood/aprovar` ao aprovar draft iFood (ordem pending→executa→sent).
+
+**Tela Cardápio iFood (#617):** rota agregada `GET /api/ifood/cardapio` + tela Console v2 (categorias/itens/preço/status, botões pausar/reabrir gated).
+
+**Fix prod "Failed to fetch":** `ifood_merchants` vazia → rota 502 (Cloudflare → "Failed to fetch"). Inserido mapeamento tenant Consult Delivery (9079bd4d) → loja teste (92a0ec17). Tela carregou — confirmado pelo Wandson.
+
+**Descobertas API Catalog v2.0:** disponibilidade efetiva em `contextModifiers[].status` (não item.status); nome em `products[]`; idempotência PUT /items por (externalCode, productId); sellableItems usa groupId≠catalogId.
+
+**Pendências:** chip task_b0f3dc0c (guard assertTenantMember); E2E real pelo WhatsApp a validar; loja REAL só após homologação iFood (Wandson sem acesso ao Portal do Parceiro — e-mail com letra errada, chamado aberto).
+
+**6 PRs:** #614 #615 #616 #617 #618 + migrations ifood_merchants e agent_drafts_status_failed.
