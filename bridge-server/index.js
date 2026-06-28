@@ -1590,6 +1590,15 @@ app.use('/api', require('./routes/vendaerp')({
   erp: require('./lib/vendaerp'),
 }));
 
+// Loop AI-First — despacho de especialista (regra única; Hermes via MCP + Trigger.dev).
+// POST /loop/despachar, protegido por x-internal-token. Substitui a regra que vivia
+// no admin-mcp (cd_despachar_especialista, agora thin RPC para esta rota).
+app.use('/loop', require('./routes/loop-despachar')({
+  requireInternalToken,
+  sbFetch,
+  supabaseInsert,
+}));
+
 // iFood — leitura (Console via JWT, Hermes via x-internal-token).
 // Ponto único de contato com a API do iFood; credencial (client_credentials)
 // só no env do Bridge. merchantId resolvido por query/tenant/env.
