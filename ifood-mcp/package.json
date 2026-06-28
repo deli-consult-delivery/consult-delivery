@@ -1,0 +1,20 @@
+{
+  "name": "cd-ifood-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "MCP do Hermes para o iFood — SÓ LEITURA. Não fala direto com a API do iFood: chama o Bridge (/api/ifood/*) com x-internal-token. Nenhuma credencial do iFood vive aqui. Toda chamada é auditada em audit_log.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "smoke": "node test/smoke.js",
+    "live-smoke": "node test/live-smoke.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "zod": "^3.23.8"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
