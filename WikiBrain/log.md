@@ -1518,3 +1518,20 @@ Redesign Chat ao Vivo em **7 fases**: F1 #601 · F2 #604 · F3 #605 · F4 #606 �
 **Pendências:** chip task_b0f3dc0c (guard assertTenantMember); E2E real pelo WhatsApp a validar; loja REAL só após homologação iFood (Wandson sem acesso ao Portal do Parceiro — e-mail com letra errada, chamado aberto).
 
 **6 PRs:** #614 #615 #616 #617 #618 + migrations ifood_merchants e agent_drafts_status_failed.
+
+---
+
+## 2026-06-28 — Loop autônomo `/loop`: GATE 0 + FASE 1 + FASE 4 do Blueprint v2 (6 PRs) [T4/AI-First]
+
+Sessão de loop auto-ritmado (build→verificação com output bruto→PR→merge), continuando o plano-mestre AI-First Hermes-First (Blueprint v2) a partir de onde a sessão da nuvem (#621) parou. Toda a **superfície de código autônoma e verificável** do GATE 0 + FASE 1 + FASE 4 foi entregue e mergeada em `main`:
+
+- **#622** — FASE 1 roteamento-como-dado: `hermes/routing/roster.json` (espelho versionado de `agents`/`tenant_agents`) + `gen-describe.cjs` (gera `profile describe` dos 12 agentes, `--check` anti-drift, `--self-test`) + 12 `describe.txt` + `deploy-hermes.sh` aplica via CLI; **gitleaks no CI**.
+- **#623** — `POST /loop/despachar` no Bridge = regra única (resolve loja→customer, valida especialista vs `tenant_agents`, insere `client_tasks`); `cd_despachar_especialista` virou thin RPC; smoke 5/5.
+- **#624** — `erp_confirmar` estrutural out-of-band: migration `20260628_004` APLICADA (`confirm_code_hash`+`confirm_attempts`); código gerado, só hash guardado, nunca devolvido ao agente; lock após 5 tentativas; testes verdes.
+- **#625** — rota `POST /loop/erp-confirm-code` entrega o código ao CEO (sino + Telegram, soft-fail); smoke 3/3.
+- **#626** — authz por tenant server-side no admin-mcp (`assertTenantExists`/`assertLojaInTenant`; escrita fail-closed); 7/7.
+- **#627** — FASE 4 lint de persona (`lint-persona.cjs` barra R$/%/prazos em SOUL.md/SKILL.md; no `deploy-hermes.sh`); 12 SOUL.md passam.
+
+**Reservado ao Wandson (VPS):** deploy do Bridge; `INTERNAL_BRIDGE_TOKEN` no admin-mcp; `VENDAERP_WRITE_TOKEN`; `TELEGRAM_BOT_TOKEN`+`CEO_TELEGRAM_CHAT_ID`; rotação do `VENDAERP_TOKEN`; root→claudedev; `deploy-hermes.sh --apply` + `hermes gateway restart`.
+
+**Teto autônomo atingido.** Restam itens que precisam da VPS/Hermes vivo p/ validar + design do Wandson: semáforo enforcement no send-path, FASE 2 (MCPs de ação ifood/asaas/evolution/web), FASE 3 (loop end-to-end + fluxo C + VERIFICA), FASE 5 (integração plataforma). Recomendado: sessão dedicada com o Wandson presente.
