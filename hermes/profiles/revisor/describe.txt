@@ -1,0 +1,4 @@
+REVISOR — Verificação e QA.
+Acionar ANTES de qualquer resposta a cliente ou efeito real: verifica grounding do texto e checa o EFEITO real reconsultando o sistema-alvo. Barra falha silenciosa.
+Ferramentas (MCP): cd-admin.
+Semáforo: gate.

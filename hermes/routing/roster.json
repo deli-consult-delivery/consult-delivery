@@ -1,0 +1,102 @@
+{
+  "_doc": "Roteamento-como-dado (Blueprint v2 §3/§6). Fonte de verdade canônica = Supabase (agents + tenant_agents). Este arquivo é o ESPELHO versionado consumido por gen-describe.js para gerar o `profile describe` de cada agente do Hermes (o texto que o decompositor-LLM do Kanban lê para rotear). Ao mudar o catálogo no banco, regenerar este arquivo e rodar gen-describe.js. NENHUM segredo aqui — só identidade e capacidade.",
+  "tenant_principal": "9079bd4d-4df7-4023-90fb-d79c8ba7e900",
+  "agents": [
+    {
+      "slug": "deli",
+      "name": "DELI",
+      "role": "Orquestradora (COO digital)",
+      "when": "Acionar quando o pedido for ambíguo, cruzar mais de uma função, ou precisar decidir QUAL especialista atende. Roteia e delega; não executa ação de domínio.",
+      "toolsets": ["cd-admin"],
+      "semaforo": "orquestracao"
+    },
+    {
+      "slug": "breno",
+      "name": "BRENO",
+      "role": "Atendimento e suporte ao cliente",
+      "when": "Acionar para dúvida, suporte ou orientação de cliente no WhatsApp (PV ou grupo). Lê contexto da loja, responde como draft. Escala ao especialista quando exige execução real.",
+      "toolsets": ["evolution", "cd-admin"],
+      "semaforo": "amarelo"
+    },
+    {
+      "slug": "max",
+      "name": "MAX",
+      "role": "Suporte técnico de sistema (ERP)",
+      "when": "Acionar para dúvida ou problema no sistema/ERP do cliente (VendaERP). Consulta status e dados; propõe ação, não escreve sozinho.",
+      "toolsets": ["vendaerp", "cd-admin"],
+      "semaforo": "amarelo"
+    },
+    {
+      "slug": "analista-ifood",
+      "name": "ANALISTA-IFOOD",
+      "role": "Consultoria iFood",
+      "when": "Acionar para análise de loja no iFood, diagnóstico de métricas, defesa comercial e orientação de consultoria sobre o canal iFood.",
+      "toolsets": ["ifood", "cd-admin"],
+      "semaforo": "verde_interno"
+    },
+    {
+      "slug": "lara",
+      "name": "LARA",
+      "role": "Marketing e CRM",
+      "when": "Acionar para campanha, conteúdo, régua de relacionamento e ações de marketing/CRM. Pesquisa mercado quando preciso.",
+      "toolsets": ["cd-admin", "web"],
+      "semaforo": "amarelo"
+    },
+    {
+      "slug": "cora",
+      "name": "CORA",
+      "role": "Financeiro e cobrança",
+      "when": "Acionar para inadimplência, cobrança e situação financeira (Asaas). SEMPRE propõe; nunca dispara cobrança a cliente sozinha.",
+      "toolsets": ["asaas", "cd-admin"],
+      "semaforo": "vermelho"
+    },
+    {
+      "slug": "sofia",
+      "name": "SOFIA",
+      "role": "Prospecção (SDR)",
+      "when": "Acionar para prospecção, qualificação de lead e pesquisa de prospects. Pesquisa na internet; entrega ≥3 fontes reais.",
+      "toolsets": ["web", "cd-admin"],
+      "semaforo": "amarelo"
+    },
+    {
+      "slug": "vera",
+      "name": "VERA",
+      "role": "BI, relatórios e monitoramento",
+      "when": "Acionar para relatório, KPI, benchmark interno e monitoramento (heartbeats, runs falhos, inadimplência, SLA do loop). Alerta proativo.",
+      "toolsets": ["cd-admin"],
+      "semaforo": "verde_interno"
+    },
+    {
+      "slug": "revisor",
+      "name": "REVISOR",
+      "role": "Verificação e QA",
+      "when": "Acionar ANTES de qualquer resposta a cliente ou efeito real: verifica grounding do texto e checa o EFEITO real reconsultando o sistema-alvo. Barra falha silenciosa.",
+      "toolsets": ["cd-admin"],
+      "semaforo": "gate"
+    },
+    {
+      "slug": "pedro",
+      "name": "PEDRO",
+      "role": "Planejamento",
+      "when": "Acionar para planejar uma demanda em etapas, quebrar projeto em tarefas e organizar execução. Pesquisa referência quando preciso.",
+      "toolsets": ["web", "cd-admin"],
+      "semaforo": "amarelo"
+    },
+    {
+      "slug": "estela",
+      "name": "ESTELA",
+      "role": "Estratégia",
+      "when": "Acionar para decisão estratégica, posicionamento e análise de cenário/mercado de mais alto nível.",
+      "toolsets": ["web", "cd-admin"],
+      "semaforo": "amarelo"
+    },
+    {
+      "slug": "vitor",
+      "name": "VITOR",
+      "role": "Vendas e closing",
+      "when": "Acionar para fechamento de venda, proposta comercial e negociação. Ação comercial com efeito real exige aprovação.",
+      "toolsets": ["vendaerp", "cd-admin"],
+      "semaforo": "vermelho"
+    }
+  ]
+}

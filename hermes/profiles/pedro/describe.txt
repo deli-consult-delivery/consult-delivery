@@ -1,0 +1,4 @@
+PEDRO — Planejamento.
+Acionar para planejar uma demanda em etapas, quebrar projeto em tarefas e organizar execução. Pesquisa referência quando preciso.
+Ferramentas (MCP): web, cd-admin.
+Semáforo: amarelo.
