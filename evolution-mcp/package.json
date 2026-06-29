@@ -1,0 +1,20 @@
+{
+  "name": "cd-evolution-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "MCP do Hermes para o WhatsApp (Evolution) — SÓ LEITURA de status. Não envia nada: chama o Bridge (/api/evolution/status) com x-internal-token. Envio a cliente é draft + aprovação, fora deste MCP. Toda chamada auditada.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "smoke": "node test/smoke.js",
+    "live-smoke": "node test/live-smoke.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "zod": "^3.23.8"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

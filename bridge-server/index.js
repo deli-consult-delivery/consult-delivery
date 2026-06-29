@@ -1607,6 +1607,12 @@ app.use('/loop', require('./routes/loop-erp-confirm-code')({
   supabaseInsert,
 }));
 
+// Evolution — status da conexão WhatsApp (leitura). Console via JWT, Hermes via x-internal-token.
+app.use('/api', require('./routes/evolution-status')({
+  requireJwtOrInternal,
+  sbFetch,
+}));
+
 // iFood — leitura (Console via JWT, Hermes via x-internal-token).
 // Ponto único de contato com a API do iFood; credencial (client_credentials)
 // só no env do Bridge. merchantId resolvido por query/tenant/env.
