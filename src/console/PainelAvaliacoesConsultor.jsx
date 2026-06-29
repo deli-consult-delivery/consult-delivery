@@ -7,7 +7,7 @@ const CLIENT_PAGE = 'https://app.consultdelivery.com.br/aprovacao-avaliacao.html
 const EVO_URL     = 'https://evo1-evolution-api.bawafu.easypanel.host';
 const EVO_KEY     = '66A55B39-3167-4B15-8933-D65B26F56E6F';
 const EVO_INST    = 'consult-delivery';
-const WA_GROUP    = '120363175577392322@g.us';
+const WA_GROUP_FALLBACK = '120363175577392322@g.us'; // fallback se loja sem grupo
 
 const SUPA_HDR = {
   'apikey': SUPA_ANON,
@@ -31,6 +31,16 @@ async function sbUpdate(match, body) {
   return r.json();
 }
 
+// Atualiza whatsapp_group em todos os registros de uma loja
+async function sbUpdateStoreGroup(store, groupId) {
+  const q = `store=eq.${encodeURIComponent(store)}`;
+  const r = await fetch(`${SUPA_URL}/rest/v1/reviews?${q}`, {
+    method: 'PATCH', headers: SUPA_HDR, body: JSON.stringify({ whatsapp_group: groupId }),
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
 function mapRow(r) {
   return {
     id: r.id, store: r.store, orderId: r.order_id, rating: r.rating,
@@ -39,6 +49,7 @@ function mapRow(r) {
     status: r.status, deadline: r.deadline,
     createdAt: r.review_date || (r.created_at ? r.created_at.slice(0, 10) : null),
     token: r.token, approvedAt: r.approved_at, publishedAt: r.published_at,
+    whatsappGroup: r.whatsapp_group || null,
   };
 }
 
@@ -72,17 +83,108 @@ function buildWaMsg(review, resp) {
   return `📋 *Avaliação para aprovação — ${review.store}*\n\n${stars} — Pedido ${review.orderId}\n\n*Comentário do cliente:*\n_"${review.clientComment}"_\n\n*Sugestão de resposta:*\n${resp}\n\n🔗 *Link para aprovar ou editar:*\n${link}\n\n_(Sem retorno até as 9h do dia seguinte, publicamos essa resposta no iFood.)_`;
 }
 
-async function postEvo(numero, text) {
+async function postEvo(groupId, text) {
   const r = await fetch(`${EVO_URL}/message/sendText/${EVO_INST}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'apikey': EVO_KEY },
-    body: JSON.stringify({ number: numero, text }),
+    body: JSON.stringify({ number: groupId, text }),
   });
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 }
 
+async function fetchEvoGroups() {
+  const r = await fetch(`${EVO_URL}/group/fetchAllGroups/${EVO_INST}?getParticipants=false`, {
+    headers: { 'apikey': EVO_KEY },
+  });
+  if (!r.ok) throw new Error(await r.text());
+  const data = await r.json();
+  // retorna array de { id, subject } ordenado por nome
+  return (Array.isArray(data) ? data : [])
+    .map(g => ({ id: g.id, name: g.subject || g.id }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+}
+
 function copiar(t) { try { navigator.clipboard?.writeText(t || ''); } catch { /* ignora */ } }
+
+// ─── Seção de configuração de grupos por loja ────────────────────────────────
+function ConfigGrupos({ stores, storeGroups, groups, groupsLoading, groupsError, onSave }) {
+  const [open, setOpen] = useState(false);
+  const [local, setLocal] = useState(() => ({ ...storeGroups }));
+  const [saving, setSaving] = useState(false);
+
+  // sincroniza quando storeGroups muda (ex: após salvar)
+  useEffect(() => { setLocal({ ...storeGroups }); }, [storeGroups]);
+
+  async function salvar() {
+    setSaving(true);
+    await onSave(local);
+    setSaving(false);
+  }
+
+  return (
+    <div className="cv2-card">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+        <div>
+          <h3 style={{ margin: 0 }}>Grupos WhatsApp por loja</h3>
+          <div style={{ fontSize: 12, color: 'var(--tx2)', marginTop: 3 }}>
+            Configure o grupo de cada loja. A lista de grupos é buscada automaticamente na Evolution API.
+          </div>
+        </div>
+        <button className="cv2-btn sec" style={{ fontSize: 12 }} onClick={() => setOpen(v => !v)}>
+          {open ? 'Fechar' : 'Configurar'}
+        </button>
+      </div>
+
+      {open && (
+        <div style={{ marginTop: 14 }}>
+          {groupsLoading && <div style={{ fontSize: 13, color: 'var(--tx2)' }}>Carregando grupos da Evolution API…</div>}
+          {groupsError && <div style={{ fontSize: 13, color: 'var(--red)' }}>Erro ao buscar grupos: {groupsError}</div>}
+          {!groupsLoading && groups.length === 0 && !groupsError && (
+            <div style={{ fontSize: 13, color: 'var(--tx2)' }}>Nenhum grupo encontrado na Evolution API.</div>
+          )}
+          {stores.length === 0 && (
+            <div style={{ fontSize: 13, color: 'var(--tx2)' }}>Nenhuma loja encontrada nas avaliações ainda.</div>
+          )}
+          {stores.map(store => (
+            <div key={store} style={{
+              display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+              padding: '8px 0', borderBottom: '1px solid var(--line)',
+            }}>
+              <span style={{ flex: 1, minWidth: 160, fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{store}</span>
+              <select
+                value={local[store] || ''}
+                onChange={e => setLocal(l => ({ ...l, [store]: e.target.value }))}
+                style={{ ...inp, width: 'auto', minWidth: 260, fontSize: 12 }}
+                disabled={groupsLoading || groups.length === 0}
+              >
+                <option value="">— selecionar grupo —</option>
+                {groups.map(g => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
+              {local[store] && (
+                <span style={{ fontSize: 11, color: 'var(--tx2)', fontFamily: 'monospace' }}>
+                  {local[store]}
+                </span>
+              )}
+            </div>
+          ))}
+          {stores.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <button className="cv2-btn" style={{ fontSize: 12 }} disabled={saving || groupsLoading} onClick={salvar}>
+                {saving ? 'Salvando…' : 'Salvar configuração de grupos'}
+              </button>
+              <span style={{ fontSize: 11, color: 'var(--tx2)', marginLeft: 10 }}>
+                Aplica o grupo a todas as avaliações da loja no Supabase.
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── Card individual ──────────────────────────────────────────────────────────
 function CardReview({ review, busy, onSend, onPublish, onSaveDraft }) {
@@ -111,6 +213,17 @@ function CardReview({ review, busy, onSend, onPublish, onSaveDraft }) {
         {review.deadline && <span className="cv2-bdg warn" style={{ fontSize: 11 }}>⏳ {review.deadline}</span>}
         <span style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 600, color: 'var(--ink)' }}>{review.store}</span>
       </div>
+
+      {/* Indicador de grupo WA */}
+      {review.whatsappGroup ? (
+        <div style={{ fontSize: 11, color: 'var(--tx2)', marginBottom: 6 }}>
+          📲 Grupo: <span style={{ fontFamily: 'monospace' }}>{review.whatsappGroup}</span>
+        </div>
+      ) : (
+        <div style={{ fontSize: 11, color: 'var(--red)', marginBottom: 6 }}>
+          ⚠ Grupo WA não configurado — configure acima antes de enviar.
+        </div>
+      )}
 
       {/* Cliente */}
       {review.clientName && (
@@ -184,7 +297,8 @@ function CardReview({ review, busy, onSend, onPublish, onSaveDraft }) {
             <button
               className="cv2-btn"
               style={{ fontSize: 11.5 }}
-              disabled={busy || over || !draft.trim()}
+              disabled={busy || over || !draft.trim() || !review.whatsappGroup}
+              title={!review.whatsappGroup ? 'Configure o grupo WA desta loja antes de enviar' : ''}
               onClick={() => onSend(review.id, draft)}
             >
               {busy ? '…' : review.status === 'sent_to_client' ? 'Reenviar prévia' : 'Enviar prévia ao cliente'}
@@ -223,6 +337,12 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
   const [busy, setBusy]     = useState(null);
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterStore, setFilterStore]   = useState('all');
+
+  // grupos Evolution API
+  const [groups, setGroups]           = useState([]);
+  const [groupsLoading, setGroupsLoading] = useState(true);
+  const [groupsError, setGroupsError]   = useState(null);
+
   const pollerRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -234,19 +354,49 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
     finally { setLoading(false); }
   }, []);
 
+  // Busca grupos da Evolution API
+  useEffect(() => {
+    fetchEvoGroups()
+      .then(gs => { setGroups(gs); setGroupsError(null); })
+      .catch(e => setGroupsError(e.message))
+      .finally(() => setGroupsLoading(false));
+  }, []);
+
   useEffect(() => {
     load();
     pollerRef.current = setInterval(load, 30_000);
     return () => clearInterval(pollerRef.current);
   }, [load]);
 
+  // Mapa loja → grupo (derivado das reviews)
+  const storeGroups = {};
+  reviews.forEach(r => {
+    if (r.store && r.whatsappGroup && !storeGroups[r.store]) {
+      storeGroups[r.store] = r.whatsappGroup;
+    }
+  });
+
+  const stores = [...new Set(reviews.map(r => r.store).filter(Boolean))].sort();
+
+  async function handleSaveGroups(mapping) {
+    // Salva no Supabase: para cada loja, atualiza whatsapp_group em todos os reviews
+    const entries = Object.entries(mapping).filter(([, v]) => v);
+    if (!entries.length) return;
+    try {
+      await Promise.all(entries.map(([store, groupId]) => sbUpdateStoreGroup(store, groupId)));
+      flash('Grupos salvos ✓');
+      await load();
+    } catch (e) { setError('Erro ao salvar grupos: ' + e.message); }
+  }
+
   async function handleSend(id, draft) {
     const rev = reviews.find(r => r.id === id);
     if (!rev) return;
+    const groupId = rev.whatsappGroup || WA_GROUP_FALLBACK;
     setBusy(id); setError(null);
     try {
       const msg = buildWaMsg(rev, draft);
-      await postEvo(WA_GROUP, msg);
+      await postEvo(groupId, msg);
       await sbUpdate({ id }, { status: 'sent_to_client', suggested_response: draft });
       flash('Prévia enviada ao grupo ✓');
       await load();
@@ -279,7 +429,6 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
     setTimeout(() => setNotice(null), 4000);
   }
 
-  const stores = [...new Set(reviews.map(r => r.store).filter(Boolean))].sort();
   const filtered = reviews.filter(r => {
     if (filterStatus !== 'all' && r.status !== filterStatus) return false;
     if (filterStore !== 'all' && r.store !== filterStore) return false;
@@ -293,6 +442,8 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
     done:     reviews.filter(r => r.status === 'published').length,
   };
 
+  const semGrupo = stores.filter(s => !storeGroups[s]).length;
+
   return (
     <div>
       <h1>Respostas de Avaliações <span className="cv2-mock">iFood · Consultor</span></h1>
@@ -302,6 +453,25 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
         {error  && <span style={{ color: 'var(--red)'   }}> · {error}</span>}
         {notice && <span style={{ color: 'var(--green)' }}> · {notice}</span>}
       </div>
+
+      {/* Alerta lojas sem grupo */}
+      {semGrupo > 0 && (
+        <div className="cv2-card" style={{ borderLeft: '3px solid var(--red)', marginBottom: 10 }}>
+          <span style={{ fontSize: 13, color: 'var(--ink)' }}>
+            ⚠ <strong>{semGrupo} loja{semGrupo > 1 ? 's' : ''}</strong> sem grupo WhatsApp configurado — configure abaixo antes de enviar.
+          </span>
+        </div>
+      )}
+
+      {/* Config de grupos */}
+      <ConfigGrupos
+        stores={stores}
+        storeGroups={storeGroups}
+        groups={groups}
+        groupsLoading={groupsLoading}
+        groupsError={groupsError}
+        onSave={handleSaveGroups}
+      />
 
       {/* KPIs */}
       <div className="cv2-kpis">
@@ -366,7 +536,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
       )}
       {filtered.map(rev => (
         <CardReview
-          key={`${rev.id}-${rev.status}`}
+          key={`${rev.id}-${rev.status}-${rev.whatsappGroup}`}
           review={rev}
           busy={busy === rev.id}
           onSend={handleSend}
