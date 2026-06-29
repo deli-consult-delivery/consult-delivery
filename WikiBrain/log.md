@@ -1535,3 +1535,18 @@ Sessão de loop auto-ritmado (build→verificação com output bruto→PR→merg
 **Reservado ao Wandson (VPS):** deploy do Bridge; `INTERNAL_BRIDGE_TOKEN` no admin-mcp; `VENDAERP_WRITE_TOKEN`; `TELEGRAM_BOT_TOKEN`+`CEO_TELEGRAM_CHAT_ID`; rotação do `VENDAERP_TOKEN`; root→claudedev; `deploy-hermes.sh --apply` + `hermes gateway restart`.
 
 **Teto autônomo atingido.** Restam itens que precisam da VPS/Hermes vivo p/ validar + design do Wandson: semáforo enforcement no send-path, FASE 2 (MCPs de ação ifood/asaas/evolution/web), FASE 3 (loop end-to-end + fluxo C + VERIFICA), FASE 5 (integração plataforma). Recomendado: sessão dedicada com o Wandson presente.
+
+---
+
+## 2026-06-29 — FASE 2: MCPs de ação (leitura) completa [T4/AI-First]
+
+3 MCPs novos do Hermes (padrão `vendaerp-mcp`: fino→Bridge, credencial só no Bridge, auditados, ZERO write — envio/escrita é draft+aprovação fora do MCP), smoke offline + `node --check`, mergeados:
+
+- **#629 `ifood-mcp`** — 5 tools leitura (status/catalogo/cardapio/reviews/vendas) sobre `/api/ifood/*`.
+- **#630 `asaas-mcp`** — 2 tools (saldo/situacao_mes); Bridge: rotas asaas `requireJwt`→`requireJwtOrInternal`.
+- **#631 `evolution-mcp`** — 1 tool evolution_status; Bridge: rota nova `GET /api/evolution/status` (lê `evolution_instances`, não envia).
+- **`web`** = toolset nativo do Hermes (config no profile, VPS) — não é MCP custom. FASE 2 fecha.
+
+**Reservado ao Wandson (VPS):** deploy do Bridge (rotas asaas/evolution mudaram); por MCP `npm install` + `hermes mcp add {ifood,asaas,evolution}` + `hermes gateway restart` + `live-smoke`.
+
+**Próximo:** FASE 3 (loop end-to-end + fluxo C + VERIFICA) e FASE 5 (integração) — precisam do Hermes vivo p/ validar.
