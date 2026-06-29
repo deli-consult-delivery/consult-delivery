@@ -67,7 +67,7 @@
   .btn-modify { width: 100%; padding: 13px; background: transparent; color: var(--offwhite); border: 1.5px solid var(--border); border-radius: 999px; font-family: 'Montserrat', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; transition: border-color 0.2s, color 0.2s; margin-bottom: 16px; }
   .btn-modify:hover:not(:disabled) { border-color: var(--offwhite); color: var(--white); }
   .btn-modify:disabled { opacity: 0.4; cursor: not-allowed; }
-  .auto-note { text-align: center; font-size: 11px; color: var(--muted); line-height: 1.5; }
+  .auto-note { text-align: center; font-size: 11px; color: var(--muted); line-height: 1.7; }
   .success-card { background: var(--card); border: 1px solid rgba(34,197,94,0.2); border-radius: 16px; padding: 32px 20px; text-align: center; }
   .success-icon { font-size: 48px; margin-bottom: 16px; }
   .success-title { font-family: 'Anton', sans-serif; font-size: 22px; letter-spacing: 0.02em; margin-bottom: 8px; }
@@ -128,11 +128,14 @@
       <p class="edit-hint">Você pode editar a resposta antes de aprovar</p>
       <div class="deadline-banner" id="deadline-banner" style="display:none">
         <span class="icon">⏳</span>
-        <span><strong id="deadline-text"></strong> — sem resposta até amanhã, publicamos a sugestão acima no iFood.</span>
+        <span><strong id="deadline-text"></strong> — sem retorno até as 9h do dia seguinte, publicamos a sugestão acima no iFood.</span>
       </div>
       <button class="btn-approve" id="btn-approve" onclick="handleApprove()">APROVAR RESPOSTA</button>
       <button class="btn-modify" id="btn-modify" onclick="handleModify()">Enviar com minha alteração</button>
-      <p class="auto-note">Ao aprovar, a Consult Delivery publica essa resposta no iFood em seu nome.<br>Sem retorno até amanhã, a sugestão original é publicada automaticamente.</p>
+      <p class="auto-note">
+        Ao aprovar, a Consult Delivery publica essa resposta no iFood em seu nome.<br>
+        Sem retorno até as <strong style="color:var(--offwhite)">9h do dia seguinte</strong>, a sugestão original é publicada automaticamente.
+      </p>
     </div>
   </div>
   <div id="success" style="display:none">
