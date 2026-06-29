@@ -200,6 +200,7 @@
     min-height: 110px;
   }
   textarea::placeholder { color: var(--muted); }
+  textarea:disabled { opacity: 0.5; cursor: not-allowed; }
 
   .edit-hint {
     font-size: 11px;
@@ -258,6 +259,24 @@
   .btn-modify:hover:not(:disabled) { border-color: var(--offwhite); color: var(--white); }
   .btn-modify:disabled { opacity: 0.4; cursor: not-allowed; }
 
+  .btn-single-approve {
+    width: 100%;
+    padding: 11px;
+    background: transparent;
+    color: var(--offwhite);
+    border: 1.5px solid var(--border);
+    border-radius: 999px;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+    margin-top: 12px;
+  }
+  .btn-single-approve:hover:not(:disabled) { border-color: #22c55e; color: #22c55e; }
+  .btn-single-approve:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-single-approve.done { border-color: rgba(34,197,94,0.4); color: #22c55e; background: rgba(34,197,94,0.06); }
+
   .auto-note {
     text-align: center;
     font-size: 11px;
@@ -285,6 +304,16 @@
     line-height: 1.6;
   }
 
+  /* Multi-review divider */
+  .review-number {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+
   footer {
     text-align: center;
     font-size: 11px;
@@ -307,16 +336,19 @@
 </header>
 
 <main>
+  <!-- Loading -->
   <div id="loading" class="state-screen">
     <div class="spinner"></div>
     <p>Carregando avaliação…</p>
   </div>
 
+  <!-- Error -->
   <div id="error" class="state-screen" style="display:none">
     <p style="font-size:32px">—</p>
     <p id="error-msg">Link inválido ou expirado.</p>
   </div>
 
+  <!-- Single review (backward compat with ?token=) -->
   <div id="content" style="display:none">
     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:20px;">
       <div>
@@ -363,11 +395,27 @@
     </div>
   </div>
 
+  <!-- Multi review (?tokens=t1,t2,...) -->
+  <div id="multi-content" style="display:none">
+    <div style="margin-bottom:20px;">
+      <h1 class="page-title">APROVAÇÃO DE<br><span>RESPOSTAS</span></h1>
+      <p class="page-subtitle" id="multi-subtitle">Revise e aprove as respostas para publicação no iFood</p>
+    </div>
+    <div class="store-name" id="multi-store-name" style="margin-bottom:20px"></div>
+    <div id="reviews-list"></div>
+    <button class="btn-approve" id="btn-approve-all" onclick="handleApproveAll()" style="margin-top:8px">APROVAR TODAS AS RESPOSTAS</button>
+    <p class="auto-note" style="margin-top:12px">
+      Ao aprovar, a Consult Delivery publica as respostas no iFood em seu nome.<br>
+      Sem retorno até as <strong style="color:var(--offwhite)">9h do dia seguinte</strong>, as sugestões originais são publicadas automaticamente.
+    </p>
+  </div>
+
+  <!-- Success -->
   <div id="success" style="display:none">
     <div class="success-card">
       <div class="success-icon">✓</div>
       <div class="success-title">APROVADO!</div>
-      <p class="success-sub">Recebemos sua aprovação.<br>A resposta será publicada no iFood em breve pela equipe da Consult Delivery.</p>
+      <p class="success-sub">Recebemos sua aprovação.<br>As respostas serão publicadas no iFood em breve pela equipe da Consult Delivery.</p>
     </div>
   </div>
 </main>
@@ -378,64 +426,250 @@
 const SUPABASE_URL  = 'https://czyanilrverorwenikqw.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6eWFuaWxydmVyb3J3ZW5pa3F3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwNTg5MzksImV4cCI6MjA5MjYzNDkzOX0.k_EIEgnM5a-4Ub52-w5VJw9WJBEPNQmmwgz8AEuyoAw';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
-let reviewId = null;
+
+// ── Shared state ──────────────────────────────────────────────────────────────
+let singleReviewId = null;
+let multiReviews   = [];          // pending reviews in multi mode
+let approvedIds    = new Set();   // approved this session (multi mode)
+
 const STAR_COLORS = { 1:'#ef4444', 2:'#f97316', 3:'#eab308', 4:'#84cc16', 5:'#22c55e' };
+
 function renderStars(rating) {
   const col = STAR_COLORS[rating] || '#888';
-  return [1,2,3,4,5].map(i => `<span class="star" style="color:${i<=rating?col:'#333'}">${i<=rating?'★':'☆'}</span>`).join('');
+  return [1,2,3,4,5].map(i =>
+    `<span class="star" style="color:${i<=rating?col:'#333'}">${i<=rating?'★':'☆'}</span>`
+  ).join('');
 }
-function updateCharCount() {
-  const ta = document.getElementById('response-text');
-  const cc = document.getElementById('char-count');
+
+function fmtDate(iso) {
+  if (!iso) return '';
+  const p = String(iso).split('-');
+  return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : iso;
+}
+
+function escHtml(s) {
+  return String(s || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function updateCC(id) {
+  const ta = document.getElementById('ta-' + id);
+  const cc = document.getElementById('cc-' + id);
+  if (!ta || !cc) return;
   const n = ta.value.length;
-  cc.textContent = `${n}/300`;
-  cc.className = 'char-count' + (n>=280?' danger': n>=240?' warn': '');
+  cc.textContent = n + '/300';
+  cc.className = 'char-count' + (n >= 280 ? ' danger' : n >= 240 ? ' warn' : '');
 }
+
 function showState(state) {
-  ['loading','error','content','success'].forEach(s => document.getElementById(s).style.display = s===state ? '' : 'none');
+  ['loading','error','content','multi-content','success'].forEach(function(s) {
+    var el = document.getElementById(s);
+    if (el) el.style.display = (s === state) ? '' : 'none';
+  });
 }
+
+function showError(msg) {
+  document.getElementById('error-msg').textContent = msg;
+  showState('error');
+}
+
+// ── Entry point ───────────────────────────────────────────────────────────────
 async function load() {
-  const token = new URLSearchParams(location.search).get('token');
-  if (!token) { showError('Link inválido — token não encontrado.'); return; }
-  const { data, error } = await sb.from('reviews').select('*').eq('token', token).maybeSingle();
-  if (error || !data) { showError('Avaliação não encontrada ou link expirado.'); return; }
-  reviewId = data.id;
+  var params = new URLSearchParams(location.search);
+  var raw = params.get('tokens') || params.get('token');
+  if (!raw) { showError('Link inválido — token não encontrado.'); return; }
+  var tokens = raw.split(',').map(function(t){ return t.trim(); }).filter(Boolean);
+  if (!tokens.length) { showError('Link inválido.'); return; }
+  if (tokens.length === 1) {
+    await loadSingle(tokens[0]);
+  } else {
+    await loadMulti(tokens);
+  }
+}
+
+// ── Single review (original, backward compatible) ─────────────────────────────
+async function loadSingle(token) {
+  var res = await sb.from('reviews').select('*').eq('token', token).maybeSingle();
+  if (res.error || !res.data) { showError('Avaliação não encontrada ou link expirado.'); return; }
+  var data = res.data;
+  singleReviewId = data.id;
   if (['approved','modified','published'].includes(data.status)) { showState('success'); return; }
-  document.getElementById('store-name').textContent    = data.store;
-  document.getElementById('order-id').textContent      = data.order_id;
-  document.getElementById('review-date').textContent   = data.review_date || '';
-  document.getElementById('stars').innerHTML           = renderStars(data.rating);
+  document.getElementById('store-name').textContent     = data.store;
+  document.getElementById('order-id').textContent       = data.order_id;
+  document.getElementById('review-date').textContent    = fmtDate(data.review_date);
+  document.getElementById('stars').innerHTML            = renderStars(data.rating);
   document.getElementById('client-comment').textContent = data.client_comment;
-  const ta = document.getElementById('response-text');
+  var ta = document.getElementById('response-text');
   ta.value = data.suggested_response;
   ta.addEventListener('input', updateCharCount);
   updateCharCount();
   if (data.deadline) {
     document.getElementById('deadline-banner').style.display = '';
-    document.getElementById('deadline-text').textContent = data.deadline;
+    document.getElementById('deadline-text').textContent = fmtDate(data.deadline);
   }
-  const statusMap = { pending: { label:'AGUARDANDO', cls:'chip-urgent' }, sent_to_client: { label:'PENDENTE', cls:'chip-urgent' } };
-  const st = statusMap[data.status] || { label: data.status.toUpperCase(), cls: 'chip-ok' };
-  document.getElementById('status-chip').innerHTML = `<span class="chip ${st.cls}">${st.label}</span>`;
+  var statusMap = { pending:{label:'AGUARDANDO',cls:'chip-urgent'}, sent_to_client:{label:'PENDENTE',cls:'chip-urgent'} };
+  var st = statusMap[data.status] || {label: data.status.toUpperCase(), cls:'chip-ok'};
+  document.getElementById('status-chip').innerHTML = '<span class="chip ' + st.cls + '">' + st.label + '</span>';
   showState('content');
 }
+
+function updateCharCount() {
+  var ta = document.getElementById('response-text');
+  var cc = document.getElementById('char-count');
+  var n = ta.value.length;
+  cc.textContent = n + '/300';
+  cc.className = 'char-count' + (n >= 280 ? ' danger' : n >= 240 ? ' warn' : '');
+}
+
 async function handleApprove() {
-  setBtns(true);
-  const finalText = document.getElementById('response-text').value.trim();
-  const { error } = await sb.from('reviews').update({ status: 'approved', final_response: finalText, approved_at: new Date().toISOString() }).eq('id', reviewId);
-  if (error) { alert('Erro ao salvar. Tente novamente.'); setBtns(false); return; }
+  setSingleBtns(true);
+  var finalText = document.getElementById('response-text').value.trim();
+  var res = await sb.from('reviews').update({ status:'approved', final_response:finalText, approved_at:new Date().toISOString() }).eq('id', singleReviewId);
+  if (res.error) { alert('Erro ao salvar. Tente novamente.'); setSingleBtns(false); return; }
   showState('success');
 }
+
 async function handleModify() {
-  const ta = document.getElementById('response-text');
+  var ta = document.getElementById('response-text');
   if (!ta.value.trim()) { ta.focus(); return; }
-  setBtns(true);
-  const { error } = await sb.from('reviews').update({ status: 'modified', final_response: ta.value.trim(), approved_at: new Date().toISOString() }).eq('id', reviewId);
-  if (error) { alert('Erro ao salvar. Tente novamente.'); setBtns(false); return; }
+  setSingleBtns(true);
+  var res = await sb.from('reviews').update({ status:'modified', final_response:ta.value.trim(), approved_at:new Date().toISOString() }).eq('id', singleReviewId);
+  if (res.error) { alert('Erro ao salvar. Tente novamente.'); setSingleBtns(false); return; }
   showState('success');
 }
-function setBtns(disabled) { document.getElementById('btn-approve').disabled = disabled; document.getElementById('btn-modify').disabled = disabled; }
-function showError(msg) { document.getElementById('error-msg').textContent = msg; showState('error'); }
+
+function setSingleBtns(disabled) {
+  document.getElementById('btn-approve').disabled = disabled;
+  document.getElementById('btn-modify').disabled  = disabled;
+}
+
+// ── Multi review ─────────────────────────────────────────────────────────────
+async function loadMulti(tokens) {
+  var res = await sb.from('reviews').select('*').in('token', tokens);
+  if (res.error || !res.data || !res.data.length) {
+    showError('Avaliações não encontradas ou link expirado.');
+    return;
+  }
+  var data = res.data;
+  var DONE = ['approved','modified','published'];
+  var pending = data.filter(function(r){ return !DONE.includes(r.status); });
+  var done    = data.filter(function(r){ return  DONE.includes(r.status); });
+
+  if (pending.length === 0) { showState('success'); return; }
+
+  multiReviews = pending;
+  var storeName = data[0].store || '';
+  document.getElementById('multi-store-name').textContent = storeName;
+  document.getElementById('multi-subtitle').textContent =
+    pending.length + ' avaliação' + (pending.length > 1 ? 'ões' : '') + ' aguardando sua aprovação';
+
+  var list = document.getElementById('reviews-list');
+  list.innerHTML = '';
+
+  // Already-done ones (collapsed)
+  done.forEach(function(r) {
+    var div = document.createElement('div');
+    div.className = 'card';
+    div.style.cssText = 'border-color:rgba(34,197,94,0.3);opacity:0.55;margin-bottom:14px';
+    div.innerHTML =
+      '<div class="meta-row">' +
+        '<div class="stars">' + renderStars(r.rating) + '</div>' +
+        '<span class="meta-sep">·</span>' +
+        '<span class="meta-item">Pedido <strong>' + escHtml(r.order_id) + '</strong></span>' +
+      '</div>' +
+      '<div style="color:#22c55e;font-size:13px;font-weight:600">✓ Já aprovada</div>';
+    list.appendChild(div);
+  });
+
+  // Pending ones
+  pending.forEach(function(r, i) {
+    var div = document.createElement('div');
+    div.className = 'card';
+    div.id = 'card-' + r.id;
+    div.style.marginBottom = '20px';
+    var deadlineHtml = r.deadline
+      ? '<span class="chip chip-urgent" style="font-size:10px;margin-left:4px">⏳ ' + fmtDate(r.deadline) + '</span>'
+      : '';
+    var dateHtml = r.review_date
+      ? '<span class="meta-sep">·</span><span class="meta-item">' + escHtml(fmtDate(r.review_date)) + '</span>'
+      : '';
+    div.innerHTML =
+      '<div class="review-number">Avaliação ' + (i + 1) + ' de ' + pending.length + '</div>' +
+      '<div class="meta-row">' +
+        '<div class="stars">' + renderStars(r.rating) + '</div>' +
+        '<span class="meta-sep">·</span>' +
+        '<span class="meta-item">Pedido <strong>' + escHtml(r.order_id) + '</strong></span>' +
+        dateHtml + deadlineHtml +
+      '</div>' +
+      '<div class="block-label client">Comentário do cliente</div>' +
+      '<div class="comment-box">' + escHtml(r.client_comment || '') + '</div>' +
+      '<div class="block-label suggest">Sugestão de resposta</div>' +
+      '<div class="response-wrap">' +
+        '<div class="response-header">' +
+          '<span class="block-label suggest" style="margin-bottom:0">Resposta</span>' +
+          '<span class="char-count" id="cc-' + r.id + '">0/300</span>' +
+        '</div>' +
+        '<textarea id="ta-' + r.id + '" maxlength="300" rows="4" oninput="updateCC(\'' + r.id + '\')">' + escHtml(r.suggested_response || '') + '</textarea>' +
+      '</div>' +
+      '<button class="btn-single-approve" id="btn-single-' + r.id + '" onclick="handleApproveSingle(\'' + r.id + '\')">✓ Aprovar esta resposta</button>';
+    list.appendChild(div);
+    updateCC(r.id);
+  });
+
+  showState('multi-content');
+}
+
+async function handleApproveSingle(id) {
+  var btn = document.getElementById('btn-single-' + id);
+  if (btn) btn.disabled = true;
+  var ta = document.getElementById('ta-' + id);
+  var finalText = ta ? ta.value.trim() : '';
+  var original = multiReviews.find(function(r){ return r.id === id; });
+  var status = (original && finalText !== (original.suggested_response || '').trim()) ? 'modified' : 'approved';
+  var res = await sb.from('reviews').update({ status:status, final_response:finalText, approved_at:new Date().toISOString() }).eq('id', id);
+  if (res.error) {
+    alert('Erro ao salvar. Tente novamente.');
+    if (btn) btn.disabled = false;
+    return;
+  }
+  markCardApproved(id);
+  approvedIds.add(id);
+  if (approvedIds.size >= multiReviews.length) {
+    setTimeout(function(){ showState('success'); }, 700);
+  }
+}
+
+async function handleApproveAll() {
+  var btnAll = document.getElementById('btn-approve-all');
+  if (btnAll) btnAll.disabled = true;
+  var pending = multiReviews.filter(function(r){ return !approvedIds.has(r.id); });
+  var updates = pending.map(function(r) {
+    var ta = document.getElementById('ta-' + r.id);
+    var finalText = ta ? ta.value.trim() : (r.suggested_response || '');
+    var status = (finalText !== (r.suggested_response || '').trim()) ? 'modified' : 'approved';
+    return sb.from('reviews').update({ status:status, final_response:finalText, approved_at:new Date().toISOString() }).eq('id', r.id);
+  });
+  var results = await Promise.all(updates);
+  var anyError = results.some(function(r){ return r.error; });
+  if (anyError) {
+    alert('Erro ao salvar algumas respostas. Tente novamente.');
+    if (btnAll) btnAll.disabled = false;
+    return;
+  }
+  pending.forEach(function(r){ markCardApproved(r.id); });
+  setTimeout(function(){ showState('success'); }, 700);
+}
+
+function markCardApproved(id) {
+  var card = document.getElementById('card-' + id);
+  if (card) { card.style.borderColor = 'rgba(34,197,94,0.35)'; card.style.opacity = '0.75'; }
+  var ta = document.getElementById('ta-' + id);
+  if (ta) ta.disabled = true;
+  var btn = document.getElementById('btn-single-' + id);
+  if (btn) { btn.textContent = '✓ Aprovada!'; btn.className = 'btn-single-approve done'; btn.disabled = true; }
+}
+
 load();
 </script>
 </body>
