@@ -28,12 +28,17 @@ module.exports = {
       (args.cliente ? ` para ${args.cliente}` : '') +
       (args.vencimento ? ` venc. ${args.vencimento}` : '');
 
-    // Mapeia os campos amigáveis → schema `Lancamento` do ERP (vencimento→
-    // dataVencimento; ehDespesa default false = receita). O Bridge é pass-through.
-    const payload = { valor: args.valor, ehDespesa: args.ehDespesa ?? false };
-    if (args.descricao != null) payload.descricao = args.descricao;
-    if (args.cliente != null) payload.cliente = args.cliente;
-    if (args.vencimento != null) payload.dataVencimento = args.vencimento;
+    // Mapeia os campos amigáveis → schema `Lancamento` do ERP em PascalCase
+    // (vencimento→DataVencimento; ehDespesa default false = receita). O ERP é
+    // .NET e exige PascalCase — o swagger interno lista camelCase, mas o ERP vivo
+    // recusou camelCase com 417 "É necessário informar uma data de vencimento"
+    // (precedente PR #354, memória vendaerp-api-reference). O Bridge é pass-through.
+    // ponytail: data fica "YYYY-MM-DD"; se persistir 417, próximo passo é
+    // date-time "YYYY-MM-DDT00:00:00" (e idem DataCompetencia se o ERP exigir).
+    const payload = { Valor: args.valor, EhDespesa: args.ehDespesa ?? false };
+    if (args.descricao != null) payload.Descricao = args.descricao;
+    if (args.cliente != null) payload.Cliente = args.cliente;
+    if (args.vencimento != null) payload.DataVencimento = args.vencimento;
 
     const out = await proposals.create({
       tipo: 'lancamento',
