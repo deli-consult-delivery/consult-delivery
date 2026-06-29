@@ -1416,3 +1416,22 @@ Wandson apontou que o Blueprint AI-First (FASE 1 — Loop ponta-a-ponta) não fo
 **Follow-up pendente (não urgente):**
 - F1-C: 8 overlays `position:fixed; zIndex:9999` no ChatScreen escapam do shell cv2 — adiar para PR dedicado
 - Avaliar se CSS morto em `console.css` deve ser removido ou mantido
+
+## 2026-06-29 — Sessão: Open Design — fix Ollama Cloud (deepseek thinking + IP dinâmico)
+
+**Problema:** Open Design em design.consultdelivery.com.br retornava "network error" ao gerar designs via Ollama Cloud.
+
+**Diagnóstico:**
+1. `deepseek-v4-pro` → max_tokens 384000 excede limite 65536 → 400 Bad Request
+2. `deepseek-v4-flash` → modelo de raciocínio puro: só retorna `thinking`, nunca `content` → proxy ignorava todos os chunks
+3. Container IP muda a cada restart → Traefik perdia rota → ERR_NETWORK_CHANGED no browser
+
+**Fixes aplicados:**
+1. **`/root/open-design/deploy/patches/chat.js`** linha ~1134: `data.message?.content || data.message?.thinking` — fallback para thinking content
+2. **`chat.js`** linha ~1100: `Math.min(maxTokens, 65536)` — cap de tokens para Ollama Cloud
+3. **`/etc/easypanel/traefik/config/open-design.yml`**: `http://open-design:7456` (DNS Docker) em vez de IP hardcoded
+4. Via UI do Open Design: modelo BYOK mudado de `deepseek-v4-flash` → `gemma3:4b`
+
+**Verificação:** `curl /api/proxy/ollama/stream` retornou SSE com `gemma3:4b` → "Olá! 😊" ✅
+
+**Nota:** ERR_NETWORK_CHANGED no Playwright é falso positivo (Docker Swarm muda rotas no VPS). Do browser real do usuário, funciona normalmente.
