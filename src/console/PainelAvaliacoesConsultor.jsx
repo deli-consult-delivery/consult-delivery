@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ─── Supabase (direto, sem SDK) ──────────────────────────────────────────────
 const SUPA_URL  = 'https://czyanilrverorwenikqw.supabase.co';
@@ -8,6 +8,11 @@ const EVO_URL     = 'https://evo1-evolution-api.bawafu.easypanel.host';
 const EVO_KEY     = '66A55B39-3167-4B15-8933-D65B26F56E6F';
 const EVO_INST    = 'consult-delivery';
 const WA_GROUP_FALLBACK = '120363175577392322@g.us';
+
+// ─── LocalStorage — persiste o mapeamento loja→grupo independente do banco ───
+const LS_KEY = 'cd_store_groups_v1';
+function lsLoad() { try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch { return {}; } }
+function lsSave(m) { try { localStorage.setItem(LS_KEY, JSON.stringify(m)); } catch {} }
 
 // ─── Lista fixa das 14 lojas ─────────────────────────────────────────────────
 const KNOWN_STORES = [
@@ -102,14 +107,13 @@ function Stars({ rating }) {
   );
 }
 
-// ─── Mensagem única por loja (múltiplas avaliações + link com todos os tokens) ─
+// ─── Mensagem única por loja ──────────────────────────────────────────────────
 function buildWaMsgStore(reviews) {
   const storeName = reviews[0]?.store || '';
   const tokens = reviews.map(r => r.token).filter(Boolean).join(',');
   const link = `${CLIENT_PAGE}?tokens=${tokens}`;
 
   let msg = `📋 *Avaliações para aprovação — ${storeName}*\n\n`;
-
   reviews.forEach((rev, i) => {
     const stars = '⭐'.repeat(rev.rating || 0);
     msg += `*${i + 1}. ${stars} — Pedido ${rev.orderId}*\n`;
@@ -118,13 +122,11 @@ function buildWaMsgStore(reviews) {
     if (resp) msg += `💬 ${resp}\n`;
     msg += '\n';
   });
-
   msg += `🔗 *Link para aprovar ou editar todas:*\n${link}\n\n`;
   msg += `_(Sem retorno até as 9h do dia seguinte, publicamos as respostas no iFood.)_`;
   return msg;
 }
 
-// Mensagem individual (mantida para reenvios isolados)
 function buildWaMsg(review, resp) {
   const stars = '⭐'.repeat(review.rating || 0);
   const link = `${CLIENT_PAGE}?token=${review.token}`;
@@ -154,14 +156,27 @@ async function fetchEvoGroups() {
 
 function copiar(t) { try { navigator.clipboard?.writeText(t || ''); } catch { /* ignora */ } }
 
-// ─── Seção de configuração de grupos por loja ────────────────────────────────
-// Sempre mostra as 14 lojas fixas, independente de quais têm avaliações no banco
+// ─── Configuração de grupos por loja ─────────────────────────────────────────
+// storeGroups já inclui localStorage + DB (mesclado no pai)
+// Não há useEffect aqui — o local state só é resetado quando o painel abre
 function ConfigGrupos({ storeGroups, groups, groupsLoading, groupsError, onSave }) {
-  const [open, setOpen] = useState(false);
-  const [local, setLocal] = useState(() => ({ ...storeGroups }));
+  const [open, setOpen]   = useState(false);
+  const [local, setLocal] = useState({});
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { setLocal(prev => ({ ...storeGroups, ...prev })); }, [storeGroups]);
+  // Ao abrir o painel: carrega a configuração atual (localStorage + DB)
+  function handleToggle() {
+    if (!open) {
+      // Carrega sempre a config mais recente ao abrir
+      setLocal({ ...storeGroups });
+    }
+    setOpen(v => !v);
+  }
+
+  function handleChange(store, value) {
+    // Qualquer grupo pode ser atribuído a qualquer loja, inclusive o mesmo grupo para múltiplas lojas
+    setLocal(l => ({ ...l, [store]: value }));
+  }
 
   async function salvar() {
     setSaving(true);
@@ -169,17 +184,21 @@ function ConfigGrupos({ storeGroups, groups, groupsLoading, groupsError, onSave 
     setSaving(false);
   }
 
+  const allConfigured = KNOWN_STORES.every(s => local[s]);
+  const configuredCount = KNOWN_STORES.filter(s => local[s]).length;
+
   return (
     <div className="cv2-card">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
         <div>
           <h3 style={{ margin: 0 }}>Grupos WhatsApp por loja</h3>
           <div style={{ fontSize: 12, color: 'var(--tx2)', marginTop: 3 }}>
-            Configure o grupo de cada loja. A lista de grupos é buscada automaticamente na Evolution API.
+            {configuredCount} de {KNOWN_STORES.length} lojas configuradas.
+            {' '}O mesmo grupo pode ser usado em múltiplas lojas.
           </div>
         </div>
-        <button className="cv2-btn sec" style={{ fontSize: 12 }} onClick={() => setOpen(v => !v)}>
-          {open ? 'Fechar' : 'Configurar'}
+        <button className="cv2-btn sec" style={{ fontSize: 12 }} onClick={handleToggle}>
+          {open ? 'Fechar' : 'Configurar grupos'}
         </button>
       </div>
 
@@ -190,38 +209,57 @@ function ConfigGrupos({ storeGroups, groups, groupsLoading, groupsError, onSave 
           {!groupsLoading && groups.length === 0 && !groupsError && (
             <div style={{ fontSize: 13, color: 'var(--tx2)' }}>Nenhum grupo encontrado na Evolution API.</div>
           )}
-          {KNOWN_STORES.map(store => (
-            <div key={store} style={{
-              display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-              padding: '8px 0', borderBottom: '1px solid var(--line)',
-            }}>
-              <span style={{ flex: 1, minWidth: 160, fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{store}</span>
-              <select
-                value={local[store] || ''}
-                onChange={e => setLocal(l => ({ ...l, [store]: e.target.value }))}
-                style={{ ...inp, width: 'auto', minWidth: 260, fontSize: 12 }}
-                disabled={groupsLoading || groups.length === 0}
-              >
-                <option value="">— selecionar grupo —</option>
-                {groups.map(g => (
-                  <option key={g.id} value={g.id}>{g.name}</option>
-                ))}
-              </select>
-              {local[store] && (
-                <span style={{ fontSize: 11, color: 'var(--tx2)', fontFamily: 'monospace' }}>
-                  {local[store]}
+
+          {!groupsLoading && groups.length > 0 && (
+            <>
+              {KNOWN_STORES.map(store => (
+                <div key={store} style={{
+                  display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+                  padding: '8px 0', borderBottom: '1px solid var(--line)',
+                }}>
+                  <span style={{ flex: 1, minWidth: 160, fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>
+                    {store}
+                  </span>
+                  <select
+                    value={local[store] || ''}
+                    onChange={e => handleChange(store, e.target.value)}
+                    style={{ ...inp, width: 'auto', minWidth: 260, fontSize: 12 }}
+                  >
+                    <option value="">— selecionar grupo —</option>
+                    {groups.map((g, idx) => (
+                      // key usa índice + id para garantir unicidade por select, mesmo que o mesmo grupo
+                      // apareça em outros selects da página
+                      <option key={`${idx}-${g.id}`} value={g.id}>{g.name}</option>
+                    ))}
+                  </select>
+                  {local[store] && (
+                    <span style={{ fontSize: 11, color: 'var(--tx2)', fontFamily: 'monospace', minWidth: 80 }}>
+                      {local[store]}
+                    </span>
+                  )}
+                </div>
+              ))}
+
+              <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <button
+                  className="cv2-btn"
+                  style={{ fontSize: 12 }}
+                  disabled={saving}
+                  onClick={salvar}
+                >
+                  {saving ? 'Salvando…' : `Salvar configuração (${configuredCount}/${KNOWN_STORES.length} lojas)`}
+                </button>
+                <span style={{ fontSize: 11, color: 'var(--tx2)' }}>
+                  Salva localmente e sincroniza com o banco.
                 </span>
-              )}
-            </div>
-          ))}
-          <div style={{ marginTop: 12 }}>
-            <button className="cv2-btn" style={{ fontSize: 12 }} disabled={saving || groupsLoading} onClick={salvar}>
-              {saving ? 'Salvando…' : 'Salvar configuração de grupos'}
-            </button>
-            <span style={{ fontSize: 11, color: 'var(--tx2)', marginLeft: 10 }}>
-              Aplica o grupo a todas as avaliações da loja no Supabase.
-            </span>
-          </div>
+                {!allConfigured && (
+                  <span style={{ fontSize: 11, color: 'var(--red)' }}>
+                    ⚠ {KNOWN_STORES.length - configuredCount} loja{KNOWN_STORES.length - configuredCount > 1 ? 's' : ''} sem grupo.
+                  </span>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -229,7 +267,7 @@ function ConfigGrupos({ storeGroups, groups, groupsLoading, groupsError, onSave 
 }
 
 // ─── Card individual ──────────────────────────────────────────────────────────
-function CardReview({ review, busy, onPublish, onSaveDraft, onSendSingle }) {
+function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSendSingle }) {
   const [draft, setDraft] = useState(review.finalResponse || review.suggestedResponse || '');
   const [copied, setCopied] = useState(false);
 
@@ -239,7 +277,7 @@ function CardReview({ review, busy, onPublish, onSaveDraft, onSendSingle }) {
   const finalText = review.finalResponse || review.suggestedResponse || draft;
   const over = draft.length > 300;
 
-  // Link individual para copiar (mantido para uso manual)
+  const effectiveGroup = review.whatsappGroup || resolvedGroup || null;
   const singleLink = `${CLIENT_PAGE}?token=${review.token}`;
 
   function handleCopyLink() {
@@ -263,10 +301,10 @@ function CardReview({ review, busy, onPublish, onSaveDraft, onSendSingle }) {
         )}
       </div>
 
-      {/* Indicador de grupo WA */}
-      {review.whatsappGroup ? (
+      {/* Grupo WA — usa o grupo resolvido (DB ou localStorage) */}
+      {effectiveGroup ? (
         <div style={{ fontSize: 11, color: 'var(--tx2)', marginBottom: 6 }}>
-          📲 Grupo: <span style={{ fontFamily: 'monospace' }}>{review.whatsappGroup}</span>
+          📲 Grupo: <span style={{ fontFamily: 'monospace' }}>{effectiveGroup}</span>
         </div>
       ) : (
         <div style={{ fontSize: 11, color: 'var(--red)', marginBottom: 6 }}>
@@ -274,14 +312,12 @@ function CardReview({ review, busy, onPublish, onSaveDraft, onSendSingle }) {
         </div>
       )}
 
-      {/* Cliente */}
       {review.clientName && (
         <div style={{ fontSize: 12, color: 'var(--tx2)', marginBottom: 6 }}>
           Cliente: <strong style={{ color: 'var(--ink)' }}>{review.clientName}</strong>
         </div>
       )}
 
-      {/* Comentário */}
       <div style={{
         fontSize: 13, color: 'var(--ink)', lineHeight: 1.6, marginBottom: 10,
         background: 'var(--bg2,#f5f4f2)', borderRadius: 6, padding: '8px 10px',
@@ -291,7 +327,6 @@ function CardReview({ review, busy, onPublish, onSaveDraft, onSendSingle }) {
         "{review.clientComment}"
       </div>
 
-      {/* Resposta */}
       {isDone ? (
         <div style={{
           fontSize: 13, lineHeight: 1.6, background: 'var(--green-soft,#f0fdf4)',
@@ -343,12 +378,11 @@ function CardReview({ review, busy, onPublish, onSaveDraft, onSendSingle }) {
             />
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
-            {/* Reenvio individual — útil quando só esta avaliação precisa ser reenviada */}
             {review.status === 'sent_to_client' && (
               <button
                 className="cv2-btn sec"
                 style={{ fontSize: 11.5 }}
-                disabled={busy || over || !draft.trim() || !review.whatsappGroup}
+                disabled={busy || over || !draft.trim() || !effectiveGroup}
                 onClick={() => onSendSingle(review.id, draft)}
               >
                 {busy ? '…' : 'Reenviar esta individualmente'}
@@ -376,18 +410,18 @@ function CardReview({ review, busy, onPublish, onSaveDraft, onSendSingle }) {
 }
 
 // ─── Accordion por loja ───────────────────────────────────────────────────────
-function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, onSendStore, onPublish, onSaveDraft, onSendSingle }) {
+function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, storeGroups, onSendStore, onPublish, onSaveDraft, onSendSingle }) {
   const [open, setOpen] = useState(defaultOpen);
 
-  // Avaliações pendentes de envio ao cliente (pending ou sent_to_client)
   const toSend = reviews.filter(r => r.status === 'pending' || r.status === 'sent_to_client');
   const pendingCount = toSend.length;
-  const groupId = reviews.find(r => r.whatsappGroup)?.whatsappGroup || null;
+
+  // Grupo resolvido: primeiro tenta DB (review.whatsappGroup), depois localStorage via storeGroups
+  const resolvedGroup = reviews.find(r => r.whatsappGroup)?.whatsappGroup || storeGroups[storeName] || null;
 
   const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
   const minDeadline = reviews.reduce((m, r) => r.deadline && (!m || r.deadline < m) ? r.deadline : m, null);
   const isUrgent = minDeadline && minDeadline <= tomorrow;
-
   const isBusy = busyStore === storeName;
 
   return (
@@ -395,14 +429,12 @@ function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, on
       border: '1px solid var(--line)', borderRadius: 8, marginBottom: 10,
       background: '#fff', overflow: 'hidden',
     }}>
-      {/* Cabeçalho do accordion */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px',
         background: open ? 'var(--bg2,#f5f4f2)' : '#fff',
         borderBottom: open ? '1px solid var(--line)' : 'none',
         flexWrap: 'wrap',
       }}>
-        {/* Área clicável para expandir */}
         <div
           onClick={() => setOpen(v => !v)}
           style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, cursor: 'pointer', userSelect: 'none', minWidth: 200 }}
@@ -425,13 +457,12 @@ function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, on
           </span>
         </div>
 
-        {/* Botão de envio consolidado ao cliente */}
         {pendingCount > 0 && (
           <button
             className="cv2-btn"
             style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}
-            disabled={isBusy || !groupId}
-            title={!groupId ? 'Configure o grupo WA desta loja em "Grupos WhatsApp por loja"' : ''}
+            disabled={isBusy || !resolvedGroup}
+            title={!resolvedGroup ? 'Configure o grupo WA desta loja em "Grupos WhatsApp por loja"' : ''}
             onClick={e => { e.stopPropagation(); onSendStore(storeName, toSend); }}
           >
             {isBusy
@@ -439,18 +470,18 @@ function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, on
               : `Enviar ${pendingCount} avaliação${pendingCount > 1 ? 'ões' : ''} ao cliente`}
           </button>
         )}
-        {!groupId && pendingCount > 0 && (
+        {!resolvedGroup && pendingCount > 0 && (
           <span style={{ fontSize: 11, color: 'var(--red)', whiteSpace: 'nowrap' }}>⚠ sem grupo WA</span>
         )}
       </div>
 
-      {/* Conteúdo expandido */}
       {open && (
         <div style={{ padding: '10px 14px' }}>
           {reviews.map(rev => (
             <CardReview
               key={`${rev.id}-${rev.status}-${rev.whatsappGroup}`}
               review={rev}
+              resolvedGroup={resolvedGroup}
               busy={busyId === rev.id}
               onPublish={onPublish}
               onSaveDraft={onSaveDraft}
@@ -465,17 +496,16 @@ function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, on
 
 // ─── Tela principal ───────────────────────────────────────────────────────────
 export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }) {
-  const [reviews, setReviews] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState(null);
-  const [notice, setNotice] = useState(null);
-  const [busyId, setBusyId]   = useState(null); // ID de review individual ocupado
-  const [busyStore, setBusyStore] = useState(null); // Nome da loja com envio em andamento
+  const [reviews, setReviews]   = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState(null);
+  const [notice, setNotice]     = useState(null);
+  const [busyId, setBusyId]     = useState(null);
+  const [busyStore, setBusyStore] = useState(null);
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterStore, setFilterStore]   = useState('all');
 
-  // grupos Evolution API
-  const [groups, setGroups]           = useState([]);
+  const [groups, setGroups]             = useState([]);
   const [groupsLoading, setGroupsLoading] = useState(true);
   const [groupsError, setGroupsError]   = useState(null);
 
@@ -503,35 +533,48 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
     return () => clearInterval(pollerRef.current);
   }, [load]);
 
-  // Mapa loja → grupo (derivado das reviews, para lookup no envio)
-  const storeGroups = {};
-  reviews.forEach(r => {
-    if (r.store && r.whatsappGroup && !storeGroups[r.store]) {
-      storeGroups[r.store] = r.whatsappGroup;
-    }
-  });
+  // storeGroups = localStorage (baseline) sobrescrito pelos valores do banco
+  // Memoizado para estabilizar referência e evitar re-renders desnecessários
+  const storeGroups = useMemo(() => {
+    const sg = { ...lsLoad() };
+    reviews.forEach(r => {
+      if (r.store && r.whatsappGroup) sg[r.store] = r.whatsappGroup;
+    });
+    return sg;
+  }, [reviews]);
 
+  // ─ Salvar grupos ─────────────────────────────────────────────────────────────
+  // 1. Salva TODOS no localStorage (persiste mesmo lojas sem reviews no banco)
+  // 2. Tenta sincronizar com o banco (só funciona para lojas que têm reviews)
   async function handleSaveGroups(mapping) {
+    // Salva no localStorage primeiro — garante persistência imediata
+    lsSave(mapping);
+
     const entries = Object.entries(mapping).filter(([, v]) => v);
-    if (!entries.length) return;
-    try {
-      await Promise.all(entries.map(([store, groupId]) => sbUpdateStoreGroup(store, groupId)));
-      flash('Grupos salvos ✓');
-      await load();
-    } catch (e) { setError('Erro ao salvar grupos: ' + e.message); }
+    if (entries.length) {
+      try {
+        await Promise.all(entries.map(([store, groupId]) => sbUpdateStoreGroup(store, groupId)));
+      } catch (e) {
+        // localStorage já salvou; erro no banco não bloqueia o usuário
+        setError('Aviso: grupos salvos localmente, mas houve erro ao sincronizar com o banco: ' + e.message);
+      }
+    }
+
+    flash('Grupos salvos ✓');
+    await load();
   }
 
-  // ─ Envio consolidado por loja ──────────────────────────────────────────────
-  // Envia UMA mensagem WhatsApp com todas as avaliações pendentes da loja
-  // e um único link ?tokens=t1,t2,t3 para aprovação conjunta
+  // ─ Envio consolidado por loja ─────────────────────────────────────────────
   async function handleSendStore(storeName, pendingReviews) {
     if (!pendingReviews.length) return;
-    const groupId = storeGroups[storeName] || WA_GROUP_FALLBACK;
+    // Usa grupo resolvido: banco → localStorage → fallback
+    const groupId = pendingReviews.find(r => r.whatsappGroup)?.whatsappGroup
+      || storeGroups[storeName]
+      || WA_GROUP_FALLBACK;
     setBusyStore(storeName); setError(null);
     try {
       const msg = buildWaMsgStore(pendingReviews);
       await postEvo(groupId, msg);
-      // Marca todas como sent_to_client
       await Promise.all(pendingReviews.map(rev =>
         sbUpdate({ id: rev.id }, { status: 'sent_to_client' })
       ));
@@ -541,11 +584,11 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
     setBusyStore(null);
   }
 
-  // ─ Reenvio individual ──────────────────────────────────────────────────────
+  // ─ Reenvio individual ─────────────────────────────────────────────────────
   async function handleSendSingle(id, draft) {
     const rev = reviews.find(r => r.id === id);
     if (!rev) return;
-    const groupId = rev.whatsappGroup || WA_GROUP_FALLBACK;
+    const groupId = rev.whatsappGroup || storeGroups[rev.store] || WA_GROUP_FALLBACK;
     setBusyId(id); setError(null);
     try {
       const msg = buildWaMsg(rev, draft);
@@ -582,14 +625,12 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
     setTimeout(() => setNotice(null), 4000);
   }
 
-  // Filtrar reviews
   const filtered = reviews.filter(r => {
     if (filterStatus !== 'all' && r.status !== filterStatus) return false;
     if (filterStore !== 'all' && r.store !== filterStore) return false;
     return true;
   });
 
-  // Agrupar por loja e ordenar pelo prazo mais urgente
   const byStore = {};
   filtered.forEach(r => {
     if (!byStore[r.store]) byStore[r.store] = [];
@@ -612,9 +653,8 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
     done:     reviews.filter(r => r.status === 'published').length,
   };
 
-  // Lojas sem grupo configurado (das que têm avaliações)
-  const storesWithReviews = [...new Set(reviews.map(r => r.store).filter(Boolean))];
-  const semGrupo = storesWithReviews.filter(s => !storeGroups[s]).length;
+  const semGrupo = [...new Set(reviews.map(r => r.store).filter(Boolean))]
+    .filter(s => !storeGroups[s]).length;
 
   return (
     <div>
@@ -626,7 +666,6 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
         {notice && <span style={{ color: 'var(--green)' }}> · {notice}</span>}
       </div>
 
-      {/* Alerta lojas sem grupo */}
       {semGrupo > 0 && (
         <div className="cv2-card" style={{ borderLeft: '3px solid var(--red)', marginBottom: 10 }}>
           <span style={{ fontSize: 13, color: 'var(--ink)' }}>
@@ -635,7 +674,6 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
         </div>
       )}
 
-      {/* Config de grupos — sempre mostra as 14 lojas */}
       <ConfigGrupos
         storeGroups={storeGroups}
         groups={groups}
@@ -694,7 +732,6 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
         <span style={{ fontSize: 11, color: 'var(--tx2)' }}>Auto-atualiza a cada 30s</span>
       </div>
 
-      {/* Lista agrupada por loja */}
       {loading && reviews.length === 0 && (
         <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>Carregando avaliações…</div>
       )}
@@ -711,6 +748,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
           defaultOpen={idx === 0}
           busyId={busyId}
           busyStore={busyStore}
+          storeGroups={storeGroups}
           onSendStore={handleSendStore}
           onPublish={handlePublish}
           onSaveDraft={handleSaveDraft}
