@@ -7,7 +7,25 @@ const CLIENT_PAGE = 'https://app.consultdelivery.com.br/aprovacao-avaliacao.html
 const EVO_URL     = 'https://evo1-evolution-api.bawafu.easypanel.host';
 const EVO_KEY     = '66A55B39-3167-4B15-8933-D65B26F56E6F';
 const EVO_INST    = 'consult-delivery';
-const WA_GROUP_FALLBACK = '120363175577392322@g.us'; // fallback se loja sem grupo
+const WA_GROUP_FALLBACK = '120363175577392322@g.us';
+
+// ─── Lista fixa das 14 lojas ─────────────────────────────────────────────────
+const KNOWN_STORES = [
+  'Café Container - Lanches e Salgados',
+  'Churrascaria Cardoso - Marmitas & Espetos',
+  'Delícias Grill - Marmitas & Espetinhos',
+  'Jf Espetaria - Marmitas & Espetos',
+  'Mangiare Pizzaria - Forno a Lenha',
+  'Marmitaria & Restaurante - Panelada da Tia',
+  'Panificadora Café Com Pão Cidade Jardim',
+  'Piazza Navona Pizzaria',
+  'Pizzaria Lá Mazza - Pizzas e Porções',
+  'Planet Pizza - Parauapebas',
+  'Popdi Pizza',
+  "Varanda's Churrascaria e Pizzaria",
+  'Villas Caldos da 14 - B. União',
+  'Villas Caldos - Panelinhas e Petiscos',
+];
 
 const SUPA_HDR = {
   'apikey': SUPA_ANON,
@@ -31,7 +49,6 @@ async function sbUpdate(match, body) {
   return r.json();
 }
 
-// Atualiza whatsapp_group em todos os registros de uma loja
 async function sbUpdateStoreGroup(store, groupId) {
   const q = `store=eq.${encodeURIComponent(store)}`;
   const r = await fetch(`${SUPA_URL}/rest/v1/reviews?${q}`, {
@@ -41,13 +58,21 @@ async function sbUpdateStoreGroup(store, groupId) {
   return r.json();
 }
 
+function fmtDate(iso) {
+  if (!iso) return null;
+  const parts = iso.split('-');
+  if (parts.length !== 3) return iso;
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
+
 function mapRow(r) {
   return {
     id: r.id, store: r.store, orderId: r.order_id, rating: r.rating,
     clientName: r.client_name, clientComment: r.client_comment,
     suggestedResponse: r.suggested_response, finalResponse: r.final_response,
     status: r.status, deadline: r.deadline,
-    createdAt: r.review_date || (r.created_at ? r.created_at.slice(0, 10) : null),
+    reviewDate: r.review_date || null,
+    createdAt: r.created_at ? r.created_at.slice(0, 10) : null,
     token: r.token, approvedAt: r.approved_at, publishedAt: r.published_at,
     whatsappGroup: r.whatsapp_group || null,
   };
@@ -99,7 +124,6 @@ async function fetchEvoGroups() {
   });
   if (!r.ok) throw new Error(await r.text());
   const data = await r.json();
-  // retorna array de { id, subject } ordenado por nome
   return (Array.isArray(data) ? data : [])
     .map(g => ({ id: g.id, name: g.subject || g.id }))
     .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
@@ -113,7 +137,6 @@ function ConfigGrupos({ stores, storeGroups, groups, groupsLoading, groupsError,
   const [local, setLocal] = useState(() => ({ ...storeGroups }));
   const [saving, setSaving] = useState(false);
 
-  // sincroniza quando storeGroups muda (ex: após salvar)
   useEffect(() => { setLocal({ ...storeGroups }); }, [storeGroups]);
 
   async function salvar() {
@@ -210,8 +233,12 @@ function CardReview({ review, busy, onSend, onPublish, onSaveDraft }) {
         <span className={`cv2-bdg ${st.cls}`} style={{ fontSize: 11 }}>{st.label}</span>
         <Stars rating={review.rating} />
         <span style={{ fontSize: 12, color: 'var(--tx2)' }}>Pedido {review.orderId}</span>
-        {review.deadline && <span className="cv2-bdg warn" style={{ fontSize: 11 }}>⏳ {review.deadline}</span>}
-        <span style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 600, color: 'var(--ink)' }}>{review.store}</span>
+        {review.deadline && <span className="cv2-bdg warn" style={{ fontSize: 11 }}>⏳ {fmtDate(review.deadline)}</span>}
+        {review.reviewDate && (
+          <span style={{ fontSize: 11, color: 'var(--tx2)', marginLeft: 'auto' }}>
+            📅 {fmtDate(review.reviewDate)}
+          </span>
+        )}
       </div>
 
       {/* Indicador de grupo WA */}
@@ -320,9 +347,66 @@ function CardReview({ review, busy, onSend, onPublish, onSaveDraft }) {
           )}
         </>
       )}
+    </div>
+  );
+}
 
-      {review.createdAt && (
-        <div style={{ fontSize: 11, color: 'var(--tx2)', marginTop: 6 }}>Data: {review.createdAt}</div>
+// ─── Accordion por loja ───────────────────────────────────────────────────────
+function StoreAccordion({ storeName, reviews, defaultOpen, busy, onSend, onPublish, onSaveDraft }) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  const pendingCount = reviews.filter(r => r.status === 'pending' || r.status === 'sent_to_client').length;
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const minDeadline = reviews.reduce((m, r) => r.deadline && (!m || r.deadline < m) ? r.deadline : m, null);
+  const isUrgent = minDeadline && minDeadline <= tomorrow;
+
+  return (
+    <div style={{
+      border: '1px solid var(--line)', borderRadius: 8, marginBottom: 10,
+      background: '#fff', overflow: 'hidden',
+    }}>
+      {/* Cabeçalho do accordion */}
+      <div
+        onClick={() => setOpen(v => !v)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px',
+          cursor: 'pointer', userSelect: 'none',
+          background: open ? 'var(--bg2,#f5f4f2)' : '#fff',
+          borderBottom: open ? '1px solid var(--line)' : 'none',
+        }}
+      >
+        <span style={{ fontSize: 15, color: 'var(--tx2)', lineHeight: 1 }}>{open ? '▾' : '▸'}</span>
+        <span style={{ fontWeight: 700, fontSize: 14, flex: 1, color: 'var(--ink)' }}>{storeName}</span>
+        {isUrgent && (
+          <span className="cv2-bdg warn" style={{ fontSize: 11 }}>⏳ urgente {fmtDate(minDeadline)}</span>
+        )}
+        {pendingCount > 0 && (
+          <span style={{
+            fontSize: 11, padding: '2px 7px', borderRadius: 10,
+            background: '#e0e7ff', color: '#3730a3', fontWeight: 600,
+          }}>
+            {pendingCount} pendente{pendingCount > 1 ? 's' : ''}
+          </span>
+        )}
+        <span style={{ fontSize: 12, color: 'var(--tx2)', whiteSpace: 'nowrap' }}>
+          {reviews.length} avaliação{reviews.length !== 1 ? 'ões' : ''}
+        </span>
+      </div>
+
+      {/* Conteúdo expandido */}
+      {open && (
+        <div style={{ padding: '10px 14px' }}>
+          {reviews.map(rev => (
+            <CardReview
+              key={`${rev.id}-${rev.status}-${rev.whatsappGroup}`}
+              review={rev}
+              busy={busy === rev.id}
+              onSend={onSend}
+              onPublish={onPublish}
+              onSaveDraft={onSaveDraft}
+            />
+          ))}
+        </div>
       )}
     </div>
   );
@@ -354,7 +438,6 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
     finally { setLoading(false); }
   }, []);
 
-  // Busca grupos da Evolution API
   useEffect(() => {
     fetchEvoGroups()
       .then(gs => { setGroups(gs); setGroupsError(null); })
@@ -368,7 +451,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
     return () => clearInterval(pollerRef.current);
   }, [load]);
 
-  // Mapa loja → grupo (derivado das reviews)
+  // Mapa loja → grupo (derivado das reviews, para ConfigGrupos)
   const storeGroups = {};
   reviews.forEach(r => {
     if (r.store && r.whatsappGroup && !storeGroups[r.store]) {
@@ -376,10 +459,10 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
     }
   });
 
-  const stores = [...new Set(reviews.map(r => r.store).filter(Boolean))].sort();
+  // Lojas que têm avaliações (para ConfigGrupos)
+  const storesWithReviews = [...new Set(reviews.map(r => r.store).filter(Boolean))].sort();
 
   async function handleSaveGroups(mapping) {
-    // Salva no Supabase: para cada loja, atualiza whatsapp_group em todos os reviews
     const entries = Object.entries(mapping).filter(([, v]) => v);
     if (!entries.length) return;
     try {
@@ -429,10 +512,27 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
     setTimeout(() => setNotice(null), 4000);
   }
 
+  // Filtrar reviews
   const filtered = reviews.filter(r => {
     if (filterStatus !== 'all' && r.status !== filterStatus) return false;
     if (filterStore !== 'all' && r.store !== filterStore) return false;
     return true;
+  });
+
+  // Agrupar por loja e ordenar pelo prazo mais urgente
+  const byStore = {};
+  filtered.forEach(r => {
+    if (!byStore[r.store]) byStore[r.store] = [];
+    byStore[r.store].push(r);
+  });
+
+  const sortedStores = Object.keys(byStore).sort((a, b) => {
+    const aMin = byStore[a].reduce((m, r) => r.deadline && (!m || r.deadline < m) ? r.deadline : m, null);
+    const bMin = byStore[b].reduce((m, r) => r.deadline && (!m || r.deadline < m) ? r.deadline : m, null);
+    if (!aMin && !bMin) return a.localeCompare(b, 'pt-BR');
+    if (!aMin) return 1;
+    if (!bMin) return -1;
+    return aMin.localeCompare(bMin);
   });
 
   const kpi = {
@@ -442,7 +542,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
     done:     reviews.filter(r => r.status === 'published').length,
   };
 
-  const semGrupo = stores.filter(s => !storeGroups[s]).length;
+  const semGrupo = storesWithReviews.filter(s => !storeGroups[s]).length;
 
   return (
     <div>
@@ -465,7 +565,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
 
       {/* Config de grupos */}
       <ConfigGrupos
-        stores={stores}
+        stores={storesWithReviews}
         storeGroups={storeGroups}
         groups={groups}
         groupsLoading={groupsLoading}
@@ -510,22 +610,20 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
             <option value="published">Publicado</option>
           </select>
         </div>
-        {stores.length > 1 && (
-          <div>
-            <label style={{ fontSize: 11, color: 'var(--tx2)', fontWeight: 700, display: 'block', marginBottom: 3 }}>Loja</label>
-            <select value={filterStore} onChange={e => setFilterStore(e.target.value)} style={{ ...inp, width: 'auto' }}>
-              <option value="all">Todas as lojas</option>
-              {stores.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-        )}
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--tx2)', fontWeight: 700, display: 'block', marginBottom: 3 }}>Loja</label>
+          <select value={filterStore} onChange={e => setFilterStore(e.target.value)} style={{ ...inp, width: 'auto' }}>
+            <option value="all">Todas as lojas</option>
+            {KNOWN_STORES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
         <button className="cv2-btn sec" style={{ fontSize: 12 }} onClick={load} disabled={loading}>
           {loading ? 'Atualizando…' : '↺ Atualizar'}
         </button>
         <span style={{ fontSize: 11, color: 'var(--tx2)' }}>Auto-atualiza a cada 30s</span>
       </div>
 
-      {/* Lista */}
+      {/* Lista agrupada por loja */}
       {loading && reviews.length === 0 && (
         <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>Carregando avaliações…</div>
       )}
@@ -534,11 +632,13 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
           {reviews.length === 0 ? 'Nenhuma avaliação cadastrada ainda.' : 'Nenhuma avaliação com esse filtro.'}
         </div>
       )}
-      {filtered.map(rev => (
-        <CardReview
-          key={`${rev.id}-${rev.status}-${rev.whatsappGroup}`}
-          review={rev}
-          busy={busy === rev.id}
+      {sortedStores.map((store, idx) => (
+        <StoreAccordion
+          key={store}
+          storeName={store}
+          reviews={byStore[store]}
+          defaultOpen={idx === 0}
+          busy={busy}
           onSend={handleSend}
           onPublish={handlePublish}
           onSaveDraft={handleSaveDraft}
