@@ -70,6 +70,17 @@ function fmtDate(iso) {
   return `${parts[2]}/${parts[1]}/${parts[0]}`;
 }
 
+// Formata ISO timestamp como "DD/MM/AAAA às HH:MM"
+function fmtDateTime(iso) {
+  if (!iso) return null;
+  try {
+    return new Date(iso).toLocaleString('pt-BR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch { return iso; }
+}
+
 function mapRow(r) {
   return {
     id: r.id, store: r.store, orderId: r.order_id, rating: r.rating,
@@ -157,24 +168,17 @@ async function fetchEvoGroups() {
 function copiar(t) { try { navigator.clipboard?.writeText(t || ''); } catch { /* ignora */ } }
 
 // ─── Configuração de grupos por loja ─────────────────────────────────────────
-// storeGroups já inclui localStorage + DB (mesclado no pai)
-// Não há useEffect aqui — o local state só é resetado quando o painel abre
 function ConfigGrupos({ storeGroups, groups, groupsLoading, groupsError, onSave }) {
   const [open, setOpen]   = useState(false);
   const [local, setLocal] = useState({});
   const [saving, setSaving] = useState(false);
 
-  // Ao abrir o painel: carrega a configuração atual (localStorage + DB)
   function handleToggle() {
-    if (!open) {
-      // Carrega sempre a config mais recente ao abrir
-      setLocal({ ...storeGroups });
-    }
+    if (!open) setLocal({ ...storeGroups });
     setOpen(v => !v);
   }
 
   function handleChange(store, value) {
-    // Qualquer grupo pode ser atribuído a qualquer loja, inclusive o mesmo grupo para múltiplas lojas
     setLocal(l => ({ ...l, [store]: value }));
   }
 
@@ -184,8 +188,8 @@ function ConfigGrupos({ storeGroups, groups, groupsLoading, groupsError, onSave 
     setSaving(false);
   }
 
-  const allConfigured = KNOWN_STORES.every(s => local[s]);
   const configuredCount = KNOWN_STORES.filter(s => local[s]).length;
+  const allConfigured   = configuredCount === KNOWN_STORES.length;
 
   return (
     <div className="cv2-card">
@@ -205,7 +209,7 @@ function ConfigGrupos({ storeGroups, groups, groupsLoading, groupsError, onSave 
       {open && (
         <div style={{ marginTop: 14 }}>
           {groupsLoading && <div style={{ fontSize: 13, color: 'var(--tx2)' }}>Carregando grupos da Evolution API…</div>}
-          {groupsError && <div style={{ fontSize: 13, color: 'var(--red)' }}>Erro ao buscar grupos: {groupsError}</div>}
+          {groupsError   && <div style={{ fontSize: 13, color: 'var(--red)' }}>Erro ao buscar grupos: {groupsError}</div>}
           {!groupsLoading && groups.length === 0 && !groupsError && (
             <div style={{ fontSize: 13, color: 'var(--tx2)' }}>Nenhum grupo encontrado na Evolution API.</div>
           )}
@@ -227,8 +231,6 @@ function ConfigGrupos({ storeGroups, groups, groupsLoading, groupsError, onSave 
                   >
                     <option value="">— selecionar grupo —</option>
                     {groups.map((g, idx) => (
-                      // key usa índice + id para garantir unicidade por select, mesmo que o mesmo grupo
-                      // apareça em outros selects da página
                       <option key={`${idx}-${g.id}`} value={g.id}>{g.name}</option>
                     ))}
                   </select>
@@ -241,17 +243,10 @@ function ConfigGrupos({ storeGroups, groups, groupsLoading, groupsError, onSave 
               ))}
 
               <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <button
-                  className="cv2-btn"
-                  style={{ fontSize: 12 }}
-                  disabled={saving}
-                  onClick={salvar}
-                >
+                <button className="cv2-btn" style={{ fontSize: 12 }} disabled={saving} onClick={salvar}>
                   {saving ? 'Salvando…' : `Salvar configuração (${configuredCount}/${KNOWN_STORES.length} lojas)`}
                 </button>
-                <span style={{ fontSize: 11, color: 'var(--tx2)' }}>
-                  Salva localmente e sincroniza com o banco.
-                </span>
+                <span style={{ fontSize: 11, color: 'var(--tx2)' }}>Salva localmente e sincroniza com o banco.</span>
                 {!allConfigured && (
                   <span style={{ fontSize: 11, color: 'var(--red)' }}>
                     ⚠ {KNOWN_STORES.length - configuredCount} loja{KNOWN_STORES.length - configuredCount > 1 ? 's' : ''} sem grupo.
@@ -273,9 +268,9 @@ function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSen
 
   const st = STATUS_CFG[review.status] || { label: review.status, cls: 'mut' };
   const isApproved = review.status === 'approved' || review.status === 'modified';
-  const isDone = review.status === 'published';
-  const finalText = review.finalResponse || review.suggestedResponse || draft;
-  const over = draft.length > 300;
+  const isDone     = review.status === 'published';
+  const finalText  = review.finalResponse || review.suggestedResponse || draft;
+  const over       = draft.length > 300;
 
   const effectiveGroup = review.whatsappGroup || resolvedGroup || null;
   const singleLink = `${CLIENT_PAGE}?token=${review.token}`;
@@ -301,7 +296,7 @@ function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSen
         )}
       </div>
 
-      {/* Grupo WA — usa o grupo resolvido (DB ou localStorage) */}
+      {/* Grupo WA */}
       {effectiveGroup ? (
         <div style={{ fontSize: 11, color: 'var(--tx2)', marginBottom: 6 }}>
           📲 Grupo: <span style={{ fontFamily: 'monospace' }}>{effectiveGroup}</span>
@@ -318,6 +313,7 @@ function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSen
         </div>
       )}
 
+      {/* Comentário */}
       <div style={{
         fontSize: 13, color: 'var(--ink)', lineHeight: 1.6, marginBottom: 10,
         background: 'var(--bg2,#f5f4f2)', borderRadius: 6, padding: '8px 10px',
@@ -327,6 +323,7 @@ function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSen
         "{review.clientComment}"
       </div>
 
+      {/* Resposta — estado publicado */}
       {isDone ? (
         <div style={{
           fontSize: 13, lineHeight: 1.6, background: 'var(--green-soft,#f0fdf4)',
@@ -334,21 +331,35 @@ function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSen
         }}>
           <span style={{ fontSize: 11, color: 'var(--tx2)', display: 'block', marginBottom: 2 }}>RESPOSTA PUBLICADA</span>
           {finalText}
-          {review.publishedAt && <div style={{ fontSize: 11, color: 'var(--tx2)', marginTop: 4 }}>
-            Publicado em {new Date(review.publishedAt).toLocaleDateString('pt-BR')}
-          </div>}
+          {review.approvedAt && (
+            <div style={{ fontSize: 11, color: 'var(--tx2)', marginTop: 6 }}>
+              ✅ Aprovado pelo cliente em <strong style={{ color: 'var(--ink)' }}>{fmtDateTime(review.approvedAt)}</strong>
+            </div>
+          )}
+          {review.publishedAt && (
+            <div style={{ fontSize: 11, color: 'var(--tx2)', marginTop: 2 }}>
+              📤 Publicado em <strong style={{ color: 'var(--ink)' }}>{fmtDateTime(review.publishedAt)}</strong>
+            </div>
+          )}
         </div>
+
+      /* Resposta — estado aprovado (aguardando publicação) */
       ) : isApproved ? (
         <>
           <div style={{
             fontSize: 13, lineHeight: 1.6, background: 'var(--green-soft,#f0fdf4)',
             borderRadius: 6, padding: '8px 10px', borderLeft: '3px solid var(--green,#22c55e)', marginBottom: 8,
           }}>
-            <span style={{ fontSize: 11, color: 'var(--tx2)', display: 'block', marginBottom: 2 }}>
+            <div style={{ fontSize: 11, color: 'var(--tx2)', marginBottom: 6 }}>
               RESPOSTA APROVADA{review.status === 'modified' ? ' COM ALTERAÇÃO' : ''}
-              {review.approvedAt && ` · ${new Date(review.approvedAt).toLocaleDateString('pt-BR')}`}
-            </span>
+            </div>
             {finalText}
+            {review.approvedAt && (
+              <div style={{ fontSize: 11, color: 'var(--tx2)', marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(34,197,94,0.2)' }}>
+                ✅ Aprovado pelo cliente em{' '}
+                <strong style={{ color: 'var(--ink)' }}>{fmtDateTime(review.approvedAt)}</strong>
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <button className="cv2-btn" style={{ fontSize: 11.5 }} disabled={busy} onClick={() => onPublish(review.id, finalText)}>
@@ -357,6 +368,8 @@ function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSen
             <button className="cv2-btn sec" style={{ fontSize: 11.5 }} onClick={() => copiar(finalText)}>Copiar resposta</button>
           </div>
         </>
+
+      /* Resposta — estado pendente / enviado ao cliente */
       ) : (
         <>
           <div style={{
@@ -415,14 +428,12 @@ function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, st
 
   const toSend = reviews.filter(r => r.status === 'pending' || r.status === 'sent_to_client');
   const pendingCount = toSend.length;
-
-  // Grupo resolvido: primeiro tenta DB (review.whatsappGroup), depois localStorage via storeGroups
   const resolvedGroup = reviews.find(r => r.whatsappGroup)?.whatsappGroup || storeGroups[storeName] || null;
 
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const tomorrow    = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
   const minDeadline = reviews.reduce((m, r) => r.deadline && (!m || r.deadline < m) ? r.deadline : m, null);
-  const isUrgent = minDeadline && minDeadline <= tomorrow;
-  const isBusy = busyStore === storeName;
+  const isUrgent    = minDeadline && minDeadline <= tomorrow;
+  const isBusy      = busyStore === storeName;
 
   return (
     <div style={{
@@ -441,14 +452,9 @@ function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, st
         >
           <span style={{ fontSize: 15, color: 'var(--tx2)', lineHeight: 1 }}>{open ? '▾' : '▸'}</span>
           <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--ink)' }}>{storeName}</span>
-          {isUrgent && (
-            <span className="cv2-bdg warn" style={{ fontSize: 11 }}>⏳ urgente {fmtDate(minDeadline)}</span>
-          )}
+          {isUrgent && <span className="cv2-bdg warn" style={{ fontSize: 11 }}>⏳ urgente {fmtDate(minDeadline)}</span>}
           {pendingCount > 0 && (
-            <span style={{
-              fontSize: 11, padding: '2px 7px', borderRadius: 10,
-              background: '#e0e7ff', color: '#3730a3', fontWeight: 600,
-            }}>
+            <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 10, background: '#e0e7ff', color: '#3730a3', fontWeight: 600 }}>
               {pendingCount} pendente{pendingCount > 1 ? 's' : ''}
             </span>
           )}
@@ -465,9 +471,7 @@ function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, st
             title={!resolvedGroup ? 'Configure o grupo WA desta loja em "Grupos WhatsApp por loja"' : ''}
             onClick={e => { e.stopPropagation(); onSendStore(storeName, toSend); }}
           >
-            {isBusy
-              ? '…'
-              : `Enviar ${pendingCount} avaliação${pendingCount > 1 ? 'ões' : ''} ao cliente`}
+            {isBusy ? '…' : `Enviar ${pendingCount} avaliação${pendingCount > 1 ? 'ões' : ''} ao cliente`}
           </button>
         )}
         {!resolvedGroup && pendingCount > 0 && (
@@ -496,18 +500,18 @@ function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, st
 
 // ─── Tela principal ───────────────────────────────────────────────────────────
 export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }) {
-  const [reviews, setReviews]   = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState(null);
-  const [notice, setNotice]     = useState(null);
-  const [busyId, setBusyId]     = useState(null);
+  const [reviews, setReviews]     = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState(null);
+  const [notice, setNotice]       = useState(null);
+  const [busyId, setBusyId]       = useState(null);
   const [busyStore, setBusyStore] = useState(null);
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterStore, setFilterStore]   = useState('all');
 
-  const [groups, setGroups]             = useState([]);
+  const [groups, setGroups]               = useState([]);
   const [groupsLoading, setGroupsLoading] = useState(true);
-  const [groupsError, setGroupsError]   = useState(null);
+  const [groupsError, setGroupsError]     = useState(null);
 
   const pollerRef = useRef(null);
 
@@ -533,41 +537,29 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
     return () => clearInterval(pollerRef.current);
   }, [load]);
 
-  // storeGroups = localStorage (baseline) sobrescrito pelos valores do banco
-  // Memoizado para estabilizar referência e evitar re-renders desnecessários
+  // storeGroups = localStorage (baseline) + banco (sobrescreve)
   const storeGroups = useMemo(() => {
     const sg = { ...lsLoad() };
-    reviews.forEach(r => {
-      if (r.store && r.whatsappGroup) sg[r.store] = r.whatsappGroup;
-    });
+    reviews.forEach(r => { if (r.store && r.whatsappGroup) sg[r.store] = r.whatsappGroup; });
     return sg;
   }, [reviews]);
 
-  // ─ Salvar grupos ─────────────────────────────────────────────────────────────
-  // 1. Salva TODOS no localStorage (persiste mesmo lojas sem reviews no banco)
-  // 2. Tenta sincronizar com o banco (só funciona para lojas que têm reviews)
   async function handleSaveGroups(mapping) {
-    // Salva no localStorage primeiro — garante persistência imediata
     lsSave(mapping);
-
     const entries = Object.entries(mapping).filter(([, v]) => v);
     if (entries.length) {
       try {
         await Promise.all(entries.map(([store, groupId]) => sbUpdateStoreGroup(store, groupId)));
       } catch (e) {
-        // localStorage já salvou; erro no banco não bloqueia o usuário
         setError('Aviso: grupos salvos localmente, mas houve erro ao sincronizar com o banco: ' + e.message);
       }
     }
-
     flash('Grupos salvos ✓');
     await load();
   }
 
-  // ─ Envio consolidado por loja ─────────────────────────────────────────────
   async function handleSendStore(storeName, pendingReviews) {
     if (!pendingReviews.length) return;
-    // Usa grupo resolvido: banco → localStorage → fallback
     const groupId = pendingReviews.find(r => r.whatsappGroup)?.whatsappGroup
       || storeGroups[storeName]
       || WA_GROUP_FALLBACK;
@@ -575,16 +567,13 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
     try {
       const msg = buildWaMsgStore(pendingReviews);
       await postEvo(groupId, msg);
-      await Promise.all(pendingReviews.map(rev =>
-        sbUpdate({ id: rev.id }, { status: 'sent_to_client' })
-      ));
+      await Promise.all(pendingReviews.map(rev => sbUpdate({ id: rev.id }, { status: 'sent_to_client' })));
       flash(`Avaliações de "${storeName}" enviadas ao cliente ✓`);
       await load();
     } catch (e) { setError('Erro ao enviar: ' + e.message); }
     setBusyStore(null);
   }
 
-  // ─ Reenvio individual ─────────────────────────────────────────────────────
   async function handleSendSingle(id, draft) {
     const rev = reviews.find(r => r.id === id);
     if (!rev) return;
@@ -620,29 +609,22 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
     setBusyId(null);
   }
 
-  function flash(msg) {
-    setNotice(msg);
-    setTimeout(() => setNotice(null), 4000);
-  }
+  function flash(msg) { setNotice(msg); setTimeout(() => setNotice(null), 4000); }
 
   const filtered = reviews.filter(r => {
     if (filterStatus !== 'all' && r.status !== filterStatus) return false;
-    if (filterStore !== 'all' && r.store !== filterStore) return false;
+    if (filterStore  !== 'all' && r.store  !== filterStore)  return false;
     return true;
   });
 
   const byStore = {};
-  filtered.forEach(r => {
-    if (!byStore[r.store]) byStore[r.store] = [];
-    byStore[r.store].push(r);
-  });
+  filtered.forEach(r => { if (!byStore[r.store]) byStore[r.store] = []; byStore[r.store].push(r); });
 
   const sortedStores = Object.keys(byStore).sort((a, b) => {
     const aMin = byStore[a].reduce((m, r) => r.deadline && (!m || r.deadline < m) ? r.deadline : m, null);
     const bMin = byStore[b].reduce((m, r) => r.deadline && (!m || r.deadline < m) ? r.deadline : m, null);
     if (!aMin && !bMin) return a.localeCompare(b, 'pt-BR');
-    if (!aMin) return 1;
-    if (!bMin) return -1;
+    if (!aMin) return 1; if (!bMin) return -1;
     return aMin.localeCompare(bMin);
   });
 
@@ -653,8 +635,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
     done:     reviews.filter(r => r.status === 'published').length,
   };
 
-  const semGrupo = [...new Set(reviews.map(r => r.store).filter(Boolean))]
-    .filter(s => !storeGroups[s]).length;
+  const semGrupo = [...new Set(reviews.map(r => r.store).filter(Boolean))].filter(s => !storeGroups[s]).length;
 
   return (
     <div>
