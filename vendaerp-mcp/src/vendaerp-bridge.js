@@ -41,7 +41,7 @@ function qs(params) {
   return s ? `?${s}` : '';
 }
 
-function makeErpBridge({ bridgeUrl, internalToken, timeoutMs = 25000 }) {
+function makeErpBridge({ bridgeUrl, internalToken, writeToken = null, timeoutMs = 25000 }) {
   const base = bridgeUrl.replace(/\/$/, '');
 
   /** GET genérico em /api/vendaerp/<path>; devolve o `data` do envelope {ok,data}. */
@@ -76,6 +76,9 @@ function makeErpBridge({ bridgeUrl, internalToken, timeoutMs = 25000 }) {
         method: 'POST',
         headers: {
           'x-internal-token': internalToken,
+          // 2º fator de ESCRITA (GATE 0): o Bridge exige este header nas rotas de
+          // escrita do ERP, ALÉM do token interno. Sem ele → Bridge recusa (fail-closed).
+          ...(writeToken ? { 'x-vendaerp-write-token': writeToken } : {}),
           'content-type': 'application/json',
           accept: 'application/json',
         },
