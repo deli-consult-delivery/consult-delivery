@@ -201,8 +201,13 @@ async function preencherResposta(orderId, texto, opts = {}) {
         return c && (c.innerText || '').trim() === alvo;
       });
       if (!row) return 'no-row';
+      // índice da coluna "Comentário" pelo header (não fixo) — robusto a reordenação de colunas
+      const headers = [...table.querySelectorAll('thead th,[role="columnheader"]')].map((h) =>
+        (h.innerText || '').trim().toLowerCase()
+      );
+      const comentIdx = headers.findIndex((h) => /coment/.test(h));
       const cells = [...row.querySelectorAll('td,[role="cell"]')];
-      (cells[4] || row).click(); // coluna Comentário → abre o drawer de detalhe
+      (cells[comentIdx] || row).click(); // coluna Comentário → abre o drawer de detalhe
       return 'ok';
     }, pedido);
 

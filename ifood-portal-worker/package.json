@@ -5,8 +5,7 @@
   "description": "Worker que opera o Portal do Parceiro iFood via CDP (Playwright). Fase 1: leitura de avaliacoes pendentes.",
   "main": "index.js",
   "scripts": {
-    "smoke": "node smoke-read.js",
-    "explore": "node explore.js"
+    "smoke": "node smoke-read.js"
   },
   "dependencies": {
     "playwright-core": "^1.49.1",
