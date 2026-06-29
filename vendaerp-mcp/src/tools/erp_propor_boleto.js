@@ -27,12 +27,13 @@ module.exports = {
       (args.cliente ? ` para ${args.cliente}` : '') +
       (args.valor != null ? ` (R$ ${args.valor})` : '');
 
-    // Mapeia → schema `DadosPagamentoCobrancaInput` do ERP. Só codigoLancamento e
-    // formaPagamento existem no contrato; cliente/valor servem apenas ao resumo.
+    // Mapeia → schema `DadosPagamentoCobrancaInput` do ERP em PascalCase. Só
+    // CodigoLancamento e FormaPagamento existem no contrato; cliente/valor servem
+    // apenas ao resumo. O ERP é .NET e exige PascalCase (precedente PR #354).
     // O Bridge é pass-through.
     const payload = {
-      codigoLancamento: Number(args.lancamento),
-      formaPagamento: args.formaPagamento ?? 0,
+      CodigoLancamento: Number(args.lancamento),
+      FormaPagamento: args.formaPagamento ?? 0,
     };
 
     const out = await proposals.create({

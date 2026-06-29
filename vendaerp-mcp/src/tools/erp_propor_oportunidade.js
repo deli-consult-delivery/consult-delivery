@@ -28,15 +28,17 @@ module.exports = {
       (args.cliente ? ` para ${args.cliente}` : '') +
       (args.valor != null ? ` (R$ ${args.valor})` : '');
 
-    // Mapeia os campos amigáveis → schema `Oportunidade` do ERP (titulo→descricao,
-    // valor→valorNegocio). O Bridge é pass-through (JSON.stringify direto), então o
-    // `payload` guardado já tem que ser o corpo no formato do ERP.
+    // Mapeia os campos amigáveis → schema `Oportunidade` do ERP em PascalCase
+    // (titulo→Descricao, valor→ValorNegocio). O ERP é .NET e exige PascalCase —
+    // o swagger interno lista camelCase, mas o ERP vivo recusa (precedente PR #354).
+    // O Bridge é pass-through (JSON.stringify direto), então o `payload` guardado
+    // já tem que ser o corpo no formato do ERP.
     const payload = {};
-    payload.descricao = args.titulo;
-    if (args.cliente != null) payload.cliente = args.cliente;
-    if (args.empresa != null) payload.empresa = args.empresa;
-    if (args.valor != null) payload.valorNegocio = args.valor;
-    if (args.responsavel != null) payload.responsavel = args.responsavel;
+    payload.Descricao = args.titulo;
+    if (args.cliente != null) payload.Cliente = args.cliente;
+    if (args.empresa != null) payload.Empresa = args.empresa;
+    if (args.valor != null) payload.ValorNegocio = args.valor;
+    if (args.responsavel != null) payload.Responsavel = args.responsavel;
 
     const out = await proposals.create({
       tipo: 'oportunidade',

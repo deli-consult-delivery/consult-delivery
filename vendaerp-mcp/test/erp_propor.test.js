@@ -33,7 +33,7 @@ const cfg = { auditTenantId: 'tenant-cd', principal: 'ceo_agent' };
     assert.strictEqual(proposals.created.endpoint, '/oportunidade');
   });
   check('resumo é legível e cita o título', () => assert.match(proposals.created.resumo, /Lead Padaria/));
-  check('payload mapeia titulo→descricao (formato do ERP)', () => assert.strictEqual(proposals.created.payload.descricao, 'Lead Padaria'));
+  check('payload mapeia titulo→Descricao (PascalCase do ERP)', () => assert.strictEqual(proposals.created.payload.Descricao, 'Lead Padaria'));
 
   check('inputShape exige titulo', () => {
     const z = require('zod');
@@ -47,14 +47,18 @@ const cfg = { auditTenantId: 'tenant-cd', principal: 'ceo_agent' };
   {
     const t = require('../src/tools/erp_propor_lancamento');
     const p = fakeProposals();
-    const res2 = await t.handler({ valor: 150, descricao: 'Mensalidade', cliente: 'Padaria X' }, { erp, cfg, proposals: p });
+    const res2 = await t.handler({ valor: 150, descricao: 'Mensalidade', cliente: 'Padaria X', vencimento: '2026-07-15' }, { erp, cfg, proposals: p });
     check('lancamento: devolve proposal_id', () => assert.strictEqual(res2.data.proposal_id, 'p-1'));
     check('lancamento: tipo+endpoint corretos', () => {
       assert.strictEqual(p.created.tipo, 'lancamento');
       assert.strictEqual(p.created.endpoint, '/lancamento');
     });
     check('lancamento: resumo legível cita o valor', () => assert.match(p.created.resumo, /150/));
-    check('lancamento: payload carrega os campos', () => assert.strictEqual(p.created.payload.valor, 150));
+    check('lancamento: payload PascalCase carrega Valor', () => assert.strictEqual(p.created.payload.Valor, 150));
+    check('lancamento: payload PascalCase mapeia descricao→Descricao', () => assert.strictEqual(p.created.payload.Descricao, 'Mensalidade'));
+    // Regressão do bug 417: o ERP .NET exigia DataVencimento (PascalCase), não dataVencimento.
+    check('lancamento: payload PascalCase mapeia vencimento→DataVencimento', () => assert.strictEqual(p.created.payload.DataVencimento, '2026-07-15'));
+    check('lancamento: NÃO emite a chave camelCase dataVencimento', () => assert.strictEqual(p.created.payload.dataVencimento, undefined));
     check('lancamento: tenantIds=[auditTenantId]', () => assert.deepStrictEqual(res2.tenantIds, ['tenant-cd']));
     check('lancamento: inputShape exige valor', () => assert.throws(() => z.object(t.inputShape).parse({}), /valor/i));
   }
@@ -70,8 +74,8 @@ const cfg = { auditTenantId: 'tenant-cd', principal: 'ceo_agent' };
       assert.strictEqual(p.created.endpoint, '/boleto');
     });
     check('boleto: resumo legível cita o lançamento', () => assert.match(p.created.resumo, /99/));
-    check('boleto: payload mapeia lancamento→codigoLancamento (Number)', () => assert.strictEqual(p.created.payload.codigoLancamento, 99));
-    check('boleto: payload tem formaPagamento padrão 0', () => assert.strictEqual(p.created.payload.formaPagamento, 0));
+    check('boleto: payload PascalCase mapeia lancamento→CodigoLancamento (Number)', () => assert.strictEqual(p.created.payload.CodigoLancamento, 99));
+    check('boleto: payload PascalCase tem FormaPagamento padrão 0', () => assert.strictEqual(p.created.payload.FormaPagamento, 0));
     check('boleto: tenantIds=[auditTenantId]', () => assert.deepStrictEqual(res2.tenantIds, ['tenant-cd']));
     check('boleto: inputShape exige lancamento', () => assert.throws(() => z.object(t.inputShape).parse({}), /lancamento/i));
   }
@@ -103,11 +107,11 @@ const cfg = { auditTenantId: 'tenant-cd', principal: 'ceo_agent' };
       assert.strictEqual(p.created.endpoint, '/estoque-ajuste');
     });
     check('estoque: resumo legível cita o produto', () => assert.match(p.created.resumo, /Coca 2L/));
-    check('estoque: payload mapeia produto→produtoCodigo', () => assert.strictEqual(p.created.payload.produtoCodigo, 'Coca 2L'));
-    check('estoque: payload mapeia deposito→depositoNome', () => assert.strictEqual(p.created.payload.depositoNome, 'Central'));
-    check('estoque: quantidade negativa vira saída (ehEntrada=false, qtd absoluta)', () => {
-      assert.strictEqual(p.created.payload.ehEntrada, false);
-      assert.strictEqual(p.created.payload.quantidade, 3);
+    check('estoque: payload PascalCase mapeia produto→ProdutoCodigo', () => assert.strictEqual(p.created.payload.ProdutoCodigo, 'Coca 2L'));
+    check('estoque: payload PascalCase mapeia deposito→DepositoNome', () => assert.strictEqual(p.created.payload.DepositoNome, 'Central'));
+    check('estoque: quantidade negativa vira saída (EhEntrada=false, qtd absoluta)', () => {
+      assert.strictEqual(p.created.payload.EhEntrada, false);
+      assert.strictEqual(p.created.payload.Quantidade, 3);
     });
     check('estoque: tenantIds=[auditTenantId]', () => assert.deepStrictEqual(res2.tenantIds, ['tenant-cd']));
     check('estoque: inputShape exige produto', () => assert.throws(() => z.object(t.inputShape).parse({}), /produto/i));

@@ -25,15 +25,16 @@ module.exports = {
       (args.quantidade != null ? ` em ${args.quantidade}` : '') +
       (args.deposito ? ` no depósito ${args.deposito}` : '');
 
-    // Mapeia → schema `EstoqueMovimentacao` do ERP (produto→produtoCodigo,
-    // deposito→depositoNome). O sinal da quantidade vira ehEntrada (>=0 entra,
-    // <0 sai) e o ERP recebe sempre o valor absoluto. Bridge é pass-through.
+    // Mapeia → schema `EstoqueMovimentacao` do ERP em PascalCase (produto→
+    // ProdutoCodigo, deposito→DepositoNome). O sinal da quantidade vira EhEntrada
+    // (>=0 entra, <0 sai) e o ERP recebe sempre o valor absoluto. O ERP é .NET e
+    // exige PascalCase (precedente PR #354). Bridge é pass-through.
     const payload = {
-      produtoCodigo: args.produto,
-      quantidade: Math.abs(args.quantidade),
-      ehEntrada: args.quantidade >= 0,
+      ProdutoCodigo: args.produto,
+      Quantidade: Math.abs(args.quantidade),
+      EhEntrada: args.quantidade >= 0,
     };
-    if (args.deposito != null) payload.depositoNome = args.deposito;
+    if (args.deposito != null) payload.DepositoNome = args.deposito;
 
     const out = await proposals.create({
       tipo: 'estoque',
