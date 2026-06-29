@@ -1550,3 +1550,24 @@ Sessão de loop auto-ritmado (build→verificação com output bruto→PR→merg
 **Reservado ao Wandson (VPS):** deploy do Bridge (rotas asaas/evolution mudaram); por MCP `npm install` + `hermes mcp add {ifood,asaas,evolution}` + `hermes gateway restart` + `live-smoke`.
 
 **Próximo:** FASE 3 (loop end-to-end + fluxo C + VERIFICA) e FASE 5 (integração) — precisam do Hermes vivo p/ validar.
+
+---
+
+## 2026-06-29 — Bloco 2 do Blueprint v2 FECHADO (Revisor + notificação CEO)
+
+Continuação do `HANDOFF-loop-bloco2.md`. Worktree isolado, aditivo/reversível, nada auto-deploya.
+
+**(1) Revisor — gate de verificação 2 camadas.** Novo `trigger/agents/revisor.ts` cabeado em `responder-conclusao.ts` ANTES de criar o draft/auto-enviar:
+- **(a) grounding** — 1 chamada LLM (`llm-client.chat`, Kimi/Ollama): a resposta é sustentada por `execution_result`? `parseGroundingVerdict` fail-closed.
+- **(b) efeito real** — reconsulta o sistema-alvo via Bridge read-only (`vendaerp` → `/api/vendaerp/status`; `nenhum` → sem ação externa; demais → fail-closed).
+- Reprovou → NÃO cria draft pending / NÃO auto-envia → `client_tasks.status='blocked'` + veredito em `execution_result.revisor` + conversa `task_pending` + `internal_notifications kind='revisor_block'` (não-silencioso).
+- Fail-closed em tudo (LLM/Bridge/token → barra → humano; alucinação nunca passa).
+- **Teste com fixture** `revisor.test.ts` (chat e fetch injetados) — PASSOU via `npx tsx`.
+
+**(2) Notificação ao CEO (Fluxo C).** `createLoopTask` (`loop-tasks.ts`), ao nascer tarefa em `aguardando_autorizacao_ceo`, chama `notificarCeoAutorizacao` (padrão `deli-notify.js`: sino `internal_notifications kind='ceo_authorization'` + Telegram Bot API direto, ambos soft-fail). Mensagem = pedido + ação proposta + `target_system`.
+
+**Verificação:** `tsc --noEmit` REAL (node_modules do projeto, não o do worktree) = 0 erros. Teste de fixture verde.
+
+**Reservado ao Wandson (VPS):** `npx trigger.dev@4.4.6 deploy` · env `TELEGRAM_BOT_TOKEN`+`CEO_TELEGRAM_CHAT_ID` · `INTERNAL_BRIDGE_TOKEN`+`BRIDGE_URL` no Trigger.dev.
+
+**Próximo:** Bloco 3 (FASE 3 end-to-end + FASE 5) — precisa do Hermes vivo + VPS.

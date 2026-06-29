@@ -90,5 +90,71 @@ export async function createLoopTask(
     );
   }
 
+  // Fluxo C: tarefa nasceu em aguardando_autorizacao_ceo → avisar o CEO (push),
+  // senão ele teria que descobrir a pendência por conta. Soft-fail: nunca quebra
+  // a criação da tarefa.
+  if (requerAutorizacao) {
+    await notificarCeoAutorizacao(sb, task.id, params);
+  }
+
   return { taskId: task.id, conversationUpdated: !convErr, requerAutorizacao };
+}
+
+// ─── Notificação ao CEO (Fluxo C) ────────────────────────────────────────────
+// Reusa o padrão de bridge-server/routes/deli-notify.js: sino interno
+// (internal_notifications) + Telegram Bot API direto, ambos soft-fail.
+
+async function notificarCeoAutorizacao(
+  sb: ReturnType<typeof getSupabase>,
+  taskId: string,
+  params: CreateLoopTaskParams,
+): Promise<void> {
+  const texto =
+    `🔐 <b>Autorização necessária</b>\n\n` +
+    `📋 ${params.titulo}\n` +
+    `💬 Pedido: ${params.descricao}\n` +
+    `⚙️ Ação proposta: ${params.operacao ?? "—"} em <b>${params.sistemaAlvo}</b>\n\n` +
+    `Responda autorizando para executar. 🔗 task: ${taskId}`;
+
+  // Sino interno
+  try {
+    const { error } = await sb.from("internal_notifications").insert({
+      tenant_id: params.tenantId,
+      kind:      "ceo_authorization",
+      agent:     params.agentId,
+      title:     "CEO · Autorização necessária",
+      body:      texto.replace(/<\/?b>/g, ""),
+      metadata:  {
+        task_id:       taskId,
+        target_system: params.sistemaAlvo,
+        operacao:      params.operacao ?? null,
+        conversation_id: params.conversationId,
+      },
+    });
+    if (error) console.warn("[loop-tasks] sino ceo_authorization falhou (soft):", error.message);
+  } catch (err) {
+    console.warn("[loop-tasks] sino ceo_authorization erro (soft):", (err as Error).message);
+  }
+
+  // Telegram Bot API direto (soft-fail)
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId   = process.env.CEO_TELEGRAM_CHAT_ID;
+  if (!botToken || !chatId) {
+    console.warn("[loop-tasks] CEO Telegram não configurado (TELEGRAM_BOT_TOKEN/CEO_TELEGRAM_CHAT_ID) — só sino");
+    return;
+  }
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ chat_id: chatId, text: texto, parse_mode: "HTML" }),
+      signal:  AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.warn(`[loop-tasks] Telegram CEO ${res.status} (soft):`, body.slice(0, 200));
+    }
+  } catch (err) {
+    console.warn("[loop-tasks] Telegram CEO falhou (soft):", (err as Error).message);
+  }
 }
