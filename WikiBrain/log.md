@@ -1571,3 +1571,23 @@ Continuação do `HANDOFF-loop-bloco2.md`. Worktree isolado, aditivo/reversível
 **Reservado ao Wandson (VPS):** `npx trigger.dev@4.4.6 deploy` · env `TELEGRAM_BOT_TOKEN`+`CEO_TELEGRAM_CHAT_ID` · `INTERNAL_BRIDGE_TOKEN`+`BRIDGE_URL` no Trigger.dev.
 
 **Próximo:** Bloco 3 (FASE 3 end-to-end + FASE 5) — precisa do Hermes vivo + VPS.
+
+---
+
+## 2026-06-29 — ATIVAÇÃO na VPS (Trigger.dev + 3 MCPs novos no Hermes)
+
+GATE 0 autônomo, output bruto a cada passo.
+
+**Trigger.dev:** `npx trigger.dev@4.4.6 deploy` → versão `20260629.17`, **81 tasks** (proj_slexhoelcjwgbopmbzzr).
+
+**MCPs (ifood/asaas/evolution):** `npm install` (0 vuln) + `hermes mcp add` espelhando o padrão `vendaerp` (env `BRIDGE_URL`/`INTERNAL_BRIDGE_TOKEN`/`SUPABASE_URL`/`SUPABASE_SERVICE_KEY`/`CD_AUDIT_TENANT_ID`, segredos lidos do `bridge-server/.env`). Habilitados: ifood 5/5, asaas 2/2, evolution 1/1. `hermes gateway restart` + validado (`hermes mcp test cd-admin` conecta; 3 novos handshake OK). **`hermes mcp list` = 5:** cd-admin, vendaerp, ifood, asaas, evolution.
+
+**live-smoke (output bruto):** evolution ✅ (whatsapp conectado, audit ok=true); ifood ✅ wiring (erro só de dado — sem `ifood_merchants` p/ o tenant); asaas ✅ wiring após fix.
+
+**2 bugs reais corrigidos:**
+1. `ifood-bridge.js` / `asaas-bridge.js` duplicavam o prefixo de rota (`/api/ifood` + `/ifood/status`) → 401 "missing token". Removido o prefixo nos métodos (espelha evolution-bridge, que estava certo).
+2. `bridge-server/index.js`: `app.use('/api', requireJwt, ...)` (cora/breno/cora-gestao) é blanket e barrava todo `/api/*` montado depois → asaas (montado depois) não aceitava `x-internal-token`. Movidos os 2 mounts do asaas p/ ANTES do blanket + comentário-guarda.
+
+Também criados os `test/live-smoke.js` ausentes nos 3 MCPs (script declarado no package.json sem o arquivo). `node --check` OK em tudo.
+
+**Falta (só Wandson):** 4 segredos — `TELEGRAM_BOT_TOKEN`+`CEO_TELEGRAM_CHAT_ID`, `VENDAERP_WRITE_TOKEN`, `INTERNAL_BRIDGE_TOKEN`/`BRIDGE_URL` no Trigger.dev — e root→`claudedev`. Asaas fica 100% verde quando o fix do Bridge entrar em produção (merge → hook de restart pós-merge recarrega o pm2).

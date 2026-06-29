@@ -56,11 +56,11 @@ function makeIfoodBridge({ bridgeUrl, internalToken, timeoutMs = 25000 }) {
   }
 
   return {
-    status: (params) => get('/ifood/status', params),
-    catalogo: (params) => get('/ifood/catalogo', params),
-    cardapio: (params) => get('/ifood/cardapio', params),
-    reviews: (params) => get('/ifood/reviews', params),
-    vendas: (params) => get('/ifood/vendas', params),
+    status: (params) => get('/status', params),
+    catalogo: (params) => get('/catalogo', params),
+    cardapio: (params) => get('/cardapio', params),
+    reviews: (params) => get('/reviews', params),
+    vendas: (params) => get('/vendas', params),
   };
 }
 
