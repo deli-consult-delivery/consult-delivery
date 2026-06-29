@@ -1,0 +1,53 @@
+# ifood-browser — Chromium headful persistente + viewer web ao vivo (take-over) + CDP
+# Fase 0 do épico "Consultor de iFood". Ver README.md para deploy e login manual.
+#
+# Runtime escolhido: linuxserver/chromium (KasmVNC).
+#   - Viewer web COM controle interativo nativo (take-over / co-piloto) — requisito central.
+#   - Perfil/sessão persistente em volume (/config) → login manual 1ª vez (2FA) sobrevive a restart.
+#   - Chromium sobe com --remote-debugging-port=9222 → worker Playwright conecta via CDP.
+# Segurança: CDP (9222) NUNCA é publicado no host — só na rede interna. O viewer fica atrás de
+# auth (CUSTOM_USER/PASSWORD no container + recomendado basic-auth no Traefik). Ver README.
+
+services:
+  ifood-browser:
+    image: lscr.io/linuxserver/chromium:latest
+    container_name: ifood-browser
+    restart: unless-stopped
+    shm_size: "1gb"
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: "America/Sao_Paulo"
+      # Auth da web UI (take-over). Defina via .env — NÃO commitar valores reais.
+      CUSTOM_USER: "${IFOOD_BROWSER_USER:?defina IFOOD_BROWSER_USER no .env}"
+      PASSWORD: "${IFOOD_BROWSER_PASSWORD:?defina IFOOD_BROWSER_PASSWORD no .env}"
+      # Flags do Chromium: habilita CDP só para a rede interna do compose.
+      CHROME_CLI: "--remote-debugging-port=9222 --remote-debugging-address=0.0.0.0 --no-first-run --start-maximized https://portal.ifood.com.br/"
+    volumes:
+      - ifood_browser_profile:/config        # perfil/sessão persistente (cookies, login 2FA)
+    ports:
+      # Viewer web (KasmVNC). Publicado só em loopback → Traefik/EasyPanel roteia o subdomínio.
+      - "127.0.0.1:7470:3000"
+      # CDP: exposto SOMENTE na rede interna (expose, não ports) — worker conecta por aqui.
+    expose:
+      - "9222"
+    networks:
+      - ifood-browser-net
+    # Labels Traefik de referência (caso o roteamento seja por labels e não pelo EasyPanel UI).
+    # Ajuste o nome da rede/entrypoint/certresolver conforme o easypanel-traefik. Ver README.
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.ifood-browser.rule: "Host(`ifood-browser.consultdelivery.com.br`)"
+      traefik.http.routers.ifood-browser.entrypoints: "websecure"
+      traefik.http.routers.ifood-browser.tls.certresolver: "letsencrypt"
+      traefik.http.services.ifood-browser.loadbalancer.server.port: "3000"
+
+volumes:
+  ifood_browser_profile:
+    name: ifood_browser_profile
+
+networks:
+  ifood-browser-net:
+    name: ifood-browser-net
