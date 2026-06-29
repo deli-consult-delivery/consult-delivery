@@ -1613,6 +1613,13 @@ app.use('/api', require('./routes/evolution-status')({
   sbFetch,
 }));
 
+// Loop AI-First — Fluxo C: CEO autoriza/recusa demanda que exige execução real.
+// POST /loop/autorizar move aguardando_autorizacao_ceo → open (autorizar) ou done/cancelled (recusar).
+app.use('/loop', require('./routes/loop-autorizar')({
+  requireInternalToken,
+  sbFetch,
+}));
+
 // iFood — leitura (Console via JWT, Hermes via x-internal-token).
 // Ponto único de contato com a API do iFood; credencial (client_credentials)
 // só no env do Bridge. merchantId resolvido por query/tenant/env.
