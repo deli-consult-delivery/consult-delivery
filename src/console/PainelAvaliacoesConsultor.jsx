@@ -102,6 +102,29 @@ function Stars({ rating }) {
   );
 }
 
+// ─── Mensagem única por loja (múltiplas avaliações + link com todos os tokens) ─
+function buildWaMsgStore(reviews) {
+  const storeName = reviews[0]?.store || '';
+  const tokens = reviews.map(r => r.token).filter(Boolean).join(',');
+  const link = `${CLIENT_PAGE}?tokens=${tokens}`;
+
+  let msg = `📋 *Avaliações para aprovação — ${storeName}*\n\n`;
+
+  reviews.forEach((rev, i) => {
+    const stars = '⭐'.repeat(rev.rating || 0);
+    msg += `*${i + 1}. ${stars} — Pedido ${rev.orderId}*\n`;
+    if (rev.clientComment) msg += `_"${rev.clientComment}"_\n`;
+    const resp = rev.suggestedResponse || rev.finalResponse || '';
+    if (resp) msg += `💬 ${resp}\n`;
+    msg += '\n';
+  });
+
+  msg += `🔗 *Link para aprovar ou editar todas:*\n${link}\n\n`;
+  msg += `_(Sem retorno até as 9h do dia seguinte, publicamos as respostas no iFood.)_`;
+  return msg;
+}
+
+// Mensagem individual (mantida para reenvios isolados)
 function buildWaMsg(review, resp) {
   const stars = '⭐'.repeat(review.rating || 0);
   const link = `${CLIENT_PAGE}?token=${review.token}`;
@@ -132,12 +155,13 @@ async function fetchEvoGroups() {
 function copiar(t) { try { navigator.clipboard?.writeText(t || ''); } catch { /* ignora */ } }
 
 // ─── Seção de configuração de grupos por loja ────────────────────────────────
-function ConfigGrupos({ stores, storeGroups, groups, groupsLoading, groupsError, onSave }) {
+// Sempre mostra as 14 lojas fixas, independente de quais têm avaliações no banco
+function ConfigGrupos({ storeGroups, groups, groupsLoading, groupsError, onSave }) {
   const [open, setOpen] = useState(false);
   const [local, setLocal] = useState(() => ({ ...storeGroups }));
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { setLocal({ ...storeGroups }); }, [storeGroups]);
+  useEffect(() => { setLocal(prev => ({ ...storeGroups, ...prev })); }, [storeGroups]);
 
   async function salvar() {
     setSaving(true);
@@ -166,10 +190,7 @@ function ConfigGrupos({ stores, storeGroups, groups, groupsLoading, groupsError,
           {!groupsLoading && groups.length === 0 && !groupsError && (
             <div style={{ fontSize: 13, color: 'var(--tx2)' }}>Nenhum grupo encontrado na Evolution API.</div>
           )}
-          {stores.length === 0 && (
-            <div style={{ fontSize: 13, color: 'var(--tx2)' }}>Nenhuma loja encontrada nas avaliações ainda.</div>
-          )}
-          {stores.map(store => (
+          {KNOWN_STORES.map(store => (
             <div key={store} style={{
               display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
               padding: '8px 0', borderBottom: '1px solid var(--line)',
@@ -193,16 +214,14 @@ function ConfigGrupos({ stores, storeGroups, groups, groupsLoading, groupsError,
               )}
             </div>
           ))}
-          {stores.length > 0 && (
-            <div style={{ marginTop: 12 }}>
-              <button className="cv2-btn" style={{ fontSize: 12 }} disabled={saving || groupsLoading} onClick={salvar}>
-                {saving ? 'Salvando…' : 'Salvar configuração de grupos'}
-              </button>
-              <span style={{ fontSize: 11, color: 'var(--tx2)', marginLeft: 10 }}>
-                Aplica o grupo a todas as avaliações da loja no Supabase.
-              </span>
-            </div>
-          )}
+          <div style={{ marginTop: 12 }}>
+            <button className="cv2-btn" style={{ fontSize: 12 }} disabled={saving || groupsLoading} onClick={salvar}>
+              {saving ? 'Salvando…' : 'Salvar configuração de grupos'}
+            </button>
+            <span style={{ fontSize: 11, color: 'var(--tx2)', marginLeft: 10 }}>
+              Aplica o grupo a todas as avaliações da loja no Supabase.
+            </span>
+          </div>
         </div>
       )}
     </div>
@@ -210,7 +229,7 @@ function ConfigGrupos({ stores, storeGroups, groups, groupsLoading, groupsError,
 }
 
 // ─── Card individual ──────────────────────────────────────────────────────────
-function CardReview({ review, busy, onSend, onPublish, onSaveDraft }) {
+function CardReview({ review, busy, onPublish, onSaveDraft, onSendSingle }) {
   const [draft, setDraft] = useState(review.finalResponse || review.suggestedResponse || '');
   const [copied, setCopied] = useState(false);
 
@@ -220,8 +239,11 @@ function CardReview({ review, busy, onSend, onPublish, onSaveDraft }) {
   const finalText = review.finalResponse || review.suggestedResponse || draft;
   const over = draft.length > 300;
 
+  // Link individual para copiar (mantido para uso manual)
+  const singleLink = `${CLIENT_PAGE}?token=${review.token}`;
+
   function handleCopyLink() {
-    copiar(`${CLIENT_PAGE}?token=${review.token}`);
+    copiar(singleLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
@@ -321,15 +343,17 @@ function CardReview({ review, busy, onSend, onPublish, onSaveDraft }) {
             />
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
-            <button
-              className="cv2-btn"
-              style={{ fontSize: 11.5 }}
-              disabled={busy || over || !draft.trim() || !review.whatsappGroup}
-              title={!review.whatsappGroup ? 'Configure o grupo WA desta loja antes de enviar' : ''}
-              onClick={() => onSend(review.id, draft)}
-            >
-              {busy ? '…' : review.status === 'sent_to_client' ? 'Reenviar prévia' : 'Enviar prévia ao cliente'}
-            </button>
+            {/* Reenvio individual — útil quando só esta avaliação precisa ser reenviada */}
+            {review.status === 'sent_to_client' && (
+              <button
+                className="cv2-btn sec"
+                style={{ fontSize: 11.5 }}
+                disabled={busy || over || !draft.trim() || !review.whatsappGroup}
+                onClick={() => onSendSingle(review.id, draft)}
+              >
+                {busy ? '…' : 'Reenviar esta individualmente'}
+              </button>
+            )}
             <button className="cv2-btn sec" style={{ fontSize: 11.5 }} onClick={handleCopyLink}>
               {copied ? '✓ Copiado!' : 'Copiar link'}
             </button>
@@ -352,13 +376,19 @@ function CardReview({ review, busy, onSend, onPublish, onSaveDraft }) {
 }
 
 // ─── Accordion por loja ───────────────────────────────────────────────────────
-function StoreAccordion({ storeName, reviews, defaultOpen, busy, onSend, onPublish, onSaveDraft }) {
+function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, onSendStore, onPublish, onSaveDraft, onSendSingle }) {
   const [open, setOpen] = useState(defaultOpen);
 
-  const pendingCount = reviews.filter(r => r.status === 'pending' || r.status === 'sent_to_client').length;
+  // Avaliações pendentes de envio ao cliente (pending ou sent_to_client)
+  const toSend = reviews.filter(r => r.status === 'pending' || r.status === 'sent_to_client');
+  const pendingCount = toSend.length;
+  const groupId = reviews.find(r => r.whatsappGroup)?.whatsappGroup || null;
+
   const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
   const minDeadline = reviews.reduce((m, r) => r.deadline && (!m || r.deadline < m) ? r.deadline : m, null);
   const isUrgent = minDeadline && minDeadline <= tomorrow;
+
+  const isBusy = busyStore === storeName;
 
   return (
     <div style={{
@@ -366,31 +396,52 @@ function StoreAccordion({ storeName, reviews, defaultOpen, busy, onSend, onPubli
       background: '#fff', overflow: 'hidden',
     }}>
       {/* Cabeçalho do accordion */}
-      <div
-        onClick={() => setOpen(v => !v)}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px',
-          cursor: 'pointer', userSelect: 'none',
-          background: open ? 'var(--bg2,#f5f4f2)' : '#fff',
-          borderBottom: open ? '1px solid var(--line)' : 'none',
-        }}
-      >
-        <span style={{ fontSize: 15, color: 'var(--tx2)', lineHeight: 1 }}>{open ? '▾' : '▸'}</span>
-        <span style={{ fontWeight: 700, fontSize: 14, flex: 1, color: 'var(--ink)' }}>{storeName}</span>
-        {isUrgent && (
-          <span className="cv2-bdg warn" style={{ fontSize: 11 }}>⏳ urgente {fmtDate(minDeadline)}</span>
-        )}
-        {pendingCount > 0 && (
-          <span style={{
-            fontSize: 11, padding: '2px 7px', borderRadius: 10,
-            background: '#e0e7ff', color: '#3730a3', fontWeight: 600,
-          }}>
-            {pendingCount} pendente{pendingCount > 1 ? 's' : ''}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px',
+        background: open ? 'var(--bg2,#f5f4f2)' : '#fff',
+        borderBottom: open ? '1px solid var(--line)' : 'none',
+        flexWrap: 'wrap',
+      }}>
+        {/* Área clicável para expandir */}
+        <div
+          onClick={() => setOpen(v => !v)}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, cursor: 'pointer', userSelect: 'none', minWidth: 200 }}
+        >
+          <span style={{ fontSize: 15, color: 'var(--tx2)', lineHeight: 1 }}>{open ? '▾' : '▸'}</span>
+          <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--ink)' }}>{storeName}</span>
+          {isUrgent && (
+            <span className="cv2-bdg warn" style={{ fontSize: 11 }}>⏳ urgente {fmtDate(minDeadline)}</span>
+          )}
+          {pendingCount > 0 && (
+            <span style={{
+              fontSize: 11, padding: '2px 7px', borderRadius: 10,
+              background: '#e0e7ff', color: '#3730a3', fontWeight: 600,
+            }}>
+              {pendingCount} pendente{pendingCount > 1 ? 's' : ''}
+            </span>
+          )}
+          <span style={{ fontSize: 12, color: 'var(--tx2)', whiteSpace: 'nowrap' }}>
+            {reviews.length} avaliação{reviews.length !== 1 ? 'ões' : ''}
           </span>
+        </div>
+
+        {/* Botão de envio consolidado ao cliente */}
+        {pendingCount > 0 && (
+          <button
+            className="cv2-btn"
+            style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}
+            disabled={isBusy || !groupId}
+            title={!groupId ? 'Configure o grupo WA desta loja em "Grupos WhatsApp por loja"' : ''}
+            onClick={e => { e.stopPropagation(); onSendStore(storeName, toSend); }}
+          >
+            {isBusy
+              ? '…'
+              : `Enviar ${pendingCount} avaliação${pendingCount > 1 ? 'ões' : ''} ao cliente`}
+          </button>
         )}
-        <span style={{ fontSize: 12, color: 'var(--tx2)', whiteSpace: 'nowrap' }}>
-          {reviews.length} avaliação{reviews.length !== 1 ? 'ões' : ''}
-        </span>
+        {!groupId && pendingCount > 0 && (
+          <span style={{ fontSize: 11, color: 'var(--red)', whiteSpace: 'nowrap' }}>⚠ sem grupo WA</span>
+        )}
       </div>
 
       {/* Conteúdo expandido */}
@@ -400,10 +451,10 @@ function StoreAccordion({ storeName, reviews, defaultOpen, busy, onSend, onPubli
             <CardReview
               key={`${rev.id}-${rev.status}-${rev.whatsappGroup}`}
               review={rev}
-              busy={busy === rev.id}
-              onSend={onSend}
+              busy={busyId === rev.id}
               onPublish={onPublish}
               onSaveDraft={onSaveDraft}
+              onSendSingle={onSendSingle}
             />
           ))}
         </div>
@@ -418,7 +469,8 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState(null);
   const [notice, setNotice] = useState(null);
-  const [busy, setBusy]     = useState(null);
+  const [busyId, setBusyId]   = useState(null); // ID de review individual ocupado
+  const [busyStore, setBusyStore] = useState(null); // Nome da loja com envio em andamento
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterStore, setFilterStore]   = useState('all');
 
@@ -451,16 +503,13 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
     return () => clearInterval(pollerRef.current);
   }, [load]);
 
-  // Mapa loja → grupo (derivado das reviews, para ConfigGrupos)
+  // Mapa loja → grupo (derivado das reviews, para lookup no envio)
   const storeGroups = {};
   reviews.forEach(r => {
     if (r.store && r.whatsappGroup && !storeGroups[r.store]) {
       storeGroups[r.store] = r.whatsappGroup;
     }
   });
-
-  // Lojas que têm avaliações (para ConfigGrupos)
-  const storesWithReviews = [...new Set(reviews.map(r => r.store).filter(Boolean))].sort();
 
   async function handleSaveGroups(mapping) {
     const entries = Object.entries(mapping).filter(([, v]) => v);
@@ -472,39 +521,60 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
     } catch (e) { setError('Erro ao salvar grupos: ' + e.message); }
   }
 
-  async function handleSend(id, draft) {
+  // ─ Envio consolidado por loja ──────────────────────────────────────────────
+  // Envia UMA mensagem WhatsApp com todas as avaliações pendentes da loja
+  // e um único link ?tokens=t1,t2,t3 para aprovação conjunta
+  async function handleSendStore(storeName, pendingReviews) {
+    if (!pendingReviews.length) return;
+    const groupId = storeGroups[storeName] || WA_GROUP_FALLBACK;
+    setBusyStore(storeName); setError(null);
+    try {
+      const msg = buildWaMsgStore(pendingReviews);
+      await postEvo(groupId, msg);
+      // Marca todas como sent_to_client
+      await Promise.all(pendingReviews.map(rev =>
+        sbUpdate({ id: rev.id }, { status: 'sent_to_client' })
+      ));
+      flash(`Avaliações de "${storeName}" enviadas ao cliente ✓`);
+      await load();
+    } catch (e) { setError('Erro ao enviar: ' + e.message); }
+    setBusyStore(null);
+  }
+
+  // ─ Reenvio individual ──────────────────────────────────────────────────────
+  async function handleSendSingle(id, draft) {
     const rev = reviews.find(r => r.id === id);
     if (!rev) return;
     const groupId = rev.whatsappGroup || WA_GROUP_FALLBACK;
-    setBusy(id); setError(null);
+    setBusyId(id); setError(null);
     try {
       const msg = buildWaMsg(rev, draft);
       await postEvo(groupId, msg);
       await sbUpdate({ id }, { status: 'sent_to_client', suggested_response: draft });
-      flash('Prévia enviada ao grupo ✓');
+      flash('Reenvio individual feito ✓');
       await load();
-    } catch (e) { setError('Erro ao enviar: ' + e.message); }
-    setBusy(null);
+    } catch (e) { setError('Erro ao reenviar: ' + e.message); }
+    setBusyId(null);
   }
 
   async function handlePublish(id, finalText) {
-    setBusy(id); setError(null);
+    setBusyId(id); setError(null);
     try {
       await sbUpdate({ id }, { status: 'published', final_response: finalText, published_at: new Date().toISOString() });
       flash('Marcado como publicado ✓');
       await load();
     } catch (e) { setError('Erro: ' + e.message); }
-    setBusy(null);
+    setBusyId(null);
   }
 
   async function handleSaveDraft(id, draft) {
-    setBusy(id); setError(null);
+    setBusyId(id); setError(null);
     try {
       await sbUpdate({ id }, { suggested_response: draft });
       flash('Rascunho salvo ✓');
       await load();
     } catch (e) { setError('Erro: ' + e.message); }
-    setBusy(null);
+    setBusyId(null);
   }
 
   function flash(msg) {
@@ -542,6 +612,8 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
     done:     reviews.filter(r => r.status === 'published').length,
   };
 
+  // Lojas sem grupo configurado (das que têm avaliações)
+  const storesWithReviews = [...new Set(reviews.map(r => r.store).filter(Boolean))];
   const semGrupo = storesWithReviews.filter(s => !storeGroups[s]).length;
 
   return (
@@ -563,9 +635,8 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
         </div>
       )}
 
-      {/* Config de grupos */}
+      {/* Config de grupos — sempre mostra as 14 lojas */}
       <ConfigGrupos
-        stores={storesWithReviews}
         storeGroups={storeGroups}
         groups={groups}
         groupsLoading={groupsLoading}
@@ -638,10 +709,12 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
           storeName={store}
           reviews={byStore[store]}
           defaultOpen={idx === 0}
-          busy={busy}
-          onSend={handleSend}
+          busyId={busyId}
+          busyStore={busyStore}
+          onSendStore={handleSendStore}
           onPublish={handlePublish}
           onSaveDraft={handleSaveDraft}
+          onSendSingle={handleSendSingle}
         />
       ))}
     </div>
