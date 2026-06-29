@@ -1606,3 +1606,32 @@ Capacidade de **escrita no VendaERP (Fluxo C) LIGADA** no gateway do Hermes na V
 5. **Verificado SEM escrever no ERP:** `hermes mcp test cd-admin` ✅ 8 tools (copiloto do CEO intacto); `hermes mcp test vendaerp` ✅ **12 tools (leitura+escrita)** — agora com `erp_propor_oportunidade/lancamento/boleto/nfe/estoque` + `erp_confirmar`. `mcp-stderr.log` última linha do vendaerp: `online (stdio) — 12 tools (leitura+escrita)`.
 
 **NENHUMA escrita real executada.** O teste E2E propor→confirmar é do Wandson, pelo Telegram (DELI chama `erp_propor_*` → CEO recebe o código out-of-band → `erp_confirmar` efetiva no ERP).
+
+---
+
+## 2026-06-29 — BUG FIX contrato de escrita VendaERP (PascalCase) — Fluxo C (GATE 0 autônomo)
+
+**Track:** T4 / AI-First / Fluxo C / GATE 0. **PR #640** (squash em main, SHA `92e63e0`).
+
+**Sintoma:** 1º write live do Fluxo C falhou com `417 Expectation Failed — É necessário informar uma data de vencimento` ao criar lançamento financeiro.
+
+**Diagnóstico (já dado, não re-investigado):** prova no banco `vendaerp_proposals` — o payload CONTINHA `dataVencimento:"2026-07-15"` (camelCase). A escrita CHEGOU ao ERP (Fluxo C OK), mas o ERP .NET não reconheceu o campo. Causa-raiz: VendaERP é .NET e exige **PascalCase** (memória `vendaerp-api-reference`; precedente PR #354 `empresa:null` camelCase-vs-PascalCase). O swagger interno (`docs/superpowers/specs/2026-06-14-vendaerp-swagger-escrita.md`) lista camelCase, mas o ERP vivo recusou.
+
+**Correção (causa-raiz, não sintoma):** os 4 `erp_propor_*` com corpo JSON montam o body em PascalCase:
+- `erp_propor_lancamento` → `Valor, EhDespesa, Descricao, Cliente, DataVencimento`
+- `erp_propor_oportunidade` → `Descricao, Cliente, Empresa, ValorNegocio, Responsavel`
+- `erp_propor_boleto` → `CodigoLancamento, FormaPagamento`
+- `erp_propor_estoque` → `ProdutoCodigo, Quantidade, EhEntrada, DepositoNome`
+- `erp_propor_nfe` → já enviava `CodigoVenda` (sem mudança)
+
+Bridge (`bridge-server/lib/vendaerp.js`) é **pass-through** (`JSON.stringify(payload)`) — confirmado, não mudou. Data fica `"YYYY-MM-DD"`; comentário no código indica que, se persistir 417, o próximo passo é date-time `"YYYY-MM-DDT00:00:00"`.
+
+**Verificação (output bruto, SEM write real no ERP — anti-padrão: não criar documento financeiro real):**
+1. `node --check` verde nos 5 propor.
+2. `npm run smoke` (offline) verde.
+3. Teste offline `vendaerp-mcp/test/erp_propor.test.js` atualizado p/ PascalCase + **regressão do 417**: assere `payload.DataVencimento === '2026-07-15'` E `payload.dataVencimento === undefined` (chave camelCase não emitida). Todas as asserções passaram.
+4. Payloads montados logados — todos PascalCase: `lancamento {"Valor":150,"EhDespesa":false,"Descricao":"Mensalidade","Cliente":"Padaria X","DataVencimento":"2026-07-15"}` etc.
+
+**Deploy (GATE 0 autônomo):** PR #640 squash-mergeado via GitHub MCP; `/root/consult-delivery` → `git reset --hard origin/main` (HEAD `92e63e0`); `hermes gateway restart` (PID 2052931, exit 0); `hermes mcp test vendaerp` ✅ **12 tools**; `hermes mcp test cd-admin` ✅ conecta.
+
+**⚠️ Falta (só Wandson):** rodar o write E2E no Telegram (`erp_propor_lancamento` → código out-of-band → `erp_confirmar`) e confirmar que o 417 sumiu (cria documento financeiro real — fora do escopo autônomo).
