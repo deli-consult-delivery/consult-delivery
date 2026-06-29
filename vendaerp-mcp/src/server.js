@@ -59,7 +59,7 @@ function buildServer({ cfg, erp, auditor, sb }) {
 
 async function main() {
   const cfg = loadConfig(); // lança se faltar env obrigatória (fail-closed)
-  const erp = makeErpBridge({ bridgeUrl: cfg.bridgeUrl, internalToken: cfg.internalToken, timeoutMs: cfg.timeoutMs });
+  const erp = makeErpBridge({ bridgeUrl: cfg.bridgeUrl, internalToken: cfg.internalToken, writeToken: cfg.vendaerpWriteToken, timeoutMs: cfg.timeoutMs });
   const sb = makeSupabase(cfg);
   const auditor = makeAuditor({ sbInsert: sb.sbInsert, auditTenantId: cfg.auditTenantId, principal: cfg.principal });
   const server = buildServer({ cfg, erp, auditor, sb });

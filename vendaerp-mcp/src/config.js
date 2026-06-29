@@ -46,6 +46,11 @@ function loadConfig() {
     bridgeUrl: opt('BRIDGE_URL', 'http://127.0.0.1:3001'),
     internalToken: req('INTERNAL_BRIDGE_TOKEN'),
 
+    // 2º fator p/ ESCRITA no ERP (GATE 0): o Bridge exige x-vendaerp-write-token
+    // ALÉM do token interno nas rotas de escrita. Opcional: sem ele, leitura segue
+    // funcionando e a escrita é recusada pelo Bridge (503/401, fail-closed).
+    vendaerpWriteToken: opt('VENDAERP_WRITE_TOKEN', null),
+
     // Service_role só p/ gravar audit_log (bypassa RLS — por isso toda chamada é
     // auditada). O token mora no Infisical, nunca no git.
     supabaseUrl: req('SUPABASE_URL'),
