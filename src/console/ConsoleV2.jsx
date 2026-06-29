@@ -12,6 +12,7 @@ import AprovacoesUnificadas from './AprovacoesUnificadas.jsx';
 import ImportarRelatorios from './ImportarRelatorios.jsx';
 import RadarReal from './RadarReal.jsx';
 import Avaliacoes from './Avaliacoes.jsx';
+import PainelAvaliacoesConsultor from './PainelAvaliacoesConsultor.jsx';
 import AnaliseLoja from './AnaliseLoja.jsx';
 import AgenteConfig from './AgenteConfig.jsx';
 import AuditLog from './AuditLog.jsx';
@@ -97,6 +98,7 @@ const GRUPOS = [
     { id: 'radar', ic: 'i-radio', label: 'Dashboard iFood' },
     { id: 'cardapio-ifood', ic: 'i-menu', label: 'Cardápio iFood' },
     { id: 'avaliacoes', ic: 'i-eye', label: 'Avaliações' },
+    { id: 'resp-avaliacoes', ic: 'i-star', label: 'Resp. Avaliações' },
     { id: 'csat', ic: 'i-check', label: 'CSAT — Atendimento' },
     { id: 'nps', ic: 'i-target', label: 'NPS — Marca' },
     { id: 'controle-atendimentos', ic: 'i-chart', label: 'Controle Atend.' },
@@ -232,7 +234,7 @@ function GlobalSearch({ tenantDbId, onNavigate }) {
         }} />
       {open && q.trim().length >= 1 && (
         <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: '#fff', border: '1px solid var(--line)', borderRadius: 6, boxShadow: '0 6px 20px rgba(0,0,0,.12)', zIndex: 50, maxHeight: 380, overflowY: 'auto', padding: 4 }}>
-          {!temAlgo && <div style={{ padding: '10px 12px', fontSize: 12.5, color: 'var(--tx2)' }}>Nada encontrado para “{q.trim()}”.</div>}
+          {!temAlgo && <div style={{ padding: '10px 12px', fontSize: 12.5, color: 'var(--tx2)' }}>Nada encontrado para "{q.trim()}".</div>}
           {navHits.length > 0 && <SecaoBusca titulo="Navegação" />}
           {navHits.map(it => <ItemBusca key={'n-' + it.id} ic={it.ic} principal={it.label} sec={it.grupo} onClick={() => go(it.id)} />)}
           {ent.lojas.length > 0 && <SecaoBusca titulo="Lojas" />}
@@ -522,7 +524,7 @@ function PaywallDefesa() {
       <div className="cv2-card" style={{ maxWidth: 620 }}>
         <h3>Pare de perder dinheiro com cancelamentos</h3>
         <div style={{ fontSize: 13, color: 'var(--tx2)', lineHeight: 1.9 }}>
-          A Defesa Comercial vigia os cancelamentos e avaliações da sua loja 24h por dia, prepara a contestação com a melhor chance de vitória e espera o seu OK — pelo painel ou respondendo “@defesa ok” no WhatsApp. O painel mostra, mês a mês, quanto dinheiro foi defendido.
+          A Defesa Comercial vigia os cancelamentos e avaliações da sua loja 24h por dia, prepara a contestação com a melhor chance de vitória e espera o seu OK — pelo painel ou respondendo "@defesa ok" no WhatsApp. O painel mostra, mês a mês, quanto dinheiro foi defendido.
         </div>
         <div style={{ margin: '14px 0 6px', fontSize: 22, fontWeight: 800 }}>R$ 147<span style={{ fontSize: 13, fontWeight: 600, color: 'var(--tx2)' }}> /loja/mês · sem taxa de ativação</span></div>
         <div style={{ fontSize: 12.5, color: 'var(--tx2)', marginBottom: 14 }}>O Dashboard iFood continua disponível no menu ao lado — ele mostra quanto está vazando.</div>
@@ -609,7 +611,7 @@ function Defesa({ tenantDbId, userId }) {
     <div>
       <h1>Defesa Comercial <span className="cv2-mock" style={{ background: 'var(--green-soft)', color: 'var(--green)' }}>FILA REAL</span></h1>
       <div className="cv2-rule" />
-      <div className="cv2-sub">Casos preparados pelo agente — revise e dê o OK (aqui ou respondendo “@defesa ok” na conversa do caso).{erro ? ` · erro: ${erro}` : ''}</div>
+      <div className="cv2-sub">Casos preparados pelo agente — revise e dê o OK (aqui ou respondendo "@defesa ok" na conversa do caso).{erro ? ` · erro: ${erro}` : ''}</div>
       <div className="cv2-kpis">
         <Kpi l="Aguardando seu OK" v={fila ? fila.length : '…'} d="revisar agora" neg={fila ? fila.length > 0 : false} />
         <Kpi l="Em andamento" v={andamento ? andamento.length : '…'} d="aprovados/enviados — registre o resultado" mut />
@@ -644,7 +646,7 @@ function Defesa({ tenantDbId, userId }) {
 
       <h1 style={{ fontSize: 15, marginTop: 22 }}>Em andamento — registre o resultado</h1>
       <div className="cv2-rule" />
-      <div className="cv2-sub">Quando o marketplace responder, marque <b>Ganho</b> (informe o valor recuperado — alimenta o painel “R$ defendido”) ou <b>Perdido</b>.</div>
+      <div className="cv2-sub">Quando o marketplace responder, marque <b>Ganho</b> (informe o valor recuperado — alimenta o painel "R$ defendido") ou <b>Perdido</b>.</div>
       {andamento && andamento.map(c => (
         <div key={c.id}>
           <CasoCard c={c}>
@@ -787,6 +789,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
       case 'radar': return <RadarReal tenantNome={tenantNome} tenantDbId={tenantDbId} />;
       case 'cardapio-ifood': return <CardapioIfood tenantDbId={tenantDbId} />;
       case 'avaliacoes': return <Avaliacoes tenantDbId={tenantDbId} userId={userId} />;
+      case 'resp-avaliacoes': return <PainelAvaliacoesConsultor tenantDbId={tenantDbId} userId={userId} />;
       case 'csat': return <AtendimentoAvaliacoes tenantDbId={tenantDbId} userId={userId} />;
       case 'nps': return <NpsResultados tenantDbId={tenantDbId} userId={userId} />;
       case 'controle-atendimentos': return <ControleAtendimentos tenantDbId={tenantDbId} />;
