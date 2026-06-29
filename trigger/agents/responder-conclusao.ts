@@ -3,6 +3,7 @@ import { z } from "zod";
 import { executeAgent } from "../../src/agents/shared/runtime";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
+import { revisar } from "./revisor";
 
 const InputSchema = z.object({
   tenant_id:       z.string().uuid(),
@@ -104,6 +105,68 @@ REGRAS:
     } catch {
       respostaFinal = "Verificamos sua solicitação! ✅\n\nRetornamos com mais detalhes em breve.";
       tomFinal = "amigavel";
+    }
+
+    // 4b. REVISOR — gate de verificação em 2 camadas ANTES de criar o draft / auto-enviar.
+    //     (a) grounding: a resposta é sustentada por execution_result?
+    //     (b) efeito real: a ação aconteceu mesmo no sistema-alvo (reconsulta Bridge)?
+    //     Falhou qualquer uma → NÃO cria draft pending / NÃO auto-envia → tarefa para humano.
+    const bridgeUrl = process.env.BRIDGE_URL ?? "http://187.127.25.24:3001";
+    const veredito = await revisar({
+      resposta:        respostaFinal,
+      executionResult: executionResult,
+      targetSystem:    tarefa.target_system ?? "nenhum",
+      bridgeUrl,
+      bridgeToken:     process.env.INTERNAL_BRIDGE_TOKEN,
+    });
+
+    if (!veredito.aprovado) {
+      logger.warn("agent-responder-conclusao: REVISOR bloqueou resposta", {
+        task_id: input.task_id,
+        grounding: veredito.grounding,
+        efeito_real: veredito.efeito_real,
+      });
+
+      // Marca a tarefa como precisa-humano (status='blocked' é válido no CHECK;
+      // loop_state='failed' não é — fica 'done' e o bloqueio mora no status + revisor).
+      await sb.from("client_tasks")
+        .update({
+          status:           "blocked",
+          execution_result: { ...(executionResult ?? {}), revisor: veredito },
+        })
+        .eq("id", input.task_id)
+        .eq("tenant_id", input.tenant_id);
+
+      // Conversa volta a 'task_pending' — um humano (ou DELI) precisa revisar.
+      await sb.from("conversations")
+        .update({ loop_status: "task_pending" })
+        .eq("id", input.conversation_id)
+        .eq("tenant_id", input.tenant_id);
+
+      // Não-silencioso: avisa no sino interno que o revisor barrou.
+      await sb.from("internal_notifications").insert({
+        tenant_id: input.tenant_id,
+        kind:      "revisor_block",
+        agent:     "breno",
+        title:     "Revisor barrou resposta automática",
+        body:      `Tarefa "${tarefa.title}" precisa de revisão humana. `
+          + `Grounding: ${veredito.grounding.motivo}. Efeito real: ${veredito.efeito_real.motivo}.`,
+        metadata:  { task_id: input.task_id, conversation_id: input.conversation_id, veredito },
+      }).then(({ error }) => {
+        if (error) logger.warn("agent-responder-conclusao: falha ao notificar revisor_block", { error: error.message });
+      });
+
+      await logAgentRun({
+        runId: ctx.run.id, agentSlug: "agent-responder-conclusao",
+        input:  { task_id: input.task_id, conversation_id: input.conversation_id },
+        output: { ok: false, action_taken: "skipped", revisor: veredito },
+        tenantId: input.tenant_id, triggeredBy: input.triggered_by,
+        durationMs: Date.now() - start, status: "failed",
+      });
+
+      return OutputSchema.parse({
+        ok: false, action_taken: "skipped", mode, loop_status: "revisor_blocked",
+      });
     }
 
     // 5. Criar draft
