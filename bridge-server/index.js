@@ -1640,11 +1640,11 @@ app.use('/api', requireJwt, require('./routes/breno-aprovacao')({ sbFetch, supab
 // Cora — gestão manual: isenção e baixa manual de pagamento PIX
 app.use('/api', requireJwt, require('./routes/cora-gestao')({ sbFetch, supabaseInsert }));
 
-// Asaas — saldo da conta (cache 5 min)
-app.use('/api', requireJwt, require('./routes/asaas-saldo')());
+// Asaas — saldo da conta (cache 5 min). Console via JWT, Hermes via x-internal-token (asaas-mcp).
+app.use('/api', requireJwtOrInternal, require('./routes/asaas-saldo')());
 
-// Asaas — dashboard situação das cobranças por mês
-app.use('/api', requireJwt, require('./routes/asaas-dashboard')());
+// Asaas — dashboard situação das cobranças por mês. Console via JWT, Hermes via x-internal-token.
+app.use('/api', requireJwtOrInternal, require('./routes/asaas-dashboard')());
 
 // Monitor de Sessões — lista spawn-queue e stream SSE de logs (cd-spawn)
 app.use('/api', require('./routes/monitor')({ requireJwt }));
