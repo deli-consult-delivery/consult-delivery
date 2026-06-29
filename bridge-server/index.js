@@ -1644,6 +1644,16 @@ app.use('/api/scraping', requireJwt, require('./routes/scraping'));
 // Images — geração de imagens via FLUX.1-schnell (HuggingFace free)
 app.use('/api/images', requireJwt, require('./routes/images'));
 
+// Asaas — saldo da conta (cache 5 min). Console via JWT, Hermes via x-internal-token (asaas-mcp).
+// ⚠️ Montado ANTES dos mounts com `requireJwt` blanket abaixo (cora/breno): como aquele
+// middleware é blanket em '/api', ele intercepta todo '/api/*' montado depois e barraria
+// o x-internal-token do Hermes com "missing token". Mantenha asaas (e qualquer rota que
+// aceite token interno) acima do primeiro `app.use('/api', requireJwt, ...)`.
+app.use('/api', requireJwtOrInternal, require('./routes/asaas-saldo')());
+
+// Asaas — dashboard situação das cobranças por mês. Console via JWT, Hermes via x-internal-token.
+app.use('/api', requireJwtOrInternal, require('./routes/asaas-dashboard')());
+
 // Cora — aprovação e rejeição de drafts de cobrança (envia via Evolution API)
 app.use('/api', requireJwt, require('./routes/cora-aprovacao')({ sbFetch, supabaseInsert }));
 
@@ -1652,12 +1662,6 @@ app.use('/api', requireJwt, require('./routes/breno-aprovacao')({ sbFetch, supab
 
 // Cora — gestão manual: isenção e baixa manual de pagamento PIX
 app.use('/api', requireJwt, require('./routes/cora-gestao')({ sbFetch, supabaseInsert }));
-
-// Asaas — saldo da conta (cache 5 min). Console via JWT, Hermes via x-internal-token (asaas-mcp).
-app.use('/api', requireJwtOrInternal, require('./routes/asaas-saldo')());
-
-// Asaas — dashboard situação das cobranças por mês. Console via JWT, Hermes via x-internal-token.
-app.use('/api', requireJwtOrInternal, require('./routes/asaas-dashboard')());
 
 // Monitor de Sessões — lista spawn-queue e stream SSE de logs (cd-spawn)
 app.use('/api', require('./routes/monitor')({ requireJwt }));

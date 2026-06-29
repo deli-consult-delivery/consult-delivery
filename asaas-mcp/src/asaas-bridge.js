@@ -46,8 +46,8 @@ function makeAsaasBridge({ bridgeUrl, internalToken, timeoutMs = 25000 }) {
   }
 
   return {
-    saldo: () => get('/asaas/saldo'),
-    situacaoMes: (params) => get('/asaas/situacao-mes', params),
+    saldo: () => get('/saldo'),
+    situacaoMes: (params) => get('/situacao-mes', params),
   };
 }
 
