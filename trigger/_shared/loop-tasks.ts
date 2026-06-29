@@ -3,7 +3,7 @@ import { getSupabase } from "./supabase";
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 export type LoopTargetSystem = "vendaerp" | "asaas" | "nenhum";
-export type LoopState = "open" | "executing" | "done";
+export type LoopState = "open" | "executing" | "done" | "aguardando_autorizacao_ceo";
 export type LoopStatus = "attending" | "task_pending" | "replied";
 
 export interface CreateLoopTaskParams {
@@ -22,6 +22,8 @@ export interface CreateLoopTaskParams {
 export interface CreateLoopTaskResult {
   taskId: string;
   conversationUpdated: boolean;
+  /** true se a tarefa exige autorização do CEO antes de executar (Fluxo C). */
+  requerAutorizacao: boolean;
 }
 
 // ─── Helper: cria tarefa + atualiza conversa atomicamente ────────────────────
@@ -37,6 +39,13 @@ export async function createLoopTask(
 ): Promise<CreateLoopTaskResult> {
   const sb = getSupabase();
 
+  // Fluxo C (Blueprint v2 §5C): demanda que executa em sistema externo (vendaerp/asaas)
+  // NÃO abre direto — nasce em 'aguardando_autorizacao_ceo' e só executa após o `ok` do
+  // CEO (via POST /loop/autorizar → loop_state='open'). 'nenhum' (só responder com
+  // contexto) abre normal. executar-tarefa já ignora tudo que não é loop_state='open'.
+  const requerAutorizacao = params.sistemaAlvo !== "nenhum";
+  const loopStateInicial: LoopState = requerAutorizacao ? "aguardando_autorizacao_ceo" : "open";
+
   const { data: task, error: taskErr } = await sb
     .from("client_tasks")
     .insert({
@@ -49,7 +58,7 @@ export async function createLoopTask(
       agent_id:         params.agentId,
       position:         0,
       conversation_id:  params.conversationId,
-      loop_state:       "open" satisfies LoopState,
+      loop_state:       loopStateInicial satisfies LoopState,
       target_system:    params.sistemaAlvo satisfies LoopTargetSystem,
       execution_result: params.operacao
         ? { operacao: params.operacao, parametros: params.parametros ?? null }
@@ -81,5 +90,5 @@ export async function createLoopTask(
     );
   }
 
-  return { taskId: task.id, conversationUpdated: !convErr };
+  return { taskId: task.id, conversationUpdated: !convErr, requerAutorizacao };
 }
