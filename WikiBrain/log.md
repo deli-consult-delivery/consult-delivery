@@ -1591,3 +1591,18 @@ GATE 0 autônomo, output bruto a cada passo.
 Também criados os `test/live-smoke.js` ausentes nos 3 MCPs (script declarado no package.json sem o arquivo). `node --check` OK em tudo.
 
 **Falta (só Wandson):** 4 segredos — `TELEGRAM_BOT_TOKEN`+`CEO_TELEGRAM_CHAT_ID`, `VENDAERP_WRITE_TOKEN`, `INTERNAL_BRIDGE_TOKEN`/`BRIDGE_URL` no Trigger.dev — e root→`claudedev`. Asaas fica 100% verde quando o fix do Bridge entrar em produção (merge → hook de restart pós-merge recarrega o pm2).
+
+---
+
+## 2026-06-29 — ESCRITA NO ERP HABILITADA no gateway do Hermes (GATE 0 autônomo)
+
+Capacidade de **escrita no VendaERP (Fluxo C) LIGADA** no gateway do Hermes na VPS. O fio de código já estava em main (#638 — `vendaerp-mcp` envia `x-vendaerp-write-token` nas escritas); faltava só a config do gateway.
+
+**Feito (output bruto):**
+1. Disco compartilhado `/root/consult-delivery` → `git reset --hard origin/main`, HEAD `c7dafe4`.
+2. Backup `~/.hermes/config.yaml.bak.preerpwrite`.
+3. Inserido `VENDAERP_WRITE_TOKEN` no bloco `env:` do MCP `vendaerp` em `~/.hermes/config.yaml` (logo após `INTERNAL_BRIDGE_TOKEN`, indent 6 espaços idêntico às demais env). Valor lido do `bridge-server/.env`, **nunca impresso**; inserção programática (Python) idempotente. `yaml.safe_load` → **YAML OK**.
+4. `hermes gateway restart` (PID 1964676, exit 0).
+5. **Verificado SEM escrever no ERP:** `hermes mcp test cd-admin` ✅ 8 tools (copiloto do CEO intacto); `hermes mcp test vendaerp` ✅ **12 tools (leitura+escrita)** — agora com `erp_propor_oportunidade/lancamento/boleto/nfe/estoque` + `erp_confirmar`. `mcp-stderr.log` última linha do vendaerp: `online (stdio) — 12 tools (leitura+escrita)`.
+
+**NENHUMA escrita real executada.** O teste E2E propor→confirmar é do Wandson, pelo Telegram (DELI chama `erp_propor_*` → CEO recebe o código out-of-band → `erp_confirmar` efetiva no ERP).
