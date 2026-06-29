@@ -40,95 +40,72 @@
     gap: 12px;
     margin-bottom: 14px;
   }
-  .logo-rocket {
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
+  .logo-rocket { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; }
   .logo-rocket img { width: 100%; height: 100%; object-fit: contain; }
-  .logo-text {
-    font-family: 'Anton', sans-serif;
-    font-size: 20px;
-    letter-spacing: 0.02em;
-    line-height: 1;
-  }
+  .logo-text { font-family: 'Anton', sans-serif; font-size: 20px; letter-spacing: 0.02em; line-height: 1; }
   .logo-text span { color: var(--red); }
-  .logo-line {
-    height: 1px;
-    background: var(--red);
-    margin-bottom: 28px;
-  }
+  .logo-line { height: 1px; background: var(--red); margin-bottom: 28px; }
 
-  main {
-    max-width: 680px;
-    margin: 0 auto;
-    padding: 0 24px 60px;
-  }
+  main { max-width: 680px; margin: 0 auto; padding: 0 24px 60px; }
 
   .state-screen {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: 60vh;
-    gap: 16px;
-    color: var(--muted);
-    font-size: 14px;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; min-height: 60vh; gap: 16px;
+    color: var(--muted); font-size: 14px;
   }
   .spinner {
     width: 36px; height: 36px;
-    border: 3px solid var(--border);
-    border-top-color: var(--red);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+    border: 3px solid var(--border); border-top-color: var(--red);
+    border-radius: 50%; animation: spin 0.8s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
   .chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    border-radius: 999px;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
   }
-  .chip-urgent   { background: rgba(183,12,0,0.15); color: var(--red); border: 1px solid rgba(183,12,0,0.3); }
-  .chip-ok       { background: rgba(34,197,94,0.1); color: #22c55e;    border: 1px solid rgba(34,197,94,0.25); }
+  .chip-urgent { background: rgba(183,12,0,0.15); color: var(--red); border: 1px solid rgba(183,12,0,0.3); }
+  .chip-ok     { background: rgba(34,197,94,0.1);  color: #22c55e;   border: 1px solid rgba(34,197,94,0.25); }
 
   .page-title {
     font-family: 'Anton', sans-serif;
     font-size: clamp(22px, 5vw, 30px);
-    line-height: 1.05;
-    letter-spacing: 0.01em;
-    margin-bottom: 4px;
+    line-height: 1.05; letter-spacing: 0.01em; margin-bottom: 4px;
   }
   .page-title span { color: var(--red); }
-  .page-subtitle {
-    font-size: 13px;
-    color: var(--muted);
-    margin-bottom: 28px;
-  }
+  .page-subtitle { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
 
   .card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 20px;
-    margin-bottom: 16px;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 16px; padding: 20px; margin-bottom: 16px;
   }
 
-  .meta-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-items: center;
-    margin-bottom: 16px;
+  /* Info banners */
+  .info-banner {
+    display: flex; align-items: flex-start; gap: 10px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 10px; padding: 13px 15px;
+    margin-bottom: 20px; font-size: 13px;
+    color: var(--offwhite); line-height: 1.55;
   }
+  .info-banner .ib-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+
+  /* Progress bar */
+  .progress-wrap {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 16px;
+    margin-bottom: 24px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .progress-bar { flex: 1; height: 6px; background: #222; border-radius: 999px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--red); border-radius: 999px; transition: width 0.4s ease, background 0.3s; }
+  .progress-fill.complete { background: #22c55e; }
+  .progress-label { font-size: 12px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
   .meta-item { font-size: 12px; color: var(--muted); }
   .meta-item strong { color: var(--offwhite); }
   .meta-sep { color: var(--border); }
@@ -137,190 +114,99 @@
   .star  { font-size: 16px; }
 
   .store-name {
-    font-family: 'Anton', sans-serif;
-    font-size: 18px;
-    letter-spacing: 0.02em;
-    color: var(--white);
-    margin-bottom: 4px;
+    font-family: 'Anton', sans-serif; font-size: 18px;
+    letter-spacing: 0.02em; color: var(--white); margin-bottom: 4px;
   }
 
   .block-label {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    margin-bottom: 8px;
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px;
   }
   .block-label.client  { color: var(--muted); }
   .block-label.suggest { color: var(--red); }
 
   .comment-box {
-    background: #1e1e1e;
-    border-left: 3px solid var(--border);
-    border-radius: 8px;
-    padding: 12px 14px;
-    font-size: 14px;
-    line-height: 1.6;
-    color: var(--offwhite);
-    margin-bottom: 20px;
+    background: #1e1e1e; border-left: 3px solid var(--border);
+    border-radius: 8px; padding: 12px 14px;
+    font-size: 14px; line-height: 1.6; color: var(--offwhite); margin-bottom: 20px;
   }
 
   .response-wrap {
-    background: #1a0d0c;
-    border-left: 3px solid var(--red);
-    border-radius: 8px;
-    padding: 14px;
-    margin-bottom: 8px;
+    background: #1a0d0c; border-left: 3px solid var(--red);
+    border-radius: 8px; padding: 14px; margin-bottom: 4px;
+    transition: border-color 0.2s;
   }
-  .response-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
-  }
-  .char-count {
-    font-size: 11px;
-    font-family: monospace;
-    color: var(--muted);
-    transition: color 0.2s;
-  }
+  .response-wrap.at-limit { border-left-color: #ef4444; background: #1e0a0a; }
+
+  .response-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .char-count { font-size: 11px; font-family: monospace; color: var(--muted); transition: color 0.2s; }
   .char-count.warn   { color: #eab308; }
-  .char-count.danger { color: var(--red); }
+  .char-count.danger { color: #ef4444; font-weight: 700; }
 
   textarea {
-    width: 100%;
-    background: transparent;
-    border: none;
-    outline: none;
-    color: var(--white);
-    font-family: 'Montserrat', sans-serif;
-    font-size: 14px;
-    line-height: 1.65;
-    resize: vertical;
-    min-height: 110px;
+    width: 100%; background: transparent; border: none; outline: none;
+    color: var(--white); font-family: 'Montserrat', sans-serif;
+    font-size: 14px; line-height: 1.65; resize: vertical; min-height: 110px;
   }
   textarea::placeholder { color: var(--muted); }
   textarea:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  .edit-hint {
-    font-size: 11px;
-    color: var(--muted);
-    text-align: right;
-    margin-bottom: 20px;
+  .char-limit-note {
+    font-size: 10px; color: var(--muted); text-align: right;
+    margin-bottom: 16px; transition: color 0.2s;
   }
+  .char-limit-note.at-limit { color: #ef4444; font-weight: 700; }
 
   .deadline-banner {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    background: rgba(183,12,0,0.08);
-    border: 1px solid rgba(183,12,0,0.2);
-    border-radius: 10px;
-    padding: 12px 14px;
-    margin-bottom: 20px;
-    font-size: 13px;
-    color: var(--offwhite);
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(183,12,0,0.08); border: 1px solid rgba(183,12,0,0.2);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 20px;
+    font-size: 13px; color: var(--offwhite);
   }
   .deadline-banner .icon { font-size: 18px; flex-shrink: 0; }
   .deadline-banner strong { color: var(--red); }
 
   .btn-approve {
-    width: 100%;
-    padding: 15px;
-    background: var(--red);
-    color: var(--white);
-    border: none;
-    border-radius: 999px;
-    font-family: 'Anton', sans-serif;
-    font-size: 16px;
-    letter-spacing: 0.06em;
-    cursor: pointer;
-    transition: background 0.2s, transform 0.1s;
-    margin-bottom: 10px;
+    width: 100%; padding: 15px; background: var(--red); color: var(--white);
+    border: none; border-radius: 999px; font-family: 'Anton', sans-serif;
+    font-size: 16px; letter-spacing: 0.06em; cursor: pointer;
+    transition: background 0.2s, transform 0.1s; margin-bottom: 10px;
   }
   .btn-approve:hover:not(:disabled) { background: var(--red-dark); }
   .btn-approve:active:not(:disabled) { transform: scale(0.99); }
   .btn-approve:disabled { opacity: 0.5; cursor: not-allowed; }
 
   .btn-modify {
-    width: 100%;
-    padding: 13px;
-    background: transparent;
-    color: var(--offwhite);
-    border: 1.5px solid var(--border);
-    border-radius: 999px;
-    font-family: 'Montserrat', sans-serif;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: border-color 0.2s, color 0.2s;
-    margin-bottom: 16px;
+    width: 100%; padding: 13px; background: transparent; color: var(--offwhite);
+    border: 1.5px solid var(--border); border-radius: 999px;
+    font-family: 'Montserrat', sans-serif; font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: border-color 0.2s, color 0.2s; margin-bottom: 16px;
   }
   .btn-modify:hover:not(:disabled) { border-color: var(--offwhite); color: var(--white); }
   .btn-modify:disabled { opacity: 0.4; cursor: not-allowed; }
 
   .btn-single-approve {
-    width: 100%;
-    padding: 11px;
-    background: transparent;
-    color: var(--offwhite);
-    border: 1.5px solid var(--border);
-    border-radius: 999px;
-    font-family: 'Montserrat', sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: border-color 0.2s, color 0.2s, background 0.2s;
-    margin-top: 12px;
+    width: 100%; padding: 11px; background: transparent; color: var(--offwhite);
+    border: 1.5px solid var(--border); border-radius: 999px;
+    font-family: 'Montserrat', sans-serif; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: border-color 0.2s, color 0.2s, background 0.2s; margin-top: 12px;
   }
   .btn-single-approve:hover:not(:disabled) { border-color: #22c55e; color: #22c55e; }
   .btn-single-approve:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-single-approve.done { border-color: rgba(34,197,94,0.4); color: #22c55e; background: rgba(34,197,94,0.06); }
 
-  .auto-note {
-    text-align: center;
-    font-size: 11px;
-    color: var(--muted);
-    line-height: 1.5;
-  }
+  .auto-note { text-align: center; font-size: 11px; color: var(--muted); line-height: 1.5; }
+  .review-number { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
 
   .success-card {
-    background: var(--card);
-    border: 1px solid rgba(34,197,94,0.2);
-    border-radius: 16px;
-    padding: 32px 20px;
-    text-align: center;
+    background: var(--card); border: 1px solid rgba(34,197,94,0.2);
+    border-radius: 16px; padding: 32px 20px; text-align: center;
   }
   .success-icon { font-size: 48px; margin-bottom: 16px; }
-  .success-title {
-    font-family: 'Anton', sans-serif;
-    font-size: 22px;
-    letter-spacing: 0.02em;
-    margin-bottom: 8px;
-  }
-  .success-sub {
-    font-size: 13px;
-    color: var(--muted);
-    line-height: 1.6;
-  }
+  .success-title { font-family: 'Anton', sans-serif; font-size: 22px; letter-spacing: 0.02em; margin-bottom: 8px; }
+  .success-sub { font-size: 13px; color: var(--muted); line-height: 1.6; }
 
-  /* Multi-review divider */
-  .review-number {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 12px;
-  }
-
-  footer {
-    text-align: center;
-    font-size: 11px;
-    color: #444;
-    padding: 24px;
-    margin-top: 8px;
-  }
+  footer { text-align: center; font-size: 11px; color: #444; padding: 24px; margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -348,14 +234,22 @@
     <p id="error-msg">Link inválido ou expirado.</p>
   </div>
 
-  <!-- Single review (backward compat with ?token=) -->
+  <!-- ── Single review (backward compat ?token=) ── -->
   <div id="content" style="display:none">
-    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:20px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:16px;">
       <div>
         <h1 class="page-title">APROVAÇÃO DE<br><span>RESPOSTA</span></h1>
-        <p class="page-subtitle">Revise e aprove a resposta para publicação no iFood</p>
       </div>
       <div id="status-chip"></div>
+    </div>
+
+    <!-- Instrução de edição -->
+    <div class="info-banner">
+      <span class="ib-icon">✏️</span>
+      <div>
+        <strong style="color:var(--white)">Você pode editar a resposta antes de aprovar.</strong><br>
+        O texto já foi preparado pela equipe — ajuste à vontade, mas respeite o limite de <strong style="color:var(--white)">300 caracteres</strong>.
+      </div>
     </div>
 
     <div class="card">
@@ -372,14 +266,14 @@
       <div class="comment-box" id="client-comment"></div>
 
       <div class="block-label suggest">Sugestão de resposta</div>
-      <div class="response-wrap">
+      <div class="response-wrap" id="single-response-wrap">
         <div class="response-header">
           <span class="block-label suggest" style="margin-bottom:0">Resposta</span>
           <span class="char-count" id="char-count">0/300</span>
         </div>
-        <textarea id="response-text" maxlength="300" rows="5" placeholder="Edite a resposta aqui…"></textarea>
+        <textarea id="response-text" maxlength="300" rows="5" placeholder="Edite a resposta aqui…" oninput="updateCharCount()"></textarea>
       </div>
-      <p class="edit-hint">Você pode editar a resposta antes de aprovar</p>
+      <p class="char-limit-note" id="single-limit-note">Máximo 300 caracteres — iFood não aceita respostas mais longas</p>
 
       <div class="deadline-banner" id="deadline-banner" style="display:none">
         <span class="icon">⏳</span>
@@ -395,15 +289,34 @@
     </div>
   </div>
 
-  <!-- Multi review (?tokens=t1,t2,...) -->
+  <!-- ── Multi review (?tokens=t1,t2,...) ── -->
   <div id="multi-content" style="display:none">
-    <div style="margin-bottom:20px;">
+    <div style="margin-bottom:16px;">
       <h1 class="page-title">APROVAÇÃO DE<br><span>RESPOSTAS</span></h1>
-      <p class="page-subtitle" id="multi-subtitle">Revise e aprove as respostas para publicação no iFood</p>
     </div>
-    <div class="store-name" id="multi-store-name" style="margin-bottom:20px"></div>
+
+    <div class="store-name" id="multi-store-name" style="margin-bottom:16px"></div>
+
+    <!-- Instrução principal -->
+    <div class="info-banner">
+      <span class="ib-icon">✏️</span>
+      <div>
+        <strong style="color:var(--white)">Você pode editar qualquer resposta antes de aprovar</strong> — máximo de <strong style="color:var(--white)">300 caracteres</strong> por resposta (limite do iFood).<br>
+        <span id="multi-mandatory-note"><strong style="color:var(--offwhite)">Todas as avaliações precisam ser aprovadas</strong> para concluir.</span>
+      </div>
+    </div>
+
+    <!-- Barra de progresso -->
+    <div class="progress-wrap">
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+      </div>
+      <span class="progress-label" id="progress-label">0 de 0 aprovadas</span>
+    </div>
+
     <div id="reviews-list"></div>
-    <button class="btn-approve" id="btn-approve-all" onclick="handleApproveAll()" style="margin-top:8px">APROVAR TODAS AS RESPOSTAS</button>
+
+    <button class="btn-approve" id="btn-approve-all" onclick="handleApproveAll()" style="margin-top:4px">APROVAR TODAS AS RESPOSTAS</button>
     <p class="auto-note" style="margin-top:12px">
       Ao aprovar, a Consult Delivery publica as respostas no iFood em seu nome.<br>
       Sem retorno até as <strong style="color:var(--offwhite)">9h do dia seguinte</strong>, as sugestões originais são publicadas automaticamente.
@@ -427,247 +340,224 @@ const SUPABASE_URL  = 'https://czyanilrverorwenikqw.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6eWFuaWxydmVyb3J3ZW5pa3F3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwNTg5MzksImV4cCI6MjA5MjYzNDkzOX0.k_EIEgnM5a-4Ub52-w5VJw9WJBEPNQmmwgz8AEuyoAw';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-// ── Shared state ──────────────────────────────────────────────────────────────
 let singleReviewId = null;
-let multiReviews   = [];          // pending reviews in multi mode
-let approvedIds    = new Set();   // approved this session (multi mode)
+let multiReviews   = [];
+let approvedIds    = new Set();
 
 const STAR_COLORS = { 1:'#ef4444', 2:'#f97316', 3:'#eab308', 4:'#84cc16', 5:'#22c55e' };
 
 function renderStars(rating) {
-  const col = STAR_COLORS[rating] || '#888';
-  return [1,2,3,4,5].map(i =>
-    `<span class="star" style="color:${i<=rating?col:'#333'}">${i<=rating?'★':'☆'}</span>`
-  ).join('');
+  var col = STAR_COLORS[rating] || '#888';
+  return [1,2,3,4,5].map(function(i){
+    return '<span class="star" style="color:'+(i<=rating?col:'#333')+'">'+(i<=rating?'★':'☆')+'</span>';
+  }).join('');
 }
 
 function fmtDate(iso) {
   if (!iso) return '';
-  const p = String(iso).split('-');
-  return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : iso;
+  var p = String(iso).split('-');
+  return p.length === 3 ? p[2]+'/'+p[1]+'/'+p[0] : iso;
 }
 
 function escHtml(s) {
-  return String(s || '')
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// Atualiza contagem de chars + feedback visual no response-wrap
 function updateCC(id) {
-  const ta = document.getElementById('ta-' + id);
-  const cc = document.getElementById('cc-' + id);
+  var ta   = document.getElementById('ta-'+id);
+  var cc   = document.getElementById('cc-'+id);
+  var note = document.getElementById('note-'+id);
+  var wrap = document.getElementById('wrap-'+id);
   if (!ta || !cc) return;
-  const n = ta.value.length;
-  cc.textContent = n + '/300';
-  cc.className = 'char-count' + (n >= 280 ? ' danger' : n >= 240 ? ' warn' : '');
-}
-
-function showState(state) {
-  ['loading','error','content','multi-content','success'].forEach(function(s) {
-    var el = document.getElementById(s);
-    if (el) el.style.display = (s === state) ? '' : 'none';
-  });
-}
-
-function showError(msg) {
-  document.getElementById('error-msg').textContent = msg;
-  showState('error');
-}
-
-// ── Entry point ───────────────────────────────────────────────────────────────
-async function load() {
-  var params = new URLSearchParams(location.search);
-  var raw = params.get('tokens') || params.get('token');
-  if (!raw) { showError('Link inválido — token não encontrado.'); return; }
-  var tokens = raw.split(',').map(function(t){ return t.trim(); }).filter(Boolean);
-  if (!tokens.length) { showError('Link inválido.'); return; }
-  if (tokens.length === 1) {
-    await loadSingle(tokens[0]);
-  } else {
-    await loadMulti(tokens);
-  }
-}
-
-// ── Single review (original, backward compatible) ─────────────────────────────
-async function loadSingle(token) {
-  var res = await sb.from('reviews').select('*').eq('token', token).maybeSingle();
-  if (res.error || !res.data) { showError('Avaliação não encontrada ou link expirado.'); return; }
-  var data = res.data;
-  singleReviewId = data.id;
-  if (['approved','modified','published'].includes(data.status)) { showState('success'); return; }
-  document.getElementById('store-name').textContent     = data.store;
-  document.getElementById('order-id').textContent       = data.order_id;
-  document.getElementById('review-date').textContent    = fmtDate(data.review_date);
-  document.getElementById('stars').innerHTML            = renderStars(data.rating);
-  document.getElementById('client-comment').textContent = data.client_comment;
-  var ta = document.getElementById('response-text');
-  ta.value = data.suggested_response;
-  ta.addEventListener('input', updateCharCount);
-  updateCharCount();
-  if (data.deadline) {
-    document.getElementById('deadline-banner').style.display = '';
-    document.getElementById('deadline-text').textContent = fmtDate(data.deadline);
-  }
-  var statusMap = { pending:{label:'AGUARDANDO',cls:'chip-urgent'}, sent_to_client:{label:'PENDENTE',cls:'chip-urgent'} };
-  var st = statusMap[data.status] || {label: data.status.toUpperCase(), cls:'chip-ok'};
-  document.getElementById('status-chip').innerHTML = '<span class="chip ' + st.cls + '">' + st.label + '</span>';
-  showState('content');
+  var n = ta.value.length;
+  cc.textContent = n+'/300';
+  cc.className   = 'char-count'+(n>=300?' danger':n>=280?' danger':n>=240?' warn':'');
+  if (note) { note.className = 'char-limit-note'+(n>=300?' at-limit':''); note.textContent = n>=300?'Limite de 300 caracteres atingido — o iFood não aceita respostas mais longas':'Máximo 300 caracteres — iFood não aceita respostas mais longas'; }
+  if (wrap) { wrap.className = 'response-wrap'+(n>=300?' at-limit':''); }
 }
 
 function updateCharCount() {
-  var ta = document.getElementById('response-text');
-  var cc = document.getElementById('char-count');
+  var ta   = document.getElementById('response-text');
+  var cc   = document.getElementById('char-count');
+  var note = document.getElementById('single-limit-note');
+  var wrap = document.getElementById('single-response-wrap');
+  if (!ta||!cc) return;
   var n = ta.value.length;
-  cc.textContent = n + '/300';
-  cc.className = 'char-count' + (n >= 280 ? ' danger' : n >= 240 ? ' warn' : '');
+  cc.textContent = n+'/300';
+  cc.className   = 'char-count'+(n>=300?' danger':n>=280?' danger':n>=240?' warn':'');
+  if (note) { note.className = 'char-limit-note'+(n>=300?' at-limit':''); note.textContent = n>=300?'Limite de 300 caracteres atingido — o iFood não aceita respostas mais longas':'Máximo 300 caracteres — iFood não aceita respostas mais longas'; }
+  if (wrap) { wrap.className = 'response-wrap'+(n>=300?' at-limit':''); }
+}
+
+function updateProgress() {
+  var total = multiReviews.length;
+  var done  = approvedIds.size;
+  var fill  = document.getElementById('progress-fill');
+  var label = document.getElementById('progress-label');
+  if (!fill||!label) return;
+  var pct = total > 0 ? Math.round((done/total)*100) : 0;
+  fill.style.width = pct+'%';
+  fill.className   = 'progress-fill'+(done>=total?' complete':'');
+  label.textContent = done+' de '+total+' aprovada'+(total===1?'':'s');
+}
+
+function showState(state) {
+  ['loading','error','content','multi-content','success'].forEach(function(s){
+    var el = document.getElementById(s);
+    if (el) el.style.display = s===state?'':'none';
+  });
+}
+function showError(msg) { document.getElementById('error-msg').textContent = msg; showState('error'); }
+
+// ── Entry point ──────────────────────────────────────────────────────────────
+async function load() {
+  var params = new URLSearchParams(location.search);
+  var raw = params.get('tokens')||params.get('token');
+  if (!raw) { showError('Link inválido — token não encontrado.'); return; }
+  var tokens = raw.split(',').map(function(t){ return t.trim(); }).filter(Boolean);
+  if (!tokens.length) { showError('Link inválido.'); return; }
+  tokens.length===1 ? await loadSingle(tokens[0]) : await loadMulti(tokens);
+}
+
+// ── Single (backward compat) ─────────────────────────────────────────────────
+async function loadSingle(token) {
+  var res = await sb.from('reviews').select('*').eq('token',token).maybeSingle();
+  if (res.error||!res.data) { showError('Avaliação não encontrada ou link expirado.'); return; }
+  var d = res.data;
+  singleReviewId = d.id;
+  if (['approved','modified','published'].includes(d.status)) { showState('success'); return; }
+  document.getElementById('store-name').textContent      = d.store;
+  document.getElementById('order-id').textContent        = d.order_id;
+  document.getElementById('review-date').textContent     = fmtDate(d.review_date);
+  document.getElementById('stars').innerHTML             = renderStars(d.rating);
+  document.getElementById('client-comment').textContent  = d.client_comment;
+  var ta = document.getElementById('response-text');
+  ta.value = d.suggested_response;
+  updateCharCount();
+  if (d.deadline) {
+    document.getElementById('deadline-banner').style.display = '';
+    document.getElementById('deadline-text').textContent = fmtDate(d.deadline);
+  }
+  var map = { pending:{label:'AGUARDANDO',cls:'chip-urgent'}, sent_to_client:{label:'PENDENTE',cls:'chip-urgent'} };
+  var st = map[d.status]||{label:d.status.toUpperCase(),cls:'chip-ok'};
+  document.getElementById('status-chip').innerHTML = '<span class="chip '+st.cls+'">'+st.label+'</span>';
+  showState('content');
 }
 
 async function handleApprove() {
   setSingleBtns(true);
-  var finalText = document.getElementById('response-text').value.trim();
-  var res = await sb.from('reviews').update({ status:'approved', final_response:finalText, approved_at:new Date().toISOString() }).eq('id', singleReviewId);
+  var text = document.getElementById('response-text').value.trim();
+  var res = await sb.from('reviews').update({status:'approved',final_response:text,approved_at:new Date().toISOString()}).eq('id',singleReviewId);
   if (res.error) { alert('Erro ao salvar. Tente novamente.'); setSingleBtns(false); return; }
   showState('success');
 }
-
 async function handleModify() {
   var ta = document.getElementById('response-text');
   if (!ta.value.trim()) { ta.focus(); return; }
   setSingleBtns(true);
-  var res = await sb.from('reviews').update({ status:'modified', final_response:ta.value.trim(), approved_at:new Date().toISOString() }).eq('id', singleReviewId);
+  var res = await sb.from('reviews').update({status:'modified',final_response:ta.value.trim(),approved_at:new Date().toISOString()}).eq('id',singleReviewId);
   if (res.error) { alert('Erro ao salvar. Tente novamente.'); setSingleBtns(false); return; }
   showState('success');
 }
-
-function setSingleBtns(disabled) {
-  document.getElementById('btn-approve').disabled = disabled;
-  document.getElementById('btn-modify').disabled  = disabled;
-}
+function setSingleBtns(d) { document.getElementById('btn-approve').disabled=d; document.getElementById('btn-modify').disabled=d; }
 
 // ── Multi review ─────────────────────────────────────────────────────────────
 async function loadMulti(tokens) {
-  var res = await sb.from('reviews').select('*').in('token', tokens);
-  if (res.error || !res.data || !res.data.length) {
-    showError('Avaliações não encontradas ou link expirado.');
-    return;
-  }
-  var data = res.data;
+  var res = await sb.from('reviews').select('*').in('token',tokens);
+  if (res.error||!res.data||!res.data.length) { showError('Avaliações não encontradas ou link expirado.'); return; }
   var DONE = ['approved','modified','published'];
-  var pending = data.filter(function(r){ return !DONE.includes(r.status); });
-  var done    = data.filter(function(r){ return  DONE.includes(r.status); });
-
-  if (pending.length === 0) { showState('success'); return; }
+  var pending = res.data.filter(function(r){ return !DONE.includes(r.status); });
+  var done    = res.data.filter(function(r){ return  DONE.includes(r.status); });
+  if (!pending.length) { showState('success'); return; }
 
   multiReviews = pending;
-  var storeName = data[0].store || '';
-  document.getElementById('multi-store-name').textContent = storeName;
-  document.getElementById('multi-subtitle').textContent =
-    pending.length + ' avaliação' + (pending.length > 1 ? 'ões' : '') + ' aguardando sua aprovação';
+  document.getElementById('multi-store-name').textContent = res.data[0].store||'';
 
   var list = document.getElementById('reviews-list');
   list.innerHTML = '';
 
-  // Already-done ones (collapsed)
-  done.forEach(function(r) {
+  // Já aprovadas
+  done.forEach(function(r){
     var div = document.createElement('div');
     div.className = 'card';
     div.style.cssText = 'border-color:rgba(34,197,94,0.3);opacity:0.55;margin-bottom:14px';
     div.innerHTML =
-      '<div class="meta-row">' +
-        '<div class="stars">' + renderStars(r.rating) + '</div>' +
-        '<span class="meta-sep">·</span>' +
-        '<span class="meta-item">Pedido <strong>' + escHtml(r.order_id) + '</strong></span>' +
-      '</div>' +
+      '<div class="meta-row"><div class="stars">'+renderStars(r.rating)+'</div><span class="meta-sep">·</span><span class="meta-item">Pedido <strong>'+escHtml(r.order_id)+'</strong></span></div>'+
       '<div style="color:#22c55e;font-size:13px;font-weight:600">✓ Já aprovada</div>';
     list.appendChild(div);
   });
 
-  // Pending ones
-  pending.forEach(function(r, i) {
+  // Pendentes
+  pending.forEach(function(r,i){
     var div = document.createElement('div');
     div.className = 'card';
-    div.id = 'card-' + r.id;
+    div.id = 'card-'+r.id;
     div.style.marginBottom = '20px';
-    var deadlineHtml = r.deadline
-      ? '<span class="chip chip-urgent" style="font-size:10px;margin-left:4px">⏳ ' + fmtDate(r.deadline) + '</span>'
-      : '';
-    var dateHtml = r.review_date
-      ? '<span class="meta-sep">·</span><span class="meta-item">' + escHtml(fmtDate(r.review_date)) + '</span>'
-      : '';
+    var dlHtml  = r.deadline ? '<span class="chip chip-urgent" style="font-size:10px;margin-left:4px">⏳ '+fmtDate(r.deadline)+'</span>' : '';
+    var dtHtml  = r.review_date ? '<span class="meta-sep">·</span><span class="meta-item">'+escHtml(fmtDate(r.review_date))+'</span>' : '';
     div.innerHTML =
-      '<div class="review-number">Avaliação ' + (i + 1) + ' de ' + pending.length + '</div>' +
-      '<div class="meta-row">' +
-        '<div class="stars">' + renderStars(r.rating) + '</div>' +
-        '<span class="meta-sep">·</span>' +
-        '<span class="meta-item">Pedido <strong>' + escHtml(r.order_id) + '</strong></span>' +
-        dateHtml + deadlineHtml +
-      '</div>' +
-      '<div class="block-label client">Comentário do cliente</div>' +
-      '<div class="comment-box">' + escHtml(r.client_comment || '') + '</div>' +
-      '<div class="block-label suggest">Sugestão de resposta</div>' +
-      '<div class="response-wrap">' +
-        '<div class="response-header">' +
-          '<span class="block-label suggest" style="margin-bottom:0">Resposta</span>' +
-          '<span class="char-count" id="cc-' + r.id + '">0/300</span>' +
-        '</div>' +
-        '<textarea id="ta-' + r.id + '" maxlength="300" rows="4" oninput="updateCC(\'' + r.id + '\')">' + escHtml(r.suggested_response || '') + '</textarea>' +
-      '</div>' +
-      '<button class="btn-single-approve" id="btn-single-' + r.id + '" onclick="handleApproveSingle(\'' + r.id + '\')">✓ Aprovar esta resposta</button>';
+      '<div class="review-number">Avaliação '+(i+1)+' de '+pending.length+'</div>'+
+      '<div class="meta-row"><div class="stars">'+renderStars(r.rating)+'</div><span class="meta-sep">·</span><span class="meta-item">Pedido <strong>'+escHtml(r.order_id)+'</strong></span>'+dtHtml+dlHtml+'</div>'+
+      '<div class="block-label client">Comentário do cliente</div>'+
+      '<div class="comment-box">'+escHtml(r.client_comment||'')+'</div>'+
+      '<div class="block-label suggest">Sugestão de resposta</div>'+
+      '<div class="response-wrap" id="wrap-'+r.id+'">'+
+        '<div class="response-header">'+
+          '<span class="block-label suggest" style="margin-bottom:0">Resposta</span>'+
+          '<span class="char-count" id="cc-'+r.id+'">0/300</span>'+
+        '</div>'+
+        '<textarea id="ta-'+r.id+'" maxlength="300" rows="4" oninput="updateCC(\''+r.id+'\')">'+escHtml(r.suggested_response||'')+'</textarea>'+
+      '</div>'+
+      '<p class="char-limit-note" id="note-'+r.id+'">Máximo 300 caracteres — iFood não aceita respostas mais longas</p>'+
+      '<button class="btn-single-approve" id="btn-single-'+r.id+'" onclick="handleApproveSingle(\''+r.id+'\')">✓ Aprovar esta resposta</button>';
     list.appendChild(div);
     updateCC(r.id);
   });
 
+  updateProgress();
   showState('multi-content');
 }
 
 async function handleApproveSingle(id) {
-  var btn = document.getElementById('btn-single-' + id);
+  var btn = document.getElementById('btn-single-'+id);
   if (btn) btn.disabled = true;
-  var ta = document.getElementById('ta-' + id);
-  var finalText = ta ? ta.value.trim() : '';
-  var original = multiReviews.find(function(r){ return r.id === id; });
-  var status = (original && finalText !== (original.suggested_response || '').trim()) ? 'modified' : 'approved';
-  var res = await sb.from('reviews').update({ status:status, final_response:finalText, approved_at:new Date().toISOString() }).eq('id', id);
-  if (res.error) {
-    alert('Erro ao salvar. Tente novamente.');
-    if (btn) btn.disabled = false;
-    return;
-  }
+  var ta = document.getElementById('ta-'+id);
+  var text = ta ? ta.value.trim() : '';
+  var orig = multiReviews.find(function(r){ return r.id===id; });
+  var status = (orig && text!==(orig.suggested_response||'').trim()) ? 'modified' : 'approved';
+  var res = await sb.from('reviews').update({status:status,final_response:text,approved_at:new Date().toISOString()}).eq('id',id);
+  if (res.error) { alert('Erro ao salvar. Tente novamente.'); if(btn) btn.disabled=false; return; }
   markCardApproved(id);
   approvedIds.add(id);
-  if (approvedIds.size >= multiReviews.length) {
-    setTimeout(function(){ showState('success'); }, 700);
-  }
+  updateProgress();
+  if (approvedIds.size >= multiReviews.length) setTimeout(function(){ showState('success'); }, 700);
 }
 
 async function handleApproveAll() {
   var btnAll = document.getElementById('btn-approve-all');
   if (btnAll) btnAll.disabled = true;
   var pending = multiReviews.filter(function(r){ return !approvedIds.has(r.id); });
-  var updates = pending.map(function(r) {
-    var ta = document.getElementById('ta-' + r.id);
-    var finalText = ta ? ta.value.trim() : (r.suggested_response || '');
-    var status = (finalText !== (r.suggested_response || '').trim()) ? 'modified' : 'approved';
-    return sb.from('reviews').update({ status:status, final_response:finalText, approved_at:new Date().toISOString() }).eq('id', r.id);
+  var updates = pending.map(function(r){
+    var ta = document.getElementById('ta-'+r.id);
+    var text = ta ? ta.value.trim() : (r.suggested_response||'');
+    var status = (text!==(r.suggested_response||'').trim()) ? 'modified' : 'approved';
+    return sb.from('reviews').update({status:status,final_response:text,approved_at:new Date().toISOString()}).eq('id',r.id);
   });
   var results = await Promise.all(updates);
-  var anyError = results.some(function(r){ return r.error; });
-  if (anyError) {
-    alert('Erro ao salvar algumas respostas. Tente novamente.');
-    if (btnAll) btnAll.disabled = false;
-    return;
-  }
-  pending.forEach(function(r){ markCardApproved(r.id); });
+  if (results.some(function(r){ return r.error; })) { alert('Erro ao salvar algumas respostas. Tente novamente.'); if(btnAll) btnAll.disabled=false; return; }
+  pending.forEach(function(r){ markCardApproved(r.id); approvedIds.add(r.id); });
+  updateProgress();
   setTimeout(function(){ showState('success'); }, 700);
 }
 
 function markCardApproved(id) {
-  var card = document.getElementById('card-' + id);
-  if (card) { card.style.borderColor = 'rgba(34,197,94,0.35)'; card.style.opacity = '0.75'; }
-  var ta = document.getElementById('ta-' + id);
+  var card = document.getElementById('card-'+id);
+  if (card) { card.style.borderColor='rgba(34,197,94,0.35)'; card.style.opacity='0.75'; }
+  var ta = document.getElementById('ta-'+id);
   if (ta) ta.disabled = true;
-  var btn = document.getElementById('btn-single-' + id);
-  if (btn) { btn.textContent = '✓ Aprovada!'; btn.className = 'btn-single-approve done'; btn.disabled = true; }
+  var btn = document.getElementById('btn-single-'+id);
+  if (btn) { btn.textContent='✓ Aprovada!'; btn.className='btn-single-approve done'; btn.disabled=true; }
 }
 
 load();
