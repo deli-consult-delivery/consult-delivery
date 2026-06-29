@@ -10,6 +10,7 @@
 // validado contra tenant_members para evitar IDOR cross-tenant.
 
 const express = require('express');
+const { decideEnvio } = require('../lib/semaforo');
 
 module.exports = function buildBrenoAprovacaoRouter({ sbFetch, supabaseInsert }) {
   const router = express.Router();
@@ -62,13 +63,20 @@ module.exports = function buildBrenoAprovacaoRouter({ sbFetch, supabaseInsert })
 
       // 1. Buscar draft — aceita pending OU approved (o painel pode já ter marcado approved)
       const drafts = await sbFetch(
-        `agent_drafts?id=eq.${encodeURIComponent(draft_id)}&tenant_id=eq.${encodeURIComponent(tenant_id)}&status=in.(approved,pending)&select=id,content,metadata,channel,status&limit=1`
+        `agent_drafts?id=eq.${encodeURIComponent(draft_id)}&tenant_id=eq.${encodeURIComponent(tenant_id)}&status=in.(approved,pending)&select=id,content,metadata,channel,status,autonomy_level&limit=1`
       );
       if (!drafts?.length) {
         return res.status(404).json({ error: 'Draft não encontrado ou já processado' });
       }
       const draft = drafts[0];
       const meta = draft.metadata || {};
+
+      // GATE de semáforo no servidor: esta rota é aprovação HUMANA explícita (viaHumano).
+      // Mesmo assim consultamos o gate central (fonte única) — fail-closed em nível inválido.
+      const gate = decideEnvio({ autonomyLevel: draft.autonomy_level, viaHumano: true });
+      if (!gate.allowed) {
+        return res.status(403).json({ error: gate.reason, code: 'SEMAFORO_BLOQUEOU' });
+      }
 
       // 2. Destino — gravado pelo trigger breno-responder no metadata do draft
       const whatsappChatId = meta.whatsapp_chat_id;
