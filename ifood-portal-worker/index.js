@@ -230,4 +230,44 @@ async function preencherResposta(orderId, texto, opts = {}) {
   });
 }
 
-module.exports = { listarAvaliacoesPendentes, preencherResposta, AvaliacaoSchema, ListaSchema };
+/**
+ * PUBLICA a resposta: clica o botão "Enviar resposta" do drawer JÁ ABERTO E PREENCHIDO (chamar
+ * preencherResposta antes). É o ÚNICO ponto que envia algo ao cliente → semáforo AMARELO: só roda
+ * sob aprovação explícita do Wandson para aquele texto específico. Por isso exige a flag
+ * { permitirEnvio: true }. Confere que o textarea tem conteúdo antes de clicar (não envia vazio).
+ *
+ * Retorna { enviado:true, statusApos } após confirmar pelo recarregamento que o status mudou.
+ */
+async function enviarResposta(opts = {}) {
+  if (opts.permitirEnvio !== true) {
+    throw new Error(
+      'enviarResposta: bloqueado por segurança. Passe { permitirEnvio: true } SOMENTE após o ' +
+        'Wandson aprovar o texto no viewer (semáforo amarelo). Nunca envie sem "ok" explícito.'
+    );
+  }
+  return withPortal(async (page) => {
+    const sel = `textarea[data-testid="${TEXTAREA_TESTID}"]`;
+    const valor = await page.$eval(sel, (t) => t.value).catch(() => '');
+    if (!valor.trim())
+      throw new Error('enviarResposta: campo de resposta vazio (preencha antes). Abortado.');
+
+    const pedido = (await page.$eval('[data-testid="table"] tbody tr [role="cell"], [data-testid="table"] tbody tr td', (c) => (c.innerText || '').trim()).catch(() => null));
+
+    const clicked = await page.evaluate(() => {
+      const ta = document.querySelector('textarea[data-testid="review-details-drawer-comment-textarea"]');
+      const scope = (ta && ta.closest('[role="dialog"],aside,section,form,div[class*="drawer"]')) || document.body;
+      const btn = [...scope.querySelectorAll('button,[role="button"]')].find((e) =>
+        /enviar resposta/i.test(e.innerText || '')
+      );
+      if (!btn) return false;
+      btn.click();
+      return true;
+    });
+    if (!clicked) throw new Error('Botão "Enviar resposta" não encontrado no drawer.');
+
+    await page.waitForTimeout(6000); // deixa a submissão completar e o drawer fechar
+    return { ok: true, enviado: true, textoEnviado: valor.trim(), pedidoAprox: pedido };
+  });
+}
+
+module.exports = { listarAvaliacoesPendentes, preencherResposta, enviarResposta, AvaliacaoSchema, ListaSchema };
