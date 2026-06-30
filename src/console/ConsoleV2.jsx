@@ -272,9 +272,9 @@ function useTenants(userId, fallback) {
     if (!userId) return;
     let alive = true;
     (async () => {
-      const { data } = await supabase.from('tenant_members').select('tenants(id, name, slug)').eq('user_id', userId);
+      const { data } = await supabase.from('tenant_members').select('role, tenants(id, name, slug)').eq('user_id', userId);
       if (!alive || !Array.isArray(data)) return;
-      const mapped = data.filter(d => d.tenants).map(d => ({ dbId: d.tenants.id, slug: d.tenants.slug, nome: d.tenants.name }));
+      const mapped = data.filter(d => d.tenants).map(d => ({ dbId: d.tenants.id, slug: d.tenants.slug, nome: d.tenants.name, role: d.role }));
       const uniq = [...new Map(mapped.map(m => [m.dbId, m])).values()];
       if (uniq.length) {
         setList(uniq);
@@ -867,7 +867,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
         {GRUPOS.map((g, i) => {
           // allowlist: esconde itens não liberados e grupos que ficarem vazios.
           // adminOnly: visível apenas para owner/admin do tenant.
-          const isAdmin = ['owner', 'admin'].includes(tenantInfo?.role);
+          const isAdmin = ['owner', 'admin'].includes(sel?.role || tenantInfo?.role);
           const items = (allowedModules ? g.items.filter(it => allowedModules.has(it.id)) : g.items)
             .filter(it => !it.adminOnly || isAdmin);
           if (items.length === 0) return null;
