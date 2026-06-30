@@ -15,6 +15,11 @@ const path = require('path');
 const { z } = require('zod');
 
 const LOJA = 'Café Container - Lanches e Salgados';
+// Provider PRIMÁRIO: Ollama Cloud (serviço hospedado da Ollama). Modelo configurável via
+// OLLAMA_MODEL; default kimi-k2.6 (Kimi K2.6 da Moonshot — forte e bom em PT-BR de texto curto,
+// confirmado disponível na conta). Endpoint configurável via OLLAMA_BASE_URL (default ollama.com).
+const OLLAMA_MODEL_DEFAULT = 'kimi-k2.6';
+const OLLAMA_BASE_DEFAULT = 'https://ollama.com';
 const MODELO_ANTHROPIC = 'claude-sonnet-4-6';
 const MODELO_OPENROUTER = 'anthropic/claude-sonnet-4.6'; // mesmo modelo Claude via OpenRouter
 const MIN_CHARS = 20;
@@ -28,11 +33,10 @@ const AvaliacaoInputSchema = z.object({
 });
 
 // ── Resolução de credencial (lazy, sem throw no topo) ─────────────────────────
-// Prioriza ANTHROPIC_API_KEY (padrão do projeto, trigger/_shared/claude.ts). Se ausente no
-// ambiente, tenta carregar do bridge-server/.env (apenas LEITURA — nunca escreve nesse arquivo) e,
-// como camada multi-provider já decidida no épico (D1: Anthropic/OpenRouter, fallback), usa
-// OPENROUTER_API_KEY rodando o MESMO modelo Claude. Nenhuma chave é hardcoded.
-// ponytail: parser de .env de 4 linhas em vez de adicionar a dep dotenv ao worker.
+// Camada multi-provider (épico D1). Ordem: Ollama Cloud (PRIMÁRIO) → OpenRouter → Anthropic,
+// conforme a key disponível. Se nenhuma estiver no ambiente, carrega do bridge-server/.env
+// (apenas LEITURA — nunca escreve nesse arquivo). Nenhuma chave é hardcoded.
+// ponytail: parser de .env de poucas linhas em vez de adicionar a dep dotenv ao worker.
 function loadEnvFromBridge() {
   const candidatos = [
     path.join(__dirname, '..', 'bridge-server', '.env'),
@@ -57,19 +61,51 @@ function loadEnvFromBridge() {
 }
 
 function getProvider() {
-  if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENROUTER_API_KEY) {
+  if (
+    !process.env.OLLAMA_API_KEY &&
+    !process.env.OPENROUTER_API_KEY &&
+    !process.env.ANTHROPIC_API_KEY
+  ) {
     loadEnvFromBridge();
   }
-  if (process.env.ANTHROPIC_API_KEY) {
-    return { tipo: 'anthropic', key: process.env.ANTHROPIC_API_KEY };
+  // PRIMÁRIO: Ollama Cloud
+  if (process.env.OLLAMA_API_KEY) {
+    const baseUrl = (process.env.OLLAMA_BASE_URL || OLLAMA_BASE_DEFAULT).replace(/\/+$/, '');
+    return {
+      tipo: 'ollama',
+      key: process.env.OLLAMA_API_KEY,
+      modelo: process.env.OLLAMA_MODEL || OLLAMA_MODEL_DEFAULT,
+      endpoint: `${baseUrl}/api/chat`,
+    };
   }
+  // Fallback 1: OpenRouter (mesmo modelo Claude)
   if (process.env.OPENROUTER_API_KEY) {
-    return { tipo: 'openrouter', key: process.env.OPENROUTER_API_KEY };
+    return {
+      tipo: 'openrouter',
+      key: process.env.OPENROUTER_API_KEY,
+      modelo: MODELO_OPENROUTER,
+      endpoint: 'https://openrouter.ai/api/v1/chat/completions',
+    };
+  }
+  // Fallback 2: Anthropic direto
+  if (process.env.ANTHROPIC_API_KEY) {
+    return {
+      tipo: 'anthropic',
+      key: process.env.ANTHROPIC_API_KEY,
+      modelo: MODELO_ANTHROPIC,
+      endpoint: 'https://api.anthropic.com/v1/messages',
+    };
   }
   throw new Error(
-    'Nenhuma API key disponível: defina ANTHROPIC_API_KEY (preferida) ou OPENROUTER_API_KEY ' +
-      'no ambiente ou em bridge-server/.env. Nenhuma chave é hardcoded.'
+    'Nenhuma API key disponível: defina OLLAMA_API_KEY (preferida) ou OPENROUTER_API_KEY ou ' +
+      'ANTHROPIC_API_KEY no ambiente ou em bridge-server/.env. Nenhuma chave é hardcoded.'
   );
+}
+
+// Info do provider SEM a key — para log/diagnóstico (ex.: smoke).
+function providerInfo() {
+  const { key, ...rest } = getProvider(); // eslint-disable-line no-unused-vars
+  return rest; // { tipo, modelo, endpoint }
 }
 
 // ── Prompt ────────────────────────────────────────────────────────────────────
@@ -101,6 +137,27 @@ function userPrompt(av) {
 }
 
 // ── Chamada ao LLM (fetch nativo do Node 22 — ponytail: sem SDK/dep nova) ──────
+// Ollama Cloud — API nativa /api/chat (system + user como mensagens; stream desligado).
+// O fetch do Node usa HTTP/1.1 (undici), exigido pelo ollama.com.
+async function callOllama(provider, system, user) {
+  const r = await fetch(provider.endpoint, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${provider.key}` },
+    body: JSON.stringify({
+      model: provider.modelo,
+      stream: false,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+    }),
+  });
+  if (!r.ok) throw new Error(`Ollama ${r.status}: ${(await r.text()).slice(0, 300)}`);
+  const data = await r.json();
+  // /api/chat devolve { message: { content, thinking? } }. Usamos só content (thinking é descartado).
+  return (data.message?.content || '').trim();
+}
+
 async function callAnthropic(key, system, user) {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -163,12 +220,16 @@ async function gerarResposta(avaliacao) {
   const system = systemPrompt();
   const user = userPrompt(av);
 
-  const texto =
-    provider.tipo === 'anthropic'
-      ? await callAnthropic(provider.key, system, user)
-      : await callOpenRouter(provider.key, system, user);
+  let texto;
+  if (provider.tipo === 'ollama') {
+    texto = await callOllama(provider, system, user);
+  } else if (provider.tipo === 'anthropic') {
+    texto = await callAnthropic(provider.key, system, user);
+  } else {
+    texto = await callOpenRouter(provider.key, system, user);
+  }
 
   return RespostaSchema.parse(texto); // valida o boundary de saída
 }
 
-module.exports = { gerarResposta, AvaliacaoInputSchema, RespostaSchema };
+module.exports = { gerarResposta, providerInfo, AvaliacaoInputSchema, RespostaSchema };
