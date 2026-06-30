@@ -4,7 +4,7 @@
 //   (b) caso real da Fase 1 (Pedido 6975, nota 5, comentário positivo)
 'use strict';
 
-const { gerarResposta, RespostaSchema } = require('./gerarResposta');
+const { gerarResposta, providerInfo, RespostaSchema } = require('./gerarResposta');
 
 setTimeout(() => { console.error('HARD TIMEOUT (smoke)'); process.exit(2); }, 90000).unref();
 
@@ -29,6 +29,8 @@ const CASOS = [
 ];
 
 (async () => {
+  const info = providerInfo(); // { tipo, modelo, endpoint } — SEM a key
+  console.error(`[smoke] provider=${info.tipo} | modelo=${info.modelo} | endpoint=${info.endpoint}`);
   for (const caso of CASOS) {
     console.error(`\n[smoke] ${caso.rotulo}`);
     const texto = await gerarResposta(caso.avaliacao);
