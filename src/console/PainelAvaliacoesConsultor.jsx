@@ -70,7 +70,6 @@ function fmtDate(iso) {
   return `${parts[2]}/${parts[1]}/${parts[0]}`;
 }
 
-// Formata ISO timestamp como "DD/MM/AAAA às HH:MM"
 function fmtDateTime(iso) {
   if (!iso) return null;
   try {
@@ -89,14 +88,17 @@ function mapRow(r) {
     status: r.status, deadline: r.deadline,
     reviewDate: r.review_date || null,
     createdAt: r.created_at ? r.created_at.slice(0, 10) : null,
-    token: r.token, approvedAt: r.approved_at, publishedAt: r.published_at,
+    token: r.token,
+    sentAt: r.sent_at || null,
+    approvedAt: r.approved_at,
+    publishedAt: r.published_at,
     whatsappGroup: r.whatsapp_group || null,
   };
 }
 
 const STATUS_CFG = {
   pending:        { label: 'Aguardando envio',       cls: 'warn' },
-  sent_to_client: { label: 'Com cliente',            cls: 'warn' },
+  sent_to_client: { label: 'Enviado ao cliente',     cls: 'warn' },
   approved:       { label: 'Aprovado',               cls: 'ok'   },
   modified:       { label: 'Aprovado c/ alteração',  cls: 'ok'   },
   published:      { label: 'Publicado no iFood',     cls: 'mut'  },
@@ -115,6 +117,81 @@ function Stars({ rating }) {
         <span key={i} style={{ color: i <= rating ? (cols[rating] || '#888') : '#ccc', fontSize: 13 }}>★</span>
       ))}
     </span>
+  );
+}
+
+// ─── Timeline de status ───────────────────────────────────────────────────────
+function StatusTimeline({ review }) {
+  const isSent      = ['sent_to_client', 'approved', 'modified', 'published'].includes(review.status);
+  const isApproved  = ['approved', 'modified', 'published'].includes(review.status);
+  const isPublished = review.status === 'published';
+
+  const steps = [
+    {
+      label: 'Enviado ao cliente',
+      done: isSent,
+      ts: review.sentAt,
+      color: '#2563eb',
+      bg: '#eff6ff',
+      border: '#93c5fd',
+    },
+    {
+      label: review.status === 'modified' ? 'Aprovado c/ alteração' : 'Aprovado pelo cliente',
+      done: isApproved,
+      ts: review.approvedAt,
+      color: '#16a34a',
+      bg: '#f0fdf4',
+      border: '#86efac',
+    },
+    {
+      label: 'Publicado no iFood',
+      done: isPublished,
+      ts: review.publishedAt,
+      color: '#7c3aed',
+      bg: '#faf5ff',
+      border: '#c4b5fd',
+    },
+  ];
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'stretch', gap: 4, marginBottom: 10 }}>
+      {steps.map((step, i) => (
+        <div key={i} style={{ flex: 1, display: 'flex', alignItems: 'stretch', gap: 4 }}>
+          <div style={{
+            flex: 1, padding: '6px 9px', borderRadius: 6,
+            background: step.done ? step.bg : 'var(--bg2,#f5f4f2)',
+            border: `1px solid ${step.done ? step.border : 'var(--line)'}`,
+            opacity: step.done ? 1 : 0.45,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{
+                fontSize: 11, fontWeight: 700,
+                color: step.done ? step.color : 'var(--tx2)',
+                lineHeight: 1,
+              }}>
+                {step.done ? '✓' : '○'}
+              </span>
+              <span style={{
+                fontSize: 10.5, fontWeight: 600,
+                color: step.done ? 'var(--ink)' : 'var(--tx2)',
+                lineHeight: 1.3,
+              }}>
+                {step.label}
+              </span>
+            </div>
+            <div style={{ fontSize: 10, color: step.done ? step.color : 'var(--tx2)', marginTop: 3, paddingLeft: 16 }}>
+              {step.done && step.ts ? fmtDateTime(step.ts) : step.done ? '—' : 'Pendente'}
+            </div>
+          </div>
+          {i < steps.length - 1 && (
+            <div style={{
+              width: 1, background: 'var(--line)', flexShrink: 0, alignSelf: 'stretch',
+              margin: '4px 0',
+            }} />
+          )}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -296,6 +373,9 @@ function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSen
         )}
       </div>
 
+      {/* Timeline de status — aparece quando já passou do pending */}
+      {review.status !== 'pending' && <StatusTimeline review={review} />}
+
       {/* Grupo WA */}
       {effectiveGroup ? (
         <div style={{ fontSize: 11, color: 'var(--tx2)', marginBottom: 6 }}>
@@ -331,16 +411,6 @@ function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSen
         }}>
           <span style={{ fontSize: 11, color: 'var(--tx2)', display: 'block', marginBottom: 2 }}>RESPOSTA PUBLICADA</span>
           {finalText}
-          {review.approvedAt && (
-            <div style={{ fontSize: 11, color: 'var(--tx2)', marginTop: 6 }}>
-              ✅ Aprovado pelo cliente em <strong style={{ color: 'var(--ink)' }}>{fmtDateTime(review.approvedAt)}</strong>
-            </div>
-          )}
-          {review.publishedAt && (
-            <div style={{ fontSize: 11, color: 'var(--tx2)', marginTop: 2 }}>
-              📤 Publicado em <strong style={{ color: 'var(--ink)' }}>{fmtDateTime(review.publishedAt)}</strong>
-            </div>
-          )}
         </div>
 
       /* Resposta — estado aprovado (aguardando publicação) */
@@ -354,12 +424,6 @@ function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSen
               RESPOSTA APROVADA{review.status === 'modified' ? ' COM ALTERAÇÃO' : ''}
             </div>
             {finalText}
-            {review.approvedAt && (
-              <div style={{ fontSize: 11, color: 'var(--tx2)', marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(34,197,94,0.2)' }}>
-                ✅ Aprovado pelo cliente em{' '}
-                <strong style={{ color: 'var(--ink)' }}>{fmtDateTime(review.approvedAt)}</strong>
-              </div>
-            )}
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <button className="cv2-btn" style={{ fontSize: 11.5 }} disabled={busy} onClick={() => onPublish(review.id, finalText)}>
@@ -567,7 +631,10 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
     try {
       const msg = buildWaMsgStore(pendingReviews);
       await postEvo(groupId, msg);
-      await Promise.all(pendingReviews.map(rev => sbUpdate({ id: rev.id }, { status: 'sent_to_client' })));
+      const now = new Date().toISOString();
+      await Promise.all(pendingReviews.map(rev =>
+        sbUpdate({ id: rev.id }, { status: 'sent_to_client', sent_at: now })
+      ));
       flash(`Avaliações de "${storeName}" enviadas ao cliente ✓`);
       await load();
     } catch (e) { setError('Erro ao enviar: ' + e.message); }
@@ -582,7 +649,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
     try {
       const msg = buildWaMsg(rev, draft);
       await postEvo(groupId, msg);
-      await sbUpdate({ id }, { status: 'sent_to_client', suggested_response: draft });
+      await sbUpdate({ id }, { status: 'sent_to_client', suggested_response: draft, sent_at: new Date().toISOString() });
       flash('Reenvio individual feito ✓');
       await load();
     } catch (e) { setError('Erro ao reenviar: ' + e.message); }
@@ -671,7 +738,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
           <div className={`d${kpi.pending > 0 ? ' neg' : ' mut'}`}>{kpi.pending > 0 ? 'pendentes' : 'ok'}</div>
         </div>
         <div className="cv2-kpi">
-          <div className="l">Com cliente</div>
+          <div className="l">Enviado ao cliente</div>
           <div className="v">{kpi.sent}</div>
           <div className="d mut">aguardando aprovação</div>
         </div>
@@ -694,7 +761,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...inp, width: 'auto' }}>
             <option value="all">Todos</option>
             <option value="pending">Aguardando envio</option>
-            <option value="sent_to_client">Com cliente</option>
+            <option value="sent_to_client">Enviado ao cliente</option>
             <option value="approved">Aprovado</option>
             <option value="modified">Com alteração</option>
             <option value="published">Publicado</option>
