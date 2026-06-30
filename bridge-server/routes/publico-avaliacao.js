@@ -61,7 +61,7 @@ module.exports = function buildPublicoAvaliacaoRouter({ sbFetch }) {
   async function getAvaliacaoByToken(token) {
     if (!UUID_RE.test(token)) return null;
     const rows = await sbFetch(
-      `atendimento_avaliacoes?public_token=eq.${encodeURIComponent(token)}&select=id,tenant_id,status,nota,atendente_nome,nome_cliente,public_token_expires_at&limit=1`
+      `atendimento_avaliacoes?public_token=eq.${encodeURIComponent(token)}&select=id,tenant_id,status,nota,atendente_nome,nome_cliente,public_token_expires_at,contact_identifier,external_ref&limit=1`
     );
     return rows?.[0] ?? null;
   }
@@ -187,9 +187,11 @@ module.exports = function buildPublicoAvaliacaoRouter({ sbFetch }) {
 
       // F2: Alerta de detrator CSAT em background (não bloqueia resposta ao cliente)
       if (nota <= 2) {
-        const avaliacaoId = avaliacao.id;
-        const tenantId    = avaliacao.tenant_id;
-        const notaFinal   = nota;
+        const avaliacaoId     = avaliacao.id;
+        const tenantId        = avaliacao.tenant_id;
+        const notaFinal       = nota;
+        const comentarioFinal = comentario ?? null;
+        const respondedAtTs   = patchBody.responded_at;
 
         setImmediate(async () => {
           try {
@@ -204,15 +206,37 @@ module.exports = function buildPublicoAvaliacaoRouter({ sbFetch }) {
               return;
             }
 
+            const dataHora = new Date(respondedAtTs).toLocaleString('pt-BR', {
+              timeZone: 'America/Sao_Paulo',
+              day: '2-digit', month: '2-digit', year: 'numeric',
+              hour: '2-digit', minute: '2-digit',
+            });
+
+            const APP_BASE = process.env.APP_BASE_URL || 'https://app.consultdelivery.com.br';
+            const linkPlataforma = `${APP_BASE}/#csat`;
+
+            const contatoCliente = avaliacao.contact_identifier
+              ? avaliacao.contact_identifier.replace(/@s\.whatsapp\.net$/i, '')
+              : 'não informado';
+
+            const datacrazyBase = process.env.DATACRAZY_MESSAGING_URL || 'https://messaging.g1.datacrazy.io';
+            const datacrazyLine = avaliacao.external_ref
+              ? `\n🔗 Conversa Datacrazy: ${datacrazyBase}/conversations/${avaliacao.external_ref}`
+              : '';
+
             const template = cfg.detrator_msg_template ||
-              '⚠️ *Detrator CSAT detectado!*\n\nCliente: {contact_nome}\nAtendente: {atendente_nome}\nNota CSAT: *{nota}*/5\n\nAbra o caso e trate em até 48h.';
+              '⚠️ *Detrator CSAT detectado!*\n\nCliente: {contact_nome}\nContato: {contato_cliente}\nAtendente: {atendente_nome}\nNota CSAT: *{nota}*/5\nData/Hora: {data_hora}\nComentário: {comentario}\n\n🔗 Ver na plataforma: {link_plataforma}\n\nAbra o caso e trate em até 48h.';
 
             const texto = renderTemplate(template, {
-              contact_nome:   avaliacao.nome_cliente   || 'desconhecido',
-              atendente_nome: avaliacao.atendente_nome || 'não identificado',
-              duracao:        'não disponível',
-              nota:           String(notaFinal),
-            });
+              contact_nome:    avaliacao.nome_cliente        || 'desconhecido',
+              contato_cliente: contatoCliente,
+              atendente_nome:  avaliacao.atendente_nome      || 'não identificado',
+              duracao:         'não disponível',
+              nota:            String(notaFinal),
+              data_hora:       dataHora,
+              comentario:      comentarioFinal               || '—',
+              link_plataforma: linkPlataforma,
+            }) + datacrazyLine;
 
             const CD_TENANT_ID = process.env.CD_TENANT_ID || '9079bd4d-4df7-4023-90fb-d79c8ba7e900';
             const result = await sendEvolutionText({
