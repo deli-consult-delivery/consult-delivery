@@ -50,6 +50,7 @@ import Metas from './Metas.jsx';
 import Memorias from './Memorias.jsx';
 import Conhecimento from './Conhecimento.jsx';
 import Configuracoes from './Configuracoes.jsx';
+import Usuarios from './Usuarios.jsx';
 // telas cv2 — onda 4 (últimas migrações de legado)
 import CRM from './CRM.jsx';
 import Lojas from './Lojas.jsx';
@@ -143,6 +144,7 @@ const GRUPOS = [
     { id: 'relatorios', ic: 'i-chart', label: 'Relatórios' },
   ]},
   { label: 'Sistema', items: [
+    { id: 'usuarios', ic: 'i-users', label: 'Usuários e equipe', adminOnly: true },
     { id: 'configsys', ic: 'i-gear', label: 'Configurações' },
     { id: 'clientesplat', ic: 'i-users', label: 'Clientes (plataforma)' },
     { id: 'marca', ic: 'i-droplet', label: 'Marca' },
@@ -821,6 +823,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
       case 'conhecimento': return <Conhecimento tenantDbId={tenantDbId} userId={userId} />;
       case 'custos': return <CustosIA tenantDbId={tenantDbId} />;
       case 'importar': return <ImportarRelatorios tenantDbId={tenantDbId} userId={userId} />;
+      case 'usuarios': return <Usuarios tenantDbId={tenantDbId} userId={userId} />;
       case 'configsys': return <Configuracoes tenantDbId={tenantDbId} userId={userId} onTenantChange={() => {}} />;
       case 'clientesplat': return <Clientes userId={userId} />;
       case 'marca': return <Marca tenantDbId={tenantDbId} onChanged={recarregarBrand} />;
@@ -863,7 +866,10 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
         </div>
         {GRUPOS.map((g, i) => {
           // allowlist: esconde itens não liberados e grupos que ficarem vazios.
-          const items = allowedModules ? g.items.filter(it => allowedModules.has(it.id)) : g.items;
+          // adminOnly: visível apenas para owner/admin do tenant.
+          const isAdmin = ['owner', 'admin'].includes(tenantInfo?.role);
+          const items = (allowedModules ? g.items.filter(it => allowedModules.has(it.id)) : g.items)
+            .filter(it => !it.adminOnly || isAdmin);
           if (items.length === 0) return null;
           return (
             <div key={i}>
