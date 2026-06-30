@@ -116,16 +116,26 @@ export default function App() {
       }
 
       // 2) Fallback: listTenants via api.js (lança em erro → fallbackErr).
+      // Usuário multi-tenant (>1 linha em tenant_members) cai aqui pois o caminho 1
+      // usa .maybeSingle() sem filtrar tenant_id. Busca o role junto para não perder
+      // adminOnly/permissões nas telas (ex.: "Usuários e equipe").
       let fallbackErr = null;
       try {
-        const real = await listTenants();
+        const [real, { data: memberRows }] = await Promise.all([
+          listTenants(),
+          userId
+            ? supabase.from('tenant_members').select('tenant_id, role').eq('user_id', userId)
+            : Promise.resolve({ data: [] }),
+        ]);
         if (real?.length) {
+          const roleByTenant = new Map((memberRows || []).map(m => [m.tenant_id, m.role]));
           const mapped = real.map(t => ({
             id: t.slug,
             dbId: t.id,
             name: t.name,
             emoji: t.emoji || '🏪',
             color: t.color || '#B70C00',
+            role: roleByTenant.get(t.id),
           }));
           setTenants(mapped);
           const slugToUse = preferSlug || mapped[0].id;
