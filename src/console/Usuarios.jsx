@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../lib/supabase.js';
 import Icon from '../components/Icon.jsx';
 
@@ -391,6 +392,7 @@ export default function Usuarios({ tenantDbId, userId }) {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeMenu, setActiveMenu] = useState(null);
+  const [menuPos, setMenuPos] = useState(null);
   const [inviting, setInviting] = useState(false);
   const [editingRole, setEditingRole] = useState(null);
   const [editingName, setEditingName] = useState(null);
@@ -547,14 +549,20 @@ export default function Usuarios({ tenantDbId, userId }) {
                     <td>
                       <div style={{ position: 'relative', display: 'inline-block' }}>
                         <button
-                          onClick={e => { e.stopPropagation(); setActiveMenu(activeMenu === m.user_id ? null : m.user_id); }}
+                          onClick={e => {
+                            e.stopPropagation();
+                            if (activeMenu === m.user_id) { setActiveMenu(null); setMenuPos(null); return; }
+                            const r = e.currentTarget.getBoundingClientRect();
+                            setMenuPos({ top: r.bottom + 4, right: window.innerWidth - r.right });
+                            setActiveMenu(m.user_id);
+                          }}
                           style={{ padding: '5px 10px', background: 'none', border: '1px solid var(--line)', borderRadius: 6, color: 'var(--tx2)', fontSize: 18, cursor: 'pointer', lineHeight: 1 }}
                           title="Ações"
                         >
                           ⋯
                         </button>
-                        {activeMenu === m.user_id && (
-                          <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 500, background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, minWidth: 200, boxShadow: '0 8px 28px rgba(0,0,0,0.18)', overflow: 'hidden' }}>
+                        {activeMenu === m.user_id && menuPos && createPortal(
+                          <div style={{ position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 1000, background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10, minWidth: 200, boxShadow: '0 8px 28px rgba(0,0,0,0.18)', overflow: 'hidden' }}>
                             <button onClick={() => { setEditingName(m); setActiveMenu(null); }} style={menuBtnStyle}>
                               <Icon name="edit" size={13} /> Editar nome
                             </button>
@@ -569,7 +577,8 @@ export default function Usuarios({ tenantDbId, userId }) {
                                 <Icon name="trash" size={13} /> Remover usuário
                               </button>
                             )}
-                          </div>
+                          </div>,
+                          document.body
                         )}
                       </div>
                     </td>
