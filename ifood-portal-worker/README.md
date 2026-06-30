@@ -88,3 +88,50 @@ texto no `textarea[data-testid="review-details-drawer-comment-textarea"]`. Retor
 `{ ok, pedido, reviewId, orderId, preenchido: true, enviado: false }` — incluindo os UUIDs
 `reviewId`/`orderId` que o portal expõe na URL do drawer. **Nunca envia.** Selecionado e provado o
 caminho do drawer por sondagem read-only; o passo de envio fica para o teste supervisionado.
+
+---
+
+# Fase 2 — `gerarResposta(avaliacao)` (geração por IA)
+
+`gerarResposta.js` recebe uma avaliação lida (`{ nota: 1-5, comentario, autor? }`) e devolve um
+**texto de resposta PERSONALIZADA em PT-BR**, em nome da **Café Container**, pronto para ser
+publicado como resposta à avaliação.
+
+- **Nota baixa (1–3):** empatia + reconhece o problema específico citado + sinaliza melhoria, sem
+  ser defensivo e sem prometer o impossível.
+- **Nota alta (4–5):** agradecimento caloroso e específico ao que o cliente elogiou.
+- Sempre humano, profissional e **curto**; saída validada por Zod (20–600 chars, sem placeholders).
+
+## ⚠️ Esta fase SÓ GERA TEXTO
+
+O texto é um **DRAFT** (semáforo amarelo). `gerarResposta` **não** abre o portal, **não** preenche e
+**não** envia. O envio é supervisionado pelo Wandson ao vivo numa **fase posterior** — nada vai a
+cliente aqui.
+
+## Credencial (lazy, sem hardcode)
+
+Resolve a key só na chamada: prioriza **`ANTHROPIC_API_KEY`** (padrão do projeto). Se ausente no
+ambiente, lê de `bridge-server/.env` (apenas leitura) e, como camada multi-provider já decidida no
+épico (D1), cai para **`OPENROUTER_API_KEY`** rodando o mesmo modelo Claude (`claude-sonnet-4.6`).
+Sem nenhuma das duas → erro claro. Nenhuma chave é hardcoded e nenhum segredo é impresso.
+
+## Smoke de geração (prova a Fase 2)
+
+```bash
+cd ifood-portal-worker
+npm install
+node smoke-gerar.js
+```
+
+Gera 2 respostas — (a) negativa fictícia (nota 2, demora + comida fria) e (b) caso real da Fase 1
+(Pedido 6975, nota 5) — imprime o **texto bruto** e valida cada uma. Prova real (2026-06-30,
+via fallback OpenRouter pois `ANTHROPIC_API_KEY` não está provisionada neste ambiente):
+
+```
+NOTA 2 → "Sentimos muito por essa experiência, receber o lanche frio depois de tanta espera é
+realmente frustrante... Estamos trabalhando para melhorar nossos prazos de entrega e a conservação
+dos pedidos no caminho. Esperamos ter a chance de reconquistar sua confiança..." (304 chars)
+
+NOTA 5 → "Que alegria receber esse carinho! Fico muito feliz que a comida tenha agradado, que a
+entrega chegou rapidinho e que a embalagem caprichou no cuidado. Obrigado por recomendar..." (210 chars)
+```
