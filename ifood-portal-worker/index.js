@@ -233,12 +233,24 @@ async function preencherResposta(orderId, texto, opts = {}) {
 /**
  * PUBLICA a resposta: clica o botão "Enviar resposta" do drawer JÁ ABERTO E PREENCHIDO (chamar
  * preencherResposta antes). É o ÚNICO ponto que envia algo ao cliente → semáforo AMARELO: só roda
- * sob aprovação explícita do Wandson para aquele texto específico. Por isso exige a flag
- * { permitirEnvio: true }. Confere que o textarea tem conteúdo antes de clicar (não envia vazio).
+ * sob aprovação explícita do Wandson para aquele texto específico. Exige { permitirEnvio: true }.
  *
- * Retorna { enviado:true, statusApos } após confirmar pelo recarregamento que o status mudou.
+ * VÍNCULO DE CONSENTIMENTO (anti-TOCTOU): o envio é amarrado ao texto aprovado. `textoEsperado` é
+ * obrigatório e DEVE ser idêntico ao que está no campo agora — se divergir (drawer trocou, texto
+ * editado, review diferente), ABORTA sem enviar. Opcional `opts.reviewId` cruza o selectedReviewId
+ * da URL do drawer. O botão é casado por texto EXATO (não regex parcial) e o envio aborta se houver
+ * 0, >1 ou botão desabilitado.
+ *
+ * Retorna { ok, enviado:true, reviewId, textoEnviado }. NÃO recarrega nem confirma o status — o
+ * chamador deve recarregar /reviews/search e checar que virou "Resposta enviada" (ver skill passo 6).
  */
-async function enviarResposta(opts = {}) {
+async function enviarResposta(textoEsperado, opts = {}) {
+  const esperado = String(textoEsperado || '').trim();
+  if (!esperado)
+    throw new Error(
+      'enviarResposta: textoEsperado (o texto exatamente aprovado) é obrigatório — ele vincula o ' +
+        'envio ao consentimento. Sem ele não há como garantir que se publica o texto certo.'
+    );
   if (opts.permitirEnvio !== true) {
     throw new Error(
       'enviarResposta: bloqueado por segurança. Passe { permitirEnvio: true } SOMENTE após o ' +
@@ -246,27 +258,51 @@ async function enviarResposta(opts = {}) {
     );
   }
   return withPortal(async (page) => {
+    // 1) Há um drawer de avaliação aberto? (selectedReviewId na URL)
+    const reviewIdAtual = (page.url().match(/selectedReviewId=([0-9a-f-]+)/i) || [])[1] || null;
+    if (!reviewIdAtual)
+      throw new Error(
+        'enviarResposta: nenhum drawer de avaliação aberto (selectedReviewId ausente). ' +
+          'Rode preencherResposta antes. Abortado.'
+      );
+    // 2) O review aberto é o aprovado? (se o chamador passou reviewId)
+    if (opts.reviewId && opts.reviewId !== reviewIdAtual)
+      throw new Error(
+        `enviarResposta: review aberto (${reviewIdAtual}) ≠ aprovado (${opts.reviewId}). ` +
+          'Consentimento não vinculado — abortado.'
+      );
+    // 3) O texto no campo é EXATAMENTE o aprovado? (consent binding / anti-TOCTOU)
     const sel = `textarea[data-testid="${TEXTAREA_TESTID}"]`;
-    const valor = await page.$eval(sel, (t) => t.value).catch(() => '');
-    if (!valor.trim())
-      throw new Error('enviarResposta: campo de resposta vazio (preencha antes). Abortado.');
+    const valor = await page.$eval(sel, (t) => t.value).catch(() => null);
+    if (valor === null)
+      throw new Error('enviarResposta: campo de resposta não encontrado (drawer fechou?). Abortado.');
+    if (valor.trim() !== esperado)
+      throw new Error(
+        'enviarResposta: o texto no campo difere do aprovado (alteração entre aprovar e enviar?). ' +
+          'NÃO enviado — abortado por segurança.'
+      );
 
-    const pedido = (await page.$eval('[data-testid="table"] tbody tr [role="cell"], [data-testid="table"] tbody tr td', (c) => (c.innerText || '').trim()).catch(() => null));
-
-    const clicked = await page.evaluate(() => {
+    // 4) Botão por texto EXATO; aborta se 0, ambíguo (>1) ou desabilitado.
+    const r = await page.evaluate(() => {
       const ta = document.querySelector('textarea[data-testid="review-details-drawer-comment-textarea"]');
       const scope = (ta && ta.closest('[role="dialog"],aside,section,form,div[class*="drawer"]')) || document.body;
-      const btn = [...scope.querySelectorAll('button,[role="button"]')].find((e) =>
-        /enviar resposta/i.test(e.innerText || '')
+      const btns = [...scope.querySelectorAll('button,[role="button"]')].filter(
+        (e) => (e.innerText || '').trim().toLowerCase() === 'enviar resposta'
       );
-      if (!btn) return false;
-      btn.click();
-      return true;
+      if (btns.length === 0) return 'no-btn';
+      if (btns.length > 1) return 'ambiguous';
+      const b = btns[0];
+      if (b.disabled || b.getAttribute('aria-disabled') === 'true') return 'disabled';
+      b.click();
+      return 'clicked';
     });
-    if (!clicked) throw new Error('Botão "Enviar resposta" não encontrado no drawer.');
+    if (r === 'no-btn') throw new Error('Botão "Enviar resposta" não encontrado no drawer. Abortado.');
+    if (r === 'ambiguous')
+      throw new Error('Mais de um botão "Enviar resposta" no drawer — abortado por segurança.');
+    if (r === 'disabled') throw new Error('Botão "Enviar resposta" desabilitado — abortado.');
 
     await page.waitForTimeout(6000); // deixa a submissão completar e o drawer fechar
-    return { ok: true, enviado: true, textoEnviado: valor.trim(), pedidoAprox: pedido };
+    return { ok: true, enviado: true, reviewId: reviewIdAtual, textoEnviado: esperado };
   });
 }
 

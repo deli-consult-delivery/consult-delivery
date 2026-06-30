@@ -85,7 +85,10 @@ docker run --rm --network container:ifood-browser \
      -v /root/consult-delivery/ifood-portal-worker:/app -w /app \
      -e CONFIRMAR_ENVIO=1 node:20-alpine sh -c "node run-enviar.js"
    ```
-   (`enviarResposta` clica o botão **"Enviar resposta"** do drawer aberto+preenchido; não envia vazio.)
+   (`enviarResposta(textoEsperado, {permitirEnvio:true, reviewId?})` clica **"Enviar resposta"** —
+   match exato — e **vincula o consentimento (anti-TOCTOU): aborta se o texto no campo divergir do
+   aprovado** ou se o `reviewId` do drawer não bater. `run-enviar` lê o texto de `texto-resposta.txt`;
+   passe `REVIEW_ID=<selectedReviewId retornado pelo run-preencher>` para cruzar o review.)
 6. **Confirmar.** Recarregar `/reviews/search` e ler a linha do pedido: status deve virar
    **"Resposta enviada"** e `run-listar.js` → `TOTAL_PENDENTES` cair. Reportar output bruto.
 7. **Atualizar a memória do épico** com qualquer descoberta nova.
@@ -94,5 +97,5 @@ docker run --rm --network container:ifood-browser \
 - `run-listar.js` — lista pendentes (read-only).
 - `run-gerar.js` — gera texto (env `AVALIACAO_JSON`).
 - `run-preencher.js` — preenche (env `PEDIDO` + `texto-resposta.txt`), não envia.
-- `run-enviar.js` — publica (env `CONFIRMAR_ENVIO=1`), semáforo amarelo.
+- `run-enviar.js` — publica (env `CONFIRMAR_ENVIO=1` + `texto-resposta.txt`; opcional `REVIEW_ID`), semáforo amarelo; envio vinculado ao texto aprovado.
 - `probe-dom.js` — diagnóstico read-only do DOM.
