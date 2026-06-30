@@ -58,7 +58,7 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
 
   async function getNpsByToken(token) {
     const rows = await sbFetch(
-      `nps_avaliacoes?public_token=eq.${encodeURIComponent(token)}&select=id,tenant_id,status,nota,public_token_expires_at&limit=1`
+      `nps_avaliacoes?public_token=eq.${encodeURIComponent(token)}&select=id,tenant_id,status,nota,public_token_expires_at,contact_identifier,external_ref&limit=1`
     );
     return rows?.[0] ?? null;
   }
@@ -172,9 +172,13 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
 
       // F2: Alerta de detrator em background (não bloqueia resposta ao cliente)
       if (nota <= 6) {
-        const npsId     = nps.id;
-        const tenantId  = nps.tenant_id;
-        const notaFinal = nota;
+        const npsId           = nps.id;
+        const tenantId        = nps.tenant_id;
+        const notaFinal       = nota;
+        const comentarioFinal = comentario ?? null;
+        const respondedAtTs   = patchBody.responded_at;
+        const npsExternalRef  = nps.external_ref  ?? null;
+        const npsContactId    = nps.contact_identifier ?? null;
 
         setImmediate(async () => {
           try {
@@ -198,17 +202,40 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
               return;
             }
 
-            const av            = Array.isArray(detailRows) ? (detailRows[0] ?? {}) : {};
-            const duracaoTexto  = av.duracao_minutos != null ? `${av.duracao_minutos} min` : 'não registrada';
-            const template      = cfg.detrator_msg_template ||
-              '⚠️ *Detrator detectado!*\n\nCliente: {contact_nome}\nAtendente: {atendente_nome}\nDuração: {duracao}\nNota NPS: *{nota}*\n\nAbra o caso e trate em até 48h.';
+            const av           = Array.isArray(detailRows) ? (detailRows[0] ?? {}) : {};
+            const duracaoTexto = av.duracao_minutos != null ? `${av.duracao_minutos} min` : 'não registrada';
+
+            const dataHora = new Date(respondedAtTs).toLocaleString('pt-BR', {
+              timeZone: 'America/Sao_Paulo',
+              day: '2-digit', month: '2-digit', year: 'numeric',
+              hour: '2-digit', minute: '2-digit',
+            });
+
+            const APP_BASE = process.env.APP_BASE_URL || 'https://app.consultdelivery.com.br';
+            const linkPlataforma = `${APP_BASE}/#nps`;
+
+            const contatoCliente = npsContactId
+              ? npsContactId.replace(/@s\.whatsapp\.net$/i, '')
+              : 'não informado';
+
+            const datacrazyBase = process.env.DATACRAZY_MESSAGING_URL || 'https://messaging.g1.datacrazy.io';
+            const datacrazyLine = npsExternalRef
+              ? `\n🔗 Conversa Datacrazy: ${datacrazyBase}/conversations/${npsExternalRef}`
+              : '';
+
+            const template = cfg.detrator_msg_template ||
+              '⚠️ *Detrator NPS detectado!*\n\nCliente: {contact_nome}\nContato: {contato_cliente}\nAtendente: {atendente_nome}\nDuração: {duracao}\nNota NPS: *{nota}*/10\nData/Hora: {data_hora}\nComentário: {comentario}\n\n🔗 Ver na plataforma: {link_plataforma}\n\nAbra o caso e trate em até 48h.';
 
             const texto = renderTemplate(template, {
-              contact_nome:   av.contact_nome   || 'desconhecido',
-              atendente_nome: av.atendente_nome || 'não identificado',
-              duracao:        duracaoTexto,
-              nota:           String(notaFinal),
-            });
+              contact_nome:    av.contact_nome        || 'desconhecido',
+              contato_cliente: contatoCliente,
+              atendente_nome:  av.atendente_nome      || 'não identificado',
+              duracao:         duracaoTexto,
+              nota:            String(notaFinal),
+              data_hora:       dataHora,
+              comentario:      comentarioFinal        || '—',
+              link_plataforma: linkPlataforma,
+            }) + datacrazyLine;
 
             // Tenants que só usam DataCrazy não têm Evolution própria —
             // usa a instância da Consult Delivery como fallback para o alerta interno.
