@@ -13,6 +13,7 @@
 const express = require('express');
 const { z }   = require('zod');
 const { getBrandByTenant, safeLogoUrl, getAvaliacaoConfig } = require('../lib/branding');
+const { sendEvolutionText, renderTemplate }                = require('../lib/evolution-send');
 
 // ── Rate limiter in-memory: 60 req/min por IP ────────────────────────────────
 const rateLimitAvaliacao = new Map(); // IP → { count, resetAt }
@@ -183,6 +184,74 @@ module.exports = function buildPublicoAvaliacaoRouter({ sbFetch }) {
       }
 
       console.info(`[publico/avaliacao POST] avaliacao=${avaliacao.id} nota=${nota}`);
+
+      // F2: Alerta de detrator CSAT em background (não bloqueia resposta ao cliente)
+      if (nota <= 2) {
+        const avaliacaoId = avaliacao.id;
+        const tenantId    = avaliacao.tenant_id;
+        const notaFinal   = nota;
+
+        setImmediate(async () => {
+          try {
+            const configRows = await sbFetch(
+              `avaliacao_config?tenant_id=eq.${encodeURIComponent(tenantId)}&select=detrator_notificar,detrator_wpp_jid,detrator_msg_template&limit=1`
+            );
+            const cfg = Array.isArray(configRows) ? configRows[0] : null;
+            if (!cfg?.detrator_notificar) return;
+
+            if (!cfg.detrator_wpp_jid) {
+              console.warn('[publico/avaliacao] detrator_notificar=true mas detrator_wpp_jid não configurado');
+              return;
+            }
+
+            const template = cfg.detrator_msg_template ||
+              '⚠️ *Detrator CSAT detectado!*\n\nCliente: {contact_nome}\nAtendente: {atendente_nome}\nNota CSAT: *{nota}*/5\n\nAbra o caso e trate em até 48h.';
+
+            const texto = renderTemplate(template, {
+              contact_nome:   avaliacao.nome_cliente   || 'desconhecido',
+              atendente_nome: avaliacao.atendente_nome || 'não identificado',
+              duracao:        'não disponível',
+              nota:           String(notaFinal),
+            });
+
+            const CD_TENANT_ID = process.env.CD_TENANT_ID || '9079bd4d-4df7-4023-90fb-d79c8ba7e900';
+            const result = await sendEvolutionText({
+              tenantId,
+              number:           cfg.detrator_wpp_jid,
+              text:             texto,
+              sbFetch,
+              fallbackTenantId: CD_TENANT_ID,
+            });
+
+            if (!result.ok) {
+              console.error(`[publico/avaliacao] falha no alerta detrator avaliacao=${avaliacaoId}`, result.detail);
+            } else {
+              console.info(`[publico/avaliacao] alerta detrator enviado avaliacao=${avaliacaoId} nota=${notaFinal}`);
+            }
+
+            // Notificação interna (sino do Console) — broadcast ao tenant.
+            try {
+              await sbFetch('internal_notifications', {
+                method: 'POST',
+                body: {
+                  tenant_id:         tenantId,
+                  recipient_user_id: null,
+                  kind:              'system',
+                  title:             `Detrator CSAT — nota ${notaFinal}/5`,
+                  body:              `${avaliacao.nome_cliente || 'Cliente'} deu nota ${notaFinal}. Atendente: ${avaliacao.atendente_nome || 'não identificado'}. Trate em até 48h.`,
+                  link:              '/controle-atendimentos',
+                },
+                prefer: 'return=minimal',
+              });
+            } catch (notifErr) {
+              console.error('[publico/avaliacao] erro ao criar notificação de detrator:', notifErr.message);
+            }
+          } catch (alertErr) {
+            console.error('[publico/avaliacao] erro no alerta de detrator:', alertErr.message);
+          }
+        });
+      }
+
       return res.status(200).json({ ok: true });
     } catch (err) {
       console.error('[publico/avaliacao POST]', err.message);
