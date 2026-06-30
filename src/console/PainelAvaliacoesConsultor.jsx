@@ -120,7 +120,21 @@ function Stars({ rating }) {
   );
 }
 
-// ─── Timeline de status ───────────────────────────────────────────────────────
+// ─── Pílula de status resumida (usada no accordion) ──────────────────────────
+function StatusPill({ count, label, bg, color, border }) {
+  if (!count) return null;
+  return (
+    <span style={{
+      fontSize: 11, padding: '2px 8px', borderRadius: 10, fontWeight: 600,
+      background: bg, color, border: `1px solid ${border}`,
+      whiteSpace: 'nowrap',
+    }}>
+      {count} {label}{count > 1 ? 's' : ''}
+    </span>
+  );
+}
+
+// ─── Timeline de status (dentro do card) ─────────────────────────────────────
 function StatusTimeline({ review }) {
   const isSent      = ['sent_to_client', 'approved', 'modified', 'published'].includes(review.status);
   const isApproved  = ['approved', 'modified', 'published'].includes(review.status);
@@ -164,18 +178,10 @@ function StatusTimeline({ review }) {
             opacity: step.done ? 1 : 0.45,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <span style={{
-                fontSize: 11, fontWeight: 700,
-                color: step.done ? step.color : 'var(--tx2)',
-                lineHeight: 1,
-              }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: step.done ? step.color : 'var(--tx2)', lineHeight: 1 }}>
                 {step.done ? '✓' : '○'}
               </span>
-              <span style={{
-                fontSize: 10.5, fontWeight: 600,
-                color: step.done ? 'var(--ink)' : 'var(--tx2)',
-                lineHeight: 1.3,
-              }}>
+              <span style={{ fontSize: 10.5, fontWeight: 600, color: step.done ? 'var(--ink)' : 'var(--tx2)', lineHeight: 1.3 }}>
                 {step.label}
               </span>
             </div>
@@ -184,10 +190,7 @@ function StatusTimeline({ review }) {
             </div>
           </div>
           {i < steps.length - 1 && (
-            <div style={{
-              width: 1, background: 'var(--line)', flexShrink: 0, alignSelf: 'stretch',
-              margin: '4px 0',
-            }} />
+            <div style={{ width: 1, background: 'var(--line)', flexShrink: 0, alignSelf: 'stretch', margin: '4px 0' }} />
           )}
         </div>
       ))}
@@ -490,8 +493,12 @@ function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSen
 function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, storeGroups, onSendStore, onPublish, onSaveDraft, onSendSingle }) {
   const [open, setOpen] = useState(defaultOpen);
 
-  const toSend = reviews.filter(r => r.status === 'pending' || r.status === 'sent_to_client');
-  const pendingCount = toSend.length;
+  // Apenas pendentes (não enviadas) vão para o botão de envio em lote
+  const toSend        = reviews.filter(r => r.status === 'pending');
+  const sentCount     = reviews.filter(r => r.status === 'sent_to_client').length;
+  const approvedCount = reviews.filter(r => r.status === 'approved' || r.status === 'modified').length;
+  const publishedCount = reviews.filter(r => r.status === 'published').length;
+
   const resolvedGroup = reviews.find(r => r.whatsappGroup)?.whatsappGroup || storeGroups[storeName] || null;
 
   const tomorrow    = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
@@ -510,24 +517,28 @@ function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, st
         borderBottom: open ? '1px solid var(--line)' : 'none',
         flexWrap: 'wrap',
       }}>
+        {/* Área clicável (toggle) */}
         <div
           onClick={() => setOpen(v => !v)}
-          style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, cursor: 'pointer', userSelect: 'none', minWidth: 200 }}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, cursor: 'pointer', userSelect: 'none', minWidth: 200, flexWrap: 'wrap' }}
         >
           <span style={{ fontSize: 15, color: 'var(--tx2)', lineHeight: 1 }}>{open ? '▾' : '▸'}</span>
           <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--ink)' }}>{storeName}</span>
           {isUrgent && <span className="cv2-bdg warn" style={{ fontSize: 11 }}>⏳ urgente {fmtDate(minDeadline)}</span>}
-          {pendingCount > 0 && (
-            <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 10, background: '#e0e7ff', color: '#3730a3', fontWeight: 600 }}>
-              {pendingCount} pendente{pendingCount > 1 ? 's' : ''}
-            </span>
-          )}
+
+          {/* Pílulas de status — visíveis sem abrir o accordion */}
+          <StatusPill count={toSend.length}    label="aguardando"  bg="#fef3c7" color="#92400e" border="#fcd34d" />
+          <StatusPill count={sentCount}         label="enviada"     bg="#dbeafe" color="#1e40af" border="#93c5fd" />
+          <StatusPill count={approvedCount}     label="aprovada"    bg="#dcfce7" color="#15803d" border="#86efac" />
+          <StatusPill count={publishedCount}    label="publicada"   bg="#f3f4f6" color="#4b5563" border="#d1d5db" />
+
           <span style={{ fontSize: 12, color: 'var(--tx2)', whiteSpace: 'nowrap' }}>
             {reviews.length} avaliação{reviews.length !== 1 ? 'ões' : ''}
           </span>
         </div>
 
-        {pendingCount > 0 && (
+        {/* Botão de envio — apenas para reviews ainda não enviadas */}
+        {toSend.length > 0 && (
           <button
             className="cv2-btn"
             style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}
@@ -535,10 +546,10 @@ function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, st
             title={!resolvedGroup ? 'Configure o grupo WA desta loja em "Grupos WhatsApp por loja"' : ''}
             onClick={e => { e.stopPropagation(); onSendStore(storeName, toSend); }}
           >
-            {isBusy ? '…' : `Enviar ${pendingCount} avaliação${pendingCount > 1 ? 'ões' : ''} ao cliente`}
+            {isBusy ? '…' : `Enviar ${toSend.length} avaliação${toSend.length > 1 ? 'ões' : ''} ao cliente`}
           </button>
         )}
-        {!resolvedGroup && pendingCount > 0 && (
+        {!resolvedGroup && toSend.length > 0 && (
           <span style={{ fontSize: 11, color: 'var(--red)', whiteSpace: 'nowrap' }}>⚠ sem grupo WA</span>
         )}
       </div>
@@ -601,7 +612,6 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
     return () => clearInterval(pollerRef.current);
   }, [load]);
 
-  // storeGroups = localStorage (baseline) + banco (sobrescreve)
   const storeGroups = useMemo(() => {
     const sg = { ...lsLoad() };
     reviews.forEach(r => { if (r.store && r.whatsappGroup) sg[r.store] = r.whatsappGroup; });
