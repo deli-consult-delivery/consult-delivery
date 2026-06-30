@@ -144,7 +144,7 @@ const GRUPOS = [
     { id: 'relatorios', ic: 'i-chart', label: 'Relatórios' },
   ]},
   { label: 'Sistema', items: [
-    { id: 'usuarios', ic: 'i-users', label: 'Usuários e equipe' },
+    { id: 'usuarios', ic: 'i-users', label: 'Usuários e equipe', adminOnly: true },
     { id: 'configsys', ic: 'i-gear', label: 'Configurações' },
     { id: 'clientesplat', ic: 'i-users', label: 'Clientes (plataforma)' },
     { id: 'marca', ic: 'i-droplet', label: 'Marca' },
@@ -866,7 +866,10 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
         </div>
         {GRUPOS.map((g, i) => {
           // allowlist: esconde itens não liberados e grupos que ficarem vazios.
-          const items = allowedModules ? g.items.filter(it => allowedModules.has(it.id)) : g.items;
+          // adminOnly: visível apenas para owner/admin do tenant.
+          const isAdmin = ['owner', 'admin'].includes(tenantInfo?.role);
+          const items = (allowedModules ? g.items.filter(it => allowedModules.has(it.id)) : g.items)
+            .filter(it => !it.adminOnly || isAdmin);
           if (items.length === 0) return null;
           return (
             <div key={i}>
