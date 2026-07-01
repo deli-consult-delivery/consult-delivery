@@ -20,19 +20,24 @@ export const GRUPOS = [
     { id: 'disparos', ic: 'i-reply', label: 'Disparos' },
     { id: 'cora', ic: 'i-cash', label: 'Cobrança' },
     { id: 'defesa', ic: 'i-shield', label: 'Defesa Comercial' },
-    { id: 'radar', ic: 'i-radio', label: 'Dashboard iFood' },
-    { id: 'cardapio-ifood', ic: 'i-menu', label: 'Cardápio iFood' },
-    { id: 'avaliacoes', ic: 'i-eye', label: 'Avaliações' },
-    { id: 'resp-avaliacoes', ic: 'i-star', label: 'Resp. Avaliações' },
-    { id: 'csat', ic: 'i-check', label: 'CSAT — Atendimento' },
-    { id: 'nps', ic: 'i-target', label: 'NPS — Marca' },
-    { id: 'controle-atendimentos', ic: 'i-chart', label: 'Controle Atend.' },
-    { id: 'avaliacao-config', ic: 'i-gear', label: 'Configurar Avaliação' },
+    { id: 'radar', ic: 'i-radio', label: 'iFood: Dashboard' },
+    { id: 'cardapio-ifood', ic: 'i-menu', label: 'iFood: Cardápio' },
     { id: 'espacos', ic: 'i-layers', label: 'Espaços' },
     { id: 'ativar', ic: 'i-plug', label: 'Ativar loja' },
     { id: 'campanhas', ic: 'i-flag', label: 'Campanhas' },
-    { id: 'grupos', ic: 'i-users', label: 'Grupos WhatsApp' },
+    { id: 'grupos', ic: 'i-users', label: 'WhatsApp: Grupos' },
     { id: 'contratos', ic: 'i-doc', label: 'Contratos' },
+  ]},
+  // Renomeado/agrupado 2026-07-01 (QA go-live Karina, bug #7): antes espalhado
+  // dentro de "Operação" com nomenclatura inconsistente (travessão, abreviação
+  // com ponto). Agrupado por assunto — mesmos ids/module_key, só label/grupo mudou.
+  { label: 'Avaliações', items: [
+    { id: 'avaliacoes', ic: 'i-eye', label: 'Avaliações Recebidas' },
+    { id: 'resp-avaliacoes', ic: 'i-star', label: 'Respostas de Avaliações' },
+    { id: 'csat', ic: 'i-check', label: 'Satisfação do Atendimento (CSAT)' },
+    { id: 'nps', ic: 'i-target', label: 'Lealdade da Marca (NPS)' },
+    { id: 'controle-atendimentos', ic: 'i-chart', label: 'Controle de Atendimento' },
+    { id: 'avaliacao-config', ic: 'i-gear', label: 'Configurações de Avaliação' },
   ]},
   { label: 'Agentes IA', items: [
     { id: 'hub', ic: 'i-bot', label: 'Painel Agentes' },

@@ -151,7 +151,7 @@ const ALL_SCREENS = [
   { id: 'drafts-pendentes', label: 'Disparos',        group: 'Marketing',   defaultRoles: ['admin','marketing'] },
   { id: 'reports',          label: 'Relatórios',      group: 'Dados',       defaultRoles: ['admin','marketing'] },
   { id: 'notificacoes',     label: 'Notificações',    group: 'Sistema' },
-  { id: 'grupos',           label: 'Grupos WhatsApp', group: 'Admin',       defaultRoles: ['admin','atendimento'] },
+  { id: 'grupos',           label: 'WhatsApp: Grupos', group: 'Admin',       defaultRoles: ['admin','atendimento'] },
   { id: 'settings',         label: 'Configurações',   group: 'Admin',       defaultRoles: ['admin'] },
 ];
 
