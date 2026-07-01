@@ -88,6 +88,48 @@ WITH rls_setup AS (
 SELECT * FROM agent_runs; -- ERRADO
 ```
 
+### P10 — KPI calculado sobre lista paginada/capada no código (não é o cap de 1000 do PostgREST)
+```text
+Sintoma: dois lugares mostram números diferentes para "a mesma métrica"
+(ex: "Respondidas: 9" numa tela, "11 avaliações respondidas" noutra).
+Causa: um .limit(N) explícito no código (paginação de lista, N pequeno tipo
+200) é reaproveitado para calcular KPIs de topo. Quando o total real > N,
+o KPI fica subcontado — SEM warning nenhum, porque N não estoura o cap
+implícito de 1000 do PostgREST (P6), então passa despercebido em tabelas
+pequenas/médias.
+Regra: nunca derive contagem/soma/percentual de topo do MESMO array que
+alimenta uma lista paginada da UI. Faça um fetch separado sem .limit() (ou
+count exato) só para os agregados; o array paginado serve só pra renderizar
+a lista.
+Verificação: contar total real via SQL (count(*) sem limit) e comparar com
+o "de N enviadas"/"Total" exibido na tela — se bater exatamente com o
+LIMIT do código-fonte (200, 500...), é sinal do bug.
+```
+Caso real: `src/console/AtendimentoAvaliacoes.jsx` — `.limit(200)` pego para
+a lista de avaliações era reusado em `calcCSAT`/`calcStatusPct`; tenant com
+247 avaliações reais subcontava 2 respondidas (9 em vez de 11). Fix: query
+separada de totais (count exato para pendente/expirada, select sem limit
+para respondida) desacoplada da lista de exibição. QA go-live Karina, 2026-07-01.
+
+### P11 — Duas implementações do mesmo modal/tela (uma delas morta)
+```text
+Sintoma: um fix aplicado no arquivo "óbvio" (ex: src/screens/*.jsx) não
+aparece em produção mesmo após build/deploy — nenhuma requisição de rede
+correspondente ao fix é feita.
+Causa: existe MAIS DE UM componente com o mesmo texto/label visível
+("Acesso às telas") em pastas diferentes — um deles é código do app legado
+nunca montado (App.jsx só renderiza <ConsoleV2/>), o outro é o que a rota
+ativa realmente usa (dentro de src/console/*.jsx).
+Verificação antes de editar: `grep -rn "<texto exato do título/label>" src/`
+— se aparecer em mais de um arquivo, confirmar qual está montado em App.jsx
+antes de tocar em qualquer um. Depois de editar, confirmar via
+read_network_requests que a query nova (ex: `.from('tenant_modules')`)
+realmente disparou na tela testada.
+```
+Caso real: `ScreenPermissionsModal` em `src/screens/SettingsScreen.jsx`
+(morto) vs `ScreenPermsModal` em `src/console/Usuarios.jsx` (ativo) —
+mesmo título "Acesso às telas", cópia quase idêntica. QA go-live Karina, 2026-07-01.
+
 ### P9 — Vazamento de tema (data-theme no `<html>`) em superfície escopada-clara
 ```
 # Console v2 (.cv2) é sempre claro, mas as telas LEGADO clássicas embutidas usam
@@ -107,6 +149,19 @@ Fix: redeclarar a escala light (`--g-*`, `--white`, `--black`, `*-soft` não cob
 ---
 
 ## Casos Resolvidos
+
+### [2026-07-01] QA go-live Karina Doceria — 8 bugs + achados extras
+**PR #662** (3 commits, squash-merge em main)
+**Bugs corrigidos:**
+- Sem logout / sem indicador de usuário logado → `UserMenu` novo em `ConsoleV2.jsx` (nome/e-mail real + "Sair"); avatar antes mostrava inicial do TENANT, não do usuário.
+- Permissões de tela vazando módulos não habilitados → fix aplicado primeiro no arquivo errado (`SettingsScreen.jsx`, morto — ver P11), depois no certo (`Usuarios.jsx`), com allowlist por `tenant_modules` via novo campo `moduleKey`.
+- Busca global vazando telas não habilitadas → mesmo allowlist aplicado à seção "Navegação" do `GlobalSearch`.
+- Divergência "9 vs 11 avaliações respondidas" → não era janela de data, era P10 (`.limit(200)` reusado para KPI, tenant com 247 avaliações reais).
+- Notificações nunca zeravam → RLS (`internal_notifications_update_own`) bloqueava UPDATE em broadcasts (`recipient_user_id IS NULL`); 127 presas no tenant principal. Migration `20260701_001_notifications_broadcast_read_fix.sql`.
+- Logo/header: `<img>` sem `height` explícito.
+- Login quebrado em mobile (achado extra, fora dos 8 originais): `grid-template-columns: 1fr 1fr` fixo sem media query — texto sobreposto/cortado em ~390px. Empilha em 1 coluna abaixo de 720px.
+**Documentado, não implementado:** nomenclatura do menu (~65 itens sem subgrupo); gatilhos de notificação ausentes (nova avaliação, draft pendente avaliação/iFood, falha RADAR, `agent_failed`); `ALL_SCREENS` em `Usuarios.jsx` sem `moduleKey` para csat/nps/avaliacao-config/controle-atendimentos/usuarios (modal de permissões fica quase vazio pra tenants como a Karina).
+**Lição:** ver P10 e P11 acima — ambos nasceram desta sessão e quase passaram batido na primeira rodada de verificação (local, antes do deploy).
 
 ### [2026-06-09] Console v2 — telas LEGADO pretas / branco-no-branco (vazamento de tema)
 **Arquivo:** `src/console/console.css` (escopo `.cv2`)  

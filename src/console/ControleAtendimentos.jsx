@@ -538,7 +538,7 @@ export default function ControleAtendimentos({ tenantDbId }) {
       {/* ── Seção 4: Últimas avaliações ── */}
       <section style={{ marginBottom: 28 }}>
         <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--tx2)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '.4px' }}>
-          Últimas avaliações respondidas ({ultimasAvaliacoes.length})
+          Últimas respostas de NPS ({ultimasAvaliacoes.length})
         </div>
         {carregando ? (
           <div style={{ color: 'var(--tx2)', fontSize: 13 }}>Carregando…</div>

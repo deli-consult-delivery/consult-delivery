@@ -76,9 +76,9 @@ export default function LoginScreen({ onLogin }) {
   };
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', height: '100vh', width: '100vw', overflow: 'hidden' }}>
-      {/* Left — brand panel */}
-      <div style={{
+    <div className="login-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', height: '100vh', width: '100vw', overflow: 'auto' }}>
+      {/* Left — brand panel (decorativo; escondido em mobile, ver .login-grid no index.css) */}
+      <div className="login-brand-panel" style={{
         background: '#0D0D0D',
         color: 'white',
         padding: 48,

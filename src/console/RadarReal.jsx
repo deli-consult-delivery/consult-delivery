@@ -5,7 +5,7 @@ import { lerSeries, agregar } from '../lib/radar-series.js';
 import { listTarefasIA, aprovarTarefa, rejeitarTarefa } from '../lib/api.js';
 
 // ============================================================
-// Console v2 — PR12b: Radar REAL (Dashboard iFood loja-por-loja)
+// Console v2 — PR12b: Radar REAL (iFood: Dashboard loja-por-loja)
 // Cruza as métricas importadas (radar_metricas, via planilhas iFood)
 // com os casos da Defesa (defesa_casos) e monta o diagnóstico.
 // Seletor de loja no topo: cada loja é analisada isolada — os
@@ -293,7 +293,7 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
   if (lojas.length === 0) {
     return (
       <div>
-        <h1>Dashboard iFood <span className="cv2-mock">SEM DADOS AINDA</span></h1>
+        <h1>iFood: Dashboard <span className="cv2-mock">SEM DADOS AINDA</span></h1>
         <div className="cv2-rule" />
         <div className="cv2-card" style={{ maxWidth: 620 }}>
           <h3>O Dashboard precisa dos seus relatórios do iFood</h3>
@@ -385,7 +385,7 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
 
   return (
     <div>
-      <h1>Dashboard iFood <span className="cv2-mock" style={{ background: 'var(--green-soft)', color: 'var(--green)' }}>DADOS REAIS</span></h1>
+      <h1>iFood: Dashboard <span className="cv2-mock" style={{ background: 'var(--green-soft)', color: 'var(--green)' }}>DADOS REAIS</span></h1>
       <div className="cv2-rule" />
 
       <div className="cv2-card" style={{ marginBottom: 14 }}>

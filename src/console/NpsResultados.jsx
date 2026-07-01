@@ -220,7 +220,7 @@ function NpsResultadosContent({ tenantDbId, userId }) {
 
   return (
     <div>
-      <h1>NPS — Marca <span className="cv2-mock">Probabilidade de indicação · IA</span></h1>
+      <h1>Lealdade da Marca (NPS) <span className="cv2-mock">Probabilidade de indicação · IA</span></h1>
       <div className="cv2-rule" />
       <div className="cv2-sub">
         Lealdade à marca. NPS = % Promotores (9-10) − % Detratores (0-6). Escala: −100 a 100.
