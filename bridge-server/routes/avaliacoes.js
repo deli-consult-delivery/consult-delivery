@@ -234,6 +234,21 @@ module.exports = function buildAvaliacoesRouter({ requireJwt, sbFetch, assertLoj
 
       const inserted = await sbFetch('avaliacoes', { method: 'POST', body: rows });
 
+      if (inserted?.length) {
+        sbFetch('internal_notifications', {
+          method: 'POST',
+          body: {
+            tenant_id:         tenantId,
+            recipient_user_id: null,
+            kind:              'system',
+            title:             `${inserted.length} avaliação(ões) recebida(s) — ${loja.nome}`,
+            body:              `${rows.filter(r => r.status === 'gerada').length} com resposta pronta para revisão.`,
+            link:              '/avaliacoes',
+          },
+          prefer: 'return=minimal',
+        }).catch(notifErr => console.error('[avaliacoes/gerar] erro ao notificar novas avaliações:', notifErr.message));
+      }
+
       // Logging best-effort (nunca derruba o endpoint).
       const duration_ms = Date.now() - started;
       sbFetch('agent_runs', {
@@ -344,6 +359,20 @@ module.exports = function buildAvaliacoesRouter({ requireJwt, sbFetch, assertLoj
           });
           const draft = Array.isArray(draftData) ? draftData[0] : draftData;
           draftId = draft?.id ?? null;
+          if (draftId) {
+            await sbFetch('internal_notifications', {
+              method: 'POST',
+              body: {
+                tenant_id:         tenantId,
+                recipient_user_id: null,
+                kind:              'draft_pending',
+                title:             `Resposta de avaliação pronta para envio — ${loja.nome}`,
+                body:              `Avaliação de ${av.nome_cliente || 'cliente'} (nota ${av.nota ?? '—'}) tem resposta pronta para o grupo "${grupo.group_name || 'da loja'}".`,
+                link:              '/avaliacoes',
+              },
+              prefer: 'return=minimal',
+            }).catch(notifErr => console.error('[avaliacoes/enviar-grupo] erro ao notificar draft:', notifErr.message));
+          }
         } catch (draftErr) {
           console.warn('[avaliacoes/enviar-grupo] draft insert falhou:', draftErr.message);
         }
