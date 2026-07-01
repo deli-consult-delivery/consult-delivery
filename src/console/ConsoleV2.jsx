@@ -407,11 +407,11 @@ function VisaoGeralAvaliacao({ tenantNome, tenantDbId, onNav }) {
       <div className="cv2-rule" />
       <div className="cv2-sub">{tenantNome}</div>
       <div className="cv2-kpis">
-        <Kpi l="CSAT — Atendimento" v={av ? (av.csatPct != null ? `${av.csatPct}%` : '—') : '…'} d={av ? `${av.csatTotal} avaliações respondidas` : 'carregando'} />
-        <Kpi l="NPS — Marca" v={av ? (av.npsScore != null ? String(av.npsScore) : '—') : '…'} d={av ? `${av.npsTotal} respondidas (30d)` : 'carregando'} />
+        <Kpi l="Satisfação do Atendimento (CSAT)" v={av ? (av.csatPct != null ? `${av.csatPct}%` : '—') : '…'} d={av ? `${av.csatTotal} avaliações respondidas` : 'carregando'} />
+        <Kpi l="Lealdade da Marca (NPS)" v={av ? (av.npsScore != null ? String(av.npsScore) : '—') : '…'} d={av ? `${av.npsTotal} respondidas (30d)` : 'carregando'} />
       </div>
       <div className="cv2-card">
-        <h3>Avaliação de Atendimento (CSAT)</h3>
+        <h3>Satisfação do Atendimento (CSAT)</h3>
         <div style={{ fontSize: 13, color: 'var(--tx2)', lineHeight: 1.8 }}>
           Monitore a satisfação do cliente após cada atendimento. Meta recomendada: ≥ 80%.
         </div>
@@ -420,7 +420,7 @@ function VisaoGeralAvaliacao({ tenantNome, tenantDbId, onNav }) {
         </div>
       </div>
       <div className="cv2-card">
-        <h3>NPS — Lealdade de Marca</h3>
+        <h3>Lealdade da Marca (NPS)</h3>
         <div style={{ fontSize: 13, color: 'var(--tx2)', lineHeight: 1.8 }}>
           Acompanhe o Net Promoter Score da sua marca. Score acima de 50 é considerado excelente.
         </div>
@@ -493,7 +493,7 @@ function PaywallDefesa() {
           A Defesa Comercial vigia os cancelamentos e avaliações da sua loja 24h por dia, prepara a contestação com a melhor chance de vitória e espera o seu OK — pelo painel ou respondendo "@defesa ok" no WhatsApp. O painel mostra, mês a mês, quanto dinheiro foi defendido.
         </div>
         <div style={{ margin: '14px 0 6px', fontSize: 22, fontWeight: 800 }}>R$ 147<span style={{ fontSize: 13, fontWeight: 600, color: 'var(--tx2)' }}> /loja/mês · sem taxa de ativação</span></div>
-        <div style={{ fontSize: 12.5, color: 'var(--tx2)', marginBottom: 14 }}>O Dashboard iFood continua disponível no menu ao lado — ele mostra quanto está vazando.</div>
+        <div style={{ fontSize: 12.5, color: 'var(--tx2)', marginBottom: 14 }}>O painel iFood: Dashboard continua disponível no menu ao lado — ele mostra quanto está vazando.</div>
         <button className="cv2-btn" onClick={() => { window.location.href = 'mailto:wandson@consultdelivery.com.br?subject=Quero ativar a Defesa Comercial'; }}>Quero ativar a Defesa</button>
         <div style={{ fontSize: 11.5, color: 'var(--tx2)', marginTop: 10 }}>Assinatura automática em breve — por enquanto a ativação é feita pela equipe Consult Delivery em até 1 dia útil.</div>
       </div>

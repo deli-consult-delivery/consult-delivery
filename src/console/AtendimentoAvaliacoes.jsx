@@ -395,7 +395,7 @@ function AtendimentoAvaliacoesContent({ tenantDbId, userId }) {
   // ── render ────────────────────────────────────────────────────────────────
   return (
     <div>
-      <h1>CSAT — Atendimento <span className="cv2-mock">Avaliações · IA</span></h1>
+      <h1>Satisfação do Atendimento (CSAT) <span className="cv2-mock">Avaliações · IA</span></h1>
       <div className="cv2-rule" />
       <div className="cv2-sub">
         Satisfação dos clientes por atendimento. CSAT = notas 4-5 ÷ respondidas.
