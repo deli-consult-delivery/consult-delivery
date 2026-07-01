@@ -125,16 +125,22 @@ async function getDatacrazyConversation(apiKey, conversationId, lookbackMinutes 
  * vivo. `contact_identifier`/`conv.id` é um ID interno do Datacrazy, não um
  * telefone, e não serve para contato.
  *
- * @returns {Promise<{atendenteNome: string|null, inicioAt: string|null, telefoneCliente: string|null}>}
+ * O número do ticket/atendimento visível ao operador (busca no painel do
+ * Datacrazy) é o `thread.code` — não vem nas mensagens, mas vem em
+ * `histories[].thread.code` da MESMA resposta. Cada atendimento gera um thread
+ * com code sequencial; o atendimento corrente é o de MAIOR code. Confirmado ao
+ * vivo (2026-07-01, conv 697bcc47...: codes 55364→…→56382,56383,56385).
+ *
+ * @returns {Promise<{atendenteNome: string|null, inicioAt: string|null, telefoneCliente: string|null, ticketCode: number|null}>}
  */
 async function getDatacrazyAtendenteEInicio(apiKey, conversationId) {
-  if (!apiKey || !conversationId) return { atendenteNome: null, inicioAt: null, telefoneCliente: null };
+  if (!apiKey || !conversationId) return { atendenteNome: null, inicioAt: null, telefoneCliente: null, ticketCode: null };
   try {
     const resp = await fetch(
       `${DATACRAZY_API_BASE}/api/v1/conversations/${conversationId}/messages`,
       { headers: { 'Authorization': `Bearer ${apiKey}` }, signal: AbortSignal.timeout(15000) }
     );
-    if (!resp.ok) return { atendenteNome: null, inicioAt: null, telefoneCliente: null };
+    if (!resp.ok) return { atendenteNome: null, inicioAt: null, telefoneCliente: null, ticketCode: null };
     const data = await resp.json().catch(() => null);
     const messages = (data && data.messages) || []; // ordenadas da mais recente p/ mais antiga
 
@@ -148,10 +154,17 @@ async function getDatacrazyAtendenteEInicio(apiKey, conversationId) {
     const msgComContato = messages.find((m) => m && m.contact && m.contact.phoneNumber);
     const telefoneCliente = msgComContato ? String(msgComContato.contact.phoneNumber).trim() : null;
 
-    return { atendenteNome, inicioAt: (inicioMsg && inicioMsg.createdAt) || null, telefoneCliente };
+    // Ticket do atendimento corrente = maior thread.code entre os históricos.
+    let ticketCode = null;
+    for (const h of (data && data.histories) || []) {
+      const code = h && h.thread && h.thread.code;
+      if (Number.isFinite(code) && (ticketCode === null || code > ticketCode)) ticketCode = code;
+    }
+
+    return { atendenteNome, inicioAt: (inicioMsg && inicioMsg.createdAt) || null, telefoneCliente, ticketCode };
   } catch (err) {
     console.error(`[datacrazy-send] getAtendente ${conversationId} erro:`, err.message);
-    return { atendenteNome: null, inicioAt: null, telefoneCliente: null };
+    return { atendenteNome: null, inicioAt: null, telefoneCliente: null, ticketCode: null };
   }
 }
 
