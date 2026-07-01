@@ -340,7 +340,7 @@ function UserMenu({ user }) {
       {open && (
         <div style={{ position: 'absolute', right: 0, top: 40, background: '#fff', border: '1px solid var(--line)', borderRadius: 6, boxShadow: '0 4px 16px rgba(0,0,0,.14)', minWidth: 210, zIndex: 50, padding: 6 }}>
           <div style={{ padding: '8px 10px 2px', fontSize: 12.5, fontWeight: 700, color: 'var(--ink)' }}>{nome}</div>
-          {user?.email && <div style={{ padding: '0 10px 8px', fontSize: 11.5, color: 'var(--tx2)' }}>{user.email}</div>}
+          {user?.email && user.email !== nome && <div style={{ padding: '0 10px 8px', fontSize: 11.5, color: 'var(--tx2)' }}>{user.email}</div>}
           <div style={{ borderTop: '1px solid var(--line)', margin: '2px 0' }} />
           <div
             role="button" tabIndex={0}
