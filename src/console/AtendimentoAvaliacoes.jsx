@@ -13,7 +13,6 @@ import RequireRole from '../components/auth/RequireRole.jsx';
 
 const BRIDGE = import.meta.env.VITE_BRIDGE_URL || 'https://bridge.consultdelivery.com.br';
 const PUBLIC_URL = import.meta.env.VITE_PUBLIC_URL || 'https://app.consultdelivery.com.br';
-const LIMIT_AVALIACOES = 200;
 const LIMIT_COMENTARIOS = 20;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -306,12 +305,20 @@ function AtendimentoAvaliacoesContent({ tenantDbId, userId }) {
   const fetchRows = useCallback(async () => {
     if (!tenantDbId) return;
     setErro(null);
+    // Mesma janela de 30 dias e MESMA ausência de limit do card "Visão Geral"
+    // (ConsoleV2 useKpisAvaliacao) — o LIMIT(200) antigo, combinado com
+    // order by created_at desc, cortava avaliações respondidas mais antigas
+    // dentro da própria janela de 30 dias sempre que o tenant tinha >200
+    // avaliações enviadas no período (o corte favorece as mais recentes,
+    // que ainda não tiveram tempo de ser respondidas — subcontando "respondidas").
+    // O filtro de data já limita o volume da query; sem LIMIT artificial.
+    const desde30d = new Date(Date.now() - 30 * 86400000).toISOString();
     const { data, error: err } = await supabase
       .from('atendimento_avaliacoes')
       .select('*')
       .eq('tenant_id', tenantDbId)
-      .order('created_at', { ascending: false })
-      .limit(LIMIT_AVALIACOES);
+      .gte('created_at', desde30d)
+      .order('created_at', { ascending: false });
     if (err) { setErro(err.message); return; }
     setRows(data ?? []);
   }, [tenantDbId]);
