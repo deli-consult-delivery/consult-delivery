@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../lib/supabase.js';
 import Icon from '../components/Icon.jsx';
+import { GRUPOS } from './moduleCatalog.js';
 
 const BRIDGE = import.meta.env.VITE_BRIDGE_URL || 'https://bridge.consultdelivery.com.br';
 
@@ -38,25 +39,16 @@ const ROLE_DESC = {
 
 const INVITABLE_ROLES = ['admin', 'consultor', 'operador', 'dev'];
 
-const ALL_SCREENS = [
-  { id: 'dashboard',        label: 'Dashboard',       group: 'Início' },
-  { id: 'deli',             label: 'DELI',            group: 'Início',      defaultRoles: ['admin','deli_owner'] },
-  { id: 'chat',             label: 'Chat Ao Vivo',    group: 'Operação',    defaultRoles: ['admin','atendimento','marketing'] },
-  { id: 'lojas',            label: 'Lojas',           group: 'Operação' },
-  { id: 'crm',              label: 'Clientes',        group: 'Operação',    defaultRoles: ['admin','marketing'] },
-  { id: 'contratos',        label: 'Contratos',       group: 'Operação',    defaultRoles: ['admin'] },
-  { id: 'recontratacao',    label: 'Re-contratação',  group: 'Operação',    defaultRoles: ['admin'] },
-  { id: 'tarefas',          label: 'Todas Tarefas',   group: 'Operação',    defaultRoles: ['admin'] },
-  { id: 'tarefas-clientes', label: 'Espaços',         group: 'Operação',    defaultRoles: ['admin','marketing'] },
-  { id: 'onboarding',       label: 'Onboarding',      group: 'Operação',    defaultRoles: ['admin','atendimento','marketing'] },
-  { id: 'agents',           label: 'Painel Agentes',  group: 'Agentes IA',  defaultRoles: ['admin'] },
-  { id: 'campanhas',        label: 'Campanhas',       group: 'Marketing',   defaultRoles: ['admin','marketing'] },
-  { id: 'drafts-pendentes', label: 'Disparos',        group: 'Marketing',   defaultRoles: ['admin','marketing'] },
-  { id: 'reports',          label: 'Relatórios',      group: 'Dados',       defaultRoles: ['admin','marketing'] },
-  { id: 'notificacoes',     label: 'Notificações',    group: 'Sistema' },
-  { id: 'grupos',           label: 'Grupos WhatsApp', group: 'Admin',       defaultRoles: ['admin','atendimento'] },
-  { id: 'settings',         label: 'Configurações',   group: 'Admin',       defaultRoles: ['admin'] },
-];
+// Fonte única com o menu real (ConsoleV2) e com tenant_modules: id = module_key.
+// Antes disto, ALL_SCREENS era uma lista solta com ids que não existiam mais
+// no app (ex: 'dashboard', 'settings') — por isso a tela listava telas que não
+// existem/não estão no plano do tenant.
+const ALL_SCREENS = GRUPOS.flatMap(g => g.items.map(it => ({
+  id: it.id,
+  label: it.label,
+  group: g.label,
+  defaultRoles: it.adminOnly ? ['admin', 'owner', 'dev'] : undefined,
+})));
 
 function relativeTime(ts) {
   if (!ts) return '—';
@@ -293,6 +285,9 @@ function ScreenPermsModal({ member, tenantDbId, onClose }) {
   const [perms, setPerms] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(null);
+  // null = tenant sem linhas em tenant_modules -> todas as telas habilitadas
+  // (mesma semântica de ConsoleV2.jsx); Set = allowlist de module_key habilitados
+  const [allowedModules, setAllowedModules] = useState(null);
 
   useEffect(() => {
     supabase.rpc('get_user_screen_permissions', {
@@ -305,6 +300,15 @@ function ScreenPermsModal({ member, tenantDbId, onClose }) {
       setLoading(false);
     });
   }, [member.user_id, tenantDbId]);
+
+  useEffect(() => {
+    if (!tenantDbId) { setAllowedModules(null); return; }
+    supabase.from('tenant_modules').select('module_key, enabled').eq('tenant_id', tenantDbId)
+      .then(({ data, error }) => {
+        if (error || !data || data.length === 0) { setAllowedModules(null); return; }
+        setAllowedModules(new Set(data.filter(r => r.enabled).map(r => r.module_key)));
+      });
+  }, [tenantDbId]);
 
   async function toggle(screenId, roleDefault) {
     const current = perms[screenId];
@@ -320,7 +324,10 @@ function ScreenPermsModal({ member, tenantDbId, onClose }) {
     setSaving(null);
   }
 
-  const groups = ALL_SCREENS.reduce((acc, s) => {
+  const screensDoTenant = allowedModules
+    ? ALL_SCREENS.filter(s => allowedModules.has(s.id))
+    : ALL_SCREENS;
+  const groups = screensDoTenant.reduce((acc, s) => {
     (acc[s.group] = acc[s.group] || []).push(s);
     return acc;
   }, {});

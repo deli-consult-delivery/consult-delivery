@@ -307,10 +307,15 @@ function AtendimentoAvaliacoesContent({ tenantDbId, userId }) {
   const fetchRows = useCallback(async () => {
     if (!tenantDbId) return;
     setErro(null);
+    // Mesma janela de 30 dias do card "Visão Geral" (ConsoleV2 useKpisAvaliacao) —
+    // antes essa tela contava as últimas 200 linhas sem filtro de data, divergindo
+    // do card do dashboard sempre que havia avaliação respondida fora dos 30 dias.
+    const desde30d = new Date(Date.now() - 30 * 86400000).toISOString();
     const { data, error: err } = await supabase
       .from('atendimento_avaliacoes')
       .select('*')
       .eq('tenant_id', tenantDbId)
+      .gte('created_at', desde30d)
       .order('created_at', { ascending: false })
       .limit(LIMIT_AVALIACOES);
     if (err) { setErro(err.message); return; }

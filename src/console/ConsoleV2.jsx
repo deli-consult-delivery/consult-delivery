@@ -616,6 +616,12 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
   const tenantNome = brand?.nome || sel?.nome || tenantInfo?.name || 'Workspace';
   const { runs, notif } = useTopbar(tenantDbId, userId);
   const creditosTxt = runs == null ? '…' : fmtK(Math.max(0, CREDITOS_MES - runs));
+  const [meEmail, setMeEmail] = useState('');
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setMeEmail(data?.user?.email || ''));
+  }, []);
+  const sair = () => supabase.auth.signOut();
 
   useEffect(() => {
     if (!tenantDbId) return;
@@ -766,6 +772,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
   }
 
   const inicial = (tenantNome || 'CD').replace(/[^A-Za-zÀ-ú]/g, '').slice(0, 2).toUpperCase() || 'CD';
+  const inicialUsuario = meEmail ? meEmail.slice(0, 2).toUpperCase() : inicial;
 
   return (
     <div className={`cv2${sidebarCollapsed ? ' cv2-sb-collapsed' : ''}`} style={temaStyle}>
@@ -840,7 +847,15 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
                 onKeyDown={e => { if (e.key === 'Enter') setTela('notificacoes'); }}>
                 <Ico name="i-bell" size={13} /><b style={notif > 0 ? { color: 'var(--red)' } : { color: 'var(--tx2)' }}>{notif}</b>
               </span>
-              <span className="cv2-avatar">{inicial}</span>
+              <div className="cv2-user">
+                <button className="cv2-avatar" title={meEmail || 'Usuário'} onClick={() => setUserMenuOpen(v => !v)}>{inicialUsuario}</button>
+                {userMenuOpen && (
+                  <div className="cv2-user-menu" onMouseLeave={() => setUserMenuOpen(false)}>
+                    <div className="email">{meEmail || 'Usuário logado'}</div>
+                    <button onClick={sair}>Sair</button>
+                  </div>
+                )}
+              </div>
             </div>
             {ehEspacos || ehLegado ? (
               // telas full-height (Espaços, Chat legado): pai bounded p/ o filho height:100% funcionar
