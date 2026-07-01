@@ -103,7 +103,7 @@ function ItemBusca({ ic, principal, sec, onClick }) {
   );
 }
 
-function GlobalSearch({ tenantDbId, onNavigate }) {
+function GlobalSearch({ tenantDbId, onNavigate, allowedModules, isAdmin }) {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
   const [ent, setEnt] = useState({ lojas: [], convs: [] });
@@ -135,7 +135,9 @@ function GlobalSearch({ tenantDbId, onNavigate }) {
   }, [q, tenantDbId]);
 
   const termo = norm(q);
-  const navHits = termo.length < 1 ? [] : NAV_ITEMS.filter(it => norm(it.label).includes(termo)).slice(0, 7);
+  const navAllowed = (allowedModules ? NAV_ITEMS.filter(it => allowedModules.has(it.id)) : NAV_ITEMS)
+    .filter(it => !it.adminOnly || isAdmin);
+  const navHits = termo.length < 1 ? [] : navAllowed.filter(it => norm(it.label).includes(termo)).slice(0, 7);
   const temAlgo = navHits.length || ent.lojas.length || ent.convs.length;
 
   function go(tela, params) { onNavigate(tela, params); setOpen(false); setQ(''); }
@@ -311,6 +313,50 @@ function useAlertas(tenantDbId) {
   return al;
 }
 
+function useCurrentUser() {
+  const [user, setUser] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    supabase.auth.getUser().then(({ data }) => { if (alive) setUser(data?.user ?? null); });
+    return () => { alive = false; };
+  }, []);
+  return user;
+}
+
+function UserMenu({ user }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+  const nome = user?.user_metadata?.full_name || user?.email || 'Usuário';
+  const inicial = (nome.match(/[A-Za-zÀ-ú]+/g) || ['U']).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <span className="cv2-avatar" style={{ cursor: 'pointer' }} title={nome} onClick={() => setOpen(o => !o)}>{inicial}</span>
+      {open && (
+        <div style={{ position: 'absolute', right: 0, top: 40, background: '#fff', border: '1px solid var(--line)', borderRadius: 6, boxShadow: '0 4px 16px rgba(0,0,0,.14)', minWidth: 210, zIndex: 50, padding: 6 }}>
+          <div style={{ padding: '8px 10px 2px', fontSize: 12.5, fontWeight: 700, color: 'var(--ink)' }}>{nome}</div>
+          {user?.email && user.email !== nome && <div style={{ padding: '0 10px 8px', fontSize: 11.5, color: 'var(--tx2)' }}>{user.email}</div>}
+          <div style={{ borderTop: '1px solid var(--line)', margin: '2px 0' }} />
+          <div
+            role="button" tabIndex={0}
+            style={{ padding: '9px 10px', fontSize: 13, fontWeight: 600, color: 'var(--red)', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+            onMouseDown={e => e.preventDefault()}
+            onClick={() => supabase.auth.signOut()}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
+            Sair
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Kpi({ l, v, d, neg, mut }) {
   return (
     <div className="cv2-kpi">
@@ -329,12 +375,13 @@ function useKpisAvaliacao(tenantDbId) {
     (async () => {
       const desde = new Date(Date.now() - 30 * 86400000).toISOString();
       const [csatRes, npsRes] = await Promise.all([
-        supabase.from('atendimento_avaliacoes').select('nota, status').eq('tenant_id', tenantDbId).gte('created_at', desde),
+        // ponytail: mesma fonte da verdade da tela CSAT — Atendimento (status='respondida', sem janela de data)
+        supabase.from('atendimento_avaliacoes').select('nota, status').eq('tenant_id', tenantDbId),
         supabase.from('nps_avaliacoes').select('nota').eq('tenant_id', tenantDbId).gte('created_at', desde),
       ]);
       if (!alive) return;
       const csatRows = csatRes.data ?? [];
-      const csatResp = csatRows.filter(r => r.nota != null);
+      const csatResp = csatRows.filter(r => r.status === 'respondida' && r.nota != null);
       const csatPct = csatResp.length
         ? Math.round((csatResp.filter(r => r.nota >= 4).length / csatResp.length) * 100)
         : null;
@@ -615,6 +662,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
   const [brand, recarregarBrand] = useBranding(tenantDbId);
   const tenantNome = brand?.nome || sel?.nome || tenantInfo?.name || 'Workspace';
   const { runs, notif } = useTopbar(tenantDbId, userId);
+  const currentUser = useCurrentUser();
   const creditosTxt = runs == null ? '…' : fmtK(Math.max(0, CREDITOS_MES - runs));
 
   useEffect(() => {
@@ -765,8 +813,6 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
     }
   }
 
-  const inicial = (tenantNome || 'CD').replace(/[^A-Za-zÀ-ú]/g, '').slice(0, 2).toUpperCase() || 'CD';
-
   return (
     <div className={`cv2${sidebarCollapsed ? ' cv2-sb-collapsed' : ''}`} style={temaStyle}>
       <CvSprite />
@@ -820,7 +866,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
               </button>
               <span className="crumb">Console › <b>{LABELS[tela] || tela}</b></span>
-              <GlobalSearch tenantDbId={tenantDbId} onNavigate={navWithParams} />
+              <GlobalSearch tenantDbId={tenantDbId} onNavigate={navWithParams} allowedModules={allowedModules} isAdmin={['owner', 'admin'].includes(sel?.role || tenantInfo?.role)} />
               {(!allowedModules || allowedModules.has('creditos-ia')) && (
                 <span className="cv2-pill" title={`Plano freemium · ${CREDITOS_MES.toLocaleString('pt-BR')} créditos/mês · 1 por execução de IA · ${runs ?? 0} usados`}>
                   <Ico name="i-zap" size={13} /> Créditos IA <b>{creditosTxt}</b>
@@ -840,7 +886,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
                 onKeyDown={e => { if (e.key === 'Enter') setTela('notificacoes'); }}>
                 <Ico name="i-bell" size={13} /><b style={notif > 0 ? { color: 'var(--red)' } : { color: 'var(--tx2)' }}>{notif}</b>
               </span>
-              <span className="cv2-avatar">{inicial}</span>
+              <UserMenu user={currentUser} />
             </div>
             {ehEspacos || ehLegado ? (
               // telas full-height (Espaços, Chat legado): pai bounded p/ o filho height:100% funcionar

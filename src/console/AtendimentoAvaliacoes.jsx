@@ -18,13 +18,11 @@ const LIMIT_COMENTARIOS = 20;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-function calcCSAT(rows) {
-  const respondidas = rows.filter(r => r.nota != null);
+function calcCSAT(totais) {
+  const respondidas = totais?.respondidas ?? [];
   if (!respondidas.length) return { csat: null, media: null, totalRespondidas: 0, taxaResposta: null };
   const satisfeitos = respondidas.filter(r => r.nota >= 4).length;
-  const pendentes = rows.filter(r => r.status === 'pendente').length;
-  const expiradas = rows.filter(r => r.status === 'expirada').length;
-  const totalDenominador = respondidas.length + pendentes + expiradas;
+  const totalDenominador = respondidas.length + (totais.pendentes ?? 0) + (totais.expiradas ?? 0);
   return {
     csat: Math.round((satisfeitos / respondidas.length) * 100),
     media: (respondidas.reduce((acc, r) => acc + r.nota, 0) / respondidas.length).toFixed(1),
@@ -33,8 +31,8 @@ function calcCSAT(rows) {
   };
 }
 
-function calcDistribuicao(rows) {
-  const respondidas = rows.filter(r => r.nota != null);
+function calcDistribuicao(totais) {
+  const respondidas = totais?.respondidas ?? [];
   const total = respondidas.length;
   return [1, 2, 3, 4, 5].map(nota => {
     const count = respondidas.filter(r => r.nota === nota).length;
@@ -42,13 +40,13 @@ function calcDistribuicao(rows) {
   });
 }
 
-function calcStatusPct(rows) {
-  const total = rows.length;
-  const grupos = ['pendente', 'respondida', 'expirada'];
-  return grupos.map(status => ({
+function calcStatusPct(totais) {
+  const counts = { pendente: totais?.pendentes ?? 0, respondida: (totais?.respondidas ?? []).length, expirada: totais?.expiradas ?? 0 };
+  const total = counts.pendente + counts.respondida + counts.expirada;
+  return ['pendente', 'respondida', 'expirada'].map(status => ({
     status,
-    count: rows.filter(r => r.status === status).length,
-    pct: total ? Math.round((rows.filter(r => r.status === status).length / total) * 100) : 0,
+    count: counts[status],
+    pct: total ? Math.round((counts[status] / total) * 100) : 0,
   }));
 }
 
@@ -295,6 +293,7 @@ function CardDetrator({ item, onSalvar, salvando }) {
 
 function AtendimentoAvaliacoesContent({ tenantDbId, userId }) {
   const [rows, setRows] = useState(null);
+  const [totais, setTotais] = useState(null); // KPIs sobre a base inteira (rows é capado em LIMIT_AVALIACOES p/ a lista)
   const [erro, setErro] = useState(null);
   const [salvandoId, setSalvandoId] = useState(null);
 
@@ -317,9 +316,24 @@ function AtendimentoAvaliacoesContent({ tenantDbId, userId }) {
     setRows(data ?? []);
   }, [tenantDbId]);
 
+  // ponytail: KPIs (respondidas/CSAT%/taxa de resposta) precisam da base inteira,
+  // não só das LIMIT_AVALIACOES linhas mais recentes — senão o total fica subcontado
+  // quando o tenant já passou de 200 avaliações.
+  const fetchTotais = useCallback(async () => {
+    if (!tenantDbId) return;
+    const [pend, resp, exp] = await Promise.all([
+      supabase.from('atendimento_avaliacoes').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantDbId).eq('status', 'pendente'),
+      supabase.from('atendimento_avaliacoes').select('nota').eq('tenant_id', tenantDbId).eq('status', 'respondida'),
+      supabase.from('atendimento_avaliacoes').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantDbId).eq('status', 'expirada'),
+    ]);
+    const respRows = (resp.data ?? []).filter(r => r.nota != null);
+    setTotais({ pendentes: pend.count ?? 0, expiradas: exp.count ?? 0, respondidas: respRows });
+  }, [tenantDbId]);
+
   useEffect(() => {
     fetchRows();
-  }, [fetchRows]);
+    fetchTotais();
+  }, [fetchRows, fetchTotais]);
 
   // ── tratativa de detrator ─────────────────────────────────────────────────
   async function salvarTratativa(id, novoStatus, novaObs) {
@@ -370,9 +384,10 @@ function AtendimentoAvaliacoesContent({ tenantDbId, userId }) {
 
   // ── derivados ─────────────────────────────────────────────────────────────
   const lista = rows ?? [];
-  const kpis = calcCSAT(lista);
-  const distribuicao = calcDistribuicao(lista);
-  const statusPcts = calcStatusPct(lista);
+  const kpis = calcCSAT(totais);
+  const distribuicao = calcDistribuicao(totais);
+  const statusPcts = calcStatusPct(totais);
+  const totalEnviadas = totais ? totais.pendentes + totais.respondidas.length + totais.expiradas : lista.length;
   const atendentes = calcAtendentes(lista);
   const comentarios = lista.filter(r => r.comentario).slice(0, LIMIT_COMENTARIOS);
   const detratores = lista.filter(r => r.nota != null && r.nota <= 2 && ['pendente', 'em_andamento'].includes(r.tratativa_status));
@@ -419,7 +434,7 @@ function AtendimentoAvaliacoesContent({ tenantDbId, userId }) {
             <KpiCard
               label="Respondidas"
               valor={kpis.totalRespondidas}
-              detalhe={`de ${lista.length} enviadas`}
+              detalhe={`de ${totalEnviadas} enviadas`}
             />
             <KpiCard
               label="Taxa de Resposta"
