@@ -106,11 +106,19 @@ async function getDatacrazyConversation(apiKey, conversationId, lookbackMinutes 
  * campo `attendants` da conversa é a lista de CONTATOS/participantes (com
  * `isAgent`, mas observados sempre `false`), não o atendente que tratou o caso.
  *
- * O atendente real vem em `/api/v1/conversations/{id}/messages`: a mensagem que
- * abre o ticket atual tem `firstTicketMessage: true` e um campo `attendant`
- * (objeto único, não array) com `{ name, userId, ... }`. Mensagens vêm ordenadas
- * da mais recente para a mais antiga, então a primeira `firstTicketMessage=true`
- * encontrada é o início do atendimento mais recente.
+ * O ticket atual começa na mensagem com `firstTicketMessage: true` — mas ela
+ * costuma ser a mensagem de ABERTURA do CLIENTE (`attendant` vazio), não a do
+ * atendente. Confirmado ao vivo (2026-07-01, conv 6a4299a106ef3c74c8430a90):
+ * a mensagem `firstTicketMessage=true` tem `attendant: undefined`; o atendente
+ * só aparece nas mensagens seguintes (respostas humanas). Por isso resolvemos
+ * o atendente como o mais recente dentro da janela do ticket atual (da mais
+ * nova até a `firstTicketMessage`), não da própria `firstTicketMessage`.
+ *
+ * A API não pagina (`limit`/`page`/`skip`/`offset` testados, sempre retornam
+ * as mesmas 20 mensagens) — em tickets longos a `firstTicketMessage` pode
+ * cair fora da janela. Nesse caso caímos para o atendente mais recente entre
+ * as 20 mensagens disponíveis (melhor aproximação possível) e `inicioAt` fica
+ * `null` (não dá pra saber o início real do ticket sem essa mensagem).
  *
  * O telefone real do cliente (para contato via WhatsApp) vem no campo
  * `contact.phoneNumber` das mensagens RECEBIDAS (do cliente) — confirmado ao
@@ -128,12 +136,14 @@ async function getDatacrazyAtendenteEInicio(apiKey, conversationId) {
     );
     if (!resp.ok) return { atendenteNome: null, inicioAt: null, telefoneCliente: null };
     const data = await resp.json().catch(() => null);
-    const messages = (data && data.messages) || [];
+    const messages = (data && data.messages) || []; // ordenadas da mais recente p/ mais antiga
 
-    const inicioMsg = messages.find((m) => m && m.firstTicketMessage === true);
-    const atendenteNome = inicioMsg && inicioMsg.attendant && inicioMsg.attendant.name
-      ? String(inicioMsg.attendant.name).trim()
-      : null;
+    const inicioIdx = messages.findIndex((m) => m && m.firstTicketMessage === true);
+    const inicioMsg = inicioIdx >= 0 ? messages[inicioIdx] : null;
+    const janelaTicket = inicioIdx >= 0 ? messages.slice(0, inicioIdx + 1) : messages;
+
+    const msgComAtendente = janelaTicket.find((m) => m && m.attendant && m.attendant.name);
+    const atendenteNome = msgComAtendente ? String(msgComAtendente.attendant.name).trim() : null;
 
     const msgComContato = messages.find((m) => m && m.contact && m.contact.phoneNumber);
     const telefoneCliente = msgComContato ? String(msgComContato.contact.phoneNumber).trim() : null;
