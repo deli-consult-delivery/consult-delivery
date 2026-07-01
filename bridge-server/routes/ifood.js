@@ -288,6 +288,18 @@ module.exports = function ({ requireJwtOrInternal, ifood, supabaseSelect, assert
     if (!row?.id) {
       throw new ifood.IfoodApiError('falha ao criar draft (insert sem retorno)', 0, null);
     }
+    sbFetch('internal_notifications', {
+      method: 'POST',
+      body: {
+        tenant_id:         ctx.tenantId,
+        recipient_user_id: null,
+        kind:              'draft_pending',
+        title:             `Ação iFood aguardando aprovação: ${content}`,
+        body:              `Agente ${spec.agent} propôs: ${content}.`,
+        link:              '/ifood',
+      },
+      prefer: 'return=minimal',
+    }).catch(notifErr => console.error('[ifood/acao] erro ao notificar draft:', notifErr.message));
     return { draft_id: row.id, operacao, item_id: resolved.item.itemId, content };
   }));
 

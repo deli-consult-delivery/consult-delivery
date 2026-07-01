@@ -58,6 +58,13 @@ const ALL_SCREENS = [
   { id: 'notificacoes',     label: 'Notificações',    group: 'Sistema',     moduleKey: 'notificacoes' },
   { id: 'grupos',           label: 'WhatsApp: Grupos', group: 'Admin',       defaultRoles: ['admin','atendimento'], moduleKey: 'grupos' },
   { id: 'settings',         label: 'Configurações',   group: 'Admin',       defaultRoles: ['admin'], moduleKey: 'configsys' },
+  // Adicionado 2026-07-01 (QA go-live Karina): faltavam telas de Avaliações + Usuários,
+  // então o modal de permissões ficava quase vazio pra tenants sem os módulos "clássicos".
+  { id: 'csat',                  label: 'Satisfação do Atendimento (CSAT)', group: 'Avaliações', moduleKey: 'csat' },
+  { id: 'nps',                   label: 'Lealdade da Marca (NPS)',          group: 'Avaliações', moduleKey: 'nps' },
+  { id: 'controle-atendimentos', label: 'Controle de Atendimento',         group: 'Avaliações', moduleKey: 'controle-atendimentos' },
+  { id: 'avaliacao-config',      label: 'Configurações de Avaliação',      group: 'Avaliações', moduleKey: 'avaliacao-config' },
+  { id: 'usuarios',              label: 'Usuários e Equipe', group: 'Sistema', defaultRoles: ['admin'], moduleKey: 'usuarios' },
 ];
 
 function relativeTime(ts) {
