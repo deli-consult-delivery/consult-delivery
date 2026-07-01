@@ -99,48 +99,40 @@ async function getDatacrazyConversation(apiKey, conversationId, lookbackMinutes 
 }
 
 /**
- * Extrai o atendente e o início do atendimento atual da conversa, usando o campo
- * `currentThread` (atendimento/ticket corrente): `startedAt` é o início confiável e
- * `attendants:[{id}]` são os atendentes do thread, resolvidos para nome via a lista
- * `attendants:[{id,name}]` da conversa. Busca via lista de conversas (o GET unitário
- * /conversations/{id} retorna erro). Mais robusto que varrer mensagens (limita a ~20).
+ * Extrai o atendente e o início do atendimento (ticket) mais recente da conversa.
+ *
+ * A API de LISTA de conversas (`/api/v1/conversations`) não expõe `currentThread`
+ * nem um `attendants` do ticket corrente — confirmado ao vivo (2026-07-01): o
+ * campo `attendants` da conversa é a lista de CONTATOS/participantes (com
+ * `isAgent`, mas observados sempre `false`), não o atendente que tratou o caso.
+ *
+ * O atendente real vem em `/api/v1/conversations/{id}/messages`: a mensagem que
+ * abre o ticket atual tem `firstTicketMessage: true` e um campo `attendant`
+ * (objeto único, não array) com `{ name, userId, ... }`. Mensagens vêm ordenadas
+ * da mais recente para a mais antiga, então a primeira `firstTicketMessage=true`
+ * encontrada é o início do atendimento mais recente.
  *
  * @returns {Promise<{atendenteNome: string|null, inicioAt: string|null}>}
  */
-async function getDatacrazyAtendenteEInicio(apiKey, conversationId, lookbackMinutes = 20) {
+async function getDatacrazyAtendenteEInicio(apiKey, conversationId) {
   if (!apiKey || !conversationId) return { atendenteNome: null, inicioAt: null };
   try {
-    const cutoff = new Date(Date.now() - lookbackMinutes * 60 * 1000).toISOString();
     const resp = await fetch(
-      `${DATACRAZY_API_BASE}/api/v1/conversations?limit=100&updatedAtStart=${encodeURIComponent(cutoff)}`,
+      `${DATACRAZY_API_BASE}/api/v1/conversations/${conversationId}/messages`,
       { headers: { 'Authorization': `Bearer ${apiKey}` }, signal: AbortSignal.timeout(15000) }
     );
     if (!resp.ok) return { atendenteNome: null, inicioAt: null };
     const data = await resp.json().catch(() => null);
-    const c = (data && data.data || []).find((x) => x.id === conversationId);
-    if (!c) return { atendenteNome: null, inicioAt: null };
+    const messages = (data && data.messages) || [];
 
-    const thread = c.currentThread || null;
-    const inicioAt = (thread && (thread.startedAt || thread.createdAt)) || null;
+    const inicioMsg = messages.find((m) => m && m.firstTicketMessage === true);
+    if (!inicioMsg) return { atendenteNome: null, inicioAt: null };
 
-    // Resolve nome do atendente: ids do thread → nome via c.attendants. Pega o último.
-    const nomePorId = {};
-    for (const a of (c.attendants || [])) {
-      if (a && a.id && a.name && String(a.name).trim()) nomePorId[a.id] = String(a.name).trim();
-    }
-    let atendenteNome = null;
-    const threadAtt = (thread && thread.attendants) || [];
-    for (let i = threadAtt.length - 1; i >= 0; i--) {
-      const nome = nomePorId[threadAtt[i] && threadAtt[i].id];
-      if (nome) { atendenteNome = nome; break; }
-    }
-    // Fallback: último atendente registrado na conversa.
-    if (!atendenteNome) {
-      const arr = (c.attendants || []).filter((a) => a && a.name && String(a.name).trim());
-      if (arr.length) atendenteNome = String(arr[arr.length - 1].name).trim();
-    }
+    const atendenteNome = inicioMsg.attendant && inicioMsg.attendant.name
+      ? String(inicioMsg.attendant.name).trim()
+      : null;
 
-    return { atendenteNome, inicioAt };
+    return { atendenteNome, inicioAt: inicioMsg.createdAt || null };
   } catch (err) {
     console.error(`[datacrazy-send] getAtendente ${conversationId} erro:`, err.message);
     return { atendenteNome: null, inicioAt: null };
