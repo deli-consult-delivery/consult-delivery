@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { supabase } from '../lib/supabase';
 
 // ─── Supabase (direto, sem SDK) ──────────────────────────────────────────────
 const SUPA_URL  = 'https://czyanilrverorwenikqw.supabase.co';
@@ -14,7 +15,6 @@ const LS_KEY = 'cd_store_groups_v1';
 function lsLoad() { try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch { return {}; } }
 function lsSave(m)  { try { localStorage.setItem(LS_KEY, JSON.stringify(m)); } catch {} }
 
-// ─── Lista fixa das 14 lojas ─────────────────────────────────────────────────
 const KNOWN_STORES = [
   'Café Container - Lanches e Salgados',
   'Churrascaria Cardoso - Marmitas & Espetos',
@@ -54,7 +54,6 @@ async function sbUpdate(match, body) {
   return r.json();
 }
 
-// ─── Salva só o campo notes (evita reload completo) ──────────────────────────
 async function sbUpdateNote(id, notes) {
   const q = `id=eq.${encodeURIComponent(id)}`;
   const r = await fetch(`${SUPA_URL}/rest/v1/reviews?${q}`, {
@@ -236,6 +235,151 @@ async function fetchEvoGroups() {
 
 function copiar(t) { try { navigator.clipboard?.writeText(t || ''); } catch {} }
 
+// ─── Feature 4: análise local de avaliações publicadas ───────────────────────
+
+function normStr(s) {
+  return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+const OP_KEYWORDS  = ['frio','gelado','errado','faltou','faltando','demorou','demora','atraso','atrasado',
+                       'diferente','ruim','pessimo','horrivel','mal','incompleto','estragado','vencido',
+                       'embalagem','pouco','pequeno','molhado','quebrado','sem sal','salgado demais','queimado'];
+const FID_KEYWORDS = ['otimo','excelente','adorei','amei','perfeito','voltarei','recomendo','maravilhoso',
+                       'delicioso','parabens','nota 10','muito bom','adoramos','sempre peco','favorit',
+                       'melhor','top','sensacional','incrivel','gostamos','amamos','amou'];
+
+function hasKw(text, kws) { const t = normStr(text); return kws.some(k => t.includes(k)); }
+
+function analisarReviews(storeName, publishedReviews) {
+  if (!publishedReviews.length) return [];
+  const demandas = [];
+  const short = storeName.split(' - ')[0];
+
+  const opRevs  = publishedReviews.filter(r => r.rating <= 3 || hasKw(r.clientComment, OP_KEYWORDS));
+  const fidRevs = publishedReviews.filter(r => r.rating >= 4 && (r.rating === 5 || hasKw(r.clientComment, FID_KEYWORDS)));
+  const avgRating = publishedReviews.reduce((s, r) => s + (r.rating || 0), 0) / publishedReviews.length;
+
+  if (opRevs.length > 0) {
+    const bullets = opRevs.slice(0, 5).map(r => {
+      const comment = (r.clientComment || '').slice(0, 100);
+      return `• ⭐${r.rating} (Ped. ${r.orderId}): "${comment}${(r.clientComment?.length || 0) > 100 ? '…' : ''}"`;
+    }).join('\n');
+
+    demandas.push({
+      titulo: `[${short}] Melhorias operacionais — ${opRevs.length} reclamação${opRevs.length !== 1 ? 'ões' : ''} identificada${opRevs.length !== 1 ? 's' : ''}`,
+      descricao: `Avaliações publicadas com pontos de melhoria:\n\n${bullets}\n\nAção: Apresentar para a equipe da loja, identificar causa raiz de cada ponto e criar plano de correção com prazo.`,
+      prioridade: opRevs.some(r => r.rating <= 2) ? 'high' : 'med',
+      tipo: 'operacional',
+    });
+  }
+
+  if (fidRevs.length > 0) {
+    const bullets = fidRevs.slice(0, 5).map(r => {
+      const comment = (r.clientComment || '').slice(0, 80);
+      const name = r.clientName || 'Cliente';
+      return `• ⭐${r.rating} — ${name}: "${comment}${(r.clientComment?.length || 0) > 80 ? '…' : ''}"`;
+    }).join('\n');
+
+    demandas.push({
+      titulo: `[${short}] Fidelização — ${fidRevs.length} cliente${fidRevs.length !== 1 ? 's' : ''} satisfeito${fidRevs.length !== 1 ? 's' : ''} a cultivar`,
+      descricao: `Clientes com alta satisfação identificados nas avaliações publicadas:\n\n${bullets}\n\nAção sugerida: Criar ação de retorno (cupom, programa de pontos ou oferta exclusiva) para reconquistar estes clientes frequentes.`,
+      prioridade: 'low',
+      tipo: 'fidelizacao',
+    });
+  }
+
+  // Se nenhuma demanda específica mas há reviews
+  if (demandas.length === 0) {
+    demandas.push({
+      titulo: `[${short}] Revisão das avaliações publicadas — ${publishedReviews.length} resp.`,
+      descricao: `Média de ${avgRating.toFixed(1)} ⭐ em ${publishedReviews.length} avaliação${publishedReviews.length !== 1 ? 'ões' : ''} publicada${publishedReviews.length !== 1 ? 's' : ''}. Revisar com o cliente os principais temas desta rodada e oportunidades de melhoria.`,
+      prioridade: avgRating < 3.5 ? 'med' : 'low',
+      tipo: 'operacional',
+    });
+  }
+
+  return demandas;
+}
+
+// ─── Feature 4: encontra/cria lista "Avaliações iFood" no Espaços ─────────────
+// Usa o supabase client (com auth) para acessar tabelas com RLS.
+async function ensureAvaliacoesEspacos(tenantId, storeName) {
+  // 1. Encontrar loja pelo nome
+  const { data: lojas, error: eLojas } = await supabase
+    .from('lojas')
+    .select('id, client_id')
+    .eq('tenant_id', tenantId)
+    .ilike('nome', storeName)
+    .limit(1);
+  if (eLojas) throw new Error('Erro ao buscar loja: ' + eLojas.message);
+  if (!lojas?.length) throw new Error(`Loja não encontrada no Espaços para "${storeName}"`);
+  const { client_id: clientId } = lojas[0];
+  if (!clientId) throw new Error(`A loja "${storeName}" não tem cliente vinculado no Espaços`);
+
+  // 2. Encontrar ou criar pasta do cliente
+  const { data: folders } = await supabase
+    .from('espacos_folders')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .eq('customer_id', clientId)
+    .order('position', { ascending: true })
+    .limit(1);
+
+  let folderId;
+  if (folders?.length) {
+    folderId = folders[0].id;
+  } else {
+    const { data: newFolder, error: eFolder } = await supabase
+      .from('espacos_folders')
+      .insert({ tenant_id: tenantId, customer_id: clientId, name: storeName.split(' - ')[0], color: '#B70C00', position: 99 })
+      .select('id').single();
+    if (eFolder) throw new Error('Erro ao criar pasta no Espaços: ' + eFolder.message);
+    folderId = newFolder.id;
+  }
+
+  // 3. Encontrar ou criar lista "Avaliações iFood"
+  const LIST_NAME = 'Avaliações iFood';
+  const { data: lists } = await supabase
+    .from('espacos_lists')
+    .select('id')
+    .eq('folder_id', folderId)
+    .eq('name', LIST_NAME)
+    .limit(1);
+
+  let listId;
+  if (lists?.length) {
+    listId = lists[0].id;
+  } else {
+    const { data: newList, error: eList } = await supabase
+      .from('espacos_lists')
+      .insert({ tenant_id: tenantId, folder_id: folderId, name: LIST_NAME, color: '#B70C00', position: 99 })
+      .select('id').single();
+    if (eList) throw new Error('Erro ao criar lista no Espaços: ' + eList.message);
+    listId = newList.id;
+    // Semear colunas padrão
+    await supabase.from('espacos_columns').insert([
+      { tenant_id: tenantId, list_id: listId, name: 'A Fazer',    color: '#6B7280', position: 0, is_done: false },
+      { tenant_id: tenantId, list_id: listId, name: 'Fazendo',    color: '#3B82F6', position: 1, is_done: false },
+      { tenant_id: tenantId, list_id: listId, name: 'Aguardando', color: '#F59E0B', position: 2, is_done: false },
+      { tenant_id: tenantId, list_id: listId, name: 'Concluído',  color: '#10B981', position: 3, is_done: true  },
+    ]);
+  }
+
+  // 4. Pegar coluna "A Fazer" (primeira coluna não concluída)
+  const { data: columns } = await supabase
+    .from('espacos_columns')
+    .select('id')
+    .eq('list_id', listId)
+    .eq('is_done', false)
+    .order('position', { ascending: true })
+    .limit(1);
+
+  const toDoColumnId = columns?.[0]?.id;
+  if (!toDoColumnId) throw new Error('Coluna "A Fazer" não encontrada na lista');
+
+  return { listId, toDoColumnId };
+}
+
 // ─── Configuração de grupos por loja ─────────────────────────────────────────
 function ConfigGrupos({ storeGroups, groups, groupsLoading, groupsError, onSave }) {
   const [open, setOpen]     = useState(false);
@@ -373,6 +517,75 @@ function AlertBanner({ overdueReviews, todayReviews, onGoToStore, onDismiss }) {
   );
 }
 
+// ─── Modal de confirmação das demandas geradas ────────────────────────────────
+function DemandaModal({ storeName, demandas, onConfirm, onClose, loading }) {
+  const PRIO_COLOR = { high: '#ef4444', med: '#f59e0b', low: '#22c55e' };
+  const PRIO_LABEL = { high: 'Alta prioridade', med: 'Média prioridade', low: 'Baixa prioridade' };
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+    }}>
+      <div style={{
+        background: '#fff', borderRadius: 12, padding: 24, maxWidth: 580, width: '100%',
+        maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+      }}>
+        <h3 style={{ margin: '0 0 4px', fontSize: 16 }}>
+          🤖 Demandas geradas — {storeName.split(' - ')[0]}
+        </h3>
+        <p style={{ margin: '0 0 16px', fontSize: 12, color: 'var(--tx2)', lineHeight: 1.5 }}>
+          Essas tarefas serão criadas na lista <strong>Avaliações iFood</strong> do Espaços desta loja.
+          Revise e confirme para criar.
+        </p>
+
+        {demandas.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--tx2)', fontSize: 13 }}>
+            Nenhuma demanda identificada para esta loja.
+          </div>
+        ) : demandas.map((d, i) => (
+          <div key={i} style={{
+            border: '1px solid var(--line)', borderLeft: `4px solid ${PRIO_COLOR[d.prioridade] || '#888'}`,
+            borderRadius: 8, padding: 12, marginBottom: 10,
+          }}>
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6, color: 'var(--ink)' }}>{d.titulo}</div>
+            <pre style={{
+              fontSize: 12, color: 'var(--tx2)', whiteSpace: 'pre-wrap', lineHeight: 1.6,
+              margin: '0 0 8px', fontFamily: 'inherit',
+            }}>{d.descricao}</pre>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{
+                fontSize: 11, padding: '2px 8px', borderRadius: 10, fontWeight: 600,
+                background: d.tipo === 'operacional' ? '#fee2e2' : '#dcfce7',
+                color: d.tipo === 'operacional' ? '#991b1b' : '#15803d',
+                border: `1px solid ${d.tipo === 'operacional' ? '#fca5a5' : '#86efac'}`,
+              }}>
+                {d.tipo === 'operacional' ? '🔧 Operacional' : '🎯 Fidelização'}
+              </span>
+              <span style={{
+                fontSize: 11, padding: '2px 8px', borderRadius: 10, fontWeight: 600,
+                background: '#f3f4f6', color: '#374151', border: '1px solid #d1d5db',
+              }}>
+                {PRIO_LABEL[d.prioridade] || d.prioridade}
+              </span>
+            </div>
+          </div>
+        ))}
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
+          <button className="cv2-btn sec" onClick={onClose} disabled={loading}>Cancelar</button>
+          {demandas.length > 0 && (
+            <button className="cv2-btn" onClick={onConfirm} disabled={loading}>
+              {loading
+                ? 'Criando tarefas…'
+                : `Criar ${demandas.length} tarefa${demandas.length !== 1 ? 's' : ''} no Espaços`}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Card individual ──────────────────────────────────────────────────────────
 function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSendSingle, onSaveNote }) {
   const [draft, setDraft]           = useState(review.finalResponse || review.suggestedResponse || '');
@@ -400,7 +613,6 @@ function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSen
 
   return (
     <div className="cv2-card" style={{ marginBottom: 10 }}>
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
         <span className={`cv2-bdg ${st.cls}`} style={{ fontSize: 11 }}>{st.label}</span>
         <Stars rating={review.rating} />
@@ -543,13 +755,14 @@ function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSen
 }
 
 // ─── Accordion por loja ───────────────────────────────────────────────────────
-function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, storeGroups, onSendStore, onPublish, onSaveDraft, onSendSingle, onSaveNote, idPrefix = 'store' }) {
+function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, storeGroups, onSendStore, onPublish, onSaveDraft, onSendSingle, onSaveNote, onGerarDemandas, idPrefix = 'store' }) {
   const [open, setOpen] = useState(defaultOpen);
 
   const toSend         = reviews.filter(r => r.status === 'pending');
   const sentCount      = reviews.filter(r => r.status === 'sent_to_client').length;
   const approvedCount  = reviews.filter(r => r.status === 'approved' || r.status === 'modified').length;
-  const publishedCount = reviews.filter(r => r.status === 'published').length;
+  const publishedRevs  = reviews.filter(r => r.status === 'published');
+  const publishedCount = publishedRevs.length;
 
   const resolvedGroup = reviews.find(r => r.whatsappGroup)?.whatsappGroup || storeGroups[storeName] || null;
 
@@ -593,19 +806,32 @@ function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, st
             {reviews.length} avaliação{reviews.length !== 1 ? 'ões' : ''}
           </span>
         </div>
-        {toSend.length > 0 && (
-          <button
-            className="cv2-btn" style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}
-            disabled={isBusy || !resolvedGroup}
-            title={!resolvedGroup ? 'Configure o grupo WA desta loja em "Grupos WhatsApp por loja"' : ''}
-            onClick={e => { e.stopPropagation(); onSendStore(storeName, toSend); }}
-          >
-            {isBusy ? '…' : `Enviar ${toSend.length} avaliação${toSend.length > 1 ? 'ões' : ''} ao cliente`}
-          </button>
-        )}
-        {!resolvedGroup && toSend.length > 0 && (
-          <span style={{ fontSize: 11, color: 'var(--red)', whiteSpace: 'nowrap' }}>⚠ sem grupo WA</span>
-        )}
+
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          {toSend.length > 0 && (
+            <button
+              className="cv2-btn" style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}
+              disabled={isBusy || !resolvedGroup}
+              title={!resolvedGroup ? 'Configure o grupo WA desta loja em "Grupos WhatsApp por loja"' : ''}
+              onClick={e => { e.stopPropagation(); onSendStore(storeName, toSend); }}
+            >
+              {isBusy ? '…' : `Enviar ${toSend.length} avaliação${toSend.length > 1 ? 'ões' : ''} ao cliente`}
+            </button>
+          )}
+          {/* Botão de demandas — aparece quando há publicadas */}
+          {publishedCount > 0 && onGerarDemandas && (
+            <button
+              className="cv2-btn sec"
+              style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}
+              onClick={e => { e.stopPropagation(); onGerarDemandas(storeName, publishedRevs); }}
+            >
+              🤖 Gerar demandas
+            </button>
+          )}
+          {!resolvedGroup && toSend.length > 0 && (
+            <span style={{ fontSize: 11, color: 'var(--red)', whiteSpace: 'nowrap' }}>⚠ sem grupo WA</span>
+          )}
+        </div>
       </div>
 
       {open && (
@@ -629,7 +855,7 @@ function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, st
 }
 
 // ─── Tela principal ───────────────────────────────────────────────────────────
-export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }) {
+export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
   const [reviews, setReviews]       = useState([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState(null);
@@ -639,6 +865,10 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterStore, setFilterStore]   = useState('all');
   const [showArchived, setShowArchived] = useState(false);
+
+  // Feature 4: modal de demandas
+  const [demandaModal, setDemandaModal] = useState(null); // { storeName, demandas, publishedRevs }
+  const [demandaLoading, setDemandaLoading] = useState(false);
 
   const todayISO    = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const DISMISS_KEY = `cd_alert_dismissed_${todayISO}`;
@@ -680,15 +910,16 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
     return sg;
   }, [reviews]);
 
-  // ─── Alertas de prazo (apenas avaliações não-publicadas) ──────────────────
+  // ─── Separação ativas × arquivadas ────────────────────────────────────────
   const activeReviews   = reviews.filter(r => !isArchivedFn(r, todayISO));
   const archivedReviews = reviews.filter(r =>  isArchivedFn(r, todayISO));
 
+  // ─── Alertas de prazo ─────────────────────────────────────────────────────
   const { overdueReviews, todayReviews } = useMemo(() => {
-    const nonPublished = reviews.filter(r => r.status !== 'published');
+    const nonPub = reviews.filter(r => r.status !== 'published');
     return {
-      overdueReviews: nonPublished.filter(r => r.deadline && r.deadline < todayISO),
-      todayReviews:   nonPublished.filter(r => r.deadline === todayISO),
+      overdueReviews: nonPub.filter(r => r.deadline && r.deadline < todayISO),
+      todayReviews:   nonPub.filter(r => r.deadline === todayISO),
     };
   }, [reviews, todayISO]);
 
@@ -710,7 +941,42 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
     }, 120);
   }
 
-  // ─── Handlers ──────────────────────────────────────────────────────────────
+  // ─── Feature 4: gerar demandas ────────────────────────────────────────────
+  function handleGerarDemandas(storeName, publishedRevs) {
+    const demandas = analisarReviews(storeName, publishedRevs);
+    setDemandaModal({ storeName, demandas, publishedRevs });
+  }
+
+  async function handleConfirmarDemandas() {
+    if (!demandaModal) return;
+    if (!tenantDbId) {
+      setError('ID do tenant não disponível — não foi possível criar as tarefas.');
+      setDemandaModal(null);
+      return;
+    }
+    setDemandaLoading(true);
+    try {
+      const { listId, toDoColumnId } = await ensureAvaliacoesEspacos(tenantDbId, demandaModal.storeName);
+      const rows = demandaModal.demandas.map((d, i) => ({
+        tenant_id:   tenantDbId,
+        list_id:     listId,
+        column_id:   toDoColumnId,
+        title:       d.titulo,
+        description: d.descricao,
+        priority:    d.prioridade,
+        position:    i,
+      }));
+      const { error: eInsert } = await supabase.from('client_tasks').insert(rows);
+      if (eInsert) throw new Error(eInsert.message);
+      flash(`${demandaModal.demandas.length} tarefa${demandaModal.demandas.length !== 1 ? 's' : ''} criada${demandaModal.demandas.length !== 1 ? 's' : ''} no Espaços ✓`);
+      setDemandaModal(null);
+    } catch (e) {
+      setError('Erro ao criar tarefas no Espaços: ' + e.message);
+    }
+    setDemandaLoading(false);
+  }
+
+  // ─── Handlers existentes ──────────────────────────────────────────────────
   async function handleSaveGroups(mapping) {
     lsSave(mapping);
     const entries = Object.entries(mapping).filter(([, v]) => v);
@@ -830,7 +1096,18 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
         {notice && <span style={{ color: 'var(--green)' }}> · {notice}</span>}
       </div>
 
-      {/* ─── Banner de alertas de prazo ─── */}
+      {/* Modal de demandas */}
+      {demandaModal && (
+        <DemandaModal
+          storeName={demandaModal.storeName}
+          demandas={demandaModal.demandas}
+          loading={demandaLoading}
+          onConfirm={handleConfirmarDemandas}
+          onClose={() => setDemandaModal(null)}
+        />
+      )}
+
+      {/* Banner de alertas */}
       {!alertDismissed && (
         <AlertBanner
           overdueReviews={overdueReviews}
@@ -931,6 +1208,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
           onSaveDraft={handleSaveDraft}
           onSendSingle={handleSendSingle}
           onSaveNote={handleSaveNote}
+          onGerarDemandas={handleGerarDemandas}
         />
       ))}
 
@@ -964,6 +1242,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId: _t, userId: _u }
               onSaveDraft={handleSaveDraft}
               onSendSingle={handleSendSingle}
               onSaveNote={handleSaveNote}
+              onGerarDemandas={handleGerarDemandas}
               idPrefix="archived"
             />
           ))}
