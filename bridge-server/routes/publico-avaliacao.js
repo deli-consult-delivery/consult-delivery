@@ -15,6 +15,15 @@ const { z }   = require('zod');
 const { getBrandByTenant, safeLogoUrl, getAvaliacaoConfig } = require('../lib/branding');
 const { sendEvolutionText, renderTemplate }                = require('../lib/evolution-send');
 
+// Formata "5594984367456" → "+55 (94) 98436-7456". Se não bater no padrão BR, retorna cru.
+function formatTelefoneBR(raw) {
+  const d = String(raw).replace(/\D/g, '');
+  const semDDI = d.startsWith('55') && d.length >= 12 ? d.slice(2) : d;
+  if (semDDI.length === 11) return `+55 (${semDDI.slice(0, 2)}) ${semDDI.slice(2, 7)}-${semDDI.slice(7)}`;
+  if (semDDI.length === 10) return `+55 (${semDDI.slice(0, 2)}) ${semDDI.slice(2, 6)}-${semDDI.slice(6)}`;
+  return raw;
+}
+
 // ── Rate limiter in-memory: 60 req/min por IP ────────────────────────────────
 const rateLimitAvaliacao = new Map(); // IP → { count, resetAt }
 const RATE_LIMIT         = 60;
@@ -215,9 +224,13 @@ module.exports = function buildPublicoAvaliacaoRouter({ sbFetch }) {
             const APP_BASE = process.env.APP_BASE_URL || 'https://app.consultdelivery.com.br';
             const linkPlataforma = `${APP_BASE}/#csat`;
 
-            const contatoCliente = avaliacao.contact_identifier
-              ? avaliacao.contact_identifier.replace(/@s\.whatsapp\.net$/i, '')
-              : 'não informado';
+            // contact_phone (Datacrazy) é o telefone real; contact_identifier pode ser
+            // um ID interno do CRM (não-telefone) quando a origem é crm_externo/Datacrazy.
+            const contatoCliente = avaliacao.contact_phone
+              ? formatTelefoneBR(avaliacao.contact_phone)
+              : avaliacao.contact_identifier
+                ? avaliacao.contact_identifier.replace(/@s\.whatsapp\.net$/i, '')
+                : 'não informado';
 
             // Testado ao vivo (2026-07-01): o CRM Datacrazy (crm2.datacrazy.io/multiservice)
             // não suporta deep-link para uma conversa específica via URL (query params

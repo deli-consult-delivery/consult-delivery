@@ -14,6 +14,32 @@ const LIMIT_COMENTARIOS = 20;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
+function formatTelefoneBR(raw) {
+  const d = String(raw).replace(/\D/g, '');
+  const semDDI = d.startsWith('55') && d.length >= 12 ? d.slice(2) : d;
+  if (semDDI.length === 11) return `(${semDDI.slice(0, 2)}) ${semDDI.slice(2, 7)}-${semDDI.slice(7)}`;
+  if (semDDI.length === 10) return `(${semDDI.slice(0, 2)}) ${semDDI.slice(2, 6)}-${semDDI.slice(6)}`;
+  return raw;
+}
+
+// contact_identifier pode ser um ID interno do CRM (Datacrazy) — não usar como telefone.
+function BadgeTelefone({ item }) {
+  if (!item.contact_phone) return null;
+  const digitos = String(item.contact_phone).replace(/\D/g, '');
+  return (
+    <a
+      href={`https://wa.me/${digitos}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="cv2-bdg mut"
+      style={{ fontSize: 11, textDecoration: 'none' }}
+      title="Abrir conversa no WhatsApp"
+    >
+      📞 {formatTelefoneBR(item.contact_phone)}
+    </a>
+  );
+}
+
 function calcNPS(rows) {
   const respondidas = rows.filter(r => r.nota != null);
   if (!respondidas.length) return { nps: null, promotores: 0, passivos: 0, detratores: 0, totalRespondidas: 0, pctPromotor: null, pctDetrator: null };
@@ -86,6 +112,7 @@ function CardDetrator({ item, onSalvar, salvando }) {
       <div className="flex items-center gap-2 flex-wrap mb-2">
         <span className="cv2-bdg err" style={{ fontSize: 12 }}>★ {item.nota}/10</span>
         {item.contact_nome && <span className="cv2-bdg mut" style={{ fontSize: 11 }}>{item.contact_nome}</span>}
+        <BadgeTelefone item={item} />
         <span style={{ fontSize: 11, color: 'var(--tx2)' }}>
           {new Date(item.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
         </span>
@@ -283,6 +310,7 @@ function NpsResultadosContent({ tenantDbId, userId }) {
                   <div className="flex items-center gap-2 flex-wrap mb-1">
                     <span className={`cv2-bdg ${c.nota >= 9 ? 'ok' : c.nota >= 7 ? 'warn' : 'err'}`} style={{ fontSize: 11 }}>★ {c.nota}/10</span>
                     {c.contact_nome && <span className="cv2-bdg mut" style={{ fontSize: 11 }}>{c.contact_nome}</span>}
+                    <BadgeTelefone item={c} />
                     {c.responded_at && (
                       <span style={{ fontSize: 11, color: 'var(--tx2)' }}>
                         {new Date(c.responded_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
