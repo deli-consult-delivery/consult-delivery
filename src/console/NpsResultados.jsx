@@ -113,6 +113,7 @@ function CardDetrator({ item, onSalvar, salvando }) {
         <span className="cv2-bdg err" style={{ fontSize: 12 }}>★ {item.nota}/10</span>
         {item.contact_nome && <span className="cv2-bdg mut" style={{ fontSize: 11 }}>{item.contact_nome}</span>}
         <BadgeTelefone item={item} />
+        {item.ticket_code && <span className="cv2-bdg mut" style={{ fontSize: 11 }} title="Ticket do atendimento no Datacrazy">🎫 #{item.ticket_code}</span>}
         <span style={{ fontSize: 11, color: 'var(--tx2)' }}>
           {new Date(item.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
         </span>
@@ -311,6 +312,7 @@ function NpsResultadosContent({ tenantDbId, userId }) {
                     <span className={`cv2-bdg ${c.nota >= 9 ? 'ok' : c.nota >= 7 ? 'warn' : 'err'}`} style={{ fontSize: 11 }}>★ {c.nota}/10</span>
                     {c.contact_nome && <span className="cv2-bdg mut" style={{ fontSize: 11 }}>{c.contact_nome}</span>}
                     <BadgeTelefone item={c} />
+                    {c.ticket_code && <span className="cv2-bdg mut" style={{ fontSize: 11 }} title="Ticket do atendimento no Datacrazy">🎫 #{c.ticket_code}</span>}
                     {c.responded_at && (
                       <span style={{ fontSize: 11, color: 'var(--tx2)' }}>
                         {new Date(c.responded_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}

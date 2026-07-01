@@ -219,6 +219,9 @@ function ItemComentario({ item }) {
           <span style={{ fontSize: 11, color: 'var(--ink)', fontWeight: 600, wordBreak: 'break-word' }}>{nomeExibicao(item)}</span>
         )}
         <BadgeTelefone item={item} />
+        {item.ticket_code && (
+          <span className="cv2-bdg mut" style={{ fontSize: 11 }} title="Ticket do atendimento no Datacrazy">🎫 #{item.ticket_code}</span>
+        )}
         {item.atendente_nome && (
           <span className="cv2-bdg mut" style={{ fontSize: 11 }}>{item.atendente_nome}</span>
         )}
@@ -268,6 +271,7 @@ function CardDetrator({ item, onSalvar, salvando }) {
           <span style={{ fontSize: 11, color: 'var(--ink)', fontWeight: 600 }}>{nomeExibicao(item)}</span>
         )}
         <BadgeTelefone item={item} />
+        {item.ticket_code && <span className="cv2-bdg mut" style={{ fontSize: 11 }} title="Ticket do atendimento no Datacrazy">🎫 #{item.ticket_code}</span>}
         {item.atendente_nome && <span className="cv2-bdg mut" style={{ fontSize: 11 }}>{item.atendente_nome}</span>}
         <span style={{ fontSize: 11, color: 'var(--tx2)' }}>
           {new Date(item.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })}

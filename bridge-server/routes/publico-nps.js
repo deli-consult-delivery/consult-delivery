@@ -197,7 +197,7 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
                 `avaliacao_config?tenant_id=eq.${encodeURIComponent(tenantId)}&select=detrator_notificar,detrator_wpp_jid,detrator_msg_template,nps_threshold_detrator&limit=1`
               ),
               sbFetch(
-                `nps_avaliacoes?id=eq.${encodeURIComponent(npsId)}&select=atendente_nome,duracao_minutos,contact_nome&limit=1`
+                `nps_avaliacoes?id=eq.${encodeURIComponent(npsId)}&select=atendente_nome,duracao_minutos,contact_nome,ticket_code&limit=1`
               ),
             ]);
 
@@ -230,21 +230,26 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
                 ? npsContactId.replace(/@s\.whatsapp\.net$/i, '')
                 : 'não informado';
 
+            // Nº do ticket do atendimento no Datacrazy (busca por código no painel).
+            const ticketTexto = av.ticket_code ? `#${av.ticket_code}` : 'não informado';
+
             // Testado ao vivo (2026-07-01): o CRM Datacrazy (crm2.datacrazy.io/multiservice)
             // não suporta deep-link para uma conversa específica via URL (query params
             // tipo conversationId/search não filtram a lista). messaging.g1.datacrazy.io
             // é host de API (retorna JSON 404 em rota de navegador), nunca deveria estar
             // aqui. Link aponta para a lista de finalizadas — o atendente busca pelo nome.
+            const buscaTicket = av.ticket_code ? ` (busque pelo ticket ${ticketTexto})` : '';
             const datacrazyLine = npsExternalRef
-              ? `\n🔗 Ver no Datacrazy (Chat ao vivo → Finalizadas): https://crm2.datacrazy.io/multiservice?status=finished`
+              ? `\n🔗 Ver no Datacrazy (Chat ao vivo → Finalizadas): https://crm2.datacrazy.io/multiservice?status=finished${buscaTicket}`
               : '';
 
             const template = cfg.detrator_msg_template ||
-              '⚠️ *Detrator NPS detectado!*\n\nCliente: {contact_nome}\nContato: {contato_cliente}\nAtendente: {atendente_nome}\nDuração: {duracao}\nNota NPS: *{nota}*/10\nData/Hora: {data_hora}\nComentário: {comentario}\n\n🔗 Ver na plataforma: {link_plataforma}\n\nAbra o caso e trate em até 48h.';
+              '⚠️ *Detrator NPS detectado!*\n\nCliente: {contact_nome}\nAtendimento (ticket): {ticket}\nContato: {contato_cliente}\nAtendente: {atendente_nome}\nDuração: {duracao}\nNota NPS: *{nota}*/10\nData/Hora: {data_hora}\nComentário: {comentario}\n\n🔗 Ver na plataforma: {link_plataforma}\n\nAbra o caso e trate em até 48h.';
 
             const texto = renderTemplate(template, {
               contact_nome:    av.contact_nome        || 'desconhecido',
               contato_cliente: contatoCliente,
+              ticket:          ticketTexto,
               atendente_nome:  av.atendente_nome      || 'não identificado',
               duracao:         duracaoTexto,
               nota:            String(notaFinal),
@@ -279,7 +284,7 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
                   recipient_user_id: null,
                   kind:              'system',
                   title:             `Detrator NPS — nota ${notaFinal}`,
-                  body:              `${av.contact_nome || 'Cliente'} deu nota ${notaFinal}. Atendente: ${av.atendente_nome || 'não identificado'}. Trate em até 48h.`,
+                  body:              `${av.contact_nome || 'Cliente'} deu nota ${notaFinal}. Atendente: ${av.atendente_nome || 'não identificado'}. Ticket ${ticketTexto}. Trate em até 48h.`,
                   link:              '/controle-atendimentos',
                 },
                 prefer: 'return=minimal',

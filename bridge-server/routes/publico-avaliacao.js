@@ -70,7 +70,7 @@ module.exports = function buildPublicoAvaliacaoRouter({ sbFetch }) {
   async function getAvaliacaoByToken(token) {
     if (!UUID_RE.test(token)) return null;
     const rows = await sbFetch(
-      `atendimento_avaliacoes?public_token=eq.${encodeURIComponent(token)}&select=id,tenant_id,status,nota,atendente_nome,nome_cliente,public_token_expires_at,contact_identifier,external_ref&limit=1`
+      `atendimento_avaliacoes?public_token=eq.${encodeURIComponent(token)}&select=id,tenant_id,status,nota,atendente_nome,nome_cliente,public_token_expires_at,contact_identifier,contact_phone,external_ref,ticket_code&limit=1`
     );
     return rows?.[0] ?? null;
   }
@@ -232,21 +232,26 @@ module.exports = function buildPublicoAvaliacaoRouter({ sbFetch }) {
                 ? avaliacao.contact_identifier.replace(/@s\.whatsapp\.net$/i, '')
                 : 'não informado';
 
+            // Nº do ticket do atendimento no Datacrazy (busca por código no painel).
+            const ticketTexto = avaliacao.ticket_code ? `#${avaliacao.ticket_code}` : 'não informado';
+
             // Testado ao vivo (2026-07-01): o CRM Datacrazy (crm2.datacrazy.io/multiservice)
             // não suporta deep-link para uma conversa específica via URL (query params
             // tipo conversationId/search não filtram a lista). messaging.g1.datacrazy.io
             // é host de API (retorna JSON 404 em rota de navegador), nunca deveria estar
             // aqui. Link aponta para a lista de finalizadas — o atendente busca pelo nome.
+            const buscaTicket = avaliacao.ticket_code ? ` (busque pelo ticket ${ticketTexto})` : '';
             const datacrazyLine = avaliacao.external_ref
-              ? `\n🔗 Ver no Datacrazy (Chat ao vivo → Finalizadas): https://crm2.datacrazy.io/multiservice?status=finished`
+              ? `\n🔗 Ver no Datacrazy (Chat ao vivo → Finalizadas): https://crm2.datacrazy.io/multiservice?status=finished${buscaTicket}`
               : '';
 
             const template = cfg.detrator_msg_template ||
-              '⚠️ *Detrator CSAT detectado!*\n\nCliente: {contact_nome}\nContato: {contato_cliente}\nAtendente: {atendente_nome}\nNota CSAT: *{nota}*/5\nData/Hora: {data_hora}\nComentário: {comentario}\n\n🔗 Ver na plataforma: {link_plataforma}\n\nAbra o caso e trate em até 48h.';
+              '⚠️ *Detrator CSAT detectado!*\n\nCliente: {contact_nome}\nAtendimento (ticket): {ticket}\nContato: {contato_cliente}\nAtendente: {atendente_nome}\nNota CSAT: *{nota}*/5\nData/Hora: {data_hora}\nComentário: {comentario}\n\n🔗 Ver na plataforma: {link_plataforma}\n\nAbra o caso e trate em até 48h.';
 
             const texto = renderTemplate(template, {
               contact_nome:    avaliacao.nome_cliente        || 'desconhecido',
               contato_cliente: contatoCliente,
+              ticket:          ticketTexto,
               atendente_nome:  avaliacao.atendente_nome      || 'não identificado',
               duracao:         'não disponível',
               nota:            String(notaFinal),
@@ -279,7 +284,7 @@ module.exports = function buildPublicoAvaliacaoRouter({ sbFetch }) {
                   recipient_user_id: null,
                   kind:              'system',
                   title:             `Detrator CSAT — nota ${notaFinal}/5`,
-                  body:              `${avaliacao.nome_cliente || 'Cliente'} deu nota ${notaFinal}. Atendente: ${avaliacao.atendente_nome || 'não identificado'}. Trate em até 48h.`,
+                  body:              `${avaliacao.nome_cliente || 'Cliente'} deu nota ${notaFinal}. Atendente: ${avaliacao.atendente_nome || 'não identificado'}. Ticket ${ticketTexto}. Trate em até 48h.`,
                   link:              '/controle-atendimentos',
                 },
                 prefer: 'return=minimal',
