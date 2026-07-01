@@ -218,9 +218,13 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
               ? npsContactId.replace(/@s\.whatsapp\.net$/i, '')
               : 'não informado';
 
-            const datacrazyBase = process.env.DATACRAZY_MESSAGING_URL || 'https://messaging.g1.datacrazy.io';
+            // Testado ao vivo (2026-07-01): o CRM Datacrazy (crm2.datacrazy.io/multiservice)
+            // não suporta deep-link para uma conversa específica via URL (query params
+            // tipo conversationId/search não filtram a lista). messaging.g1.datacrazy.io
+            // é host de API (retorna JSON 404 em rota de navegador), nunca deveria estar
+            // aqui. Link aponta para a lista de finalizadas — o atendente busca pelo nome.
             const datacrazyLine = npsExternalRef
-              ? `\n🔗 Conversa Datacrazy: ${datacrazyBase}/conversations/${npsExternalRef}`
+              ? `\n🔗 Ver no Datacrazy (Chat ao vivo → Finalizadas): https://crm2.datacrazy.io/multiservice?status=finished`
               : '';
 
             const template = cfg.detrator_msg_template ||
