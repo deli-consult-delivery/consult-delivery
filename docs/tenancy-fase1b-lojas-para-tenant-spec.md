@@ -1,7 +1,14 @@
 # SPEC — Tenancy Fase 1b: lojas com consultoria ativa → tenants `store`
 
-Status: **AGUARDANDO APROVAÇÃO DO WANDSON** (Passo 2). Nada aplicado.
+Status: **✅ APLICADO** (aprovado Wandson 2026-07-01; recomendações A1/B/C/D). Migration `20260701_010_tenancy_fase1b_lojas_store.sql`.
 Autor: sessão consult-delivery-22 | Data: 2026-07-01 | Projeto Supabase: `czyanilrverorwenikqw`
+
+## RESULTADO (output bruto pós-aplicação)
+- `stores_sob_agencia=18` (16 novos + sandbox + karina) · `ativas_vinculadas=16` · `ativas_sem_store=0`
+- `naoativas_afetadas=0` · `lojas_tenant_id_mudou=0` (1177 intocadas)
+- Dados migrados p/ stores: radar_series 150, radar_metricas 35, avaliacoes_loja_config 9, radar_fontes 7, analises 2, loja_whatsapp_vinculo 2, whatsapp_groups 1 = **206** · 0 remanescente na agência
+- Membros: 2 (agência, via A1) por store · Slugs: `cafe-container-8434cea4`, `consultoria-piazza-f0fa34d0`, … (emoji/acento removidos)
+- **Teste isolamento:** agência vê 150 radar; membro só-Karina vê **0** das 16 lojas, `is_member_of(Café Container)=false` ✔
 
 ---
 
