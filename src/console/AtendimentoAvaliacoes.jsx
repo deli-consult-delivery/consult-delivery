@@ -178,14 +178,14 @@ function ItemComentario({ item }) {
   const notaCls = item.nota >= 4 ? 'ok' : item.nota <= 2 ? 'err' : 'warn';
 
   return (
-    <div className="cv2-card" style={{ marginBottom: 8, padding: '10px 14px' }}>
-      <div className="flex items-center gap-2 flex-wrap mb-1">
+    <div className="cv2-card" style={{ marginBottom: 8, padding: '10px 14px', minWidth: 0, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
         {item.nota != null && (
           <span className={`cv2-bdg ${notaCls}`} style={{ fontSize: 11 }}>★ {item.nota}</span>
         )}
         <BadgeOrigem origem={item.origem} />
         {nomeExibicao(item) && (
-          <span style={{ fontSize: 11, color: 'var(--ink)', fontWeight: 600 }}>{nomeExibicao(item)}</span>
+          <span style={{ fontSize: 11, color: 'var(--ink)', fontWeight: 600, wordBreak: 'break-word' }}>{nomeExibicao(item)}</span>
         )}
         {item.atendente_nome && (
           <span className="cv2-bdg mut" style={{ fontSize: 11 }}>{item.atendente_nome}</span>
@@ -196,7 +196,7 @@ function ItemComentario({ item }) {
           </span>
         )}
         {url && (
-          <div className="flex gap-1 ml-auto">
+          <div style={{ display: 'flex', gap: 4, marginLeft: 'auto', flexWrap: 'wrap' }}>
             <button
               className="cv2-btn sec"
               style={{ fontSize: 11, padding: '3px 8px' }}
@@ -216,7 +216,7 @@ function ItemComentario({ item }) {
           </div>
         )}
       </div>
-      <p style={{ margin: 0, fontSize: 13, color: 'var(--ink)', lineHeight: 1.55 }}>"{item.comentario}"</p>
+      <p style={{ margin: 0, fontSize: 13, color: 'var(--ink)', lineHeight: 1.55, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>"{item.comentario}"</p>
       {qrUrl && <ModalQR url={qrUrl} onClose={() => setQrUrl(null)} />}
     </div>
   );

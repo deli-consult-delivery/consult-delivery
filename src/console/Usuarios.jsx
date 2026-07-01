@@ -508,7 +508,8 @@ export default function Usuarios({ tenantDbId, userId }) {
             )}
           </div>
         ) : (
-          <table className="crm-table" style={{ width: '100%' }}>
+          <div style={{ overflowX: 'auto' }}>
+          <table className="crm-table" style={{ width: '100%', minWidth: 640 }}>
             <thead>
               <tr>
                 <th>Usuário</th>
@@ -602,6 +603,7 @@ export default function Usuarios({ tenantDbId, userId }) {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
