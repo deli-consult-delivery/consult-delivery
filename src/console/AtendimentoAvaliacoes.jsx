@@ -76,6 +76,38 @@ function nomeExibicao(item) {
   return item.nome_cliente || item.contact_identifier || null;
 }
 
+// Telefone p/ contato via WhatsApp. contact_identifier pode ser um ID interno
+// do CRM (Datacrazy) quando não há contact_phone — não usar como telefone.
+function telefoneExibicao(item) {
+  return item.contact_phone || null;
+}
+
+function formatTelefoneBR(raw) {
+  const d = String(raw).replace(/\D/g, '');
+  const semDDI = d.startsWith('55') && d.length >= 12 ? d.slice(2) : d;
+  if (semDDI.length === 11) return `(${semDDI.slice(0, 2)}) ${semDDI.slice(2, 7)}-${semDDI.slice(7)}`;
+  if (semDDI.length === 10) return `(${semDDI.slice(0, 2)}) ${semDDI.slice(2, 6)}-${semDDI.slice(6)}`;
+  return raw;
+}
+
+function BadgeTelefone({ item }) {
+  const tel = telefoneExibicao(item);
+  if (!tel) return null;
+  const digitos = String(tel).replace(/\D/g, '');
+  return (
+    <a
+      href={`https://wa.me/${digitos}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="cv2-bdg mut"
+      style={{ fontSize: 11, textDecoration: 'none' }}
+      title="Abrir conversa no WhatsApp"
+    >
+      📞 {formatTelefoneBR(tel)}
+    </a>
+  );
+}
+
 // Badge de origem (crm_externo = avaliação criada via webhook do CRM do cliente)
 function BadgeOrigem({ origem }) {
   if (origem !== 'crm_externo') return null;
@@ -186,6 +218,7 @@ function ItemComentario({ item }) {
         {nomeExibicao(item) && (
           <span style={{ fontSize: 11, color: 'var(--ink)', fontWeight: 600, wordBreak: 'break-word' }}>{nomeExibicao(item)}</span>
         )}
+        <BadgeTelefone item={item} />
         {item.atendente_nome && (
           <span className="cv2-bdg mut" style={{ fontSize: 11 }}>{item.atendente_nome}</span>
         )}
@@ -234,6 +267,7 @@ function CardDetrator({ item, onSalvar, salvando }) {
         {nomeExibicao(item) && (
           <span style={{ fontSize: 11, color: 'var(--ink)', fontWeight: 600 }}>{nomeExibicao(item)}</span>
         )}
+        <BadgeTelefone item={item} />
         {item.atendente_nome && <span className="cv2-bdg mut" style={{ fontSize: 11 }}>{item.atendente_nome}</span>}
         <span style={{ fontSize: 11, color: 'var(--tx2)' }}>
           {new Date(item.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })}

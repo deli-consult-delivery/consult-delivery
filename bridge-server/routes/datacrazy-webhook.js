@@ -124,7 +124,7 @@ module.exports = function datacrazyWebhookRouter({ sbFetch }) {
         // 3d. Captura atendente + início do atendimento ANTES do envio (o nosso
         // reopen/send pode iniciar um novo ticket e poluir a detecção).
         const finishedAt = conv.updatedAt; // momento da finalização
-        const { atendenteNome, inicioAt } = await getDatacrazyAtendenteEInicio(
+        const { atendenteNome, inicioAt, telefoneCliente } = await getDatacrazyAtendenteEInicio(
           config.datacrazy_api_key, conversation_id
         );
         const duracaoMin = inicioAt
@@ -149,6 +149,7 @@ module.exports = function datacrazyWebhookRouter({ sbFetch }) {
             atendimento_inicio_at: inicioAt,
             atendimento_fim_at:    finishedAt,
             duracao_minutos:       duracaoMin,
+            contact_phone:         telefoneCliente,
           },
         }).catch(e => console.error('[datacrazy-webhook] Erro ao atualizar registro:', e.message));
 

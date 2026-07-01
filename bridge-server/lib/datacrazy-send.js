@@ -112,30 +112,36 @@ async function getDatacrazyConversation(apiKey, conversationId, lookbackMinutes 
  * da mais recente para a mais antiga, então a primeira `firstTicketMessage=true`
  * encontrada é o início do atendimento mais recente.
  *
- * @returns {Promise<{atendenteNome: string|null, inicioAt: string|null}>}
+ * O telefone real do cliente (para contato via WhatsApp) vem no campo
+ * `contact.phoneNumber` das mensagens RECEBIDAS (do cliente) — confirmado ao
+ * vivo. `contact_identifier`/`conv.id` é um ID interno do Datacrazy, não um
+ * telefone, e não serve para contato.
+ *
+ * @returns {Promise<{atendenteNome: string|null, inicioAt: string|null, telefoneCliente: string|null}>}
  */
 async function getDatacrazyAtendenteEInicio(apiKey, conversationId) {
-  if (!apiKey || !conversationId) return { atendenteNome: null, inicioAt: null };
+  if (!apiKey || !conversationId) return { atendenteNome: null, inicioAt: null, telefoneCliente: null };
   try {
     const resp = await fetch(
       `${DATACRAZY_API_BASE}/api/v1/conversations/${conversationId}/messages`,
       { headers: { 'Authorization': `Bearer ${apiKey}` }, signal: AbortSignal.timeout(15000) }
     );
-    if (!resp.ok) return { atendenteNome: null, inicioAt: null };
+    if (!resp.ok) return { atendenteNome: null, inicioAt: null, telefoneCliente: null };
     const data = await resp.json().catch(() => null);
     const messages = (data && data.messages) || [];
 
     const inicioMsg = messages.find((m) => m && m.firstTicketMessage === true);
-    if (!inicioMsg) return { atendenteNome: null, inicioAt: null };
-
-    const atendenteNome = inicioMsg.attendant && inicioMsg.attendant.name
+    const atendenteNome = inicioMsg && inicioMsg.attendant && inicioMsg.attendant.name
       ? String(inicioMsg.attendant.name).trim()
       : null;
 
-    return { atendenteNome, inicioAt: inicioMsg.createdAt || null };
+    const msgComContato = messages.find((m) => m && m.contact && m.contact.phoneNumber);
+    const telefoneCliente = msgComContato ? String(msgComContato.contact.phoneNumber).trim() : null;
+
+    return { atendenteNome, inicioAt: (inicioMsg && inicioMsg.createdAt) || null, telefoneCliente };
   } catch (err) {
     console.error(`[datacrazy-send] getAtendente ${conversationId} erro:`, err.message);
-    return { atendenteNome: null, inicioAt: null };
+    return { atendenteNome: null, inicioAt: null, telefoneCliente: null };
   }
 }
 

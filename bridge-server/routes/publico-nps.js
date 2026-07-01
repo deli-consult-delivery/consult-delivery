@@ -17,6 +17,15 @@ const { z }   = require('zod');
 const { getBrandByTenant, getAvaliacaoConfig } = require('../lib/branding');
 const { sendEvolutionText, renderTemplate }    = require('../lib/evolution-send');
 
+// Formata "5594984367456" → "+55 (94) 98436-7456". Se não bater no padrão BR, retorna cru.
+function formatTelefoneBR(raw) {
+  const d = String(raw).replace(/\D/g, '');
+  const semDDI = d.startsWith('55') && d.length >= 12 ? d.slice(2) : d;
+  if (semDDI.length === 11) return `+55 (${semDDI.slice(0, 2)}) ${semDDI.slice(2, 7)}-${semDDI.slice(7)}`;
+  if (semDDI.length === 10) return `+55 (${semDDI.slice(0, 2)}) ${semDDI.slice(2, 6)}-${semDDI.slice(6)}`;
+  return raw;
+}
+
 // ── Rate limiter in-memory ────────────────────────────────────────────────────
 const rateLimitNps = new Map();
 const RATE_LIMIT   = 60;
@@ -58,7 +67,7 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
 
   async function getNpsByToken(token) {
     const rows = await sbFetch(
-      `nps_avaliacoes?public_token=eq.${encodeURIComponent(token)}&select=id,tenant_id,status,nota,public_token_expires_at,contact_identifier,external_ref&limit=1`
+      `nps_avaliacoes?public_token=eq.${encodeURIComponent(token)}&select=id,tenant_id,status,nota,public_token_expires_at,contact_identifier,contact_phone,external_ref&limit=1`
     );
     return rows?.[0] ?? null;
   }
@@ -179,6 +188,7 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
         const respondedAtTs   = patchBody.responded_at;
         const npsExternalRef  = nps.external_ref  ?? null;
         const npsContactId    = nps.contact_identifier ?? null;
+        const npsContactPhone = nps.contact_phone ?? null;
 
         setImmediate(async () => {
           try {
@@ -214,9 +224,11 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
             const APP_BASE = process.env.APP_BASE_URL || 'https://app.consultdelivery.com.br';
             const linkPlataforma = `${APP_BASE}/#nps`;
 
-            const contatoCliente = npsContactId
-              ? npsContactId.replace(/@s\.whatsapp\.net$/i, '')
-              : 'não informado';
+            const contatoCliente = npsContactPhone
+              ? formatTelefoneBR(npsContactPhone)
+              : npsContactId
+                ? npsContactId.replace(/@s\.whatsapp\.net$/i, '')
+                : 'não informado';
 
             // Testado ao vivo (2026-07-01): o CRM Datacrazy (crm2.datacrazy.io/multiservice)
             // não suporta deep-link para uma conversa específica via URL (query params
