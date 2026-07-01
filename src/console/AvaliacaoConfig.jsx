@@ -180,7 +180,7 @@ function SecaoIdentidade({ tenantDbId, brandAtual }) {
 
 function SecaoMensagens({ tenantDbId, tipo, config, onSaved }) {
   const prefix = tipo === 'csat' ? 'csat' : 'nps';
-  const label  = tipo === 'csat' ? 'CSAT — Atendimento' : 'NPS — Marca';
+  const label  = tipo === 'csat' ? 'Satisfação do Atendimento (CSAT)' : 'Lealdade da Marca (NPS)';
 
   const defaults = tipo === 'csat'
     ? { titulo: 'Como foi seu atendimento?', subtitulo: 'Sua opinião nos ajuda a melhorar.', agradecimento: 'Obrigado pelo seu feedback!' }
@@ -317,7 +317,7 @@ export default function AvaliacaoConfig({ tenantDbId }) {
 
   return (
     <div>
-      <h1>Configurar Avaliação</h1>
+      <h1>Configurações de Avaliação</h1>
       <div className="cv2-rule" />
       <div className="cv2-sub">
         Personalize a identidade visual e as mensagens das pesquisas CSAT e NPS enviadas aos clientes.

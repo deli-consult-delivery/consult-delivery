@@ -458,6 +458,12 @@ export const radarProcessarFontes = schedules.task({
       } catch (err) {
         erros++;
         await sb.from("radar_fontes").update({ status: "erro", erro_detalhe: (err as Error).message.slice(0, 500) }).eq("id", f.id);
+        await notify({
+          tenantId: f.tenant_id, kind: "agent_failed", agent: "radar",
+          title: `Falha ao processar fonte: ${f.arquivo_nome ?? f.arquivo_path ?? f.id}`,
+          body: (err as Error).message.slice(0, 500),
+          metadata: { fonte_id: f.id },
+        });
         logger.error("fonte com erro", { id: f.id, erro: (err as Error).message });
       }
     }

@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../lib/supabase.js';
 import Icon from '../components/Icon.jsx';
-import { GRUPOS } from './moduleCatalog.js';
 
 const BRIDGE = import.meta.env.VITE_BRIDGE_URL || 'https://bridge.consultdelivery.com.br';
 
@@ -39,16 +38,34 @@ const ROLE_DESC = {
 
 const INVITABLE_ROLES = ['admin', 'consultor', 'operador', 'dev'];
 
-// Fonte única com o menu real (ConsoleV2) e com tenant_modules: id = module_key.
-// Antes disto, ALL_SCREENS era uma lista solta com ids que não existiam mais
-// no app (ex: 'dashboard', 'settings') — por isso a tela listava telas que não
-// existem/não estão no plano do tenant.
-const ALL_SCREENS = GRUPOS.flatMap(g => g.items.map(it => ({
-  id: it.id,
-  label: it.label,
-  group: g.label,
-  defaultRoles: it.adminOnly ? ['admin', 'owner', 'dev'] : undefined,
-})));
+// moduleKey = id equivalente em tenant_modules (ver src/console/moduleCatalog.js).
+// Usado para esconder telas não habilitadas para o tenant (Console → Clientes → "Telas").
+const ALL_SCREENS = [
+  { id: 'dashboard',        label: 'Dashboard',       group: 'Início',      moduleKey: 'visao' },
+  { id: 'deli',             label: 'DELI',            group: 'Início',      defaultRoles: ['admin','deli_owner'], moduleKey: 'deli' },
+  { id: 'chat',             label: 'Chat Ao Vivo',    group: 'Operação',    defaultRoles: ['admin','atendimento','marketing'], moduleKey: 'chat' },
+  { id: 'lojas',            label: 'Lojas',           group: 'Operação',    moduleKey: 'lojas' },
+  { id: 'crm',              label: 'Clientes',        group: 'Operação',    defaultRoles: ['admin','marketing'], moduleKey: 'crm' },
+  { id: 'contratos',        label: 'Contratos',       group: 'Operação',    defaultRoles: ['admin'], moduleKey: 'contratos' },
+  { id: 'recontratacao',    label: 'Re-contratação',  group: 'Operação',    defaultRoles: ['admin'], moduleKey: 'recontratacao' },
+  { id: 'tarefas',          label: 'Todas Tarefas',   group: 'Operação',    defaultRoles: ['admin'], moduleKey: 'tarefas' },
+  { id: 'tarefas-clientes', label: 'Espaços',         group: 'Operação',    defaultRoles: ['admin','marketing'], moduleKey: 'espacos' },
+  { id: 'onboarding',       label: 'Onboarding',      group: 'Operação',    defaultRoles: ['admin','atendimento','marketing'], moduleKey: 'onboarding' },
+  { id: 'agents',           label: 'Painel Agentes',  group: 'Agentes IA',  defaultRoles: ['admin'], moduleKey: 'hub' },
+  { id: 'campanhas',        label: 'Campanhas',       group: 'Marketing',   defaultRoles: ['admin','marketing'], moduleKey: 'campanhas' },
+  { id: 'drafts-pendentes', label: 'Disparos',        group: 'Marketing',   defaultRoles: ['admin','marketing'], moduleKey: 'disparos' },
+  { id: 'reports',          label: 'Relatórios',      group: 'Dados',       defaultRoles: ['admin','marketing'], moduleKey: 'relatorios' },
+  { id: 'notificacoes',     label: 'Notificações',    group: 'Sistema',     moduleKey: 'notificacoes' },
+  { id: 'grupos',           label: 'WhatsApp: Grupos', group: 'Admin',       defaultRoles: ['admin','atendimento'], moduleKey: 'grupos' },
+  { id: 'settings',         label: 'Configurações',   group: 'Admin',       defaultRoles: ['admin'], moduleKey: 'configsys' },
+  // Adicionado 2026-07-01 (QA go-live Karina): faltavam telas de Avaliações + Usuários,
+  // então o modal de permissões ficava quase vazio pra tenants sem os módulos "clássicos".
+  { id: 'csat',                  label: 'Satisfação do Atendimento (CSAT)', group: 'Avaliações', moduleKey: 'csat' },
+  { id: 'nps',                   label: 'Lealdade da Marca (NPS)',          group: 'Avaliações', moduleKey: 'nps' },
+  { id: 'controle-atendimentos', label: 'Controle de Atendimento',         group: 'Avaliações', moduleKey: 'controle-atendimentos' },
+  { id: 'avaliacao-config',      label: 'Configurações de Avaliação',      group: 'Avaliações', moduleKey: 'avaliacao-config' },
+  { id: 'usuarios',              label: 'Usuários e Equipe', group: 'Sistema', defaultRoles: ['admin'], moduleKey: 'usuarios' },
+];
 
 function relativeTime(ts) {
   if (!ts) return '—';
@@ -285,9 +302,7 @@ function ScreenPermsModal({ member, tenantDbId, onClose }) {
   const [perms, setPerms] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(null);
-  // null = tenant sem linhas em tenant_modules -> todas as telas habilitadas
-  // (mesma semântica de ConsoleV2.jsx); Set = allowlist de module_key habilitados
-  const [allowedModules, setAllowedModules] = useState(null);
+  const [allowedModules, setAllowedModules] = useState(null); // null = sem allowlist → tudo liberado
 
   useEffect(() => {
     supabase.rpc('get_user_screen_permissions', {
@@ -299,16 +314,11 @@ function ScreenPermsModal({ member, tenantDbId, onClose }) {
       setPerms(map);
       setLoading(false);
     });
+    supabase.from('tenant_modules').select('module_key, enabled').eq('tenant_id', tenantDbId).then(({ data }) => {
+      if (!data || data.length === 0) { setAllowedModules(null); return; }
+      setAllowedModules(new Set(data.filter(r => r.enabled).map(r => r.module_key)));
+    });
   }, [member.user_id, tenantDbId]);
-
-  useEffect(() => {
-    if (!tenantDbId) { setAllowedModules(null); return; }
-    supabase.from('tenant_modules').select('module_key, enabled').eq('tenant_id', tenantDbId)
-      .then(({ data, error }) => {
-        if (error || !data || data.length === 0) { setAllowedModules(null); return; }
-        setAllowedModules(new Set(data.filter(r => r.enabled).map(r => r.module_key)));
-      });
-  }, [tenantDbId]);
 
   async function toggle(screenId, roleDefault) {
     const current = perms[screenId];
@@ -324,10 +334,8 @@ function ScreenPermsModal({ member, tenantDbId, onClose }) {
     setSaving(null);
   }
 
-  const screensDoTenant = allowedModules
-    ? ALL_SCREENS.filter(s => allowedModules.has(s.id))
-    : ALL_SCREENS;
-  const groups = screensDoTenant.reduce((acc, s) => {
+  const visibleScreens = ALL_SCREENS.filter(s => !allowedModules || !s.moduleKey || allowedModules.has(s.moduleKey));
+  const groups = visibleScreens.reduce((acc, s) => {
     (acc[s.group] = acc[s.group] || []).push(s);
     return acc;
   }, {});
@@ -500,7 +508,8 @@ export default function Usuarios({ tenantDbId, userId }) {
             )}
           </div>
         ) : (
-          <table className="crm-table" style={{ width: '100%' }}>
+          <div style={{ overflowX: 'auto' }}>
+          <table className="crm-table" style={{ width: '100%', minWidth: 640 }}>
             <thead>
               <tr>
                 <th>Usuário</th>
@@ -594,6 +603,7 @@ export default function Usuarios({ tenantDbId, userId }) {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

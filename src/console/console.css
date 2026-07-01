@@ -10,7 +10,7 @@
 .cv2 .anton{font-family:'Anton',sans-serif;text-transform:uppercase;font-weight:400;letter-spacing:.2px}
 .cv2-sb{width:236px;min-width:236px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;overflow-y:auto}
 .cv2-brand{display:flex;align-items:center;justify-content:center;gap:10px;padding:16px;border-bottom:1px solid var(--line)}
-.cv2-brand img{width:22px}
+.cv2-brand img{width:22px;height:22px;display:block;object-fit:contain}
 .cv2-brand .anton{font-size:14px;color:var(--ink);line-height:.95;display:block}
 .cv2-brand small{display:block;color:var(--tx2);font-size:7.5px;letter-spacing:1.6px;font-weight:600;margin-top:2px}
 .cv2-grp{padding:15px 16px 5px;font-size:10px;letter-spacing:1.2px;color:var(--tx2);text-transform:uppercase;font-weight:700}
@@ -28,12 +28,7 @@
 .cv2-tb .search{flex:1;max-width:420px;background:#faf9f8;border:1px solid var(--line);border-radius:4px;padding:8px 12px;font-size:13px;outline:none;font-weight:500;color:var(--tx);font-family:inherit}
 .cv2-tb .search:focus{border-color:var(--red)}
 .cv2-search-item:hover{background:#faf9f8}
-.cv2-avatar{width:32px;height:32px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;border:none;cursor:pointer;font-family:inherit}
-.cv2-user{position:relative}
-.cv2-user-menu{position:absolute;top:40px;right:0;background:var(--panel);border:1px solid var(--line);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:220px;z-index:50;padding:6px}
-.cv2-user-menu .email{padding:8px 10px;font-size:12px;color:var(--tx2);border-bottom:1px solid var(--line);word-break:break-all}
-.cv2-user-menu button{width:100%;text-align:left;background:none;border:none;padding:8px 10px;font-size:13px;font-weight:600;color:var(--tx);cursor:pointer;border-radius:4px;font-family:inherit}
-.cv2-user-menu button:hover{background:var(--red-soft);color:var(--red)}
+.cv2-avatar{width:32px;height:32px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
 .cv2-pill{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:11.5px;color:var(--tx2);font-weight:600;white-space:nowrap}
 .cv2-pill b{color:var(--ink)}
 .cv2-ct{flex:1;overflow-y:auto;padding:24px 28px}
