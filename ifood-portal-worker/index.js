@@ -30,11 +30,15 @@ const REVIEWS_URL = 'https://portal.ifood.com.br/reviews/search';
 const TEXTAREA_TESTID = 'review-details-drawer-comment-textarea'; // descoberto via probe read-only
 
 // ── garantirLoja — multi-loja (Fase Gestor F0) ────────────────────────────────
-// Os dois seletores abaixo NUNCA foram probados no DOM real (só o piloto Café
-// Container/loja única foi testado). Ficam null até um probe supervisionado com o
-// Wandson — garantirLoja() prefere lançar erro pedindo probe a chutar um seletor.
-const SELETOR_SWITCHER = null; // TODO probe: seletor do switcher de loja (troca fora do modal inicial)
-const SELETOR_NOME_LOJA_ATIVA = null; // TODO probe: onde a UI mostra o nome da loja atualmente ativa
+// Fluxo do switcher CONFIRMADO ao vivo via probe supervisionado em 2026-07-02
+// (probe-switch13.js): status-indicator-v2 → dialog "Status da loja" → botão
+// "Trocar loja" → modal choose-restaurant-modal-list → busca (pressSequentially,
+// NUNCA fill — fill não dispara o filtro) → li[role="option"] por match exato.
+const NOME_LOJA_ATIVA_SEL = '[data-testid="restaurant-profile-name"]';
+const STATUS_INDICATOR_SEL = '[data-testid="status-indicator-v2"]';
+const DIALOG_CONTENT_SEL = '[data-testid="dialog-content"]';
+const MODAL_LOJAS_SEL = '[data-testid="choose-restaurant-modal-list"]';
+const BUSCA_LOJA_SEL = 'input[placeholder="Busque pelo nome ou ID"]';
 
 // ── Schema de saída (boundary validado) ───────────────────────────────────────
 const AvaliacaoSchema = z.object({
@@ -76,143 +80,100 @@ function normalizarNomeLoja(s) {
     .toLowerCase();
 }
 
-// Lê o nome da loja ativa exibido na UI. Retorna null se o seletor ainda não foi
-// mapeado (probe pendente) — nunca chuta um seletor.
+// Lê o nome da loja ativa exibido no header. Retorna null se o elemento não estiver
+// presente (ex.: 1º load pós-login, antes de qualquer loja ser escolhida).
 async function lerNomeLojaAtiva(page) {
-  if (!SELETOR_NOME_LOJA_ATIVA) return null;
-  const texto = await page.$eval(SELETOR_NOME_LOJA_ATIVA, (el) => el.textContent).catch(() => null);
+  const texto = await page.$eval(NOME_LOJA_ATIVA_SEL, (el) => el.textContent).catch(() => null);
   return texto ? texto.trim() : null;
 }
 
-// Modal "Escolher loja" (mapeado via probe supervisionado em 2026-07-02): pagina 5 de 75 lojas,
-// então SEMPRE busca pelo campo `input[placeholder="Busque pelo nome ou ID"]` antes de olhar a
-// lista — nunca varre páginas. Itens são `li[role="option"]` dentro de `ul[data-testid="choose-
-// restaurant-modal-list"]`; casa pela PRIMEIRA LINHA do innerText (nome da loja) igual, exata, ao
-// alvo. Aborta se a busca não isolar exatamente 1 item — nunca clica no item errado.
-async function buscarEClicarLojaNoModal(page, modalSel, nomeLoja) {
-  const busca = page.locator('input[placeholder="Busque pelo nome ou ID"]');
-  await busca.fill(nomeLoja);
-  await page.waitForTimeout(1500);
+// Passo (c) do fluxo: modal "Escolher loja" já aberto → busca por nome (pressSequentially,
+// NUNCA fill — probe provou que fill não dispara o filtro) e clica o li[role="option"] cuja
+// PRIMEIRA LINHA do texto bate EXATAMENTE com o nome alvo (normalizado).
+async function buscarEEscolherLojaNoModal(page, nomeLoja, alvo) {
+  await page.waitForSelector(MODAL_LOJAS_SEL, { timeout: 20000 }).catch(() => {
+    throw new Error(`garantirLoja: modal "${MODAL_LOJAS_SEL}" não apareceu para buscar a loja.`);
+  });
 
-  const itens = page.locator(`${modalSel} li[role="option"]`);
-  const textos = await itens.allInnerTexts();
-  const primeirasLinhas = textos.map((t) => t.split('\n')[0].trim());
-  const alvoTrim = nomeLoja.trim();
-  const indices = primeirasLinhas.reduce((acc, linha, i) => {
-    if (linha === alvoTrim) acc.push(i);
-    return acc;
-  }, []);
+  const busca = page.locator(BUSCA_LOJA_SEL);
+  await busca.click();
+  await busca.pressSequentially(nomeLoja, { delay: 100 });
+  await page.waitForTimeout(3000); // debounce da busca
 
-  if (indices.length === 0) {
+  const opcoes = page.locator(`${MODAL_LOJAS_SEL} li[role="option"]`);
+  const total = await opcoes.count();
+  let alvoIdx = -1;
+  for (let i = 0; i < total; i++) {
+    const texto = (await opcoes.nth(i).innerText()).trim();
+    const primeiraLinha = normalizarNomeLoja(texto.split('\n')[0]);
+    if (primeiraLinha === alvo) {
+      alvoIdx = i;
+      break;
+    }
+  }
+  if (alvoIdx === -1) {
     throw new Error(
-      `garantirLoja: loja "${nomeLoja}" não encontrada no modal "Escolher loja" (busca não retornou item com nome exato).`
+      `garantirLoja: loja "${nomeLoja}" não encontrada (match exato) entre ${total} resultado(s) do modal de busca.`
     );
   }
-  if (indices.length > 1) {
-    throw new Error(
-      `garantirLoja: busca "${nomeLoja}" no modal "Escolher loja" retornou ${indices.length} itens com nome exato igual — ambíguo, abortado por segurança.`
-    );
-  }
-  await itens.nth(indices[0]).click();
-}
-
-// Procura, dentro de `scopeSel`, um item clicável cujo texto contenha `alvoNormalizado` e clica.
-// Retorna true se encontrou e clicou. Usado hoje só pelo switcher (caso b) — seletor ainda pendente
-// de probe (SELETOR_SWITCHER).
-async function clicarItemLojaNoEscopo(page, scopeSel, alvoNormalizado) {
-  return page.evaluate(
-    ({ scopeSel, alvoNormalizado }) => {
-      const norm = (s) =>
-        (s || '')
-          .normalize('NFD')
-          .replace(/[̀-ͯ]/g, '')
-          .trim()
-          .toLowerCase();
-      const scope = document.querySelector(scopeSel) || document;
-      const item = [...scope.querySelectorAll('button,[role="button"],li,a')].find((el) =>
-        norm(el.innerText).includes(alvoNormalizado)
-      );
-      if (!item) return false;
-      item.click();
-      return true;
-    },
-    { scopeSel, alvoNormalizado }
-  );
+  await opcoes.nth(alvoIdx).click();
+  await page.waitForTimeout(4000);
 }
 
 /**
- * Garante que a sessão do portal está na loja `nomeLoja` antes de qualquer ação. Casos:
- *   (a) modal "Escolher loja" aberto → busca pelo nome e clica;
- *   (b) já logado em loja diferente → abre o switcher (SELETOR_SWITCHER) e troca;
- *   (c) já na loja certa → no-op.
+ * Garante que a sessão do portal está na loja `nomeLoja` antes de qualquer ação.
+ * Fluxo CONFIRMADO ao vivo (probe supervisionado 2026-07-02):
+ *   (0) já na loja certa (lê NOME_LOJA_ATIVA_SEL) → no-op;
+ *   (a) modal "Escolher loja" já aberto (1º load pós-login) → vai direto à busca (c);
+ *   (b) senão: clica STATUS_INDICATOR_SEL → dialog "Status da loja" → botão "Trocar loja" → abre o modal;
+ *   (c) busca pelo nome e clica o li[role="option"] de match exato.
  *
  * PÓS-CONDIÇÃO OBRIGATÓRIA: após qualquer troca, relê o nome da loja ativa na UI e compara
  * (normalizado) com `nomeLoja`. Divergiu → throw. NUNCA prossegue em loja errada.
- *
- * Seletores de switcher/nome-ativo ainda não foram mapeados no DOM real (pendente de probe
- * supervisionado) — quando necessários e ausentes, a função lança erro em vez de adivinhar.
+ * Cada passo lança erro claro se o seletor esperado não aparecer — nunca segue às cegas.
  */
 async function garantirLoja(page, nomeLoja) {
   const alvo = normalizarNomeLoja(nomeLoja);
   if (!alvo) throw new Error('garantirLoja: nomeLoja é obrigatório.');
 
-  const modalSel = '[data-testid="choose-restaurant-modal-list"]';
-  const modalAberto = await page.$(modalSel).catch(() => null);
-  let trocou = false;
-
-  if (modalAberto) {
-    // (a) modal "Escolher loja" aberto → buscar (pagina 5 de 75) e clicar no item de nome exato
-    await buscarEClicarLojaNoModal(page, modalSel, nomeLoja);
-    await settle(page, 4000);
-    trocou = true;
-  } else {
-    const nomeAtual = await lerNomeLojaAtiva(page);
-    if (nomeAtual === null) {
-      throw new Error(
-        'garantirLoja: não há modal de escolha aberto e não foi possível ler a loja ativa na UI ' +
-          '(SELETOR_NOME_LOJA_ATIVA ainda não mapeado). Rode um probe supervisionado com o Wandson ' +
-          'antes de operar mais de uma loja.'
-      );
-    }
-    if (normalizarNomeLoja(nomeAtual) === alvo) {
-      return; // (c) já na loja certa — no-op
-    }
-    // (b) já logado em loja errada → trocar via switcher
-    if (!SELETOR_SWITCHER) {
-      throw new Error(
-        `garantirLoja: sessão está na loja "${nomeAtual}", diferente da pedida ("${nomeLoja}"), e o ` +
-          'seletor do switcher (SELETOR_SWITCHER) ainda não foi mapeado. Rode um probe supervisionado ' +
-          'antes de habilitar a troca automática.'
-      );
-    }
-    const abriu = await page
-      .click(SELETOR_SWITCHER)
-      .then(() => true)
-      .catch(() => false);
-    if (!abriu) {
-      throw new Error('garantirLoja: SELETOR_SWITCHER configurado mas não encontrado no DOM — rode o probe novamente.');
-    }
-    await settle(page, 1500);
-    const clicado = await clicarItemLojaNoEscopo(page, 'body', alvo);
-    if (!clicado) throw new Error(`garantirLoja: loja "${nomeLoja}" não encontrada no switcher aberto.`);
-    await settle(page, 4000);
-    trocou = true;
+  const nomeAtual = await lerNomeLojaAtiva(page);
+  if (nomeAtual !== null && normalizarNomeLoja(nomeAtual) === alvo) {
+    return; // já na loja certa — no-op
   }
 
-  if (trocou) {
-    const nomeFinal = await lerNomeLojaAtiva(page);
-    if (nomeFinal === null) {
-      throw new Error(
-        'garantirLoja: troca de loja feita, mas não há como confirmar a loja ativa final ' +
-          '(SELETOR_NOME_LOJA_ATIVA não mapeado) — abortado por segurança.'
-      );
+  const modalJaAberto = await page.$(MODAL_LOJAS_SEL).catch(() => null);
+  if (!modalJaAberto) {
+    // (b) abre o dialog "Status da loja" → botão "Trocar loja"
+    await page.waitForSelector(STATUS_INDICATOR_SEL, { timeout: 20000 }).catch(() => {
+      throw new Error(`garantirLoja: header "${STATUS_INDICATOR_SEL}" não encontrado.`);
+    });
+    await page.click(STATUS_INDICATOR_SEL);
+    await page.waitForSelector(DIALOG_CONTENT_SEL, { timeout: 20000 }).catch(() => {
+      throw new Error('garantirLoja: dialog "Status da loja" não abriu após clicar no header.');
+    });
+
+    const btnTrocar = page.locator(`${DIALOG_CONTENT_SEL} button`, { hasText: 'Trocar loja' });
+    if ((await btnTrocar.count()) === 0) {
+      throw new Error('garantirLoja: botão "Trocar loja" não encontrado dentro do dialog "Status da loja".');
     }
-    if (normalizarNomeLoja(nomeFinal) !== alvo) {
-      throw new Error(
-        `garantirLoja: pós-troca, a UI mostra a loja "${nomeFinal}", esperado "${nomeLoja}". ` +
-          'Abortado por segurança (nunca agir em loja errada).'
-      );
-    }
+    await btnTrocar.first().click();
+  }
+
+  // (c) busca + seleção no modal
+  await buscarEEscolherLojaNoModal(page, nomeLoja, alvo);
+
+  // PÓS-CONDIÇÃO: relê a loja ativa e confirma o match — nunca segue em loja errada.
+  const nomeFinal = await lerNomeLojaAtiva(page);
+  if (nomeFinal === null) {
+    throw new Error(
+      `garantirLoja: pós-troca, "${NOME_LOJA_ATIVA_SEL}" não foi encontrado — não há como confirmar a loja ativa. Abortado por segurança.`
+    );
+  }
+  if (normalizarNomeLoja(nomeFinal) !== alvo) {
+    throw new Error(
+      `garantirLoja: pós-troca, a UI mostra a loja "${nomeFinal}", esperado "${nomeLoja}". ` +
+        'Abortado por segurança (nunca agir em loja errada).'
+    );
   }
 }
 
