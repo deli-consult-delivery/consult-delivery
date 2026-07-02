@@ -188,6 +188,65 @@ async function callAnthropicNative(input: ChatWithToolsInput): Promise<ChatWithT
   return { message: fromAnthropicResponse(response), provider: "anthropic", modelo };
 }
 
+// ── Ollama Cloud web search/fetch — API própria (mesma OLLAMA_API_KEY) ───────────
+// Substitui o web_search da Anthropic (também sem créditos) para tools que precisam
+// de dados externos. https://ollama.com/api/web_search e /api/web_fetch.
+
+export interface OllamaWebSearchResult {
+  title: string;
+  url: string;
+  content: string;
+}
+
+export async function ollamaWebSearch(
+  query: string,
+  maxResults = 5
+): Promise<OllamaWebSearchResult[]> {
+  const apiKey = process.env.OLLAMA_API_KEY;
+  if (!apiKey) throw new Error("OLLAMA_API_KEY não configurada");
+
+  const r = await fetch("https://ollama.com/api/web_search", {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ query }),
+  });
+  if (!r.ok) throw new Error(`Ollama web_search HTTP ${r.status}: ${(await r.text()).slice(0, 300)}`);
+
+  const data = (await r.json()) as {
+    results?: Array<{ title?: string; url?: string; content?: string }>;
+  };
+  return (data.results ?? []).slice(0, maxResults).map((res) => ({
+    title: res.title ?? "",
+    url: res.url ?? "",
+    content: (res.content ?? "").slice(0, 800),
+  }));
+}
+
+export interface OllamaWebFetchResult {
+  title: string;
+  content: string;
+  links: string[];
+}
+
+export async function ollamaWebFetch(url: string): Promise<OllamaWebFetchResult> {
+  const apiKey = process.env.OLLAMA_API_KEY;
+  if (!apiKey) throw new Error("OLLAMA_API_KEY não configurada");
+
+  const r = await fetch("https://ollama.com/api/web_fetch", {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ url }),
+  });
+  if (!r.ok) throw new Error(`Ollama web_fetch HTTP ${r.status}: ${(await r.text()).slice(0, 300)}`);
+
+  const data = (await r.json()) as { title?: string; content?: string; links?: string[] };
+  return {
+    title: data.title ?? "",
+    content: (data.content ?? "").slice(0, 4000),
+    links: data.links ?? [],
+  };
+}
+
 // ── Cascata ────────────────────────────────────────────────────────────────────
 
 export async function chatWithTools(input: ChatWithToolsInput): Promise<ChatWithToolsResult> {

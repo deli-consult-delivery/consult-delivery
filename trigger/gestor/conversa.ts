@@ -4,8 +4,7 @@ import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 import { getPrompt } from "../../src/agents/shared/runtime";
 import { getClientContext } from "../../src/agents/shared/runtime";
-import { runClaudeWithWebSearch } from "../_shared/claude";
-import { chatWithTools, type ToolDef, type OAIMessage } from "../_shared/llm-tools";
+import { chatWithTools, ollamaWebSearch, ollamaWebFetch, type ToolDef, type OAIMessage } from "../_shared/llm-tools";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -19,10 +18,6 @@ const InputSchema = z.object({
 const OutputSchema = z.object({
   ok: z.boolean(),
   reply: z.string(),
-});
-
-const WebSearchResultSchema = z.object({
-  resumo: z.string(),
 });
 
 // ── Ferramentas ───────────────────────────────────────────────────────────────
@@ -65,13 +60,28 @@ const pesquisarWebTool: ToolDef = {
   type: "function",
   function: {
     name: "pesquisar_web",
-    description: "Pesquisa na web informações atualizadas (concorrência, tendências de delivery, práticas de iFood). Use quando precisar de dados externos que não estão no banco.",
+    description: "Pesquisa na web informações atualizadas (concorrência, tendências de delivery, práticas de iFood). Use quando precisar de dados externos que não estão no banco. Devolve os títulos/URLs/trechos dos resultados.",
     parameters: {
       type: "object",
       properties: {
         query: { type: "string", description: "O que pesquisar" },
       },
       required: ["query"],
+    },
+  },
+};
+
+const abrirPaginaTool: ToolDef = {
+  type: "function",
+  function: {
+    name: "abrir_pagina",
+    description: "Abre uma URL específica (ex.: um resultado de pesquisar_web) e devolve o conteúdo da página. Use quando um resumo curto não for suficiente.",
+    parameters: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "URL completa da página a abrir" },
+      },
+      required: ["url"],
     },
   },
 };
@@ -93,7 +103,7 @@ const salvarConhecimentoTool: ToolDef = {
   },
 };
 
-const allTools = [proporDraftTool, consultarMetricasTool, pesquisarWebTool, salvarConhecimentoTool];
+const allTools = [proporDraftTool, consultarMetricasTool, pesquisarWebTool, abrirPaginaTool, salvarConhecimentoTool];
 
 // ── Task ──────────────────────────────────────────────────────────────────────
 
@@ -232,14 +242,24 @@ export const gestorConversa = task({
         } else if (toolCall.function.name === "pesquisar_web") {
           const toolInput = toolArgs as { query: string };
           try {
-            const resultado = await runClaudeWithWebSearch({
-              systemPrompt: "Responda em português brasileiro com um resumo objetivo dos achados, em JSON: {\"resumo\": string}.",
-              userPrompt: toolInput.query,
-              outputSchema: WebSearchResultSchema,
-            });
-            toolResult = resultado.resumo;
+            const resultados = await ollamaWebSearch(toolInput.query);
+            toolResult = resultados.length
+              ? resultados
+                  .map((r, i) => `${i + 1}. ${r.title}\n${r.url}\n${r.content}`)
+                  .join("\n\n")
+              : "Nenhum resultado encontrado.";
           } catch (err) {
-            toolResult = `Erro ao pesquisar na web: ${(err as Error).message}`;
+            console.warn(`[gestor-conversa] pesquisar_web falhou: ${(err as Error).message}`);
+            toolResult = JSON.stringify({ erro: "pesquisa indisponível" });
+          }
+        } else if (toolCall.function.name === "abrir_pagina") {
+          const toolInput = toolArgs as { url: string };
+          try {
+            const pagina = await ollamaWebFetch(toolInput.url);
+            toolResult = `${pagina.title}\n\n${pagina.content}`;
+          } catch (err) {
+            console.warn(`[gestor-conversa] abrir_pagina falhou: ${(err as Error).message}`);
+            toolResult = JSON.stringify({ erro: "pesquisa indisponível" });
           }
         } else if (toolCall.function.name === "salvar_conhecimento") {
           const toolInput = toolArgs as { titulo: string; conteudo: string; tags?: string[] };
