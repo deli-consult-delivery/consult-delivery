@@ -14,6 +14,7 @@ const express = require('express');
 const { z }   = require('zod');
 const { getBrandByTenant, safeLogoUrl, getAvaliacaoConfig } = require('../lib/branding');
 const { sendEvolutionText, renderTemplate }                = require('../lib/evolution-send');
+const { pushNotifyTenant }                                  = require('../lib/push-notify');
 
 // Formata "5594984367456" → "+55 (94) 98436-7456". Se não bater no padrão BR, retorna cru.
 function formatTelefoneBR(raw) {
@@ -292,6 +293,14 @@ module.exports = function buildPublicoAvaliacaoRouter({ sbFetch }) {
             } catch (notifErr) {
               console.error('[publico/avaliacao] erro ao criar notificação de detrator:', notifErr.message);
             }
+
+            await pushNotifyTenant({
+              sbFetch,
+              tenantId,
+              title: `Detrator CSAT — nota ${notaFinal}/5`,
+              body:  `${avaliacao.nome_cliente || 'Cliente'} deu nota ${notaFinal}. Atendente: ${avaliacao.atendente_nome || 'não identificado'}.`,
+              route: 'controle-atendimentos',
+            });
           } catch (alertErr) {
             console.error('[publico/avaliacao] erro no alerta de detrator:', alertErr.message);
           }

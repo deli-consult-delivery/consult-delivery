@@ -16,6 +16,7 @@ const express = require('express');
 const { z }   = require('zod');
 const { getBrandByTenant, getAvaliacaoConfig } = require('../lib/branding');
 const { sendEvolutionText, renderTemplate }    = require('../lib/evolution-send');
+const { pushNotifyTenant }                     = require('../lib/push-notify');
 
 // Formata "5594984367456" → "+55 (94) 98436-7456". Se não bater no padrão BR, retorna cru.
 function formatTelefoneBR(raw) {
@@ -292,6 +293,14 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
             } catch (notifErr) {
               console.error('[publico/nps] erro ao criar notificação de detrator:', notifErr.message);
             }
+
+            await pushNotifyTenant({
+              sbFetch,
+              tenantId,
+              title: `Detrator NPS — nota ${notaFinal}`,
+              body:  `${av.contact_nome || 'Cliente'} deu nota ${notaFinal}. Atendente: ${av.atendente_nome || 'não identificado'}.`,
+              route: 'controle-atendimentos',
+            });
           } catch (alertErr) {
             console.error('[publico/nps] erro no alerta de detrator:', alertErr.message);
           }
