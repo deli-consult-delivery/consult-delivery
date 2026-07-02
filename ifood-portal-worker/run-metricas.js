@@ -44,14 +44,16 @@ function parseMoedaBR(texto) {
 // níveis de parentElement procurando, em cada nível, o primeiro filho cujo texto NÃO é R$ e
 // tem <40 chars — esse é o rótulo. Comprovado ao vivo (probe-revenue.js, 2026-07-02): o valor
 // NÃO fica no mesmo bloco do rótulo (a extração por closest() falhava), o rótulo é um
-// irmão/ancestral próximo do span de valor.
+// irmão/ancestral próximo do span de valor. IMPORTANTE: usar innerText, não textContent — o
+// portal renderiza texto oculto/decorativo em nós que textContent inclui e innerText ignora
+// (diagnóstico ao vivo: textContent → mapa vazio, innerText → os 5 rótulos corretos).
 function extrairMapaLabelValor(page) {
   return page.evaluate(() => {
     const REGEX_VALOR = /R\$\s?-?[\d.]+,\d{2}/;
     const spans = [...document.querySelectorAll('span[class*="_variant-heading-2"]')];
     const mapa = {};
     for (const span of spans) {
-      const texto = (span.textContent || '').trim();
+      const texto = (span.innerText || '').trim();
       if (!REGEX_VALOR.test(texto)) continue;
 
       let label = null;
@@ -60,7 +62,7 @@ function extrairMapaLabelValor(page) {
         node = node.parentElement;
         if (!node) break;
         const candidato = [...node.children]
-          .map((c) => (c.textContent || '').trim())
+          .map((c) => (c.innerText || '').trim())
           .find((t) => t && t.length < 40 && !REGEX_VALOR.test(t));
         if (candidato) label = candidato;
       }
