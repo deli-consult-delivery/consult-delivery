@@ -29,6 +29,13 @@ function getConfig() {
 const REVIEWS_URL = 'https://portal.ifood.com.br/reviews/search';
 const TEXTAREA_TESTID = 'review-details-drawer-comment-textarea'; // descoberto via probe read-only
 
+// ── garantirLoja — multi-loja (Fase Gestor F0) ────────────────────────────────
+// Os dois seletores abaixo NUNCA foram probados no DOM real (só o piloto Café
+// Container/loja única foi testado). Ficam null até um probe supervisionado com o
+// Wandson — garantirLoja() prefere lançar erro pedindo probe a chutar um seletor.
+const SELETOR_SWITCHER = null; // TODO probe: seletor do switcher de loja (troca fora do modal inicial)
+const SELETOR_NOME_LOJA_ATIVA = null; // TODO probe: onde a UI mostra o nome da loja atualmente ativa
+
 // ── Schema de saída (boundary validado) ───────────────────────────────────────
 const AvaliacaoSchema = z.object({
   id: z.string().min(1), // nº do pedido (coluna "Pedido") — identificador estável visível na lista
@@ -61,9 +68,130 @@ function clickLeafByText(page, reSource) {
   }, reSource);
 }
 
+function normalizarNomeLoja(s) {
+  return String(s || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+// Lê o nome da loja ativa exibido na UI. Retorna null se o seletor ainda não foi
+// mapeado (probe pendente) — nunca chuta um seletor.
+async function lerNomeLojaAtiva(page) {
+  if (!SELETOR_NOME_LOJA_ATIVA) return null;
+  const texto = await page.$eval(SELETOR_NOME_LOJA_ATIVA, (el) => el.textContent).catch(() => null);
+  return texto ? texto.trim() : null;
+}
+
+// Procura, dentro de `scopeSel`, um item clicável cujo texto contenha `alvoNormalizado` e clica.
+// Retorna true se encontrou e clicou.
+async function clicarItemLojaNoEscopo(page, scopeSel, alvoNormalizado) {
+  return page.evaluate(
+    ({ scopeSel, alvoNormalizado }) => {
+      const norm = (s) =>
+        (s || '')
+          .normalize('NFD')
+          .replace(/[̀-ͯ]/g, '')
+          .trim()
+          .toLowerCase();
+      const scope = document.querySelector(scopeSel) || document;
+      const item = [...scope.querySelectorAll('button,[role="button"],li,a')].find((el) =>
+        norm(el.innerText).includes(alvoNormalizado)
+      );
+      if (!item) return false;
+      item.click();
+      return true;
+    },
+    { scopeSel, alvoNormalizado }
+  );
+}
+
+/**
+ * Garante que a sessão do portal está na loja `nomeLoja` antes de qualquer ação. Casos:
+ *   (a) modal "Escolher loja" aberto → busca pelo nome e clica;
+ *   (b) já logado em loja diferente → abre o switcher (SELETOR_SWITCHER) e troca;
+ *   (c) já na loja certa → no-op.
+ *
+ * PÓS-CONDIÇÃO OBRIGATÓRIA: após qualquer troca, relê o nome da loja ativa na UI e compara
+ * (normalizado) com `nomeLoja`. Divergiu → throw. NUNCA prossegue em loja errada.
+ *
+ * Seletores de switcher/nome-ativo ainda não foram mapeados no DOM real (pendente de probe
+ * supervisionado) — quando necessários e ausentes, a função lança erro em vez de adivinhar.
+ */
+async function garantirLoja(page, nomeLoja) {
+  const alvo = normalizarNomeLoja(nomeLoja);
+  if (!alvo) throw new Error('garantirLoja: nomeLoja é obrigatório.');
+
+  const modalSel = '[data-testid="choose-restaurant-modal-list"]';
+  const modalAberto = await page.$(modalSel).catch(() => null);
+  let trocou = false;
+
+  if (modalAberto) {
+    // (a) modal "Escolher loja" aberto → buscar pelo nome e clicar
+    const clicado = await clicarItemLojaNoEscopo(page, modalSel, alvo);
+    if (!clicado) {
+      throw new Error(
+        `garantirLoja: loja "${nomeLoja}" não encontrada no modal "Escolher loja" (nome diverge do portal?).`
+      );
+    }
+    await settle(page, 4000);
+    trocou = true;
+  } else {
+    const nomeAtual = await lerNomeLojaAtiva(page);
+    if (nomeAtual === null) {
+      throw new Error(
+        'garantirLoja: não há modal de escolha aberto e não foi possível ler a loja ativa na UI ' +
+          '(SELETOR_NOME_LOJA_ATIVA ainda não mapeado). Rode um probe supervisionado com o Wandson ' +
+          'antes de operar mais de uma loja.'
+      );
+    }
+    if (normalizarNomeLoja(nomeAtual) === alvo) {
+      return; // (c) já na loja certa — no-op
+    }
+    // (b) já logado em loja errada → trocar via switcher
+    if (!SELETOR_SWITCHER) {
+      throw new Error(
+        `garantirLoja: sessão está na loja "${nomeAtual}", diferente da pedida ("${nomeLoja}"), e o ` +
+          'seletor do switcher (SELETOR_SWITCHER) ainda não foi mapeado. Rode um probe supervisionado ' +
+          'antes de habilitar a troca automática.'
+      );
+    }
+    const abriu = await page
+      .click(SELETOR_SWITCHER)
+      .then(() => true)
+      .catch(() => false);
+    if (!abriu) {
+      throw new Error('garantirLoja: SELETOR_SWITCHER configurado mas não encontrado no DOM — rode o probe novamente.');
+    }
+    await settle(page, 1500);
+    const clicado = await clicarItemLojaNoEscopo(page, 'body', alvo);
+    if (!clicado) throw new Error(`garantirLoja: loja "${nomeLoja}" não encontrada no switcher aberto.`);
+    await settle(page, 4000);
+    trocou = true;
+  }
+
+  if (trocou) {
+    const nomeFinal = await lerNomeLojaAtiva(page);
+    if (nomeFinal === null) {
+      throw new Error(
+        'garantirLoja: troca de loja feita, mas não há como confirmar a loja ativa final ' +
+          '(SELETOR_NOME_LOJA_ATIVA não mapeado) — abortado por segurança.'
+      );
+    }
+    if (normalizarNomeLoja(nomeFinal) !== alvo) {
+      throw new Error(
+        `garantirLoja: pós-troca, a UI mostra a loja "${nomeFinal}", esperado "${nomeLoja}". ` +
+          'Abortado por segurança (nunca agir em loja errada).'
+      );
+    }
+  }
+}
+
 // Garante que a aba principal está em /reviews/search no contexto da loja piloto. SOMENTE leitura
 // (selecionar "Portal do Parceiro" é navegação, não escrita).
 async function abrirListaDeAvaliacoes(page, cfg) {
+  await garantirLoja(page, cfg.loja);
   await settle(page, 1500);
 
   // /chains: escolher "Portal do Parceiro" (loja única) → /home
@@ -306,4 +434,11 @@ async function enviarResposta(textoEsperado, opts = {}) {
   });
 }
 
-module.exports = { listarAvaliacoesPendentes, preencherResposta, enviarResposta, AvaliacaoSchema, ListaSchema };
+module.exports = {
+  listarAvaliacoesPendentes,
+  preencherResposta,
+  enviarResposta,
+  garantirLoja,
+  AvaliacaoSchema,
+  ListaSchema,
+};
