@@ -1111,7 +1111,10 @@ async function sbFetch(path, { method = 'GET', body, prefer, headers: xh = {} } 
     const txt = await r.text();
     throw new Error(`Supabase ${r.status} [${method} ${path}]: ${txt}`);
   }
-  return r.json();
+  // Prefer: return=minimal (ou DELETE) volta 204 sem corpo — r.json() quebraria com
+  // "Unexpected end of JSON input".
+  const txt = await r.text();
+  return txt ? JSON.parse(txt) : null;
 }
 
 // Helper: verifica se req.user é membro do tenant_id solicitado
