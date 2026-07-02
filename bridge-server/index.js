@@ -1671,6 +1671,10 @@ app.use('/api', requireJwt, require('./routes/breno-aprovacao')({ sbFetch, supab
 // Cora — gestão manual: isenção e baixa manual de pagamento PIX
 app.use('/api', requireJwt, require('./routes/cora-gestao')({ sbFetch, supabaseInsert }));
 
+// Gestor (Consultor de iFood) — aprovação/execução de drafts: whatsapp (Evolution API) ou
+// portal_ifood (runners preencher+enviar via /api/portal-worker/run)
+app.use('/api', requireJwt, require('./routes/gestor-aprovacao')({ sbFetch, supabaseInsert }));
+
 // Monitor de Sessões — lista spawn-queue e stream SSE de logs (cd-spawn)
 app.use('/api', require('./routes/monitor')({ requireJwt }));
 

@@ -23,6 +23,7 @@ const CANAL_LABELS = {
   telegram_interno: 'Telegram interno',
   painel: 'Painel',
   sms: 'SMS',
+  portal_ifood: 'Resposta iFood',
 };
 
 const DRAFT_STATUS_APROVAVEL = ['pending', 'aguardando_ok', 'rascunho'];
@@ -247,6 +248,29 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
       }
       setAgindo(null);
       await carregar(); // some da fila em sucesso (vira 'sent'); permanece se 'failed'/erro
+      return;
+    }
+
+    // Drafts do GESTOR (whatsapp ou portal_ifood): o Bridge é a única porta de execução
+    // e exige o draft AINDA em 'pending' — ele mesmo marca sent/failed. Mesma lógica do
+    // caso ifood.* acima: NÃO marcamos 'approved' aqui.
+    if (item.agent_name === 'gestor') {
+      try {
+        const token = (await supabase.auth.getSession()).data.session?.access_token;
+        const res = await fetch(`${BRIDGE}/api/gestor/aprovar/${id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ tenant_id: tenantDbId }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          setErro(`Falha ao executar draft do Gestor: ${err.error || res.status}`);
+        }
+      } catch (e) {
+        setErro(`Falha ao executar draft do Gestor: ${e.message}`);
+      }
+      setAgindo(null);
+      await carregar();
       return;
     }
 
