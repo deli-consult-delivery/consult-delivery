@@ -17,15 +17,19 @@ const OutputSchema = z.object({
   lojas_puladas: z.number().optional(),
 });
 
-// Formato esperado do stdout do runner metricas (trigger/gestor F2, ainda não implementado).
+// Formato do stdout do runner ifood-portal-worker/run-metricas.js (v2, extração real de /revenue).
+// pedidos/cancelamentos/avaliacao ainda não têm seletor mapeado (TODO probe /orders e /reviews)
+// e chegam sempre null — nunca 0.
 const MetricasPortalSchema = z.object({
-  faturamento: z.number().optional(),
-  pedidos: z.number().optional(),
-  ticket_medio: z.number().optional(),
-  avaliacao: z.number().optional(),
-  cancelamentos: z.number().optional(),
-  loja_pausada: z.boolean().optional(),
-  desconto_medio: z.number().optional(),
+  loja: z.string().optional(),
+  mes_referencia: z.string().nullable().optional(),
+  valor_vendas: z.number().nullable().optional(),
+  taxas_comissoes: z.number().nullable().optional(),
+  servicos_promocoes: z.number().nullable().optional(),
+  total_faturamento: z.number().nullable().optional(),
+  pedidos: z.number().nullable().optional(),
+  cancelamentos: z.number().nullable().optional(),
+  avaliacao: z.number().nullable().optional(),
 });
 
 interface LojaAlvo {
@@ -109,9 +113,11 @@ export const gestorColetaDiaria = schedules.task({
             tenant_id: loja.tenant_id,
             data: hoje,
             fonte: "portal_ifood",
-            faturamento: resultado.metricas.faturamento ?? null,
+            // faturamento = total_faturamento do /revenue (único campo confiável hoje). O resto
+            // (valor_vendas, taxas, serviços) fica em raw_data — pedidos/avaliacao/cancelamentos
+            // ainda não têm seletor mapeado (TODO probe /orders e /reviews) → sempre null.
+            faturamento: resultado.metricas.total_faturamento ?? null,
             pedidos: resultado.metricas.pedidos ?? null,
-            ticket_medio: resultado.metricas.ticket_medio ?? null,
             avaliacao: resultado.metricas.avaliacao ?? null,
             cancelamentos: resultado.metricas.cancelamentos ?? null,
             raw_data: resultado.metricas,
@@ -270,21 +276,16 @@ async function verificarAlertas(
     }
   }
 
-  // Loja pausada
-  if (metricas.loja_pausada) {
-    alertas.push(`⏸️ loja pausada no iFood`);
-  }
-
   // Faturamento < 70% da média do mesmo dia-da-semana
-  if (metricas.faturamento != null) {
+  if (metricas.total_faturamento != null) {
     const hojeDiaSemana = new Date().getUTCDay();
     const mesmoDiaSemana = hist.filter((h) => new Date(h.data).getUTCDay() === hojeDiaSemana && h.faturamento != null);
     if (mesmoDiaSemana.length) {
       const mediaFaturamento =
         mesmoDiaSemana.reduce((s, h) => s + (h.faturamento ?? 0), 0) / mesmoDiaSemana.length;
-      if (mediaFaturamento > 0 && metricas.faturamento < mediaFaturamento * 0.7) {
+      if (mediaFaturamento > 0 && metricas.total_faturamento < mediaFaturamento * 0.7) {
         alertas.push(
-          `📉 faturamento R$${metricas.faturamento.toFixed(2)} — 70% abaixo da média do dia (R$${mediaFaturamento.toFixed(2)})`
+          `📉 faturamento R$${metricas.total_faturamento.toFixed(2)} — 70% abaixo da média do dia (R$${mediaFaturamento.toFixed(2)})`
         );
       }
     }
@@ -293,18 +294,6 @@ async function verificarAlertas(
   // Pedidos zerados
   if (metricas.pedidos === 0) {
     alertas.push(`0️⃣ zero pedidos hoje`);
-  }
-
-  // Desconto médio ≥30% do ticket
-  if (
-    metricas.desconto_medio != null &&
-    metricas.ticket_medio != null &&
-    metricas.ticket_medio > 0 &&
-    metricas.desconto_medio >= metricas.ticket_medio * 0.3
-  ) {
-    alertas.push(
-      `🏷️ desconto médio R$${metricas.desconto_medio.toFixed(2)} (≥30% do ticket R$${metricas.ticket_medio.toFixed(2)})`
-    );
   }
 
   for (const alerta of alertas) {
