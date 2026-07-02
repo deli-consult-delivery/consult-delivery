@@ -1,6 +1,9 @@
 # Relatório — bug RLS `= (SELECT … LIMIT 1)` em 28 policies
 
-Status: **⚠️ REPORTADO, não corrigido** (decisão Wandson 2026-07-01: investigar e reportar).
+Status: **✅ CORRIGIDO 2026-07-01** (migration `20260701_013_rls_fix_limit1_to_in.sql`, commit 4d47d2b).
+27 policies migradas `= (…LIMIT 1)` → `IN (…)`; `max_kb_write` deixada intacta (não compara tenant_id).
+Teste de isolamento: agência multi-tenant passou a ver 2319 cobranças; store único (Karina) vê 0 → sem vazamento.
+Histórico original abaixo.
 Descoberto ao investigar a "RLS hierárquica". Projeto Supabase `czyanilrverorwenikqw`.
 
 ## O bug
