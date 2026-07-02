@@ -1647,6 +1647,11 @@ app.use('/api/scraping', requireJwt, require('./routes/scraping'));
 // Images — geração de imagens via FLUX.1-schnell (HuggingFace free)
 app.use('/api/images', requireJwt, require('./routes/images'));
 
+// Portal Worker — executa runners do ifood-portal-worker (docker run --network
+// container:ifood-browser) para o agente GESTOR. Só x-internal-token (Trigger.dev),
+// nunca exposto a JWT de usuário — é execução real de browser automation.
+app.use('/api/portal-worker', requireInternalToken, require('./routes/portal-worker')());
+
 // Asaas — saldo da conta (cache 5 min). Console via JWT, Hermes via x-internal-token (asaas-mcp).
 // ⚠️ Montado ANTES dos mounts com `requireJwt` blanket abaixo (cora/breno): como aquele
 // middleware é blanket em '/api', ele intercepta todo '/api/*' montado depois e barraria
