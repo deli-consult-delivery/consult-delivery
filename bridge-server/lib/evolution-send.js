@@ -36,7 +36,10 @@ async function sendEvolutionText({ tenantId, number, text, sbFetch, fallbackTena
     return { ok: false, status: 0, detail: 'sem_instancia_evolution' };
   }
 
-  const phone = String(number).replace(/\D/g, '');
+  // JID completo (grupo @g.us ou contato @s.whatsapp.net) vai direto no campo
+  // number — só telefone puro passa pela extração de dígitos.
+  const raw   = String(number);
+  const phone = raw.includes('@') ? raw : raw.replace(/\D/g, '');
   if (!phone) {
     return { ok: false, status: 0, detail: 'numero_invalido' };
   }

@@ -285,6 +285,76 @@ function SecaoMensagens({ tenantDbId, tipo, config, onSaved }) {
   );
 }
 
+// ── Seção: Alerta de Detrator (WhatsApp) ──────────────────────────────────────
+
+function SecaoAlertaDetrator({ tenantDbId, config, onSaved }) {
+  const [notificar, setNotificar] = useState(false);
+  const [wppJid,    setWppJid]    = useState('');
+  const [salvando,  setSalvando]  = useState(false);
+  const [feedback,  setFeedback]  = useState('');
+
+  useEffect(() => {
+    setNotificar(config?.detrator_notificar ?? false);
+    setWppJid(config?.detrator_wpp_jid      ?? '');
+  }, [config]);
+
+  async function salvar() {
+    setSalvando(true); setFeedback('');
+    try {
+      await apiFetch(`${BRIDGE_URL}/api/tenant/avaliacao-config`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          tenant_id:          tenantDbId,
+          detrator_notificar: notificar,
+          detrator_wpp_jid:   wppJid.trim() || null,
+        }),
+      });
+      setFeedback('Alerta de detrator salvo!');
+      onSaved?.();
+    } catch (err) {
+      setFeedback(`Erro: ${err.message}`);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="cv2-card" style={{ marginBottom: 20 }}>
+      <h2 style={sectionTitleStyle}>Alerta de Detrator (WhatsApp)</h2>
+      <p style={descStyle}>
+        Quando um cliente dá nota baixa (detrator CSAT ou NPS), envia um aviso via WhatsApp
+        para o grupo ou contato configurado abaixo.
+      </p>
+
+      <Field label="Notificar detrator via WhatsApp">
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
+          <input type="checkbox" checked={notificar} onChange={e => setNotificar(e.target.checked)} />
+          Ativado
+        </label>
+      </Field>
+
+      <Field
+        label="Grupo ou contato destino"
+        hint="JID do WhatsApp: grupo termina em @g.us, contato em @s.whatsapp.net. Copie do link do grupo ou peça ao suporte."
+      >
+        <input
+          type="text"
+          value={wppJid}
+          onChange={e => setWppJid(e.target.value)}
+          placeholder="120363422466462172@g.us"
+          maxLength={50}
+          style={fieldStyle}
+        />
+      </Field>
+
+      <button className="cv2-btn" onClick={salvar} disabled={salvando} style={{ marginTop: 8 }}>
+        {salvando ? 'Salvando…' : 'Salvar alerta de detrator'}
+      </button>
+      {feedback && <p style={{ marginTop: 8, fontSize: 13, color: feedback.startsWith('Erro') ? 'var(--red)' : 'var(--green)' }}>{feedback}</p>}
+    </div>
+  );
+}
+
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export default function AvaliacaoConfig({ tenantDbId }) {
@@ -326,6 +396,7 @@ export default function AvaliacaoConfig({ tenantDbId }) {
       <SecaoIdentidade tenantDbId={tenantDbId} brandAtual={brand} />
       <SecaoMensagens tenantDbId={tenantDbId} tipo="csat" config={config} onSaved={carregar} />
       <SecaoMensagens tenantDbId={tenantDbId} tipo="nps"  config={config} onSaved={carregar} />
+      <SecaoAlertaDetrator tenantDbId={tenantDbId} config={config} onSaved={carregar} />
     </div>
   );
 }
