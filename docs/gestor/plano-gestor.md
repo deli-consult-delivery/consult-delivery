@@ -2,7 +2,7 @@
 
 > STATUS: FINAL — entrevistas (4 rodadas) + mapeamento (3 Explore) + design (Plan agent, código do Bridge lido) + verificação no banco real.
 >
-> **Aprovado em 2026-07-02.** F0 concluída no PR #681 (migrations `20260702_001`/`002`/`003` aplicadas).
+> **Aprovado em 2026-07-02.** **2026-07-02 (consolidação):** F0 + F1b + F1 parcial + F2 parcial **EM PRODUÇÃO** — 11 PRs #681-#691 mergeados: F0 fundação (migrations `20260702_001`/`002`/`003` aplicadas + rota Bridge `portal-worker.js` + `garantirLoja`, #681); chat `gestor-conversa` na cascata multi-provider Ollama Cloud (kimi-k2.6) → OpenRouter → Anthropic com tools+web search (#683/#685); DELI portada para a mesma cascata (#687); perfil Hermes fase B (#686); Dashboard v1 por loja (`src/console/GestorDashboard.jsx`, #688); `telegram.ts` compartilhado + `relatorio-semanal.ts` + esqueleto `coleta-diaria.ts` atrás da trava `GESTOR_COLETA_ATIVA` (desligada por padrão, #689); rota de aprovação/execução de drafts whatsapp+portal_ifood (`gestor-aprovacao.js`, #690); fix de segurança removendo secrets hardcoded do `PainelAvaliacoesConsultor.jsx` (#691). **Pendente — gates do Wandson:** login único consolidado do Portal iFood (email/senha + 2FA das 16 lojas) · probe do seletor do modal "Escolher loja" no viewer do `ifood-browser` + validar `garantirLoja` entre 2 lojas reais · deploy do Bridge na VPS (`pm2 restart bridge-server`) · rotação da chave Evolution que estava hardcoded. Depois dos gates: ativar `GESTOR_COLETA_ATIVA=true` e escalar F2 às 16 lojas.
 
 ## Context
 
