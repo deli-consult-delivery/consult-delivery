@@ -1,11 +1,11 @@
 import { task } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
-import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 import { getPrompt } from "../../src/agents/shared/runtime";
 import { getClientContext } from "../../src/agents/shared/runtime";
 import { runClaudeWithWebSearch } from "../_shared/claude";
+import { chatWithTools, type ToolDef, type OAIMessage } from "../_shared/llm-tools";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -27,57 +27,69 @@ const WebSearchResultSchema = z.object({
 
 // ── Ferramentas ───────────────────────────────────────────────────────────────
 
-const proporDraftTool: Anthropic.Tool = {
-  name: "propor_draft",
-  description: "Cria uma PROPOSTA (draft pendente) de mensagem/ação para o Wandson aprovar. NUNCA envia nada — só propõe. Use quando quiser sugerir uma resposta a cliente, contestação ou ação concreta sobre uma loja.",
-  input_schema: {
-    type: "object",
-    properties: {
-      loja_id: { type: "string", description: "UUID da loja relacionada à proposta" },
-      channel: { type: "string", description: "Canal da proposta (ex.: painel, whatsapp_pv, whatsapp_group)" },
-      content: { type: "string", description: "Conteúdo/corpo da proposta" },
-      reasoning: { type: "string", description: "Por que você está propondo isto" },
+const proporDraftTool: ToolDef = {
+  type: "function",
+  function: {
+    name: "propor_draft",
+    description: "Cria uma PROPOSTA (draft pendente) de mensagem/ação para o Wandson aprovar. NUNCA envia nada — só propõe. Use quando quiser sugerir uma resposta a cliente, contestação ou ação concreta sobre uma loja.",
+    parameters: {
+      type: "object",
+      properties: {
+        loja_id: { type: "string", description: "UUID da loja relacionada à proposta" },
+        channel: { type: "string", description: "Canal da proposta (ex.: painel, whatsapp_pv, whatsapp_group)" },
+        content: { type: "string", description: "Conteúdo/corpo da proposta" },
+        reasoning: { type: "string", description: "Por que você está propondo isto" },
+      },
+      required: ["loja_id", "channel", "content", "reasoning"],
     },
-    required: ["loja_id", "channel", "content", "reasoning"],
   },
 };
 
-const consultarMetricasTool: Anthropic.Tool = {
-  name: "consultar_metricas",
-  description: "Consulta as métricas diárias (loja_metricas) de uma loja nos últimos N dias — faturamento, pedidos, avaliação, cancelamentos.",
-  input_schema: {
-    type: "object",
-    properties: {
-      loja_id: { type: "string", description: "UUID da loja" },
-      dias: { type: "number", description: "Quantos dias olhar para trás (default 14)" },
+const consultarMetricasTool: ToolDef = {
+  type: "function",
+  function: {
+    name: "consultar_metricas",
+    description: "Consulta as métricas diárias (loja_metricas) de uma loja nos últimos N dias — faturamento, pedidos, avaliação, cancelamentos.",
+    parameters: {
+      type: "object",
+      properties: {
+        loja_id: { type: "string", description: "UUID da loja" },
+        dias: { type: "number", description: "Quantos dias olhar para trás (default 14)" },
+      },
+      required: ["loja_id"],
     },
-    required: ["loja_id"],
   },
 };
 
-const pesquisarWebTool: Anthropic.Tool = {
-  name: "pesquisar_web",
-  description: "Pesquisa na web informações atualizadas (concorrência, tendências de delivery, práticas de iFood). Use quando precisar de dados externos que não estão no banco.",
-  input_schema: {
-    type: "object",
-    properties: {
-      query: { type: "string", description: "O que pesquisar" },
+const pesquisarWebTool: ToolDef = {
+  type: "function",
+  function: {
+    name: "pesquisar_web",
+    description: "Pesquisa na web informações atualizadas (concorrência, tendências de delivery, práticas de iFood). Use quando precisar de dados externos que não estão no banco.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "O que pesquisar" },
+      },
+      required: ["query"],
     },
-    required: ["query"],
   },
 };
 
-const salvarConhecimentoTool: Anthropic.Tool = {
-  name: "salvar_conhecimento",
-  description: "Salva um aprendizado ou boa prática na base de conhecimento do GESTOR, para reutilizar em conversas futuras.",
-  input_schema: {
-    type: "object",
-    properties: {
-      titulo: { type: "string", description: "Título curto do conhecimento" },
-      conteudo: { type: "string", description: "Conteúdo completo" },
-      tags: { type: "array", items: { type: "string" }, description: "Tags para busca futura" },
+const salvarConhecimentoTool: ToolDef = {
+  type: "function",
+  function: {
+    name: "salvar_conhecimento",
+    description: "Salva um aprendizado ou boa prática na base de conhecimento do GESTOR, para reutilizar em conversas futuras.",
+    parameters: {
+      type: "object",
+      properties: {
+        titulo: { type: "string", description: "Título curto do conhecimento" },
+        conteudo: { type: "string", description: "Conteúdo completo" },
+        tags: { type: "array", items: { type: "string" }, description: "Tags para busca futura" },
+      },
+      required: ["titulo", "conteudo"],
     },
-    required: ["titulo", "conteudo"],
   },
 };
 
@@ -149,8 +161,7 @@ export const gestorConversa = task({
     const { data: history } = await historyQuery;
     const historyChronological = (history ?? []).reverse();
 
-    const client = new Anthropic();
-    let messages: Anthropic.MessageParam[] = [
+    let messages: OAIMessage[] = [
       ...historyChronological.map((h) => ({ role: h.role as "user" | "assistant", content: h.content })),
       { role: "user", content: input.message },
     ];
@@ -160,25 +171,21 @@ export const gestorConversa = task({
     const maxTurns = 5;
 
     for (let turn = 0; turn < maxTurns; turn++) {
-      const response = await client.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 1536,
+      const { message } = await chatWithTools({
         system: systemPrompt,
         messages,
         tools: allTools,
-        tool_choice: { type: "auto" },
+        maxTokens: 1536,
       });
 
-      if (response.stop_reason === "tool_use") {
-        const toolBlock = response.content.find(
-          (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
-        );
-        if (!toolBlock) break;
+      if (message.tool_calls?.length) {
+        const toolCall = message.tool_calls[0];
+        const toolArgs = JSON.parse(toolCall.function.arguments || "{}");
 
         let toolResult = "";
 
-        if (toolBlock.name === "propor_draft") {
-          const toolInput = toolBlock.input as {
+        if (toolCall.function.name === "propor_draft") {
+          const toolInput = toolArgs as {
             loja_id: string;
             channel: string;
             content: string;
@@ -206,8 +213,8 @@ export const gestorConversa = task({
           } catch (err) {
             toolResult = `Erro ao criar draft: ${(err as Error).message}`;
           }
-        } else if (toolBlock.name === "consultar_metricas") {
-          const toolInput = toolBlock.input as { loja_id: string; dias?: number };
+        } else if (toolCall.function.name === "consultar_metricas") {
+          const toolInput = toolArgs as { loja_id: string; dias?: number };
           try {
             const desde = new Date();
             desde.setDate(desde.getDate() - (toolInput.dias ?? 14));
@@ -222,8 +229,8 @@ export const gestorConversa = task({
           } catch (err) {
             toolResult = `Erro ao consultar métricas: ${(err as Error).message}`;
           }
-        } else if (toolBlock.name === "pesquisar_web") {
-          const toolInput = toolBlock.input as { query: string };
+        } else if (toolCall.function.name === "pesquisar_web") {
+          const toolInput = toolArgs as { query: string };
           try {
             const resultado = await runClaudeWithWebSearch({
               systemPrompt: "Responda em português brasileiro com um resumo objetivo dos achados, em JSON: {\"resumo\": string}.",
@@ -234,8 +241,8 @@ export const gestorConversa = task({
           } catch (err) {
             toolResult = `Erro ao pesquisar na web: ${(err as Error).message}`;
           }
-        } else if (toolBlock.name === "salvar_conhecimento") {
-          const toolInput = toolBlock.input as { titulo: string; conteudo: string; tags?: string[] };
+        } else if (toolCall.function.name === "salvar_conhecimento") {
+          const toolInput = toolArgs as { titulo: string; conteudo: string; tags?: string[] };
           try {
             const { error } = await sb.from("agent_knowledge_base").insert({
               tenant_id: input.tenant_id,
@@ -253,26 +260,18 @@ export const gestorConversa = task({
             toolResult = `Erro ao salvar conhecimento: ${(err as Error).message}`;
           }
         } else {
-          toolResult = `Ferramenta desconhecida: ${toolBlock.name}`;
+          toolResult = `Ferramenta desconhecida: ${toolCall.function.name}`;
         }
 
         messages = [
           ...messages,
-          { role: "assistant", content: response.content },
-          {
-            role: "user",
-            content: [
-              { type: "tool_result" as const, tool_use_id: toolBlock.id, content: toolResult },
-            ],
-          },
+          { role: "assistant", content: message.content, tool_calls: message.tool_calls },
+          { role: "tool", tool_call_id: toolCall.id, content: toolResult },
         ];
         continue;
       }
 
-      reply = response.content
-        .filter((b): b is Anthropic.TextBlock => b.type === "text")
-        .map((b) => b.text)
-        .join("");
+      reply = message.content ?? "";
       break;
     }
 
