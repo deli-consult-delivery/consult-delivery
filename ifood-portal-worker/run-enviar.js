@@ -1,6 +1,8 @@
 // Runner: PUBLICA a resposta do drawer aberto+preenchido. SÓ roda com CONFIRMAR_ENVIO=1.
 // Semáforo amarelo: rodar apenas após o Wandson aprovar o texto no viewer.
-// O texto aprovado (./texto-resposta.txt) vincula o envio (anti-TOCTOU): se o campo divergir, aborta.
+// O texto aprovado vincula o envio (anti-TOCTOU): vem de env TEXTO_APROVADO (chamada via
+// Bridge/aprovação) ou, na ausência dela, arquivo ./texto-resposta.txt (uso manual/local).
+// Se o campo divergir do texto aprovado, enviarResposta() aborta.
 // Opcional: env REVIEW_ID (selectedReviewId do drawer, retornado por preencherResposta) para cruzar.
 const fs = require('fs');
 const { enviarResposta } = require('./index');
@@ -8,7 +10,7 @@ const { enviarResposta } = require('./index');
   try {
     if (process.env.CONFIRMAR_ENVIO !== '1')
       throw new Error('defina CONFIRMAR_ENVIO=1 para publicar (só após "ok" explícito do Wandson)');
-    const texto = fs.readFileSync('./texto-resposta.txt', 'utf8').trim();
+    const texto = (process.env.TEXTO_APROVADO || fs.readFileSync('./texto-resposta.txt', 'utf8')).trim();
     const opts = { permitirEnvio: true };
     if (process.env.REVIEW_ID) opts.reviewId = process.env.REVIEW_ID.trim();
     const r = await enviarResposta(texto, opts);
