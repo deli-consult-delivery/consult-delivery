@@ -41,6 +41,7 @@ import Contratos from './Contratos.jsx';
 import Automacoes from './Automacoes.jsx';
 import Deli from './Deli.jsx';
 import Gestor from './Gestor.jsx';
+import GestorDashboard from './GestorDashboard.jsx';
 import MiaAudit from './MiaAudit.jsx';
 import MonitorSessoes from './MonitorSessoes.jsx';
 import PipelineScreen from './PipelineScreen.jsx';
@@ -742,6 +743,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
       case 'visao': return <VisaoGeral tenantNome={tenantNome} tenantDbId={tenantDbId} onNav={nav} allowedModules={allowedModules} />;
       case 'deli': return <Deli tenantDbId={tenantDbId} userId={userId} />;
       case 'gestor': return <Gestor tenantDbId={tenantDbId} userId={userId} />;
+      case 'gestor-dashboard': return <GestorDashboard tenantDbId={tenantDbId} userId={userId} onNavigate={nav} />;
       case 'crm': return <CRM tenantSlug={tenantSlug} tenantDbId={tenantDbId} onNavigate={nav} />;
       case 'lojas': return <Lojas tenantDbId={tenantDbId} userId={userId} />;
       case 'mia': return <MiaAudit tenantDbId={tenantDbId} userId={userId} />;
