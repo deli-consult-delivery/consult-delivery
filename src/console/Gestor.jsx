@@ -122,7 +122,7 @@ function KpiFaixa({ lojaId }) {
   }, [lojaId]);
 
   if (!lojaId || lojaId === TODAS_LOJAS) return null;
-  if (metricas === null) return null;
+  if (metricas == null) return null;
 
   if (metricas.length === 0) {
     return (
