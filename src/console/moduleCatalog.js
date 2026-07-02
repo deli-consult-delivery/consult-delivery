@@ -46,6 +46,7 @@ export const GRUPOS = [
     { id: 'lara-editorial', ic: 'i-palette', label: 'LARA Editorial' },
     { id: 'lara', ic: 'i-bot', label: 'LARA' },
     { id: 'gestor', ic: 'i-target', label: 'GESTOR — iFood' },
+    { id: 'gestor-dashboard', ic: 'i-chart', label: 'GESTOR — Dashboard' },
     { id: 'tarefas-globais', ic: 'i-list', label: 'Tarefas Globais' },
     { id: 'automacoes', ic: 'i-zap', label: 'Automações' },
     { id: 'habilidades', ic: 'i-zap', label: 'Habilidades' },
