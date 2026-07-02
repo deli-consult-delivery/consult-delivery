@@ -1,4 +1,5 @@
 import { getSupabase } from "./supabase";
+import { notifyTelegram } from "./telegram";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -136,25 +137,6 @@ async function notificarCeoAutorizacao(
     console.warn("[loop-tasks] sino ceo_authorization erro (soft):", (err as Error).message);
   }
 
-  // Telegram Bot API direto (soft-fail)
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId   = process.env.CEO_TELEGRAM_CHAT_ID;
-  if (!botToken || !chatId) {
-    console.warn("[loop-tasks] CEO Telegram não configurado (TELEGRAM_BOT_TOKEN/CEO_TELEGRAM_CHAT_ID) — só sino");
-    return;
-  }
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ chat_id: chatId, text: texto, parse_mode: "HTML" }),
-      signal:  AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      console.warn(`[loop-tasks] Telegram CEO ${res.status} (soft):`, body.slice(0, 200));
-    }
-  } catch (err) {
-    console.warn("[loop-tasks] Telegram CEO falhou (soft):", (err as Error).message);
-  }
+  // Telegram Bot API direto (soft-fail) — via notifier compartilhado
+  await notifyTelegram(texto);
 }
