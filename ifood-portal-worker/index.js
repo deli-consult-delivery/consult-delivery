@@ -84,8 +84,41 @@ async function lerNomeLojaAtiva(page) {
   return texto ? texto.trim() : null;
 }
 
+// Modal "Escolher loja" (mapeado via probe supervisionado em 2026-07-02): pagina 5 de 75 lojas,
+// então SEMPRE busca pelo campo `input[placeholder="Busque pelo nome ou ID"]` antes de olhar a
+// lista — nunca varre páginas. Itens são `li[role="option"]` dentro de `ul[data-testid="choose-
+// restaurant-modal-list"]`; casa pela PRIMEIRA LINHA do innerText (nome da loja) igual, exata, ao
+// alvo. Aborta se a busca não isolar exatamente 1 item — nunca clica no item errado.
+async function buscarEClicarLojaNoModal(page, modalSel, nomeLoja) {
+  const busca = page.locator('input[placeholder="Busque pelo nome ou ID"]');
+  await busca.fill(nomeLoja);
+  await page.waitForTimeout(1500);
+
+  const itens = page.locator(`${modalSel} li[role="option"]`);
+  const textos = await itens.allInnerTexts();
+  const primeirasLinhas = textos.map((t) => t.split('\n')[0].trim());
+  const alvoTrim = nomeLoja.trim();
+  const indices = primeirasLinhas.reduce((acc, linha, i) => {
+    if (linha === alvoTrim) acc.push(i);
+    return acc;
+  }, []);
+
+  if (indices.length === 0) {
+    throw new Error(
+      `garantirLoja: loja "${nomeLoja}" não encontrada no modal "Escolher loja" (busca não retornou item com nome exato).`
+    );
+  }
+  if (indices.length > 1) {
+    throw new Error(
+      `garantirLoja: busca "${nomeLoja}" no modal "Escolher loja" retornou ${indices.length} itens com nome exato igual — ambíguo, abortado por segurança.`
+    );
+  }
+  await itens.nth(indices[0]).click();
+}
+
 // Procura, dentro de `scopeSel`, um item clicável cujo texto contenha `alvoNormalizado` e clica.
-// Retorna true se encontrou e clicou.
+// Retorna true se encontrou e clicou. Usado hoje só pelo switcher (caso b) — seletor ainda pendente
+// de probe (SELETOR_SWITCHER).
 async function clicarItemLojaNoEscopo(page, scopeSel, alvoNormalizado) {
   return page.evaluate(
     ({ scopeSel, alvoNormalizado }) => {
@@ -128,13 +161,8 @@ async function garantirLoja(page, nomeLoja) {
   let trocou = false;
 
   if (modalAberto) {
-    // (a) modal "Escolher loja" aberto → buscar pelo nome e clicar
-    const clicado = await clicarItemLojaNoEscopo(page, modalSel, alvo);
-    if (!clicado) {
-      throw new Error(
-        `garantirLoja: loja "${nomeLoja}" não encontrada no modal "Escolher loja" (nome diverge do portal?).`
-      );
-    }
+    // (a) modal "Escolher loja" aberto → buscar (pagina 5 de 75) e clicar no item de nome exato
+    await buscarEClicarLojaNoModal(page, modalSel, nomeLoja);
     await settle(page, 4000);
     trocou = true;
   } else {
