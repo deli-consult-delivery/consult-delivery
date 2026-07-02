@@ -668,12 +668,30 @@ export function subscribeToDrafts(tenantId, callback) {
 export async function listLojasConsultoria(tenantId) {
   const { data, error } = await supabase
     .from('lojas')
-    .select('id, nome, super_restaurante')
+    .select('id, nome, super_restaurante, whatsapp_group_jid')
     .eq('tenant_id', tenantId)
     .eq('is_consultoria_ativa', true)
     .order('nome');
   if (error) throw error;
   return data ?? [];
+}
+
+// Envio de mensagem WhatsApp via Bridge (nunca chamar a Evolution API do frontend).
+const BRIDGE = import.meta.env.VITE_BRIDGE_URL || 'https://bridge.consultdelivery.com.br';
+
+export async function enviarWhatsAppAvaliacao({ tenantId, chatId, texto }) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token || '';
+  const res = await fetch(`${BRIDGE}/api/avaliacoes/enviar-whatsapp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ tenant_id: tenantId, chat_id: chatId, texto }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`enviarWhatsAppAvaliacao HTTP ${res.status}: ${body.slice(0, 300)}`);
+  }
+  return res.json();
 }
 
 export async function getAvaliacoesConfig(lojaId) {

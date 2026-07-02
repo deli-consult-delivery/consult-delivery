@@ -1,75 +1,29 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
+import { listLojasConsultoria, enviarWhatsAppAvaliacao } from '../lib/api';
 
-// ─── Supabase (direto, sem SDK) ──────────────────────────────────────────────
-const SUPA_URL  = 'https://czyanilrverorwenikqw.supabase.co';
-const SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6eWFuaWxydmVyb3J3ZW5pa3F3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwNTg5MzksImV4cCI6MjA5MjYzNDkzOX0.k_EIEgnM5a-4Ub52-w5VJw9WJBEPNQmmwgz8AEuyoAw';
-const CLIENT_PAGE     = 'https://app.consultdelivery.com.br/aprovacao-avaliacao.html';
-const EVO_URL         = 'https://evo1-evolution-api.bawafu.easypanel.host';
-const EVO_KEY         = '66A55B39-3167-4B15-8933-D65B26F56E6F';
-const EVO_INST        = 'consult-delivery';
-const WA_GROUP_FALLBACK = '120363175577392322@g.us';
+const CLIENT_PAGE = 'https://app.consultdelivery.com.br/aprovacao-avaliacao.html';
 
-// ─── LocalStorage ────────────────────────────────────────────────────────────
-const LS_KEY = 'cd_store_groups_v1';
-function lsLoad() { try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch { return {}; } }
-function lsSave(m)  { try { localStorage.setItem(LS_KEY, JSON.stringify(m)); } catch {} }
-
-const KNOWN_STORES = [
-  'Café Container - Lanches e Salgados',
-  'Churrascaria Cardoso - Marmitas & Espetos',
-  'Delícias Grill - Marmitas & Espetinhos',
-  'Jf Espetaria - Marmitas & Espetos',
-  'Mangiare Pizzaria - Forno a Lenha',
-  'Marmitaria & Restaurante - Panelada da Tia',
-  'Panificadora Café Com Pão Cidade Jardim',
-  'Piazza Navona Pizzaria',
-  'Pizzaria Lá Mazza - Pizzas e Porções',
-  'Planet Pizza - Parauapebas',
-  'Popdi Pizza',
-  "Varanda's Churrascaria e Pizzaria",
-  'Villas Caldos da 14 - B. União',
-  'Villas Caldos - Panelinhas e Petiscos',
-];
-
-const SUPA_HDR = {
-  'apikey': SUPA_ANON,
-  'Authorization': `Bearer ${SUPA_ANON}`,
-  'Content-Type': 'application/json',
-  'Prefer': 'return=representation',
-};
-
-async function sbSelect(q = '') {
-  const r = await fetch(`${SUPA_URL}/rest/v1/reviews?${q}`, { headers: SUPA_HDR });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
+async function sbSelect() {
+  const { data, error } = await supabase
+    .from('reviews')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(300);
+  if (error) throw new Error(error.message);
+  return data ?? [];
 }
 
 async function sbUpdate(match, body) {
-  const q = Object.entries(match).map(([k, v]) => `${k}=eq.${encodeURIComponent(v)}`).join('&');
-  const r = await fetch(`${SUPA_URL}/rest/v1/reviews?${q}`, {
-    method: 'PATCH', headers: SUPA_HDR, body: JSON.stringify(body),
-  });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
+  let q = supabase.from('reviews').update(body);
+  Object.entries(match).forEach(([k, v]) => { q = q.eq(k, v); });
+  const { error } = await q;
+  if (error) throw new Error(error.message);
 }
 
 async function sbUpdateNote(id, notes) {
-  const q = `id=eq.${encodeURIComponent(id)}`;
-  const r = await fetch(`${SUPA_URL}/rest/v1/reviews?${q}`, {
-    method: 'PATCH', headers: SUPA_HDR, body: JSON.stringify({ notes }),
-  });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
-}
-
-async function sbUpdateStoreGroup(store, groupId) {
-  const q = `store=eq.${encodeURIComponent(store)}`;
-  const r = await fetch(`${SUPA_URL}/rest/v1/reviews?${q}`, {
-    method: 'PATCH', headers: SUPA_HDR, body: JSON.stringify({ whatsapp_group: groupId }),
-  });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
+  const { error } = await supabase.from('reviews').update({ notes }).eq('id', id);
+  if (error) throw new Error(error.message);
 }
 
 // ─── Arquivada = publicada OU prazo já vencido ────────────────────────────────
@@ -210,27 +164,6 @@ function buildWaMsg(review, resp) {
   const stars = '⭐'.repeat(review.rating || 0);
   const link = `${CLIENT_PAGE}?token=${review.token}`;
   return `📋 *Avaliação para aprovação — ${review.store}*\n\n${stars} — Pedido ${review.orderId}\n\n*Comentário do cliente:*\n_"${review.clientComment}"_\n\n*Sugestão de resposta:*\n${resp}\n\n🔗 *Link para aprovar ou editar:*\n${link}\n\n_(Sem retorno até as 9h do dia seguinte, publicamos essa resposta no iFood.)_`;
-}
-
-async function postEvo(groupId, text) {
-  const r = await fetch(`${EVO_URL}/message/sendText/${EVO_INST}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'apikey': EVO_KEY },
-    body: JSON.stringify({ number: groupId, text }),
-  });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
-}
-
-async function fetchEvoGroups() {
-  const r = await fetch(`${EVO_URL}/group/fetchAllGroups/${EVO_INST}?getParticipants=false`, {
-    headers: { 'apikey': EVO_KEY },
-  });
-  if (!r.ok) throw new Error(await r.text());
-  const data = await r.json();
-  return (Array.isArray(data) ? data : [])
-    .map(g => ({ id: g.id, name: g.subject || g.id }))
-    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 }
 
 function copiar(t) { try { navigator.clipboard?.writeText(t || ''); } catch {} }
@@ -380,82 +313,17 @@ async function ensureAvaliacoesEspacos(tenantId, storeName) {
   return { listId, toDoColumnId };
 }
 
-// ─── Configuração de grupos por loja ─────────────────────────────────────────
-function ConfigGrupos({ storeGroups, groups, groupsLoading, groupsError, onSave }) {
-  const [open, setOpen]     = useState(false);
-  const [local, setLocal]   = useState({});
-  const [saving, setSaving] = useState(false);
-
-  function handleToggle() {
-    if (!open) setLocal({ ...storeGroups });
-    setOpen(v => !v);
-  }
-  function handleChange(store, value) { setLocal(l => ({ ...l, [store]: value })); }
-  async function salvar() {
-    setSaving(true);
-    await onSave(local);
-    setSaving(false);
-  }
-
-  const configuredCount = KNOWN_STORES.filter(s => local[s]).length;
-  const allConfigured   = configuredCount === KNOWN_STORES.length;
-
+// ─── Aviso de lojas sem grupo WhatsApp cadastrado ─────────────────────────────
+// TODO: edição do campo lojas.whatsapp_group_jid fica de fora desta tela por ora
+// (cadastrar via SQL/painel de lojas até termos um form dedicado aqui).
+function AvisoGruposFaltando({ lojasSemGrupo }) {
+  if (!lojasSemGrupo.length) return null;
   return (
-    <div className="cv2-card">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-        <div>
-          <h3 style={{ margin: 0 }}>Grupos WhatsApp por loja</h3>
-          <div style={{ fontSize: 12, color: 'var(--tx2)', marginTop: 3 }}>
-            {configuredCount} de {KNOWN_STORES.length} lojas configuradas. O mesmo grupo pode ser usado em múltiplas lojas.
-          </div>
-        </div>
-        <button className="cv2-btn sec" style={{ fontSize: 12 }} onClick={handleToggle}>
-          {open ? 'Fechar' : 'Configurar grupos'}
-        </button>
-      </div>
-      {open && (
-        <div style={{ marginTop: 14 }}>
-          {groupsLoading && <div style={{ fontSize: 13, color: 'var(--tx2)' }}>Carregando grupos da Evolution API…</div>}
-          {groupsError   && <div style={{ fontSize: 13, color: 'var(--red)' }}>Erro ao buscar grupos: {groupsError}</div>}
-          {!groupsLoading && groups.length === 0 && !groupsError && (
-            <div style={{ fontSize: 13, color: 'var(--tx2)' }}>Nenhum grupo encontrado na Evolution API.</div>
-          )}
-          {!groupsLoading && groups.length > 0 && (
-            <>
-              {KNOWN_STORES.map(store => (
-                <div key={store} style={{
-                  display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-                  padding: '8px 0', borderBottom: '1px solid var(--line)',
-                }}>
-                  <span style={{ flex: 1, minWidth: 160, fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{store}</span>
-                  <select
-                    value={local[store] || ''}
-                    onChange={e => handleChange(store, e.target.value)}
-                    style={{ ...inp, width: 'auto', minWidth: 260, fontSize: 12 }}
-                  >
-                    <option value="">— selecionar grupo —</option>
-                    {groups.map((g, idx) => <option key={`${idx}-${g.id}`} value={g.id}>{g.name}</option>)}
-                  </select>
-                  {local[store] && (
-                    <span style={{ fontSize: 11, color: 'var(--tx2)', fontFamily: 'monospace', minWidth: 80 }}>{local[store]}</span>
-                  )}
-                </div>
-              ))}
-              <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <button className="cv2-btn" style={{ fontSize: 12 }} disabled={saving} onClick={salvar}>
-                  {saving ? 'Salvando…' : `Salvar configuração (${configuredCount}/${KNOWN_STORES.length} lojas)`}
-                </button>
-                <span style={{ fontSize: 11, color: 'var(--tx2)' }}>Salva localmente e sincroniza com o banco.</span>
-                {!allConfigured && (
-                  <span style={{ fontSize: 11, color: 'var(--red)' }}>
-                    ⚠ {KNOWN_STORES.length - configuredCount} loja{KNOWN_STORES.length - configuredCount > 1 ? 's' : ''} sem grupo.
-                  </span>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      )}
+    <div className="cv2-card" style={{ borderLeft: '3px solid var(--red)', marginBottom: 10 }}>
+      <span style={{ fontSize: 13, color: 'var(--ink)' }}>
+        ⚠ Sem grupo WhatsApp cadastrado: <strong>{lojasSemGrupo.join(', ')}</strong>.
+        Cadastre em <code>lojas.whatsapp_group_jid</code> antes de enviar avaliações destas lojas.
+      </span>
     </div>
   );
 }
@@ -876,15 +744,15 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
     try { return localStorage.getItem(DISMISS_KEY) === '1'; } catch { return false; }
   });
 
-  const [groups, setGroups]               = useState([]);
-  const [groupsLoading, setGroupsLoading] = useState(true);
-  const [groupsError, setGroupsError]     = useState(null);
+  const [lojas, setLojas]           = useState([]);
+  const [lojasLoading, setLojasLoading] = useState(true);
+  const [lojasError, setLojasError]     = useState(null);
 
   const pollerRef = useRef(null);
 
   const load = useCallback(async () => {
     try {
-      const rows = await sbSelect('order=created_at.desc&limit=300');
+      const rows = await sbSelect();
       setReviews(rows.map(mapRow));
       setError(null);
     } catch (e) { setError(e.message); }
@@ -892,11 +760,12 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
   }, []);
 
   useEffect(() => {
-    fetchEvoGroups()
-      .then(gs => { setGroups(gs); setGroupsError(null); })
-      .catch(e => setGroupsError(e.message))
-      .finally(() => setGroupsLoading(false));
-  }, []);
+    if (!tenantDbId) { setLojasLoading(false); return; }
+    listLojasConsultoria(tenantDbId)
+      .then(rows => { setLojas(rows); setLojasError(null); })
+      .catch(e => setLojasError(e.message))
+      .finally(() => setLojasLoading(false));
+  }, [tenantDbId]);
 
   useEffect(() => {
     load();
@@ -904,11 +773,14 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
     return () => clearInterval(pollerRef.current);
   }, [load]);
 
+  // Grupo por loja: whatsapp_group_jid cadastrado (lojas), com override pelo
+  // grupo já gravado em cada review (compatibilidade com dados legados).
   const storeGroups = useMemo(() => {
-    const sg = { ...lsLoad() };
+    const sg = {};
+    lojas.forEach(l => { if (l.whatsapp_group_jid) sg[l.nome] = l.whatsapp_group_jid; });
     reviews.forEach(r => { if (r.store && r.whatsappGroup) sg[r.store] = r.whatsappGroup; });
     return sg;
-  }, [reviews]);
+  }, [lojas, reviews]);
 
   // ─── Separação ativas × arquivadas ────────────────────────────────────────
   const activeReviews   = reviews.filter(r => !isArchivedFn(r, todayISO));
@@ -977,27 +849,14 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
   }
 
   // ─── Handlers existentes ──────────────────────────────────────────────────
-  async function handleSaveGroups(mapping) {
-    lsSave(mapping);
-    const entries = Object.entries(mapping).filter(([, v]) => v);
-    if (entries.length) {
-      try {
-        await Promise.all(entries.map(([store, groupId]) => sbUpdateStoreGroup(store, groupId)));
-      } catch (e) {
-        setError('Aviso: grupos salvos localmente, mas houve erro ao sincronizar com o banco: ' + e.message);
-      }
-    }
-    flash('Grupos salvos ✓');
-    await load();
-  }
-
   async function handleSendStore(storeName, pendingReviews) {
     if (!pendingReviews.length) return;
-    const groupId = pendingReviews.find(r => r.whatsappGroup)?.whatsappGroup || storeGroups[storeName] || WA_GROUP_FALLBACK;
+    const groupId = pendingReviews.find(r => r.whatsappGroup)?.whatsappGroup || storeGroups[storeName];
+    if (!groupId) { setError(`Loja "${storeName}" sem grupo WhatsApp cadastrado.`); return; }
     setBusyStore(storeName); setError(null);
     try {
       const msg = buildWaMsgStore(pendingReviews);
-      await postEvo(groupId, msg);
+      await enviarWhatsAppAvaliacao({ tenantId: tenantDbId, chatId: groupId, texto: msg });
       const now = new Date().toISOString();
       await Promise.all(pendingReviews.map(rev =>
         sbUpdate({ id: rev.id }, { status: 'sent_to_client', sent_at: now })
@@ -1011,11 +870,12 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
   async function handleSendSingle(id, draft) {
     const rev = reviews.find(r => r.id === id);
     if (!rev) return;
-    const groupId = rev.whatsappGroup || storeGroups[rev.store] || WA_GROUP_FALLBACK;
+    const groupId = rev.whatsappGroup || storeGroups[rev.store];
+    if (!groupId) { setError(`Loja "${rev.store}" sem grupo WhatsApp cadastrado.`); return; }
     setBusyId(id); setError(null);
     try {
       const msg = buildWaMsg(rev, draft);
-      await postEvo(groupId, msg);
+      await enviarWhatsAppAvaliacao({ tenantId: tenantDbId, chatId: groupId, texto: msg });
       await sbUpdate({ id }, { status: 'sent_to_client', suggested_response: draft, sent_at: new Date().toISOString() });
       flash('Reenvio individual feito ✓');
       await load();
@@ -1084,7 +944,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
     approved: activeReviews.filter(r => r.status === 'approved' || r.status === 'modified').length,
   };
 
-  const semGrupo = [...new Set(reviews.map(r => r.store).filter(Boolean))].filter(s => !storeGroups[s]).length;
+  const lojasSemGrupo = [...new Set(reviews.map(r => r.store).filter(Boolean))].filter(s => !storeGroups[s]);
 
   return (
     <div>
@@ -1117,21 +977,9 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
         />
       )}
 
-      {semGrupo > 0 && (
-        <div className="cv2-card" style={{ borderLeft: '3px solid var(--red)', marginBottom: 10 }}>
-          <span style={{ fontSize: 13, color: 'var(--ink)' }}>
-            ⚠ <strong>{semGrupo} loja{semGrupo > 1 ? 's' : ''}</strong> sem grupo WhatsApp configurado — configure abaixo antes de enviar.
-          </span>
-        </div>
-      )}
-
-      <ConfigGrupos
-        storeGroups={storeGroups}
-        groups={groups}
-        groupsLoading={groupsLoading}
-        groupsError={groupsError}
-        onSave={handleSaveGroups}
-      />
+      <AvisoGruposFaltando lojasSemGrupo={lojasSemGrupo} />
+      {lojasLoading && <div className="cv2-sub">Carregando lojas…</div>}
+      {lojasError && <div className="cv2-sub" style={{ color: 'var(--red)' }}>Erro ao carregar lojas: {lojasError}</div>}
 
       {/* KPIs */}
       <div className="cv2-kpis">
@@ -1173,7 +1021,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
           <label style={{ fontSize: 11, color: 'var(--tx2)', fontWeight: 700, display: 'block', marginBottom: 3 }}>Loja</label>
           <select value={filterStore} onChange={e => setFilterStore(e.target.value)} style={{ ...inp, width: 'auto' }}>
             <option value="all">Todas as lojas</option>
-            {KNOWN_STORES.map(s => <option key={s} value={s}>{s}</option>)}
+            {lojas.map(l => <option key={l.id} value={l.nome}>{l.nome}</option>)}
           </select>
         </div>
         <button className="cv2-btn sec" style={{ fontSize: 12 }} onClick={load} disabled={loading}>

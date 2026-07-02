@@ -1398,6 +1398,13 @@ app.use('/api', require('./routes/avaliacoes')({
   assertLojaAccess,
 }));
 
+// ── Avaliações — envio WhatsApp genérico p/ painel "Resp. Avaliações" ────────
+app.use('/api', require('./routes/avaliacoes-consultor')({
+  requireJwt,
+  sbFetch,
+  assertTenantMember,
+}));
+
 // ── G03 — Contratos Digitais ─────────────────────────────────────────────────
 app.use('/api', require('./routes/contratos')({
   requireJwt,
