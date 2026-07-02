@@ -1,8 +1,8 @@
 import { task, tasks } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
-import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
+import { chatWithTools, type ToolDef, type OAIMessage } from "../_shared/llm-tools";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -23,133 +23,151 @@ const OutputSchema = z.object({
 
 // ── Ferramentas dos agentes ───────────────────────────────────────────────────
 
-const acionarLaraTool: Anthropic.Tool = {
-  name: "acionar_lara",
-  description: "Aciona a LARA para executar uma task de marketing em background. Use quando o usuário pedir pesquisa de loja, geração de conteúdo ou análise de tendências. O resultado chegará no chat em alguns minutos.",
-  input_schema: {
-    type: "object",
-    properties: {
-      task: {
-        type: "string",
-        enum: ["pesquisar-loja", "gerar-conteudo", "analisar-tendencia"],
-        description: "Qual task da LARA executar",
+const acionarLaraTool: ToolDef = {
+  type: "function",
+  function: {
+    name: "acionar_lara",
+    description: "Aciona a LARA para executar uma task de marketing em background. Use quando o usuário pedir pesquisa de loja, geração de conteúdo ou análise de tendências. O resultado chegará no chat em alguns minutos.",
+    parameters: {
+      type: "object",
+      properties: {
+        task: {
+          type: "string",
+          enum: ["pesquisar-loja", "gerar-conteudo", "analisar-tendencia"],
+          description: "Qual task da LARA executar",
+        },
+        parametros: {
+          type: "object",
+          description: "Parâmetros para a task. pesquisar-loja: {loja_nome, cidade?, ifood_link?, instagram?}. gerar-conteudo: {loja_nome, tipo, objetivo, contexto?, tom?, cupom?}. analisar-tendencia: {segmento, cidade?, foco?}",
+        },
+        justificativa: {
+          type: "string",
+          description: "Por que você está acionando a LARA agora",
+        },
       },
-      parametros: {
-        type: "object",
-        description: "Parâmetros para a task. pesquisar-loja: {loja_nome, cidade?, ifood_link?, instagram?}. gerar-conteudo: {loja_nome, tipo, objetivo, contexto?, tom?, cupom?}. analisar-tendencia: {segmento, cidade?, foco?}",
-      },
-      justificativa: {
-        type: "string",
-        description: "Por que você está acionando a LARA agora",
-      },
+      required: ["task", "parametros", "justificativa"],
     },
-    required: ["task", "parametros", "justificativa"],
   },
 };
 
-const acionarVeraTool: Anthropic.Tool = {
-  name: "acionar_vera",
-  description: "Aciona a VERA para gerar um relatório analítico ou responder uma pergunta com dados reais do negócio. Use quando o usuário pedir análises, métricas, KPIs ou relatórios de BI.",
-  input_schema: {
-    type: "object",
-    properties: {
-      task: {
-        type: "string",
-        enum: ["vera-responder-pergunta", "vera-snapshot-diario"],
-        description: "Qual task da VERA executar",
+const acionarVeraTool: ToolDef = {
+  type: "function",
+  function: {
+    name: "acionar_vera",
+    description: "Aciona a VERA para gerar um relatório analítico ou responder uma pergunta com dados reais do negócio. Use quando o usuário pedir análises, métricas, KPIs ou relatórios de BI.",
+    parameters: {
+      type: "object",
+      properties: {
+        task: {
+          type: "string",
+          enum: ["vera-responder-pergunta", "vera-snapshot-diario"],
+          description: "Qual task da VERA executar",
+        },
+        parametros: {
+          type: "object",
+          description: "Para vera-responder-pergunta: {pergunta: string}. Para vera-snapshot-diario: {}",
+        },
+        justificativa: {
+          type: "string",
+          description: "Por que você está acionando a VERA agora",
+        },
       },
-      parametros: {
-        type: "object",
-        description: "Para vera-responder-pergunta: {pergunta: string}. Para vera-snapshot-diario: {}",
-      },
-      justificativa: {
-        type: "string",
-        description: "Por que você está acionando a VERA agora",
-      },
+      required: ["task", "parametros", "justificativa"],
     },
-    required: ["task", "parametros", "justificativa"],
   },
 };
 
-const acionarCoraTool: Anthropic.Tool = {
-  name: "acionar_cora",
-  description: "Aciona a CORA para escalonar ou gerenciar uma cobrança. Use quando o usuário mencionar inadimplência, devedor, cobrança vencida ou quiser agir sobre um cliente com pagamento em atraso.",
-  input_schema: {
-    type: "object",
-    properties: {
-      cobranca_id: {
-        type: "string",
-        description: "ID da cobrança a escalonar (UUID)",
+const acionarCoraTool: ToolDef = {
+  type: "function",
+  function: {
+    name: "acionar_cora",
+    description: "Aciona a CORA para escalonar ou gerenciar uma cobrança. Use quando o usuário mencionar inadimplência, devedor, cobrança vencida ou quiser agir sobre um cliente com pagamento em atraso.",
+    parameters: {
+      type: "object",
+      properties: {
+        cobranca_id: {
+          type: "string",
+          description: "ID da cobrança a escalonar (UUID)",
+        },
+        justificativa: {
+          type: "string",
+          description: "Por que você está acionando a CORA agora",
+        },
       },
-      justificativa: {
-        type: "string",
-        description: "Por que você está acionando a CORA agora",
-      },
+      required: ["cobranca_id", "justificativa"],
     },
-    required: ["cobranca_id", "justificativa"],
   },
 };
 
-const acionarSofiaTool: Anthropic.Tool = {
-  name: "acionar_sofia",
-  description: "Aciona a SOFIA para iniciar ou retomar uma abordagem de prospecção para um prospect específico. Use quando o usuário pedir para contatar, abordar ou qualificar um prospect.",
-  input_schema: {
-    type: "object",
-    properties: {
-      prospect_id: {
-        type: "string",
-        description: "ID do prospect no banco (UUID)",
+const acionarSofiaTool: ToolDef = {
+  type: "function",
+  function: {
+    name: "acionar_sofia",
+    description: "Aciona a SOFIA para iniciar ou retomar uma abordagem de prospecção para um prospect específico. Use quando o usuário pedir para contatar, abordar ou qualificar um prospect.",
+    parameters: {
+      type: "object",
+      properties: {
+        prospect_id: {
+          type: "string",
+          description: "ID do prospect no banco (UUID)",
+        },
+        instrucao: {
+          type: "string",
+          description: "Instrução específica para a SOFIA sobre como abordar este prospect",
+        },
+        justificativa: {
+          type: "string",
+          description: "Por que você está acionando a SOFIA agora",
+        },
       },
-      instrucao: {
-        type: "string",
-        description: "Instrução específica para a SOFIA sobre como abordar este prospect",
-      },
-      justificativa: {
-        type: "string",
-        description: "Por que você está acionando a SOFIA agora",
-      },
+      required: ["prospect_id", "instrucao", "justificativa"],
     },
-    required: ["prospect_id", "instrucao", "justificativa"],
   },
 };
 
-const acionarBrenoTool: Anthropic.Tool = {
-  name: "acionar_breno",
-  description: "Pausa ou libera o BRENO em uma conversa de atendimento. Use quando o usuário quiser que o BRENO pare de responder automaticamente em uma conversa ou retome o atendimento.",
-  input_schema: {
-    type: "object",
-    properties: {
-      conversation_id: {
-        type: "string",
-        description: "ID da conversa (UUID)",
+const acionarBrenoTool: ToolDef = {
+  type: "function",
+  function: {
+    name: "acionar_breno",
+    description: "Pausa ou libera o BRENO em uma conversa de atendimento. Use quando o usuário quiser que o BRENO pare de responder automaticamente em uma conversa ou retome o atendimento.",
+    parameters: {
+      type: "object",
+      properties: {
+        conversation_id: {
+          type: "string",
+          description: "ID da conversa (UUID)",
+        },
+        acao: {
+          type: "string",
+          enum: ["pausar", "liberar"],
+          description: "pausar = BRENO para de responder; liberar = BRENO retoma atendimento automático",
+        },
+        justificativa: {
+          type: "string",
+          description: "Por que você está acionando o BRENO agora",
+        },
       },
-      acao: {
-        type: "string",
-        enum: ["pausar", "liberar"],
-        description: "pausar = BRENO para de responder; liberar = BRENO retoma atendimento automático",
-      },
-      justificativa: {
-        type: "string",
-        description: "Por que você está acionando o BRENO agora",
-      },
+      required: ["conversation_id", "acao", "justificativa"],
     },
-    required: ["conversation_id", "acao", "justificativa"],
   },
 };
 
-const consultarKpisTool: Anthropic.Tool = {
-  name: "consultar_kpis",
-  description: "Consulta os KPIs e métricas mais recentes do negócio direto do banco. Use quando o usuário pedir números reais como faturamento, inadimplência, prospects, taxa de recuperação, etc.",
-  input_schema: {
-    type: "object",
-    properties: {
-      metricas: {
-        type: "array",
-        items: { type: "string" },
-        description: "Lista de métricas desejadas. Valores possíveis: snapshot_vera, cobrancas_vencidas, prospects_novos, conversas_abertas, anomalias_ativas",
+const consultarKpisTool: ToolDef = {
+  type: "function",
+  function: {
+    name: "consultar_kpis",
+    description: "Consulta os KPIs e métricas mais recentes do negócio direto do banco. Use quando o usuário pedir números reais como faturamento, inadimplência, prospects, taxa de recuperação, etc.",
+    parameters: {
+      type: "object",
+      properties: {
+        metricas: {
+          type: "array",
+          items: { type: "string" },
+          description: "Lista de métricas desejadas. Valores possíveis: snapshot_vera, cobrancas_vencidas, prospects_novos, conversas_abertas, anomalias_ativas",
+        },
       },
+      required: ["metricas"],
     },
-    required: ["metricas"],
   },
 };
 
@@ -226,11 +244,8 @@ ${memoriesBlock}
 - Se não souber algo com certeza, use \`consultar_kpis\` para buscar dados reais — nunca invente números
 - Respostas longas: use markdown (cabeçalhos, bullets, negrito) para organização`;
 
-    // 5. Construir histórico para o Claude
-    const client = new Anthropic();
-
-    // Formata mensagens do histórico — relatórios de agentes aparecem com prefixo
-    const histMessages: Anthropic.MessageParam[] = historyChronological.map((h) => {
+    // 5. Formata mensagens do histórico — relatórios de agentes aparecem com prefixo
+    const histMessages: OAIMessage[] = historyChronological.map((h) => {
       const isAgentReport = h.metadata?.source_agent != null;
       const content = isAgentReport
         ? `[Relatório ${String(h.metadata.source_agent).toUpperCase()}] ${h.content}`
@@ -238,7 +253,7 @@ ${memoriesBlock}
       return { role: h.role as "user" | "assistant", content };
     });
 
-    let messages: Anthropic.MessageParam[] = [
+    let messages: OAIMessage[] = [
       ...histMessages,
       { role: "user", content: input.message },
     ];
@@ -259,25 +274,21 @@ ${memoriesBlock}
     ];
 
     for (let turn = 0; turn < maxTurns; turn++) {
-      const response = await client.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 1024,
+      const { message } = await chatWithTools({
         system: systemPrompt,
         messages,
         tools: allTools,
-        tool_choice: { type: "auto" },
+        maxTokens: 1024,
       });
 
-      if (response.stop_reason === "tool_use") {
-        const toolBlock = response.content.find(
-          (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
-        );
-        if (!toolBlock) break;
+      if (message.tool_calls?.length) {
+        const toolCall = message.tool_calls[0];
+        const toolArgs = JSON.parse(toolCall.function.arguments || "{}");
 
         let toolResult = "";
 
-        if (toolBlock.name === "acionar_lara") {
-          const toolInput = toolBlock.input as {
+        if (toolCall.function.name === "acionar_lara") {
+          const toolInput = toolArgs as {
             task: string;
             parametros: Record<string, unknown>;
             justificativa: string;
@@ -294,8 +305,8 @@ ${memoriesBlock}
           } catch (err) {
             toolResult = `Erro ao acionar LARA: ${(err as Error).message}`;
           }
-        } else if (toolBlock.name === "acionar_vera") {
-          const toolInput = toolBlock.input as {
+        } else if (toolCall.function.name === "acionar_vera") {
+          const toolInput = toolArgs as {
             task: string;
             parametros: Record<string, unknown>;
             justificativa: string;
@@ -311,8 +322,8 @@ ${memoriesBlock}
           } catch (err) {
             toolResult = `Erro ao acionar VERA: ${(err as Error).message}`;
           }
-        } else if (toolBlock.name === "acionar_cora") {
-          const toolInput = toolBlock.input as {
+        } else if (toolCall.function.name === "acionar_cora") {
+          const toolInput = toolArgs as {
             cobranca_id: string;
             justificativa: string;
           };
@@ -327,8 +338,8 @@ ${memoriesBlock}
           } catch (err) {
             toolResult = `Erro ao acionar CORA: ${(err as Error).message}`;
           }
-        } else if (toolBlock.name === "acionar_sofia") {
-          const toolInput = toolBlock.input as {
+        } else if (toolCall.function.name === "acionar_sofia") {
+          const toolInput = toolArgs as {
             prospect_id: string;
             instrucao: string;
             justificativa: string;
@@ -345,8 +356,8 @@ ${memoriesBlock}
           } catch (err) {
             toolResult = `Erro ao acionar SOFIA: ${(err as Error).message}`;
           }
-        } else if (toolBlock.name === "acionar_breno") {
-          const toolInput = toolBlock.input as {
+        } else if (toolCall.function.name === "acionar_breno") {
+          const toolInput = toolArgs as {
             conversation_id: string;
             acao: "pausar" | "liberar";
             justificativa: string;
@@ -362,8 +373,8 @@ ${memoriesBlock}
           } catch (err) {
             toolResult = `Erro ao acionar BRENO: ${(err as Error).message}`;
           }
-        } else if (toolBlock.name === "consultar_kpis") {
-          const toolInput = toolBlock.input as { metricas: string[] };
+        } else if (toolCall.function.name === "consultar_kpis") {
+          const toolInput = toolArgs as { metricas: string[] };
           const kpiResults: Record<string, unknown> = {};
 
           if (toolInput.metricas.includes("snapshot_vera")) {
@@ -422,31 +433,19 @@ ${memoriesBlock}
 
           toolResult = JSON.stringify(kpiResults, null, 2);
         } else {
-          toolResult = `Ferramenta desconhecida: ${toolBlock.name}`;
+          toolResult = `Ferramenta desconhecida: ${toolCall.function.name}`;
         }
 
         messages = [
           ...messages,
-          { role: "assistant", content: response.content },
-          {
-            role: "user",
-            content: [
-              {
-                type: "tool_result" as const,
-                tool_use_id: toolBlock.id,
-                content: toolResult,
-              },
-            ],
-          },
+          { role: "assistant", content: message.content, tool_calls: message.tool_calls },
+          { role: "tool", tool_call_id: toolCall.id, content: toolResult },
         ];
         continue;
       }
 
       // Resposta final em texto
-      reply = response.content
-        .filter((b): b is Anthropic.TextBlock => b.type === "text")
-        .map((b) => b.text)
-        .join("");
+      reply = message.content ?? "";
       break;
     }
 
