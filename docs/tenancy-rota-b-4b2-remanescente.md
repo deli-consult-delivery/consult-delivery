@@ -19,7 +19,11 @@ Transform: subquery/EXISTS de membership com `tm.role <op> <set>` → `accessibl
 - tenant_agent_config.tenant_admin_manage_agent_config (EXISTS correlacionado tm.role admin/owner) → `is_admin_of(tenant_id)`
 - user_screen_permissions.admin_read_screen_perms (EXISTS correlacionado tm.role admin/owner) → `is_admin_of(tenant_id)`
 
-## Z — RBAC (user_roles+roles.r.name) e/ou atribuição loja_consultores (PRECISA HELPER NOVO + DECISÃO) ~11
+## ✅ DECISÕES (Wandson 2026-07-02)
+- **Grupo Z: RBAC DESCE** a hierarquia. Helper criado e testado: `has_rbac_role_in_hierarchy(_tenant uuid, _role_names text[])` (migration `20260702_008`). Teste: agência admin desce ao store=true; role ausente=false; lojista não sobe=false. Transform Z: trocar o ramo RBAC `EXISTS(... user_roles ur JOIN roles r ... r.name=ANY([...]) AND r.tenant_id=<parent>.tenant_id ...)` por `has_rbac_role_in_hierarchy(<parent>.tenant_id, ARRAY[<names>])`, **preservando intacta** a branch `OR EXISTS(loja_consultores lc WHERE lc.user_id=auth.uid() AND lc.ativo)`.
+- **evolution_instances_manage_admin: CORRELACIONAR por tenant** → trocar o EXISTS global por `is_admin_of(tenant_id)` (fecha o gate cross-tenant).
+
+## Z — RBAC (user_roles+roles.r.name) e/ou atribuição loja_consultores (helper `has_rbac_role_in_hierarchy` PRONTO) ~11
 Estas NÃO usam tenant_members.role; usam o RBAC: `tenant_members tm` só para achar o tenant, `JOIN user_roles ur ON ur.user_id=tm.user_id JOIN roles r ON r.id=ur.role_id AND r.tenant_id=<parent>.tenant_id` e filtram por `r.name`. Várias têm OR com `loja_consultores lc` (lc.user_id=auth.uid() AND lc.ativo) = atribuição direta do consultor (já funciona sem hierarquia — PRESERVAR essa branch intacta).
 Para hierarquizar o eixo tenant do ramo RBAC é preciso um helper novo, algo como
 `has_rbac_role_in_hierarchy(_tenant uuid, _role_names text[])` = existe roles r + user_roles ur do auth.uid() com r.name∈_role_names e r.tenant_id ∈ (ancestrais de _tenant ∪ _tenant). DECISÃO Wandson: o RBAC-role da agência deve valer nos stores descendentes? (provável sim, coerente com Opção 2.)
@@ -39,7 +43,7 @@ Para hierarquizar o eixo tenant do ramo RBAC é preciso um helper novo, algo com
 - messages.messages_{select,insert,update}_tenant: composto `(tenant_id IS NOT NULL AND tenant_id IN <membros>) OR (tenant_id IS NULL AND conversation_id IN (SELECT id FROM conversations WHERE conversations.tenant_id IN <membros>))`. Trocar cada `<membros>` (`tenant_id IN (SELECT tenant_id FROM tenant_members WHERE user_id=auth.uid())`) por `IN (SELECT accessible_tenant_ids())`. Convertível, só é composto.
 - whatsapp_aprovacao_sessions."Cancelar sessao do tenant" (UPDATE, with_check status='cancelada') e "Sessoes do tenant" (SELECT): `EXISTS(FROM lojas l WHERE l.id=...loja_id AND l.tenant_id IN (SELECT tenant_id FROM tenant_members WHERE user_id=auth.uid()))` → trocar inner por `l.tenant_id IN (SELECT accessible_tenant_ids())`. Convertível (Cat.X composta).
 - profiles.tenant_peers_see_profiles: `id IN (SELECT tm2.user_id FROM tenant_members tm1 JOIN tenant_members tm2 ON tm1.tenant_id=tm2.tenant_id WHERE tm1.user_id=auth.uid())` = "vejo perfis de quem compartilha tenant comigo". Hierárquico = `id IN (SELECT user_id FROM tenant_members WHERE tenant_id IN (SELECT accessible_tenant_ids()))`. DECISÃO: agência passa a ver perfis dos membros dos stores (provável ok).
-- evolution_instances.evolution_instances_manage_admin: `EXISTS(tenant_members WHERE user_id=auth.uid() AND role='admin')` — gate GLOBAL sem correlação de tenant (admin de QUALQUER tenant gere TODAS as instâncias). ⚠️ possível brecha pré-existente. DECISÃO: correlacionar por tenant_id (`is_admin_of(tenant_id)`) ou manter global? Recomendo correlacionar.
+- evolution_instances.evolution_instances_manage_admin: **DECIDIDO → correlacionar**: trocar por `is_admin_of(tenant_id)`.
 - max_knowledge_base.max_kb_write: `EXISTS(role admin/owner/deli_owner) LIMIT 1` — global; KB tem linhas globais (tenant_id NULL). Provavelmente intencional global → deixar como está (documentar).
 
 ## Ordem sugerida na retomada
