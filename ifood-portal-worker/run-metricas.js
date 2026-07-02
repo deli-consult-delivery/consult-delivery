@@ -39,22 +39,35 @@ function parseMoedaBR(texto) {
   return negativo ? -numero : numero;
 }
 
-// Casa o rótulo exato (texto de um nó-folha) e retorna o próximo valor "R$ ..." dentro do
-// mesmo bloco (irmão ou descendente próximo) — robusto a mudança de classe CSS.
-function extrairValorPorLabel(page, label) {
-  return page.evaluate((alvo) => {
-    const nodes = [...document.body.querySelectorAll('*')].filter(
-      (e) => e.children.length === 0 && (e.innerText || '').trim() === alvo
-    );
-    for (const node of nodes) {
-      const bloco = node.closest('div,li,section') || node.parentElement;
-      if (!bloco) continue;
-      const texto = bloco.innerText || '';
-      const m = texto.match(/-?R\$\s?-?[\d.]+,\d{2}/);
-      if (m) return m[0];
+// Monta um mapa {label: valorBruto} numa única passada: acha os spans
+// `_variant-heading-2` que contêm um valor R$ (os resumos do /revenue), depois sobe até 3
+// níveis de parentElement procurando, em cada nível, o primeiro filho cujo texto NÃO é R$ e
+// tem <40 chars — esse é o rótulo. Comprovado ao vivo (probe-revenue.js, 2026-07-02): o valor
+// NÃO fica no mesmo bloco do rótulo (a extração por closest() falhava), o rótulo é um
+// irmão/ancestral próximo do span de valor.
+function extrairMapaLabelValor(page) {
+  return page.evaluate(() => {
+    const REGEX_VALOR = /R\$\s?-?[\d.]+,\d{2}/;
+    const spans = [...document.querySelectorAll('span[class*="_variant-heading-2"]')];
+    const mapa = {};
+    for (const span of spans) {
+      const texto = (span.textContent || '').trim();
+      if (!REGEX_VALOR.test(texto)) continue;
+
+      let label = null;
+      let node = span;
+      for (let nivel = 0; nivel < 3 && !label; nivel++) {
+        node = node.parentElement;
+        if (!node) break;
+        const candidato = [...node.children]
+          .map((c) => (c.textContent || '').trim())
+          .find((t) => t && t.length < 40 && !REGEX_VALOR.test(t));
+        if (candidato) label = candidato;
+      }
+      if (label && !(label in mapa)) mapa[label] = texto;
     }
-    return null;
-  }, label);
+    return mapa;
+  });
 }
 
 async function extrairMesReferencia(page) {
@@ -88,10 +101,10 @@ async function coletarRevenue(page, cfg) {
   await page.waitForTimeout(6000);
 
   const mes_referencia = await extrairMesReferencia(page);
+  const mapa = await extrairMapaLabelValor(page);
   const valores = {};
   for (const [campo, label] of Object.entries(LABELS)) {
-    const bruto = await extrairValorPorLabel(page, label);
-    valores[campo] = parseMoedaBR(bruto);
+    valores[campo] = parseMoedaBR(mapa[label] ?? null);
   }
 
   return { mes_referencia, ...valores };
@@ -155,4 +168,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { parseMoedaBR, extrairValorPorLabel, selfCheck };
+module.exports = { parseMoedaBR, extrairMapaLabelValor, selfCheck };
