@@ -1033,7 +1033,9 @@ app.post('/agents/recontratacao/:customer_id/enviar', requireJwtOrInternal, asyn
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// GET /whatsapp/groups — Lista grupos WhatsApp via Evolution API
+// GET /whatsapp/groups — Lista grupos WhatsApp. Fonte primária: Supabase
+// (whatsapp_groups do tenant — QA P3: Evolution é lenta/instável). Fallback:
+// Evolution API ao vivo só se a tabela vier vazia para o tenant.
 // ════════════════════════════════════════════════════════════════════════════
 app.get('/whatsapp/groups', requireJwt, async (req, res) => {
   const { tenant_id } = req.query;
@@ -1041,6 +1043,23 @@ app.get('/whatsapp/groups', requireJwt, async (req, res) => {
   if (!SUPABASE_SERVICE_KEY)
     return res.status(503).json({ error: 'SUPABASE_SERVICE_KEY não configurado' });
 
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/whatsapp_groups?tenant_id=eq.${encodeURIComponent(tenant_id)}&ativo=eq.true&select=evolution_jid,group_name`,
+      { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }
+    );
+    if (!r.ok) throw new Error(`supabase whatsapp_groups select ${r.status}: ${await r.text()}`);
+    const rows = await r.json();
+    if (Array.isArray(rows) && rows.length > 0) {
+      const groups = rows.map(g => ({ jid: g.evolution_jid, name: g.group_name }));
+      console.log(`[whatsapp/groups] ${groups.length} grupo(s) do Supabase (tenant=${tenant_id})`);
+      return res.json({ groups });
+    }
+  } catch (err) {
+    return res.status(500).json({ error: 'erro ao buscar grupos', detail: err.message });
+  }
+
+  // Supabase vazio para o tenant → fallback Evolution ao vivo
   let inst;
   try {
     inst = await supabaseSelect('evolution_instances', { tenant_id });
@@ -1077,7 +1096,22 @@ app.get('/whatsapp/groups', requireJwt, async (req, res) => {
       name:        g.subject || g.id,
       picture_url: g.pictureUrl ?? null,
     }));
-    console.log(`[whatsapp/groups] ${groups.length} grupo(s) retornados`);
+
+    // upsert best-effort no Supabase p/ próxima leitura já vir do banco
+    if (groups.length > 0) {
+      fetch(`${SUPABASE_URL}/rest/v1/whatsapp_groups?on_conflict=tenant_id,evolution_jid`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPABASE_SERVICE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify(groups.map(g => ({ tenant_id, evolution_jid: g.jid, group_name: g.name }))),
+      }).catch(err => console.warn('[whatsapp/groups] upsert Supabase falhou:', err.message));
+    }
+
+    console.log(`[whatsapp/groups] ${groups.length} grupo(s) retornados (Evolution, fallback)`);
     res.json({ groups });
   } catch (err) {
     console.error('[whatsapp/groups] erro:', err.message);
