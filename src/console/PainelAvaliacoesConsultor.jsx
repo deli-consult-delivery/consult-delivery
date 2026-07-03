@@ -143,6 +143,10 @@ function StatusTimeline({ review }) {
 }
 
 function buildWaMsgStore(reviews) {
+  // Mensagem de parabéns — envia o texto direto, sem template de avaliação
+  if (reviews.length === 1 && reviews[0].orderId === 'PARABENS') {
+    return reviews[0].suggestedResponse || '';
+  }
   const storeName = reviews[0]?.store || '';
   const tokens = reviews.map(r => r.token).filter(Boolean).join(',');
   const link = `${CLIENT_PAGE}?tokens=${tokens}`;
@@ -498,7 +502,7 @@ function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSen
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
         <span className={`cv2-bdg ${st.cls}`} style={{ fontSize: 11 }}>{st.label}</span>
         <Stars rating={review.rating} />
-        <span style={{ fontSize: 12, color: 'var(--tx2)' }}>Pedido {review.orderId}</span>
+        <span style={{ fontSize: 12, color: 'var(--tx2)' }}>{review.orderId === 'PARABENS' ? '🎉 Sem avaliações negativas' : `Pedido ${review.orderId}`}</span>
         {review.deadline && <span className="cv2-bdg warn" style={{ fontSize: 11 }}>⏳ {fmtDate(review.deadline)}</span>}
         {review.reviewDate && (
           <span style={{ fontSize: 11, color: 'var(--tx2)', marginLeft: 'auto' }}>📅 {fmtDate(review.reviewDate)}</span>
@@ -523,14 +527,16 @@ function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSen
         </div>
       )}
 
-      <div style={{
-        fontSize: 13, color: 'var(--ink)', lineHeight: 1.6, marginBottom: 10,
-        background: 'var(--bg2,#f5f4f2)', borderRadius: 6, padding: '8px 10px',
-        borderLeft: '3px solid var(--line)',
-      }}>
-        <span style={{ fontSize: 11, color: 'var(--tx2)', display: 'block', marginBottom: 2 }}>COMENTÁRIO DO CLIENTE</span>
-        "{review.clientComment}"
-      </div>
+      {review.orderId !== 'PARABENS' && (
+        <div style={{
+          fontSize: 13, color: 'var(--ink)', lineHeight: 1.6, marginBottom: 10,
+          background: 'var(--bg2,#f5f4f2)', borderRadius: 6, padding: '8px 10px',
+          borderLeft: '3px solid var(--line)',
+        }}>
+          <span style={{ fontSize: 11, color: 'var(--tx2)', display: 'block', marginBottom: 2 }}>COMENTÁRIO DO CLIENTE</span>
+          "{review.clientComment}"
+        </div>
+      )}
 
       {isDone ? (
         <div style={{
@@ -566,7 +572,7 @@ function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSen
             borderLeft: `3px solid ${review.status === 'sent_to_client' ? '#f59e0b' : 'var(--line)'}`,
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <span style={{ fontSize: 11, color: 'var(--tx2)' }}>SUGESTÃO DE RESPOSTA</span>
+              <span style={{ fontSize: 11, color: 'var(--tx2)' }}>{review.orderId === 'PARABENS' ? 'MENSAGEM PARA CLIENTE' : 'SUGESTÃO DE RESPOSTA'}</span>
               <span style={{ fontSize: 11, fontFamily: 'monospace', color: over ? 'var(--red)' : 'var(--tx2)' }}>
                 {draft.length}/300{over ? ' ⚠' : ''}
               </span>
@@ -697,7 +703,9 @@ function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, st
               title={!resolvedGroup ? 'Configure o grupo WA desta loja em "Grupos WhatsApp por loja"' : ''}
               onClick={e => { e.stopPropagation(); onSendStore(storeName, toSend); }}
             >
-              {isBusy ? '…' : `Enviar ${toSend.length} avaliação${toSend.length > 1 ? 'ões' : ''} ao cliente`}
+              {isBusy ? '…' : (toSend.length === 1 && toSend[0].orderId === 'PARABENS')
+                ? 'Enviar mensagem ao cliente 🎉'
+                : `Enviar ${toSend.length} avaliação${toSend.length > 1 ? 'ões' : ''} ao cliente`}
             </button>
           )}
           {/* Botão de demandas — aparece quando há publicadas */}
@@ -890,10 +898,15 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
       const msg = buildWaMsgStore(pendingReviews);
       await enviarWhatsAppAvaliacao({ tenantId: tenantDbId, chatId: groupId, texto: msg });
       const now = new Date().toISOString();
+      const isParabens = pendingReviews.length === 1 && pendingReviews[0].orderId === 'PARABENS';
       await Promise.all(pendingReviews.map(rev =>
-        sbUpdate({ id: rev.id }, { status: 'sent_to_client', sent_at: now })
+        sbUpdate({ id: rev.id }, {
+          status: isParabens ? 'published' : 'sent_to_client',
+          sent_at: now,
+          ...(isParabens ? { published_at: now } : {}),
+        })
       ));
-      flash(`Avaliações de "${storeName}" enviadas ao cliente ✓`);
+      flash(isParabens ? `Mensagem enviada para "${storeName}" ✓` : `Avaliações de "${storeName}" enviadas ao cliente ✓`);
       await load();
     } catch (e) { setError('Erro ao enviar: ' + e.message); }
     setBusyStore(null);
