@@ -17,9 +17,9 @@ const OutputSchema = z.object({
   lojas_puladas: z.number().optional(),
 });
 
-// Formato do stdout do runner ifood-portal-worker/run-metricas.js (v2, extração real de /revenue).
-// pedidos/cancelamentos/avaliacao ainda não têm seletor mapeado (TODO probe /orders e /reviews)
-// e chegam sempre null — nunca 0.
+// Formato do stdout do runner ifood-portal-worker/run-metricas.js (v3: /revenue + /orders +
+// /reviews/performance). pedidos/cancelamentos = grupo "Ontem" em /orders; avaliacao = nota
+// "Sobre a loja" em /reviews/performance. null = extração falhou (nunca inventa 0).
 const MetricasPortalSchema = z.object({
   loja: z.string().optional(),
   mes_referencia: z.string().nullable().optional(),

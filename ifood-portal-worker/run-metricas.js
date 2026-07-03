@@ -79,6 +79,9 @@ async function extrairMesReferencia(page) {
   });
 }
 
+const ORDERS_URL = 'https://portal.ifood.com.br/orders';
+const PERFORMANCE_URL = 'https://portal.ifood.com.br/reviews/performance';
+
 const MetricasRevenueSchema = z.object({
   loja: z.string(),
   mes_referencia: z.string().nullable(),
@@ -86,12 +89,85 @@ const MetricasRevenueSchema = z.object({
   taxas_comissoes: z.number().nullable(),
   servicos_promocoes: z.number().nullable(),
   total_faturamento: z.number().nullable(),
-  // TODO(probe): pedidos/cancelamentos exigem filtro de período em /orders; nota média exige
-  // varrer /reviews. Não implementado nesta versão — sempre null.
-  pedidos: z.null(),
-  cancelamentos: z.null(),
-  avaliacao: z.null(),
+  // pedidos/cancelamentos = contagem do grupo "Ontem" em /orders (dia anterior fechado, mesma
+  // semântica do financeiro); avaliacao = nota "Sobre a loja" em /reviews/performance.
+  // Probe ao vivo 2026-07-03 (Café Container): 21 pedidos / 0 cancelamentos / nota 5.
+  pedidos: z.number().int().nullable(),
+  cancelamentos: z.number().int().nullable(),
+  avaliacao: z.number().nullable(),
 });
+
+// Lê o grupo "Ontem" (dia anterior) na lista de /orders, já filtrada por aba de situação.
+// Não acha o grupo mas a página carregou normalmente (orders-filter-v2 presente) → 0 é real
+// (dia sem pedidos/cancelamentos, não falha de extração). Página não carregou → null.
+async function extrairPedidosGrupoOntem(page) {
+  const carregou = await page.evaluate(() => Boolean(document.querySelector('[data-testid="orders-filter-v2"]')));
+  if (!carregou) return null;
+  return page.evaluate(() => {
+    const linhas = document.body.innerText.split('\n');
+    for (let i = 0; i < linhas.length; i++) {
+      if (linhas[i].trim() === 'Ontem') {
+        const m = (linhas[i + 1] || '').match(/(\d+)\s*pedidos?/);
+        return m ? parseInt(m[1], 10) : 0;
+      }
+    }
+    return 0;
+  });
+}
+
+async function coletarPedidosCancelamentos(page, cfg) {
+  await page.goto(ORDERS_URL, { waitUntil: 'domcontentloaded', timeout: cfg.navTimeoutMs });
+  await page
+    .waitForFunction(() => /Digite o número do pedido/.test(document.body.innerText), { timeout: 25000 })
+    .catch(() => {});
+  await page.waitForTimeout(5000);
+
+  const pedidos = await extrairPedidosGrupoOntem(page);
+
+  const abaCancelados = page.locator('button,[role="tab"]', { hasText: 'Cancelados' });
+  let cancelamentos = null;
+  if ((await abaCancelados.count()) > 0) {
+    await abaCancelados.first().click();
+    await page.waitForTimeout(5000);
+    cancelamentos = await extrairPedidosGrupoOntem(page);
+  }
+
+  return { pedidos, cancelamentos };
+}
+
+// Nota "Sobre a loja" em /reviews/performance: 2 blocos `[data-testid="summary"]` (loja/entrega,
+// SVG sem texto) — escolhe pelo texto do ancestral ("Sobre a loja" vs "Sobre a entrega") e lê o
+// <h1> irmão do summary-star-rating. Confirmado ao vivo 2026-07-03 (Café Container: "5").
+async function coletarAvaliacao(page, cfg) {
+  await page.goto(PERFORMANCE_URL, { waitUntil: 'domcontentloaded', timeout: cfg.navTimeoutMs });
+  await page
+    .waitForFunction(() => document.querySelectorAll('[data-testid="summary"]').length >= 1, { timeout: 25000 })
+    .catch(() => {});
+  await page.waitForTimeout(3000);
+
+  return page.evaluate(() => {
+    const summaries = [...document.querySelectorAll('[data-testid="summary"]')];
+    for (const s of summaries) {
+      let ancestral = s;
+      let contexto = null;
+      for (let i = 0; i < 8 && ancestral; i++) {
+        const m = (ancestral.innerText || '').match(/Sobre a (loja|entrega)/);
+        if (m) {
+          contexto = m[1];
+          break;
+        }
+        ancestral = ancestral.parentElement;
+      }
+      if (contexto === 'loja') {
+        const h1 = s.querySelector('h1');
+        const texto = h1 ? h1.innerText.trim() : null;
+        const numero = texto ? parseFloat(texto.replace(',', '.')) : null;
+        return Number.isNaN(numero) ? null : numero;
+      }
+    }
+    return null;
+  });
+}
 
 async function coletarRevenue(page, cfg) {
   await page.goto(REVENUE_URL, { waitUntil: 'domcontentloaded', timeout: cfg.navTimeoutMs });
@@ -128,6 +204,8 @@ async function main() {
     await garantirLoja(page, cfg.loja);
 
     const revenue = await coletarRevenue(page, cfg);
+    const { pedidos, cancelamentos } = await coletarPedidosCancelamentos(page, cfg);
+    const avaliacao = await coletarAvaliacao(page, cfg);
 
     const saida = MetricasRevenueSchema.parse({
       loja: cfg.loja,
@@ -136,9 +214,9 @@ async function main() {
       taxas_comissoes: revenue.taxas_comissoes,
       servicos_promocoes: revenue.servicos_promocoes,
       total_faturamento: revenue.total_faturamento,
-      pedidos: null,
-      cancelamentos: null,
-      avaliacao: null,
+      pedidos,
+      cancelamentos,
+      avaliacao,
     });
 
     console.log(JSON.stringify(saida, null, 2));
@@ -173,4 +251,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { parseMoedaBR, extrairMapaLabelValor, selfCheck };
+module.exports = { parseMoedaBR, extrairMapaLabelValor, selfCheck, extrairPedidosGrupoOntem, coletarPedidosCancelamentos, coletarAvaliacao };
