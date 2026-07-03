@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase.js';
+import { listTenantsWithRole } from '../lib/api.js';
 import { CvSprite, Ico } from './CvIcons.jsx';
 // telas cv2 (visual claro)
 import AtivarLoja from './AtivarLoja.jsx';
@@ -193,19 +194,18 @@ function useTenants(userId, fallback) {
     if (!userId) return;
     let alive = true;
     (async () => {
-      const { data } = await supabase.from('tenant_members').select('role, tenants(id, name, slug)').eq('user_id', userId);
-      if (!alive || !Array.isArray(data)) return;
-      const mapped = data.filter(d => d.tenants).map(d => ({ dbId: d.tenants.id, slug: d.tenants.slug, nome: d.tenants.name, role: d.role }));
-      const uniq = [...new Map(mapped.map(m => [m.dbId, m])).values()];
-      if (uniq.length) {
-        setList(uniq);
-        // Prioridade: tenant salvo (se ainda for membro) → seleção atual → primeiro.
-        setSelRaw(prev => {
-          const salvo = savedId && uniq.find(u => u.dbId === savedId);
-          if (salvo) return salvo;
-          return (prev && uniq.find(u => u.dbId === prev.dbId)) || uniq[0];
-        });
-      }
+      // Rota B etapa 4c: lista via RLS hierárquica (agência vê seus stores), não
+      // mais só linhas diretas de tenant_members — sobrevive à remoção da cópia A1.
+      const real = await listTenantsWithRole(userId).catch(() => []);
+      if (!alive || !real.length) return;
+      const uniq = real.map(t => ({ dbId: t.id, slug: t.slug, nome: t.name, role: t.role }));
+      setList(uniq);
+      // Prioridade: tenant salvo (se ainda for membro) → seleção atual → primeiro.
+      setSelRaw(prev => {
+        const salvo = savedId && uniq.find(u => u.dbId === savedId);
+        if (salvo) return salvo;
+        return (prev && uniq.find(u => u.dbId === prev.dbId)) || uniq[0];
+      });
     })();
     return () => { alive = false; };
   }, [userId]);

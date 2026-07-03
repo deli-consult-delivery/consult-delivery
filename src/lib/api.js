@@ -14,11 +14,39 @@ import { supabase } from './supabase';
 export async function listTenants() {
   const { data, error } = await supabase
     .from('tenants')
-    .select('id, slug, name, emoji, color, status, plan')
+    .select('id, slug, name, emoji, color, status, plan, parent_tenant_id')
     .order('name')
     .limit(50);
   if (error) throw error;
   return data ?? [];
+}
+
+// Rota B etapa 4c: lista de tenants via RLS hierárquica (tenants_select_member,
+// já hierárquico — agência enxerga seus stores) + role. Role vem da linha DIRETA
+// em tenant_members quando existe; para tenants só visíveis por herança (ex.:
+// store de uma agência sem membro direto ali) sobe o parent_tenant_id até achar
+// um role — mesma semântica que a cópia A1 dava (linha copiada tinha o role do
+// membro da agência).
+export async function listTenantsWithRole(userId) {
+  const [tenants, memberRes] = await Promise.all([
+    listTenants(),
+    userId
+      ? supabase.from('tenant_members').select('tenant_id, role').eq('user_id', userId)
+      : Promise.resolve({ data: [] }),
+  ]);
+  const roleByTenant = new Map((memberRes.data || []).map(m => [m.tenant_id, m.role]));
+  const byId = new Map(tenants.map(t => [t.id, t]));
+  const resolveRole = (t) => {
+    const seen = new Set();
+    let cur = t;
+    while (cur && !seen.has(cur.id)) {
+      seen.add(cur.id);
+      if (roleByTenant.has(cur.id)) return roleByTenant.get(cur.id);
+      cur = cur.parent_tenant_id ? byId.get(cur.parent_tenant_id) : null;
+    }
+    return undefined;
+  };
+  return tenants.map(t => ({ ...t, role: resolveRole(t) }));
 }
 
 export async function getTenantBySlug(slug) {
