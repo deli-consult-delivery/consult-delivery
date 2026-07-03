@@ -1044,15 +1044,26 @@ app.get('/whatsapp/groups', requireJwt, async (req, res) => {
     return res.status(503).json({ error: 'SUPABASE_SERVICE_KEY não configurado' });
 
   try {
+    // hierárquico: tenant pedido + filhos diretos (ex.: agência + stores)
+    const tr = await fetch(
+      `${SUPABASE_URL}/rest/v1/tenants?or=(id.eq.${encodeURIComponent(tenant_id)},parent_tenant_id.eq.${encodeURIComponent(tenant_id)})&select=id`,
+      { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }
+    );
+    if (!tr.ok) throw new Error(`supabase tenants select ${tr.status}: ${await tr.text()}`);
+    const tenantRows = await tr.json();
+    const tenantIds = Array.isArray(tenantRows) && tenantRows.length > 0
+      ? tenantRows.map(t => t.id)
+      : [tenant_id];
+
     const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/whatsapp_groups?tenant_id=eq.${encodeURIComponent(tenant_id)}&ativo=eq.true&select=evolution_jid,group_name`,
+      `${SUPABASE_URL}/rest/v1/whatsapp_groups?tenant_id=in.(${tenantIds.map(encodeURIComponent).join(',')})&ativo=eq.true&select=evolution_jid,group_name`,
       { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }
     );
     if (!r.ok) throw new Error(`supabase whatsapp_groups select ${r.status}: ${await r.text()}`);
     const rows = await r.json();
     if (Array.isArray(rows) && rows.length > 0) {
       const groups = rows.map(g => ({ jid: g.evolution_jid, name: g.group_name }));
-      console.log(`[whatsapp/groups] ${groups.length} grupo(s) do Supabase (tenant=${tenant_id})`);
+      console.log(`[whatsapp/groups] ${groups.length} grupo(s) do Supabase (tenant=${tenant_id}, +filhos)`);
       return res.json({ groups });
     }
   } catch (err) {
