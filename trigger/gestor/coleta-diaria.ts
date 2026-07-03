@@ -209,28 +209,45 @@ async function coletarLoja(
     }
   }
 
-  const stdout = await res.text();
+  // Envelope do Bridge: {ok, runner, loja, stdout, stderr, exitCode}. stdout/stderr são o
+  // texto BRUTO do processo docker — a saída de run-metricas.js (JSON de métricas) fica
+  // DENTRO de envelope.stdout, precisa de um 2º JSON.parse. Tratar o corpo da resposta como
+  // se já fosse o JSON de métricas (bug anterior) faz o schema — todo opcional — "aceitar"
+  // o envelope inteiro e devolver tudo null/undefined, sem erro visível.
+  const bodyText = await res.text();
+  let envelope: { ok?: boolean; stdout?: string; stderr?: string; exitCode?: number | null };
+  try {
+    envelope = JSON.parse(bodyText);
+  } catch {
+    logger.warn("gestor-coleta-diaria: resposta do Bridge não é JSON válido", {
+      loja_id: loja.id,
+      body: bodyText.slice(0, 300),
+    });
+    return { ok: false, sessaoExpirada: false, metricas: {} };
+  }
 
-  if (/deslogada|login/i.test(stdout)) {
+  const textoCombinado = `${envelope.stdout ?? ""}\n${envelope.stderr ?? ""}`;
+  if (/deslogada|login/i.test(textoCombinado)) {
     return { ok: false, sessaoExpirada: true, metricas: {} };
   }
 
-  if (!res.ok) {
+  if (!res.ok || envelope.ok !== true || envelope.exitCode !== 0) {
     logger.warn("gestor-coleta-diaria: Bridge respondeu erro", {
       loja_id: loja.id,
       status: res.status,
-      body: stdout.slice(0, 300),
+      exitCode: envelope.exitCode,
+      stderr: (envelope.stderr ?? "").slice(0, 300),
     });
     return { ok: false, sessaoExpirada: false, metricas: {} };
   }
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(stdout);
+    parsed = JSON.parse(envelope.stdout ?? "");
   } catch {
-    logger.warn("gestor-coleta-diaria: stdout não é JSON válido", {
+    logger.warn("gestor-coleta-diaria: stdout do runner não é JSON válido", {
       loja_id: loja.id,
-      stdout: stdout.slice(0, 300),
+      stdout: (envelope.stdout ?? "").slice(0, 300),
     });
     return { ok: false, sessaoExpirada: false, metricas: {} };
   }
