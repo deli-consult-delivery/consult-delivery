@@ -314,8 +314,6 @@ async function ensureAvaliacoesEspacos(tenantId, storeName) {
 }
 
 // ─── Aviso de lojas sem grupo WhatsApp cadastrado ─────────────────────────────
-// TODO: edição do campo lojas.whatsapp_group_jid fica de fora desta tela por ora
-// (cadastrar via SQL/painel de lojas até termos um form dedicado aqui).
 function AvisoGruposFaltando({ lojasSemGrupo }) {
   if (!lojasSemGrupo.length) return null;
   return (
@@ -329,7 +327,9 @@ function AvisoGruposFaltando({ lojasSemGrupo }) {
 }
 
 // ─── Banner de alertas de prazo ───────────────────────────────────────────────
-function AlertBanner({ overdueReviews, todayReviews, onGoToStore, onDismiss }) {
+// onDismissId(id) — arquiva um alerta individual sem afetar os demais.
+// onDismiss       — arquiva o banner inteiro pelo dia.
+function AlertBanner({ overdueReviews, todayReviews, onGoToStore, onDismiss, onDismissId }) {
   if (overdueReviews.length === 0 && todayReviews.length === 0) return null;
   return (
     <div style={{ marginBottom: 12 }}>
@@ -346,12 +346,19 @@ function AlertBanner({ overdueReviews, todayReviews, onGoToStore, onDismiss }) {
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {overdueReviews.map(r => (
-              <button key={r.id} onClick={() => onGoToStore(r.store)} style={{
-                background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 6,
-                padding: '3px 8px', fontSize: 11.5, cursor: 'pointer', color: '#7f1d1d', fontFamily: 'inherit',
-              }}>
-                {r.store.split(' - ')[0]} · Pedido {r.orderId} · venceu {fmtDate(r.deadline)}
-              </button>
+              <span key={r.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                <button onClick={() => onGoToStore(r.store)} style={{
+                  background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '6px 0 0 6px',
+                  padding: '3px 8px', fontSize: 11.5, cursor: 'pointer', color: '#7f1d1d', fontFamily: 'inherit',
+                }}>
+                  {r.store.split(' - ')[0]} · Pedido {r.orderId} · venceu {fmtDate(r.deadline)}
+                </button>
+                <button onClick={() => onDismissId && onDismissId(r.id)} style={{
+                  background: '#fca5a5', border: '1px solid #fca5a5', borderRadius: '0 6px 6px 0',
+                  borderLeft: 'none', padding: '3px 7px', fontSize: 12, cursor: 'pointer',
+                  color: '#7f1d1d', fontFamily: 'inherit', lineHeight: 1,
+                }} title="Arquivar este alerta">✕</button>
+              </span>
             ))}
           </div>
         </div>
@@ -371,12 +378,19 @@ function AlertBanner({ overdueReviews, todayReviews, onGoToStore, onDismiss }) {
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {todayReviews.map(r => (
-              <button key={r.id} onClick={() => onGoToStore(r.store)} style={{
-                background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 6,
-                padding: '3px 8px', fontSize: 11.5, cursor: 'pointer', color: '#78350f', fontFamily: 'inherit',
-              }}>
-                {r.store.split(' - ')[0]} · Pedido {r.orderId} · vence hoje
-              </button>
+              <span key={r.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                <button onClick={() => onGoToStore(r.store)} style={{
+                  background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '6px 0 0 6px',
+                  padding: '3px 8px', fontSize: 11.5, cursor: 'pointer', color: '#78350f', fontFamily: 'inherit',
+                }}>
+                  {r.store.split(' - ')[0]} · Pedido {r.orderId} · vence hoje
+                </button>
+                <button onClick={() => onDismissId && onDismissId(r.id)} style={{
+                  background: '#fcd34d', border: '1px solid #fcd34d', borderRadius: '0 6px 6px 0',
+                  borderLeft: 'none', padding: '3px 7px', fontSize: 12, cursor: 'pointer',
+                  color: '#78350f', fontFamily: 'inherit', lineHeight: 1,
+                }} title="Arquivar este alerta">✕</button>
+              </span>
             ))}
           </div>
         </div>
@@ -744,6 +758,15 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
     try { return localStorage.getItem(DISMISS_KEY) === '1'; } catch { return false; }
   });
 
+  // Dismiss individual por review — persiste no localStorage pelo dia
+  const DISMISS_IDS_KEY = `cd_alert_dismissed_ids_${todayISO}`;
+  const [dismissedAlertIds, setDismissedAlertIds] = useState(() => {
+    try {
+      const stored = localStorage.getItem(`cd_alert_dismissed_ids_${todayISO}`);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch { return new Set(); }
+  });
+
   const [lojas, setLojas]           = useState([]);
   const [lojasLoading, setLojasLoading] = useState(true);
   const [lojasError, setLojasError]     = useState(null);
@@ -798,6 +821,15 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
   function handleDismissAlert() {
     setAlertDismissed(true);
     try { localStorage.setItem(DISMISS_KEY, '1'); } catch {}
+  }
+
+  function handleDismissAlertId(id) {
+    setDismissedAlertIds(prev => {
+      const next = new Set(prev);
+      next.add(id);
+      try { localStorage.setItem(DISMISS_IDS_KEY, JSON.stringify([...next])); } catch {}
+      return next;
+    });
   }
 
   function handleGoToStore(storeName) {
@@ -967,13 +999,14 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
         />
       )}
 
-      {/* Banner de alertas */}
+      {/* Banner de alertas — onDismissId arquiva item individual, onDismiss arquiva tudo */}
       {!alertDismissed && (
         <AlertBanner
-          overdueReviews={overdueReviews}
-          todayReviews={todayReviews}
+          overdueReviews={overdueReviews.filter(r => !dismissedAlertIds.has(r.id))}
+          todayReviews={todayReviews.filter(r => !dismissedAlertIds.has(r.id))}
           onGoToStore={handleGoToStore}
           onDismiss={handleDismissAlert}
+          onDismissId={handleDismissAlertId}
         />
       )}
 
