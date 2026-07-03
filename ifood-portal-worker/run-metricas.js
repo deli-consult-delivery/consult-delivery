@@ -119,8 +119,11 @@ async function main() {
     browser = await chromium.connectOverCDP(cfg.cdpUrl);
     const ctx = browser.contexts()[0];
     if (!ctx) throw new Error('Nenhum contexto no browser CDP — o ifood-browser está logado?');
-    const page = ctx.pages()[0];
-    if (!page) throw new Error('Nenhuma aba aberta no ifood-browser.');
+    const paginas = ctx.pages();
+    if (!paginas.length) throw new Error('Nenhuma aba aberta no ifood-browser.');
+    // Mesma lógica de withPortal() (index.js) — aba de login antiga nunca fechada engana
+    // pages()[0]; prioriza a 1ª aba autenticada, fallback pra pages()[0] se todas forem login.
+    const page = paginas.find((p) => !p.url().startsWith('https://portal.ifood.com.br/login')) || paginas[0];
 
     await garantirLoja(page, cfg.loja);
 
