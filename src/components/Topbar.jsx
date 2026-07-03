@@ -65,11 +65,14 @@ export default function Topbar({ route, tenant, setTenant, tenants, theme = 'cla
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!alive || !user) return;
-        const [{ data: profile }, { data: member }] = await Promise.all([
+        let memberQuery = supabase.from('tenant_members').select('display_name, role').eq('user_id', user.id);
+        if (tenantId) memberQuery = memberQuery.eq('tenant_id', tenantId);
+        const [{ data: profile }, { data: members }] = await Promise.all([
           supabase.from('profiles').select('full_name, avatar_url').eq('id', user.id).maybeSingle(),
-          supabase.from('tenant_members').select('display_name, role').eq('user_id', user.id).maybeSingle(),
+          memberQuery.limit(1),
         ]);
         if (!alive) return;
+        const member = members?.[0];
         setCurrentUser({
           id:     user.id,
           email:  user.email,
@@ -80,7 +83,7 @@ export default function Topbar({ route, tenant, setTenant, tenants, theme = 'cla
       } catch { /* ignore */ }
     })();
     return () => { alive = false; };
-  }, [userId]);
+  }, [userId, tenantId]);
 
   async function handleLogout() {
     try {
