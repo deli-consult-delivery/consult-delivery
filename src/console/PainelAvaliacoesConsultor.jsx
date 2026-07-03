@@ -573,7 +573,7 @@ function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSen
   const over       = draft.length > 300;
   const notesChanged = notes !== (review.notes || '');
 
-  const effectiveGroup = review.whatsappGroup || resolvedGroup || null;
+  const effectiveGroup = resolvedGroup || review.whatsappGroup || null;
   const singleLink = `${CLIENT_PAGE}?token=${review.token}`;
 
   function handleCopyLink() { copiar(singleLink); setCopied(true); setTimeout(() => setCopied(false), 2000); }
@@ -739,7 +739,7 @@ function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, st
   const publishedRevs  = reviews.filter(r => r.status === 'published');
   const publishedCount = publishedRevs.length;
 
-  const resolvedGroup = reviews.find(r => r.whatsappGroup)?.whatsappGroup || storeGroups[storeName] || null;
+  const resolvedGroup = storeGroups[storeName] || reviews.find(r => r.whatsappGroup)?.whatsappGroup || null;
 
   const today       = new Date().toISOString().slice(0, 10);
   const tomorrow    = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
@@ -903,12 +903,12 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
     return () => clearInterval(pollerRef.current);
   }, [load]);
 
-  // Grupo por loja: whatsapp_group_jid cadastrado (lojas), com override pelo
-  // grupo já gravado em cada review (compatibilidade com dados legados).
+  // Grupo por loja: whatsapp_group_jid cadastrado (lojas) tem precedência.
+  // Grupo legado gravado em cada review só preenche quando a loja não tem vínculo configurado.
   const storeGroups = useMemo(() => {
     const sg = {};
-    lojas.forEach(l => { if (l.whatsapp_group_jid) sg[l.nome] = l.whatsapp_group_jid; });
     reviews.forEach(r => { if (r.store && r.whatsappGroup) sg[r.store] = r.whatsappGroup; });
+    lojas.forEach(l => { if (l.whatsapp_group_jid) sg[l.nome] = l.whatsapp_group_jid; });
     return sg;
   }, [lojas, reviews]);
 
@@ -1007,7 +1007,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
   // ─── Handlers existentes ──────────────────────────────────────────────────
   async function handleSendStore(storeName, pendingReviews) {
     if (!pendingReviews.length) return;
-    const groupId = pendingReviews.find(r => r.whatsappGroup)?.whatsappGroup || storeGroups[storeName];
+    const groupId = storeGroups[storeName] || pendingReviews.find(r => r.whatsappGroup)?.whatsappGroup;
     if (!groupId) { setError(`Loja "${storeName}" sem grupo WhatsApp cadastrado.`); return; }
     setBusyStore(storeName); setError(null);
     try {
@@ -1031,7 +1031,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
   async function handleSendSingle(id, draft) {
     const rev = reviews.find(r => r.id === id);
     if (!rev) return;
-    const groupId = rev.whatsappGroup || storeGroups[rev.store];
+    const groupId = storeGroups[rev.store] || rev.whatsappGroup;
     if (!groupId) { setError(`Loja "${rev.store}" sem grupo WhatsApp cadastrado.`); return; }
     setBusyId(id); setError(null);
     try {
