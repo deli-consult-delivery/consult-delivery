@@ -86,12 +86,15 @@ function variacaoPct(atual: number, anterior: number): number | null {
 }
 
 // =====================================================
-// TASK — cron segunda 09h UTC (06h Belém)
+// TASK — cron segunda 08h de Brasília (decisão 2026-07-03)
 // =====================================================
 
 export const gestorRelatorioSemanal = schedules.task({
   id: "gestor-relatorio-semanal",
-  cron: "0 9 * * 1",
+  cron: {
+    pattern: "0 8 * * 1",
+    timezone: "America/Sao_Paulo",
+  },
   retry: { maxAttempts: 2, minTimeoutInMs: 2000 },
 
   run: async (_payload, { ctx }) => {

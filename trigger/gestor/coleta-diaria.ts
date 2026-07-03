@@ -40,17 +40,23 @@ interface LojaAlvo {
 }
 
 // =====================================================
-// TASK — cron diário 06h UTC (03h Belém)
+// TASK — cron diário 22h de Brasília
 // =====================================================
 //
-// GESTOR_COLETA_ATIVA: trava explícita (env var do Trigger.dev). A coleta via portal
-// depende do runner run-metricas.js (F2, ainda não existe) + deploy do probe supervisionado
-// na VPS. Enquanto a trava estiver off, a task sai no primeiro if — sem tentar Bridge,
-// sem cron falhando toda madrugada. Ativar via env var quando o probe for aprovado.
+// Horário 22h (não 03h): o portal iFood desloga com o tempo e exige relogin manual com
+// 2FA no viewer — às 22h o Wandson está acordado pra relogar quando a sessão cair; às 03h
+// não (decisão 2026-07-03).
+//
+// GESTOR_COLETA_ATIVA: trava explícita (env var do Trigger.dev). Enquanto estiver off, a
+// task sai no primeiro if — sem tentar Bridge, sem cron falhando à toa. Ativada em produção
+// em 2026-07-03 (gates F0 fechados: PR #702 fix de aba + PRs #703/#705 nomes/lista de lojas).
 
 export const gestorColetaDiaria = schedules.task({
   id: "gestor-coleta-diaria",
-  cron: "0 6 * * *",
+  cron: {
+    pattern: "0 22 * * *",
+    timezone: "America/Sao_Paulo",
+  },
   retry: { maxAttempts: 2, minTimeoutInMs: 2000 },
 
   run: async (_payload, { ctx }) => {
