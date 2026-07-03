@@ -58,6 +58,10 @@ export const gestorColetaDiaria = schedules.task({
     timezone: "America/Sao_Paulo",
   },
   retry: { maxAttempts: 2, minTimeoutInMs: 2000 },
+  // F2 (pedidos/cancelamentos/avaliacao) triplica o tempo por loja (garantirLoja + /revenue +
+  // /orders x2 abas + /reviews/performance); 16 lojas sequenciais passam do default de 10min
+  // (run_cmr4fez9h7i2z0un99xzw2zu4 bateu MAX_DURATION_EXCEEDED em 2026-07-03). 1h de folga.
+  maxDuration: 3600,
 
   run: async (_payload, { ctx }) => {
     if (process.env.GESTOR_COLETA_ATIVA !== "true") {
