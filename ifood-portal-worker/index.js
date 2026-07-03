@@ -97,6 +97,7 @@ async function buscarEEscolherLojaNoModal(page, nomeLoja, alvo) {
 
   const busca = page.locator(BUSCA_LOJA_SEL);
   await busca.click();
+  await busca.fill(''); // limpa texto residual de execução anterior (fill não dispara filtro, só serve p/ limpar)
   await busca.pressSequentially(nomeLoja, { delay: 100 });
   await page.waitForTimeout(3000); // debounce da busca
 
