@@ -211,8 +211,11 @@ async function withPortal(fn) {
   try {
     const ctx = browser.contexts()[0];
     if (!ctx) throw new Error('Nenhum contexto no browser CDP — o ifood-browser está logado?');
-    const page = ctx.pages()[0];
-    if (!page) throw new Error('Nenhuma aba aberta no ifood-browser.');
+    const paginas = ctx.pages();
+    if (!paginas.length) throw new Error('Nenhuma aba aberta no ifood-browser.');
+    // Sobra de aba de login antiga (nunca fechada) engana pages()[0] — prioriza a 1ª aba
+    // autenticada; se todas forem /login, cai no fallback antigo (pages()[0]).
+    const page = paginas.find((p) => !p.url().startsWith('https://portal.ifood.com.br/login')) || paginas[0];
     return await fn(page, cfg);
   } finally {
     // connectOverCDP: close() só desconecta; não fecha o browser do Wandson.
