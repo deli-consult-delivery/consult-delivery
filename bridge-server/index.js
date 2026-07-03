@@ -1239,6 +1239,7 @@ app.patch('/api/lojas/:id', requireJwt, async (req, res) => {
     'nicho','ifood_merchant_id','ifood_url','tipo','whatsapp','logo_url','observacoes',
     'tags','client_id','data_inicio_consultoria','data_fim_consultoria',
     'super_restaurante','data_super_restaurante','plataforma','metadata',
+    'whatsapp_group_jid',
   ]);
   const updates = Object.fromEntries(
     Object.entries(req.body).filter(([k]) => EDITABLE.has(k))

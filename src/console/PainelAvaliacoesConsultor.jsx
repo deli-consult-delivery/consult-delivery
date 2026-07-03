@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
-import { listLojasConsultoria, enviarWhatsAppAvaliacao } from '../lib/api';
+import { listLojasConsultoria, enviarWhatsAppAvaliacao, listGruposWhatsApp, salvarGrupoLoja } from '../lib/api';
 
 const CLIENT_PAGE = 'https://app.consultdelivery.com.br/aprovacao-avaliacao.html';
 
@@ -324,8 +324,95 @@ function AvisoGruposFaltando({ lojasSemGrupo }) {
     <div className="cv2-card" style={{ borderLeft: '3px solid var(--red)', marginBottom: 10 }}>
       <span style={{ fontSize: 13, color: 'var(--ink)' }}>
         ⚠ Sem grupo WhatsApp cadastrado: <strong>{lojasSemGrupo.join(', ')}</strong>.
-        Cadastre em <code>lojas.whatsapp_group_jid</code> antes de enviar avaliações destas lojas.
+        Configure abaixo antes de enviar avaliações destas lojas.
       </span>
+    </div>
+  );
+}
+
+// ─── Configuração de grupos por loja ─────────────────────────────────────────
+// Lista de grupos vem do Bridge (GET /whatsapp/groups) e o vínculo é salvo em
+// lojas.whatsapp_group_jid via Bridge (PATCH /api/lojas/:id) — nunca chama a
+// Evolution API nem grava credenciais no frontend.
+function ConfigGrupos({ lojas, groups, groupsLoading, groupsError, onSave }) {
+  const [open, setOpen]     = useState(false);
+  const [local, setLocal]   = useState({});
+  const [saving, setSaving] = useState(false);
+
+  function handleToggle() {
+    if (!open) {
+      const initial = {};
+      lojas.forEach(l => { if (l.whatsapp_group_jid) initial[l.id] = l.whatsapp_group_jid; });
+      setLocal(initial);
+    }
+    setOpen(v => !v);
+  }
+  function handleChange(lojaId, value) { setLocal(l => ({ ...l, [lojaId]: value })); }
+  async function salvar() {
+    setSaving(true);
+    await onSave(local);
+    setSaving(false);
+  }
+
+  const configuredCount = lojas.filter(l => local[l.id]).length;
+  const allConfigured   = lojas.length > 0 && configuredCount === lojas.length;
+
+  return (
+    <div className="cv2-card">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+        <div>
+          <h3 style={{ margin: 0 }}>Grupos WhatsApp por loja</h3>
+          <div style={{ fontSize: 12, color: 'var(--tx2)', marginTop: 3 }}>
+            {configuredCount} de {lojas.length} lojas configuradas. O mesmo grupo pode ser usado em múltiplas lojas.
+          </div>
+        </div>
+        <button className="cv2-btn sec" style={{ fontSize: 12 }} onClick={handleToggle}>
+          {open ? 'Fechar' : 'Configurar grupos'}
+        </button>
+      </div>
+      {open && (
+        <div style={{ marginTop: 14 }}>
+          {groupsLoading && <div style={{ fontSize: 13, color: 'var(--tx2)' }}>Carregando grupos da Evolution API…</div>}
+          {groupsError   && <div style={{ fontSize: 13, color: 'var(--red)' }}>Erro ao buscar grupos: {groupsError}</div>}
+          {!groupsLoading && groups.length === 0 && !groupsError && (
+            <div style={{ fontSize: 13, color: 'var(--tx2)' }}>Nenhum grupo encontrado na Evolution API.</div>
+          )}
+          {!groupsLoading && groups.length > 0 && (
+            <>
+              {lojas.map(loja => (
+                <div key={loja.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+                  padding: '8px 0', borderBottom: '1px solid var(--line)',
+                }}>
+                  <span style={{ flex: 1, minWidth: 160, fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{loja.nome}</span>
+                  <select
+                    value={local[loja.id] || ''}
+                    onChange={e => handleChange(loja.id, e.target.value)}
+                    style={{ ...inp, width: 'auto', minWidth: 260, fontSize: 12 }}
+                  >
+                    <option value="">— selecionar grupo —</option>
+                    {groups.map((g, idx) => <option key={`${idx}-${g.jid}`} value={g.jid}>{g.name}</option>)}
+                  </select>
+                  {local[loja.id] && (
+                    <span style={{ fontSize: 11, color: 'var(--tx2)', fontFamily: 'monospace', minWidth: 80 }}>{local[loja.id]}</span>
+                  )}
+                </div>
+              ))}
+              <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <button className="cv2-btn" style={{ fontSize: 12 }} disabled={saving} onClick={salvar}>
+                  {saving ? 'Salvando…' : `Salvar configuração (${configuredCount}/${lojas.length} lojas)`}
+                </button>
+                <span style={{ fontSize: 11, color: 'var(--tx2)' }}>Salva em lojas.whatsapp_group_jid via Bridge.</span>
+                {!allConfigured && (
+                  <span style={{ fontSize: 11, color: 'var(--red)' }}>
+                    ⚠ {lojas.length - configuredCount} loja{lojas.length - configuredCount > 1 ? 's' : ''} sem grupo.
+                  </span>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -779,6 +866,10 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
   const [lojasLoading, setLojasLoading] = useState(true);
   const [lojasError, setLojasError]     = useState(null);
 
+  const [groups, setGroups]               = useState([]);
+  const [groupsLoading, setGroupsLoading] = useState(true);
+  const [groupsError, setGroupsError]     = useState(null);
+
   const pollerRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -796,6 +887,14 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
       .then(rows => { setLojas(rows); setLojasError(null); })
       .catch(e => setLojasError(e.message))
       .finally(() => setLojasLoading(false));
+  }, [tenantDbId]);
+
+  useEffect(() => {
+    if (!tenantDbId) { setGroupsLoading(false); return; }
+    listGruposWhatsApp(tenantDbId)
+      .then(gs => { setGroups(gs); setGroupsError(null); })
+      .catch(e => setGroupsError(e.message))
+      .finally(() => setGroupsLoading(false));
   }, [tenantDbId]);
 
   useEffect(() => {
@@ -886,6 +985,23 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
       setError('Erro ao criar tarefas no Espaços: ' + e.message);
     }
     setDemandaLoading(false);
+  }
+
+  async function handleSaveGroups(mapping) {
+    const entries = Object.entries(mapping).filter(([, v]) => v);
+    try {
+      await Promise.all(entries.map(([lojaId, jid]) => salvarGrupoLoja(lojaId, jid)));
+    } catch (e) {
+      setError('Erro ao salvar grupos: ' + e.message);
+      return;
+    }
+    flash('Grupos salvos ✓');
+    if (tenantDbId) {
+      try {
+        const rows = await listLojasConsultoria(tenantDbId);
+        setLojas(rows);
+      } catch (e) { setLojasError(e.message); }
+    }
   }
 
   // ─── Handlers existentes ──────────────────────────────────────────────────
@@ -1026,6 +1142,14 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
       <AvisoGruposFaltando lojasSemGrupo={lojasSemGrupo} />
       {lojasLoading && <div className="cv2-sub">Carregando lojas…</div>}
       {lojasError && <div className="cv2-sub" style={{ color: 'var(--red)' }}>Erro ao carregar lojas: {lojasError}</div>}
+
+      <ConfigGrupos
+        lojas={lojas}
+        groups={groups}
+        groupsLoading={groupsLoading}
+        groupsError={groupsError}
+        onSave={handleSaveGroups}
+      />
 
       {/* KPIs */}
       <div className="cv2-kpis">

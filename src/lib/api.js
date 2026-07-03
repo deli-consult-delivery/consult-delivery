@@ -722,6 +722,38 @@ export async function enviarWhatsAppAvaliacao({ tenantId, chatId, texto }) {
   return res.json();
 }
 
+// Lista de grupos WhatsApp da instância Evolution do tenant — SEMPRE via Bridge
+// (a key da Evolution nunca deve existir no frontend).
+export async function listGruposWhatsApp(tenantId) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token || '';
+  const res = await fetch(`${BRIDGE}/whatsapp/groups?tenant_id=${encodeURIComponent(tenantId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`listGruposWhatsApp HTTP ${res.status}: ${body.slice(0, 300)}`);
+  }
+  const { groups } = await res.json();
+  return groups ?? [];
+}
+
+// Vincula o grupo WhatsApp de uma loja (lojas.whatsapp_group_jid) via Bridge.
+export async function salvarGrupoLoja(lojaId, whatsappGroupJid) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token || '';
+  const res = await fetch(`${BRIDGE}/api/lojas/${encodeURIComponent(lojaId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ whatsapp_group_jid: whatsappGroupJid }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`salvarGrupoLoja HTTP ${res.status}: ${body.slice(0, 300)}`);
+  }
+  return res.json();
+}
+
 export async function getAvaliacoesConfig(lojaId) {
   const { data, error } = await supabase
     .from('avaliacoes_loja_config')
