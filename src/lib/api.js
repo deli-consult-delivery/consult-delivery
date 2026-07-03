@@ -696,7 +696,7 @@ export function subscribeToDrafts(tenantId, callback) {
 export async function listLojasConsultoria(tenantId) {
   const { data, error } = await supabase
     .from('lojas')
-    .select('id, nome, super_restaurante, whatsapp_group_jid')
+    .select('id, nome, super_restaurante, whatsapp_group_jid, ifood_portal_nome')
     .eq('tenant_id', tenantId)
     .eq('is_consultoria_ativa', true)
     .order('nome');

@@ -908,7 +908,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
   const storeGroups = useMemo(() => {
     const sg = {};
     reviews.forEach(r => { if (r.store && r.whatsappGroup) sg[r.store] = r.whatsappGroup; });
-    lojas.forEach(l => { if (l.whatsapp_group_jid) sg[l.nome] = l.whatsapp_group_jid; });
+    lojas.forEach(l => { if (l.whatsapp_group_jid) { sg[l.nome] = l.whatsapp_group_jid; if (l.ifood_portal_nome) sg[l.ifood_portal_nome] = l.whatsapp_group_jid; } });
     return sg;
   }, [lojas, reviews]);
 
