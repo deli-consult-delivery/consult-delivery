@@ -560,11 +560,13 @@ function DemandaModal({ storeName, demandas, onConfirm, onClose, loading }) {
 }
 
 // ─── Card individual ──────────────────────────────────────────────────────────
-function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSendSingle, onSaveNote }) {
+function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSendSingle, onSaveNote, onEditFinal }) {
   const [draft, setDraft]           = useState(review.finalResponse || review.suggestedResponse || '');
   const [notes, setNotes]           = useState(review.notes || '');
   const [notesSaved, setNotesSaved] = useState(false);
   const [copied, setCopied]         = useState(false);
+  const [editingFinal, setEditingFinal] = useState(false);
+  const [editText, setEditText]         = useState('');
 
   const st         = STATUS_CFG[review.status] || { label: review.status, cls: 'mut' };
   const isApproved = review.status === 'approved' || review.status === 'modified';
@@ -642,13 +644,42 @@ function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSen
             <div style={{ fontSize: 11, color: 'var(--tx2)', marginBottom: 6 }}>
               RESPOSTA APROVADA{review.status === 'modified' ? ' COM ALTERAÇÃO' : ''}
             </div>
-            {finalText}
+            {editingFinal ? (
+              <>
+                <textarea
+                  value={editText}
+                  onChange={e => setEditText(e.target.value)}
+                  rows={3}
+                  maxLength={300}
+                  style={{ ...inp, resize: 'vertical', background: '#fff' }}
+                />
+                <div style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--tx2)', marginTop: 4 }}>
+                  {editText.length}/300
+                </div>
+              </>
+            ) : finalText}
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <button className="cv2-btn" style={{ fontSize: 11.5 }} disabled={busy} onClick={() => onPublish(review.id, finalText)}>
-              {busy ? '…' : 'Marcar como publicado'}
-            </button>
-            <button className="cv2-btn sec" style={{ fontSize: 11.5 }} onClick={() => copiar(finalText)}>Copiar resposta</button>
+            {editingFinal ? (
+              <>
+                <button
+                  className="cv2-btn" style={{ fontSize: 11.5 }}
+                  disabled={busy || !editText.trim()}
+                  onClick={async () => { await onEditFinal(review.id, editText); setEditingFinal(false); }}
+                >
+                  {busy ? '…' : 'Salvar'}
+                </button>
+                <button className="cv2-btn sec" style={{ fontSize: 11.5 }} onClick={() => setEditingFinal(false)}>Cancelar</button>
+              </>
+            ) : (
+              <>
+                <button className="cv2-btn" style={{ fontSize: 11.5 }} disabled={busy} onClick={() => onPublish(review.id, finalText)}>
+                  {busy ? '…' : 'Marcar como publicado'}
+                </button>
+                <button className="cv2-btn sec" style={{ fontSize: 11.5 }} onClick={() => copiar(finalText)}>Copiar resposta</button>
+                <button className="cv2-btn sec" style={{ fontSize: 11.5 }} onClick={() => { setEditText(finalText); setEditingFinal(true); }}>Editar resposta</button>
+              </>
+            )}
           </div>
         </>
       ) : (
@@ -730,7 +761,7 @@ function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSen
 }
 
 // ─── Accordion por loja ───────────────────────────────────────────────────────
-function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, storeGroups, onSendStore, onPublish, onSaveDraft, onSendSingle, onSaveNote, onGerarDemandas, idPrefix = 'store' }) {
+function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, storeGroups, onSendStore, onPublish, onSaveDraft, onSendSingle, onSaveNote, onEditFinal, onGerarDemandas, idPrefix = 'store' }) {
   const [open, setOpen] = useState(defaultOpen);
 
   const toSend         = reviews.filter(r => r.status === 'pending');
@@ -823,6 +854,7 @@ function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, st
               onSaveDraft={onSaveDraft}
               onSendSingle={onSendSingle}
               onSaveNote={onSaveNote}
+              onEditFinal={onEditFinal}
             />
           ))}
         </div>
@@ -1064,6 +1096,18 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
     setBusyId(null);
   }
 
+  async function handleEditFinal(id, newText) {
+    const text = newText.trim();
+    if (!text) return;
+    setBusyId(id); setError(null);
+    try {
+      await sbUpdate({ id }, { final_response: text, status: 'modified' });
+      flash('Resposta atualizada ✓');
+      await load();
+    } catch (e) { setError('Erro ao editar resposta: ' + e.message); }
+    setBusyId(null);
+  }
+
   async function handleSaveNote(id, notes) {
     setBusyId(id);
     try {
@@ -1226,6 +1270,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
           onSaveDraft={handleSaveDraft}
           onSendSingle={handleSendSingle}
           onSaveNote={handleSaveNote}
+          onEditFinal={handleEditFinal}
           onGerarDemandas={handleGerarDemandas}
         />
       ))}
@@ -1260,6 +1305,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
               onSaveDraft={handleSaveDraft}
               onSendSingle={handleSendSingle}
               onSaveNote={handleSaveNote}
+              onEditFinal={handleEditFinal}
               onGerarDemandas={handleGerarDemandas}
               idPrefix="archived"
             />
