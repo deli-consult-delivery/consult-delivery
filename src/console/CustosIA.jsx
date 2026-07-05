@@ -4,8 +4,30 @@ import { supabase } from '../lib/supabase.js';
 // ============================================================
 // Console v2 — T1/GAP-4: Custos de IA
 // Fonte: agent_runs.cost_usd por agente/dia/tenant, janela 30d
-// P6: limit(1000) — agregacao cliente-side apos fetch limitado
+// P6: paginacao completa via .range() — sem limit(1000), sem subestimar
+// tenants com >1000 runs/30d (auditoria GAPs T3 2026-07-05)
 // ============================================================
+
+const PAGE = 1000;
+
+export async function buscarTodosRuns(tenantDbId, desdeIso) {
+  let rows = [];
+  let offset = 0;
+  for (;;) {
+    const { data, error } = await supabase
+      .from('agent_runs')
+      .select('agent_id, cost_usd, created_at, status')
+      .eq('tenant_id', tenantDbId)
+      .gte('created_at', desdeIso)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    rows = rows.concat(data ?? []);
+    if (!data || data.length < PAGE) break;
+    offset += PAGE;
+  }
+  return rows;
+}
 
 function fmt(n, casas = 4) {
   return Number(n || 0).toFixed(casas);
@@ -37,17 +59,10 @@ export default function CustosIA({ tenantDbId }) {
     (async () => {
       try {
         const desde = new Date(Date.now() - 30 * 86400000).toISOString();
-        const [{ data: runs, error: e1 }, { data: ags, error: e2 }] = await Promise.all([
-          supabase
-            .from('agent_runs')
-            .select('agent_id, cost_usd, created_at, status')
-            .eq('tenant_id', tenantDbId)
-            .gte('created_at', desde)
-            .order('created_at', { ascending: false })
-            .limit(1000),
+        const [runs, { data: ags, error: e2 }] = await Promise.all([
+          buscarTodosRuns(tenantDbId, desde),
           supabase.from('agents').select('id, name, category'),
         ]);
-        if (e1) throw e1;
         if (e2) throw e2;
         if (alive) {
           setRows(runs ?? []);
@@ -116,7 +131,7 @@ export default function CustosIA({ tenantDbId }) {
       <div className="cv2-rule" />
       <div className="cv2-sub">
         Agregacao de <b>agent_runs.cost_usd</b> por agente e dia ·{' '}
-        {rows.length} execucoes carregadas (limite 1000/janela)
+        {rows.length.toLocaleString('pt-BR')} execucoes carregadas (paginacao completa, sem limite)
         {erro && <span style={{ color: 'var(--red)' }}> · Erro: {erro}</span>}
       </div>
 
