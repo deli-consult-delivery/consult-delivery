@@ -4,6 +4,7 @@ import { getSupabase } from "./supabase";
 import { logAgentRun } from "./audit";
 import { notifyDeli } from "./notify-deli";
 import { lerMetricas } from "./radar-metricas";
+import { calcularCustoUsd } from "./pricing";
 
 // =====================================================
 // Helper compartilhado dos agentes de análise (Cardápio, Multicanal).
@@ -38,14 +39,15 @@ export async function processarFila(opts: {
         await sb.from("agente_analises").update({ status: "erro", erro_detalhe: "sem métricas importadas", processado_em: new Date().toISOString() }).eq("id", a.id);
         continue;
       }
+      const MODEL = "claude-sonnet-4-6";
       const client = getAnthropic();
       const resp = await client.messages.create({
-        model: "claude-sonnet-4-6", max_tokens: 1600, system: opts.systemPrompt,
+        model: MODEL, max_tokens: 1600, system: opts.systemPrompt,
         messages: [{ role: "user", content: `Métricas:\n${fatos}` }],
       });
       const texto = resp.content.filter(b => b.type === "text").map(b => (b as Anthropic.TextBlock).text).join("");
       const resultado = JSON.parse(texto.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim());
-      const custoUsd = (resp.usage.input_tokens / 1e6) * 3 + (resp.usage.output_tokens / 1e6) * 15;
+      const custoUsd = calcularCustoUsd(MODEL, resp.usage);
       await sb.from("agente_analises").update({ status: "processado", resultado, custo_usd: custoUsd, processado_em: new Date().toISOString() }).eq("id", a.id);
       await logAgentRun({ runId: opts.runId + ":" + a.id, agentSlug: opts.agente, input: { loja_id: a.loja_id ?? null }, output: { resumo: resultado.resumo }, tenantId: a.tenant_id, triggeredBy: a.solicitado_por ?? undefined, durationMs: Date.now() - t0, costUsd: custoUsd, status: "success" });
       await notifyDeli({ tenantId: a.tenant_id, content: `${opts.agente.toUpperCase()}: ${resultado.resumo ?? "análise pronta"}`, sourceAgent: opts.agente, sourceTask: `${opts.agente}-processar`, runId: opts.runId });

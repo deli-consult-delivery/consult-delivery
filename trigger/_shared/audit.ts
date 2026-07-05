@@ -35,7 +35,7 @@ interface AgentRunLog {
   tenantId?: string;
   triggeredBy?: string;
   durationMs?: number;
-  costUsd?: number;
+  costUsd?: number | null;
   status?: "success" | "failed";
   explanation?: string;
   confidenceScore?: number;

@@ -6,6 +6,7 @@ import { logAgentRun } from "../_shared/audit";
 import { notify } from "../_shared/notify";
 import { notifyDeli } from "../_shared/notify-deli";
 import { lerMetricas } from "../_shared/radar-metricas";
+import { calcularCustoUsd } from "../_shared/pricing";
 
 // =====================================================
 // RADAR — diagnóstico semanal automático (PR12c)
@@ -256,16 +257,17 @@ export const radarDiagnosticoSemanal = schedules.task({
         // resumo curto pela IA (Brand Guard); fallback = os próprios fatos
         let resumo = fatos;
         try {
+          const MODEL = "claude-sonnet-4-6";
           const client = getAnthropic();
           const resp = await client.messages.create({
-            model: "claude-sonnet-4-6",
+            model: MODEL,
             max_tokens: 600,
             system: "Voce e o RADAR da Consult Delivery. A partir dos numeros, escreva um diagnostico semanal curto (ate 4 frases) para o dono da loja: o que mais pesa, o que e contestavel pela Defesa, e a acao mais importante da semana. Portugues do Brasil, profissional, direto, ZERO emoji. Use 'oferta' nunca 'promocao'.",
             messages: [{ role: "user", content: `Numeros da semana:\n${fatos}` }],
           });
           const out = resp.content.filter(b => b.type === "text").map(b => (b as Anthropic.TextBlock).text).join("").trim();
           if (out) resumo = out;
-          custoTotal += (resp.usage.input_tokens / 1e6) * 3 + (resp.usage.output_tokens / 1e6) * 15;
+          custoTotal += calcularCustoUsd(MODEL, resp.usage) ?? 0;
         } catch (e) {
           logger.warn("radar semanal: IA falhou, usando fatos crus", { erro: (e as Error).message });
         }

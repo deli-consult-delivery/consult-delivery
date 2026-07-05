@@ -23,6 +23,10 @@ interface RunClaudeOptions<T extends z.ZodTypeAny> {
   outputSchema: T;
   maxRetries?: number;
   useWebSearch?: boolean;
+  // Chamado a cada resposta da API (inclusive tentativas com parse malsucedido —
+  // o token já foi cobrado mesmo quando o retry descarta o resultado). O caller
+  // acumula para obter o custo real do run: onUsage: (u) => costUsd += calcularCustoUsd(MODEL, u) ?? 0
+  onUsage?: (usage: Anthropic.Usage) => void;
 }
 
 export async function runClaudeWithWebSearch<T extends z.ZodTypeAny>({
@@ -31,6 +35,7 @@ export async function runClaudeWithWebSearch<T extends z.ZodTypeAny>({
   outputSchema,
   maxRetries = 1,
   useWebSearch = true,
+  onUsage,
 }: RunClaudeOptions<T>): Promise<z.infer<T>> {
   // web_search_20250305 é a ferramenta de busca aprovada no RESTRUCTURE.md
   const tools: Anthropic.Tool[] = useWebSearch
@@ -49,6 +54,8 @@ export async function runClaudeWithWebSearch<T extends z.ZodTypeAny>({
         messages: [{ role: "user", content: userPrompt }],
         ...(tools.length > 0 ? { tools } : {}),
       });
+
+      onUsage?.(response.usage);
 
       const text = response.content
         .filter((b) => b.type === "text")

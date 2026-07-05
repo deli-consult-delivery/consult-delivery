@@ -4,6 +4,7 @@ import { getAnthropic } from "../_shared/claude";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 import { buildLojaContexto } from "../_shared/loja-contexto";
+import { calcularCustoUsd } from "../_shared/pricing";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -164,6 +165,8 @@ Gere o relatório, resumo executivo e lista de tarefas conforme instruído.`;
       messages: [{ role: "user", content: userPrompt }],
     });
 
+    let costUsd = calcularCustoUsd("claude-sonnet-4-6", response.usage) ?? 0;
+
     const textBlock = response.content.find((b) => b.type === "text");
     const rawText = textBlock && textBlock.type === "text" ? textBlock.text : "";
 
@@ -201,6 +204,8 @@ Gere o relatório, resumo executivo e lista de tarefas conforme instruído.`;
           },
         ],
       });
+
+      costUsd += calcularCustoUsd("claude-sonnet-4-6", fixResponse.usage) ?? 0;
 
       const fixBlock = fixResponse.content.find((b) => b.type === "text");
       const fixText = fixBlock && fixBlock.type === "text" ? fixBlock.text : "";
@@ -284,6 +289,7 @@ Gere o relatório, resumo executivo e lista de tarefas conforme instruído.`;
       tenantId: tenant_id,
       triggeredBy: criado_por ?? undefined,
       durationMs: Date.now() - startedAt,
+      costUsd,
       status: "success",
     });
 

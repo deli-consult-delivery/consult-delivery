@@ -4,6 +4,7 @@ import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
+import { calcularCustoUsd } from "../_shared/pricing";
 
 // =====================================================
 // SCHEMAS
@@ -186,6 +187,8 @@ Retorne APENAS JSON:
         messages:   [{ role: "user", content: userPrompt }],
       });
 
+      const costUsd = calcularCustoUsd("claude-haiku-4-5-20251001", response.usage);
+
       const rawText = response.content
         .filter((b) => b.type === "text")
         .map((b) => (b as Anthropic.TextBlock).text)
@@ -285,6 +288,7 @@ Retorne APENAS JSON:
         triggeredBy: input.triggered_by,
         input,
         output,
+        costUsd,
         status:      "success",
       });
 

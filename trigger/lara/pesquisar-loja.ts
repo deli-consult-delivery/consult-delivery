@@ -4,6 +4,7 @@ import { runClaudeWithWebSearch } from "../_shared/claude";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 import { notifyDeli } from "../_shared/notify-deli";
+import { calcularCustoUsd } from "../_shared/pricing";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -110,12 +111,14 @@ Loja: ${input.loja_nome}${cidadeInfo}${idfoodInfo}${instaInfo}
 Use web_search para encontrar o iFood, Instagram, Google Maps e qualquer presença digital.
 Retorne o JSON estruturado conforme solicitado.`;
 
+    let costUsd = 0;
     const resultado = await runClaudeWithWebSearch({
       systemPrompt,
       userPrompt,
       outputSchema: OutputSchema,
       maxRetries: 1,
       useWebSearch: true,
+      onUsage: (usage) => { costUsd += calcularCustoUsd("claude-sonnet-4-6", usage) ?? 0; },
     });
 
     // Salvar fatos na memória do cliente (se loja_id fornecido)
@@ -137,6 +140,7 @@ Retorne o JSON estruturado conforme solicitado.`;
       tenantId: input.tenant_id,
       triggeredBy: input.triggered_by,
       durationMs: Date.now() - startedAt,
+      costUsd,
     });
 
     await notifyDeli({

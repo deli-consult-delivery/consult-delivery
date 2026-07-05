@@ -3,6 +3,7 @@ import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
+import { calcularCustoUsd } from "../_shared/pricing";
 
 const anthropic = new Anthropic();
 
@@ -88,6 +89,8 @@ Retorne APENAS um JSON válido com esta estrutura:
       messages: [{ role: "user", content: userPrompt }],
     });
 
+    const costUsd = calcularCustoUsd("claude-haiku-4-5-20251001", response.usage);
+
     const rawText = response.content
       .filter((b) => b.type === "text")
       .map((b) => (b as Anthropic.TextBlock).text)
@@ -157,6 +160,7 @@ Retorne APENAS um JSON válido com esta estrutura:
       tenantId: input.tenant_id,
       triggeredBy: input.user_id,
       durationMs: Date.now() - start,
+      costUsd,
     });
 
     return OutputSchema.parse({ ok: true, blueprint_id: blueprintId, discovery });

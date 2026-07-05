@@ -3,6 +3,7 @@ import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
+import { calcularCustoUsd } from "../_shared/pricing";
 
 // =====================================================
 // SCHEMAS
@@ -137,6 +138,8 @@ NUNCA:
         messages: [{ role: "user", content: prompt }],
       });
 
+      let costUsd = calcularCustoUsd("claude-sonnet-4-6", response.usage) ?? 0;
+
       const rawText = response.content
         .filter((b) => b.type === "text")
         .map((b) => (b as Anthropic.TextBlock).text)
@@ -165,6 +168,8 @@ NUNCA:
             },
           ],
         });
+
+        costUsd += calcularCustoUsd("claude-sonnet-4-6", correcaoResponse.usage) ?? 0;
 
         const correcaoText = correcaoResponse.content
           .filter((b) => b.type === "text")
@@ -219,6 +224,7 @@ NUNCA:
           abordagem_id: abordagemInserida.id,
           canal:        input.canal,
         },
+        costUsd,
         status: "success",
       });
 

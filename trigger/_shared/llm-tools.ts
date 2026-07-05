@@ -13,6 +13,7 @@
 // agregado. Sem dependência nova: fetch global (Node 18+) para a/b; @anthropic-ai/sdk (já é dep) para c.
 
 import Anthropic from "@anthropic-ai/sdk";
+import { calcularCustoUsd } from "./pricing";
 
 export interface ToolDef {
   type: "function";
@@ -47,6 +48,8 @@ export interface ChatWithToolsResult {
   message: OAIMessage;
   provider: "ollama" | "openrouter" | "anthropic";
   modelo: string;
+  // null: provider não-Anthropic (Ollama/OpenRouter) ou modelo fora da tabela de preços — nunca 0 fake.
+  cost_usd?: number | null;
 }
 
 // ── Providers OpenAI-compat (Ollama Cloud + OpenRouter) — mesmo envelope ──────────
@@ -185,7 +188,12 @@ async function callAnthropicNative(input: ChatWithToolsInput): Promise<ChatWithT
       : {}),
   });
 
-  return { message: fromAnthropicResponse(response), provider: "anthropic", modelo };
+  return {
+    message: fromAnthropicResponse(response),
+    provider: "anthropic",
+    modelo,
+    cost_usd: calcularCustoUsd(modelo, response.usage),
+  };
 }
 
 // ── Ollama Cloud web search/fetch — API própria (mesma OLLAMA_API_KEY) ───────────
