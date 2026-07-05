@@ -1,19 +1,24 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
+import { aprovarSugestao, rejeitarSugestao } from '../lib/miaApi.js';
 
 // Bridge: envio real de drafts (ex.: WhatsApp do Breno ao aprovar).
 const BRIDGE = import.meta.env.VITE_BRIDGE_URL || 'https://bridge.consultdelivery.com.br';
 
 // ============================================================
-// T4 · Aprovacoes Unificadas (GAP-3)
+// T4 · Aprovacoes Unificadas (GAP-3, fecho conceitual: sugestões MIA)
 // Fila unificada de aprovacoes pendentes neste workspace:
 //   - agent_drafts: mensagens preparadas por agentes aguardando OK
 //   - defesa_casos: status aguardando_ok (reaproveitado da Defesa)
+//   - sugestoes_ia: sugestões (fact/tarefa) do Monitor IA (MIA) pendentes
 // Schema REAL agent_drafts (conferido no banco 2026-06-08):
 //   id, tenant_id, agent_name, channel, target_id, subject, content, status,
 //   autonomy_level, reviewer_id, reviewed_at, metadata, created_at, ...
 // (correção E4b: a versão anterior usava agent_id/recipient/aprovado_* que
 //  NÃO existem — toda a fila de drafts degradava p/ vazia, incl. Defesa.)
+// sugestoes_ia já existe desde MIA-01 (20260603_008) com RLS hierárquica
+// (20260702_003); aprovar/rejeitar via bridge (miaApi) reaproveita a lógica
+// já pronta de conversão fact→client_facts / tarefa→tarefas_loja.
 // ============================================================
 
 const CANAL_LABELS = {
@@ -177,9 +182,54 @@ function ItemDefesa({ caso, onAprovar, onDescartar, agindo }) {
   );
 }
 
+function ItemMia({ item, onAprovar, onRejeitar, agindo }) {
+  const confiancaBdg = item.confianca === 'alta' ? 'ok' : item.confianca === 'media' ? 'warn' : 'mut';
+
+  return (
+    <div className="cv2-card" style={{ marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
+            <span className="cv2-bdg mut" style={{ fontSize: 11 }}>MIA</span>
+            <span className="cv2-bdg mut" style={{ fontSize: 11 }}>{item.tipo === 'fact' ? 'Fato' : 'Tarefa'}</span>
+            <span className={`cv2-bdg ${confiancaBdg}`} style={{ fontSize: 11 }}>confiança {item.confianca}</span>
+            {item.loja?.nome && <span className="cv2-bdg mut" style={{ fontSize: 11 }}>{item.loja.nome}</span>}
+            <span style={{ fontSize: 11.5, color: 'var(--tx2)' }}>{fmtData(item.criada_em)}</span>
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--ink)', marginBottom: 4 }}>{item.conteudo}</div>
+          {item.evidencia?.trecho && (
+            <div style={{ fontSize: 11.5, color: 'var(--tx2)', fontStyle: 'italic', borderLeft: '2px solid var(--line)', paddingLeft: 6 }}>
+              "{item.evidencia.trecho}"
+            </div>
+          )}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+          <button
+            className="cv2-btn"
+            style={{ fontSize: 12 }}
+            disabled={agindo === item.id}
+            onClick={() => onAprovar(item.id)}
+          >
+            {agindo === item.id ? '...' : 'Aprovar'}
+          </button>
+          <button
+            className="cv2-btn danger"
+            style={{ fontSize: 12 }}
+            disabled={agindo === item.id}
+            onClick={() => onRejeitar(item.id)}
+          >
+            Rejeitar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AprovacoesUnificadas({ tenantDbId, userId }) {
   const [drafts, setDrafts] = useState(null);
   const [casos, setCasos] = useState(null);
+  const [sugestoes, setSugestoes] = useState(null);
   const [erro, setErro] = useState(null);
   const [agindo, setAgindo] = useState(null);
   const [filtroOrigem, setFiltroOrigem] = useState('');
@@ -189,7 +239,7 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
   const carregar = useCallback(async () => {
     if (!tenantDbId) return;
     try {
-      const [{ data: dr, error: e1 }, { data: ca, error: e2 }] = await Promise.all([
+      const [{ data: dr, error: e1 }, { data: ca, error: e2 }, { data: sg, error: e3 }] = await Promise.all([
         supabase
           .from('agent_drafts')
           .select('id, agent_name, channel, target_id, subject, content, status, metadata, created_at, loja_id, loja:lojas(id, nome)')
@@ -204,10 +254,18 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
           .eq('status', 'aguardando_ok')
           .order('created_at', { ascending: false })
           .limit(50),
+        supabase
+          .from('sugestoes_ia')
+          .select('id, tipo, conteudo, evidencia, confianca, status, criada_em, loja_id, loja:lojas(id, nome)')
+          .eq('tenant_id', tenantDbId)
+          .eq('status', 'pendente')
+          .order('criada_em', { ascending: false })
+          .limit(100),
       ]);
 
       // e1 pode ser erro de tabela inexistente (agent_drafts) — degradar graciosamente
       if (e2) throw e2;
+      if (e3) throw e3;
 
       // mostra drafts que precisam de aprovação: oculta canal interno do CEO e
       // agentes já representados por outra fonte (Defesa vem via defesa_casos).
@@ -215,6 +273,7 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
 
       setDrafts(e1 ? [] : draftsAprovacao);
       setCasos(ca ?? []);
+      setSugestoes(sg ?? []);
     } catch (err) {
       setErro(err?.message || 'erro ao carregar');
     }
@@ -339,32 +398,65 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
     await carregar();
   }
 
+  // Aprovar/rejeitar reaproveitam a lógica já pronta no bridge (miaApi):
+  // aprovar cria client_facts (tipo=fact) ou tarefas_loja (tipo=tarefa);
+  // nenhum envio a cliente em nenhum dos dois casos.
+  async function aprovarSugestaoMia(id) {
+    setAgindo(id);
+    try {
+      await aprovarSugestao(id);
+    } catch (err) {
+      setErro(err?.message || 'erro ao aprovar sugestão MIA');
+    }
+    setAgindo(null);
+    await carregar();
+  }
+
+  async function rejeitarSugestaoMia(id) {
+    setAgindo(id);
+    try {
+      await rejeitarSugestao(id);
+    } catch (err) {
+      setErro(err?.message || 'erro ao rejeitar sugestão MIA');
+    }
+    setAgindo(null);
+    await carregar();
+  }
+
   const totalDrafts = drafts?.length ?? 0;
   const totalCasos = casos?.length ?? 0;
-  const total = totalDrafts + totalCasos;
+  const totalSugestoes = sugestoes?.length ?? 0;
+  const total = totalDrafts + totalCasos + totalSugestoes;
 
   // Opcoes de filtro derivadas dos itens carregados (origem/agente/loja).
+  // MIA não entra aqui: já tem opção dedicada no filtro de Origem, evitando duplicidade.
   const agentesDisponiveis = [...new Set([
     ...(drafts ?? []).map(d => d.agent_name).filter(Boolean),
     ...(casos ?? []).map(c => c.criado_por_agente).filter(Boolean),
   ])].sort();
   const lojasDisponiveis = Object.values(
-    [...(drafts ?? []), ...(casos ?? [])].reduce((acc, item) => {
+    [...(drafts ?? []), ...(casos ?? []), ...(sugestoes ?? [])].reduce((acc, item) => {
       if (item.loja?.id) acc[item.loja.id] = item.loja;
       return acc;
     }, {})
   ).sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
 
   const draftsFiltrados = (drafts ?? []).filter(d => {
-    if (filtroOrigem === 'defesa') return false;
+    if (filtroOrigem === 'defesa' || filtroOrigem === 'mia') return false;
     if (filtroAgente && d.agent_name !== filtroAgente) return false;
     if (filtroLoja && d.loja_id !== filtroLoja) return false;
     return true;
   });
   const casosFiltrados = (casos ?? []).filter(c => {
-    if (filtroOrigem === 'draft') return false;
+    if (filtroOrigem === 'draft' || filtroOrigem === 'mia') return false;
     if (filtroAgente && c.criado_por_agente !== filtroAgente) return false;
     if (filtroLoja && c.loja_id !== filtroLoja) return false;
+    return true;
+  });
+  const sugestoesFiltradas = (sugestoes ?? []).filter(s => {
+    if (filtroOrigem === 'draft' || filtroOrigem === 'defesa') return false;
+    if (filtroAgente) return false; // MIA não tem agent_name — filtro de agente não se aplica
+    if (filtroLoja && s.loja_id !== filtroLoja) return false;
     return true;
   });
   const temFiltroAtivo = filtroOrigem || filtroAgente || filtroLoja;
@@ -375,7 +467,7 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
         {total > 0 ? `${total} PENDENTE${total > 1 ? 'S' : ''}` : 'TUDO APROVADO'}
       </span></h1>
       <div className="cv2-rule" />
-      <div className="cv2-sub">Fila unificada: mensagens de agentes + contestacoes de Defesa aguardando seu OK.{erro ? ` · erro: ${erro}` : ''}</div>
+      <div className="cv2-sub">Fila unificada: mensagens de agentes + contestacoes de Defesa + sugestões do MIA aguardando seu OK.{erro ? ` · erro: ${erro}` : ''}</div>
 
       <div className="cv2-kpis">
         <div className="cv2-kpi">
@@ -389,18 +481,24 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
           <div className={`d${totalCasos > 0 ? ' neg' : ' mut'}`}>defesa_casos</div>
         </div>
         <div className="cv2-kpi">
+          <div className="l">Sugestões MIA</div>
+          <div className="v">{sugestoes ? totalSugestoes : '…'}</div>
+          <div className={`d${totalSugestoes > 0 ? ' neg' : ' mut'}`}>sugestoes_ia</div>
+        </div>
+        <div className="cv2-kpi">
           <div className="l">Total fila</div>
-          <div className="v">{drafts && casos ? total : '…'}</div>
+          <div className="v">{drafts && casos && sugestoes ? total : '…'}</div>
           <div className={`d${total > 0 ? ' neg' : ' mut'}`}>{total > 0 ? 'aguardando OK' : 'fila limpa'}</div>
         </div>
       </div>
 
-      {drafts && casos && (
+      {drafts && casos && sugestoes && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '14px 0' }}>
           <select className="cv2-btn sec" style={{ fontSize: 12 }} value={filtroOrigem} onChange={e => setFiltroOrigem(e.target.value)}>
             <option value="">Origem: todas</option>
             <option value="draft">Mensagens de agentes</option>
             <option value="defesa">Defesa Comercial</option>
+            <option value="mia">MIA</option>
           </select>
           <select className="cv2-btn sec" style={{ fontSize: 12 }} value={filtroAgente} onChange={e => setFiltroAgente(e.target.value)}>
             <option value="">Agente: todos</option>
@@ -458,19 +556,37 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
         </>
       )}
 
-      {drafts && casos && total === 0 && (
+      {/* Sugestões MIA */}
+      {sugestoes && sugestoesFiltradas.length > 0 && (
+        <>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--tx2)', letterSpacing: '0.06em', margin: '16px 0 8px', textTransform: 'uppercase' }}>
+            Sugestões MIA ({sugestoesFiltradas.length})
+          </div>
+          {sugestoesFiltradas.map(s => (
+            <ItemMia
+              key={s.id}
+              item={s}
+              agindo={agindo}
+              onAprovar={aprovarSugestaoMia}
+              onRejeitar={rejeitarSugestaoMia}
+            />
+          ))}
+        </>
+      )}
+
+      {drafts && casos && sugestoes && total === 0 && (
         <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>
           Fila limpa — nenhuma aprovacao pendente neste workspace.
         </div>
       )}
 
-      {drafts && casos && total > 0 && draftsFiltrados.length === 0 && casosFiltrados.length === 0 && (
+      {drafts && casos && sugestoes && total > 0 && draftsFiltrados.length === 0 && casosFiltrados.length === 0 && sugestoesFiltradas.length === 0 && (
         <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>
           Nenhum item pendente com esses filtros.
         </div>
       )}
 
-      {(!drafts || !casos) && (
+      {(!drafts || !casos || !sugestoes) && (
         <div style={{ color: 'var(--tx2)', fontSize: 13 }}>Carregando...</div>
       )}
     </div>
