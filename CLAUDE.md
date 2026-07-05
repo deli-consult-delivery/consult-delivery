@@ -73,6 +73,14 @@ OpenClaw: containers rodando na porta 18789 hospedando agentes da EvoNexus (POC)
 
 ---
 
+## DESIGN SYSTEM
+
+**DECISÃO TRAVADA (Wandson, 04/07/2026)** — `docs/estrategia/PLANO-CONTINUIDADE-PLATAFORMA-2026-07.md` §3 B2 / §6 item 4.
+
+`console.css` (visual claro) é o DS oficial da plataforma. Fonte visual = `docs/prototipo/console-v2.html` (ver `docs/prototipo/METODO-CONSOLE-V2.md`). Toda tela nova ou alterada segue o padrão cv2. **Não adotar Tailwind novo** em telas cv2. Telas LEGADO (visual escuro) portam para o claro sob demanda.
+
+---
+
 ## INFRA
 
 ```
