@@ -8,7 +8,8 @@ MIGRATIONS_DIR="supabase/migrations"
 ARCHIVE_DIR="supabase/migrations_archive"
 BASELINE_NAME="00000000000000_baseline.sql"
 BASELINE_FILE="$MIGRATIONS_DIR/$BASELINE_NAME"
-SUPABASE_CMD="${SUPABASE_CMD:-npx --yes supabase}"
+# array, não string — "$SUPABASE_CMD" (string) quebraria com word-splitting perdido pelas aspas
+SUPABASE_CMD=(${SUPABASE_CMD:-npx --yes supabase})
 
 echo "== 1/4: pré-checagem =="
 if [ -f "$BASELINE_FILE" ]; then
@@ -20,8 +21,8 @@ before_count=$(find "$MIGRATIONS_DIR" -maxdepth 1 -name '*.sql' | wc -l | tr -d 
 echo "Migrations atuais em $MIGRATIONS_DIR: $before_count"
 
 echo "== 2/4: dump do schema de produção (read-only, --linked) =="
-"$SUPABASE_CMD" db dump --linked -f "$BASELINE_FILE" \
-  || { echo "ERRO: dump falhou (provável falta de credencial — rode '$SUPABASE_CMD login' ou exporte SUPABASE_ACCESS_TOKEN). Nada foi arquivado." >&2; exit 1; }
+"${SUPABASE_CMD[@]}" db dump --linked -f "$BASELINE_FILE" \
+  || { echo "ERRO: dump falhou (provável falta de credencial — rode '${SUPABASE_CMD[*]} login' ou exporte SUPABASE_ACCESS_TOKEN). Nada foi arquivado." >&2; exit 1; }
 
 if [ ! -s "$BASELINE_FILE" ]; then
   echo "ERRO: dump não gerou conteúdo. Abortando ANTES de arquivar nada." >&2
