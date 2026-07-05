@@ -10,6 +10,10 @@ import { supabase } from '../lib/supabase.js';
 
 const PAGE = 1000;
 
+// ponytail: paginação por offset (.range) sem tiebreaker nem teto de páginas —
+// correta para o volume atual (~1.7k runs/mês em TODOS os tenants). Se um tenant
+// passar de poucos milhares de runs/mês, ou inserts concorrentes durante o scan
+// virarem problema real, trocar por RPC de agregação no Postgres (sum/group by).
 export async function buscarTodosRuns(tenantDbId, desdeIso) {
   let rows = [];
   let offset = 0;
