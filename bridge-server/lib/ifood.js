@@ -373,6 +373,27 @@ async function deletarCategoria(merchantId, categoryId, tenantId) {
   ).then(tolerant);
 }
 
+// Responde uma avaliação (review) — mensagem PÚBLICA ao cliente do lojista.
+// Path confirmado no 00-api-reference.md (POST /review/v2.0/merchants/{merchantId}/reviews/{reviewId}/answers).
+// Corpo `{ text }` segue o schema documentado da API iFood — ainda NÃO confirmado
+// contra uma chamada real (doc capturada do portal não detalha o schema de resposta);
+// ajustar aqui se o 1º smoke live devolver 4xx de validação.
+// SEM retry: POST não é idempotente (reenvio duplicaria a resposta pública ao cliente).
+// Escrita gated: NUNCA chamar direto de um agente — sempre via draft (amarelo) +
+// aprovação humana, mesmo padrão de pausarItem/reabrirItem (routes/ifood.js).
+async function responderReview(merchantId, reviewId, texto, tenantId) {
+  assertPathId(merchantId, 'merchantId');
+  assertPathId(reviewId, 'reviewId');
+  if (typeof texto !== 'string' || texto.trim() === '') {
+    throw new IfoodApiError('responderReview: texto é obrigatório', 0, null);
+  }
+  return ifoodFetch(
+    `/review/v2.0/merchants/${merchantId}/reviews/${reviewId}/answers`,
+    { method: 'POST', body: { text: texto } },
+    tenantId
+  ).then(tolerant);
+}
+
 // ---------------------------------------------------------------------------
 // Resolução item_nome|externalCode → { itemId, productId, nome } contra o
 // cardápio REAL da categoria. NUNCA chuta: 0 ou >1 match devolve candidatos
@@ -533,4 +554,5 @@ module.exports = {
   pausarItem,
   reabrirItem,
   deletarCategoria,
+  responderReview,
 };
