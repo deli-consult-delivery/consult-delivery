@@ -21,6 +21,19 @@
 
 ### Como atualizar e reiniciar o bridge
 
+⚠️ **Isto já é automático, não manual.** `.github/workflows/deploy.yml` job `deploy-bridge`
+roda em TODO push em `main` via self-hosted runner (`runs-on: [self-hosted, bridge-vps]`,
+desde PR #148) e faz exatamente `git reset --hard origin/main` + `pm2 restart bridge-server`
+em `/root/consult-delivery`. Confirmado ativo: últimos runs `deploy-bridge` = success
+(verificado 2026-07-05, `gh run view`).
+
+**Implicação:** qualquer alteração feita à mão em `/root/consult-delivery` (hotfix não
+commitado, checkout de outra branch p/ teste) é **apagada no próximo push em `main`** —
+não existe deploy manual "seguro" nesse diretório, é sempre sobrescrito. Se precisar
+testar algo sem isso ser destruído pelo próximo push, usar `/home/wandson/consult-delivery/`
+(cópia dev) ou uma branch separada, nunca o diretório de produção.
+
+Comando manual (só se o runner cair/estiver indisponível):
 ```bash
 cd /root/consult-delivery
 git fetch origin && git reset --hard origin/main   # nunca git pull simples
