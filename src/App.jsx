@@ -5,7 +5,6 @@ import { useTweaks } from './components/TweaksPanel.jsx';
 import LoginScreen from './screens/LoginScreen.jsx';
 import ResetPasswordScreen from './screens/ResetPasswordScreen.jsx';
 import ConsoleV2 from './console/ConsoleV2.jsx';
-import { TENANTS } from './data.js';
 import { supabase } from './lib/supabase.js';
 import { listTenantsWithRole, countUnreadNotifications, subscribeToNotifications } from './lib/api.js';
 import { registerPushSubscription } from './lib/pushNotifications.js';
@@ -32,7 +31,7 @@ export default function App() {
   const [tenantLoading, setTenantLoading] = useState(false);
   const [tenantLoadAttempted, setTenantLoadAttempted] = useState(false);
   const [tenantLoadError, setTenantLoadError] = useState(false);
-  const [tenants, setTenants] = useState(TENANTS);
+  const [tenants, setTenants] = useState([]);
   const [_deepLinkConvId] = useState(() => new URLSearchParams(window.location.search).get('chat'));
   const [_confirmedAcao]  = useState(() => new URLSearchParams(window.location.search).get('breno_confirmado'));
   // Console clássico aposentado (D1): rota só serve a deep-links/notif internos; v2 é o único shell.
