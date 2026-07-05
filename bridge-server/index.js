@@ -1688,6 +1688,16 @@ app.use('/api', require('./routes/ifood')({
   supabaseInsert,
 }));
 
+// iFood API oficial — rotas gated por `lojas.fonte_dados` (Frente A fase 2,
+// migração gradual loja a loja). Flag off por padrão: zero mudança de
+// comportamento até o Wandson trocar loja a loja (ver ?dryrun=1 p/ testar).
+app.use('/api', require('./routes/ifood-api')({
+  requireJwtOrInternal,
+  ifood: require('./lib/ifood'),
+  sbFetch,
+  assertTenantMember,
+}));
+
 // Whisper — transcrição de áudio/vídeo recebidos no chat
 app.use('/api/whisper', requireJwt, require('./routes/whisper'));
 
