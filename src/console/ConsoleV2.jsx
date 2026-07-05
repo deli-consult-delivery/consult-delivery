@@ -126,7 +126,7 @@ function GlobalSearch({ tenantDbId, onNavigate, allowedModules, isAdmin }) {
     const t = setTimeout(async () => {
       const like = `%${safe}%`;
       const [lj, cv] = await Promise.all([
-        supabase.from('lojas').select('id, nome, cidade').eq('tenant_id', tenantDbId).ilike('nome', like).limit(6),
+        supabase.from('lojas').select('id, nome, cidade').eq('tenant_id', tenantDbId).eq('is_contato', false).ilike('nome', like).limit(6),
         supabase.from('conversations').select('id, contact_name, push_name, group_name, whatsapp_chat_id, is_group')
           .eq('tenant_id', tenantDbId)
           .or(`contact_name.ilike.${like},push_name.ilike.${like},group_name.ilike.${like}`).limit(6),

@@ -48,7 +48,7 @@ export default function AtivarLoja({ tenantDbId }) {
     if (!tenantDbId) return;
     const [{ data: gs, error: e1 }, { data: ls, error: e2 }, { data: as_, error: e3 }] = await Promise.all([
       supabase.from('whatsapp_groups').select('id, group_name, loja_id, ativo').eq('tenant_id', tenantDbId).order('group_name'),
-      supabase.from('lojas').select('id, nome, cidade, metadata, created_at').eq('tenant_id', tenantDbId).order('created_at', { ascending: false }).limit(30),
+      supabase.from('lojas').select('id, nome, cidade, metadata, created_at').eq('tenant_id', tenantDbId).eq('is_contato', false).order('created_at', { ascending: false }).limit(30),
       supabase.from('defesa_aprovadores').select('id, nome, telefone_jid, ativo, created_at').eq('tenant_id', tenantDbId).order('created_at'),
     ]);
     if (e1 || e2 || e3) { setErro((e1 || e2 || e3).message); return; }

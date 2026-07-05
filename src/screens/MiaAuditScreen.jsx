@@ -32,6 +32,7 @@ export default function MiaAuditScreen({ tenantDbId }) {
       .select('id, nome')
       .eq('tenant_id', tenantDbId)
       .eq('status', 'ativo')
+      .eq('is_contato', false)
       .order('nome')
       .then(({ data }) => setLojas(data || []));
   }, [tenantDbId]);

@@ -242,6 +242,7 @@ async function ensureAvaliacoesEspacos(tenantId, storeName) {
     .from('lojas')
     .select('id, client_id')
     .eq('tenant_id', tenantId)
+    .eq('is_contato', false)
     .ilike('nome', storeName)
     .limit(1);
   if (eLojas) throw new Error('Erro ao buscar loja: ' + eLojas.message);
