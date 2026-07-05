@@ -41,11 +41,13 @@ no dump de schema de 2026-06-06. **Nenhum arquivo em `supabase/migrations/` faz 
 `ALTER TABLE ... ADD COLUMN is_real_business` nem o backfill.**
 
 **Isso é um gap de processo** (viola o princípio "SQL versionado em git ANTES de aplicar" do
-CLAUDE.md) cometido em sessão anterior — registrado aqui, não corrigido nesta migration (não é
-destrutivo, não bloqueia a higienização). Recomendação: se o Wandson quiser, uma migration
-separada e trivial pode "adotar" a coluna já existente (`ALTER TABLE lojas ADD COLUMN IF NOT
-EXISTS is_real_business boolean DEFAULT false` — idempotente, não sobrescreve o valor já em
-prod) só para fechar o rastro em git. Não incluído aqui para não misturar escopos.
+CLAUDE.md) cometido em sessão anterior. **Corrigido nesta própria migration** (revisão do
+`ecc:database-reviewer` apontou que, sem isso, o arquivo quebra em qualquer ambiente que faça
+replay completo das migrations do zero — `supabase db reset`, CI, staging): o SQL agora inclui
+`ALTER TABLE lojas ADD COLUMN IF NOT EXISTS is_real_business boolean NOT NULL DEFAULT false`
+antes do bloco de classificação. Em prod é **NO-OP** (coluna já existe, valores intocados); em
+ambiente novo, cria a coluna com default `false`, tornando o arquivo replayável sem depender de
+estado fora do git.
 
 **Importante:** `is_real_business` **não é confiável sozinha** como critério (ver §3) — por
 isso o critério final combina ela com sinais de atividade operacional.
@@ -206,7 +208,8 @@ app (filtrar `is_contato = false`) — **fora do escopo desta migration**:
 
 1. `CREATE TABLE contatos` (RLS por `accessible_tenant_ids()`, padrão atual do projeto) —
    cópia das linhas classificadas, com `loja_origem_id` apontando de volta pra `lojas.id`.
-2. `ALTER TABLE lojas ADD COLUMN is_contato boolean DEFAULT false` — só marca.
+2. `ALTER TABLE lojas ADD COLUMN is_real_business ... DEFAULT false` (NO-OP em prod, fecha o
+   gap do §2) + `ADD COLUMN is_contato boolean DEFAULT false` — só marca, não apaga.
 3. `INSERT INTO contatos SELECT ...` das ~1.028 linhas do critério §3.2.
 4. `UPDATE lojas SET is_contato = true` nas mesmas linhas.
 

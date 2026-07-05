@@ -14,7 +14,9 @@
 --   Uma linha é "contato" (movida) SOMENTE SE as DUAS condições valem:
 --   (1) is_real_business = false  — coluna já populada em prod (2026-06-10,
 --       admin-mcp/src/tools/cd_lojas.js), classificação seed/teste vs negócio real.
---       NÃO tem migration de origem versionada (gap documentado no doc de análise).
+--       Não tinha migration de origem versionada (gap de processo); esta
+--       migration adota a coluna (passo 2 abaixo, NO-OP em prod) para fechar
+--       o rastro em git e tornar o arquivo replayável do zero.
 --   (2) ZERO sinal de atividade operacional em qualquer tabela/coluna que
 --       referencia lojas.id: is_consultoria_ativa, store_tenant_id,
 --       ifood_portal_nome, whatsapp_group_jid, skill_criada, loja_metricas,
@@ -84,7 +86,15 @@ CREATE POLICY contatos_tenant ON public.contatos FOR ALL TO public
 
 -- ------------------------------------------------------------
 -- 2. Flag em `lojas` — marca (sem apagar) o que foi classificado como contato.
+--
+-- `is_real_business` já existe em prod desde 2026-06-10 (admin-mcp/cd_lojas),
+-- mas nenhuma migration deste repo a criou (gap de processo, ver doc de análise
+-- §2). O ADD COLUMN abaixo adota a coluna existente: em prod é NO-OP (coluna já
+-- lá, valores intocados); em qualquer ambiente que faça replay do zero
+-- (`supabase db reset`, CI, staging) cria a coluna com default `false`, o que
+-- torna este arquivo replayável sem depender de estado fora do git.
 -- ------------------------------------------------------------
+ALTER TABLE public.lojas ADD COLUMN IF NOT EXISTS is_real_business boolean NOT NULL DEFAULT false;
 ALTER TABLE public.lojas ADD COLUMN IF NOT EXISTS is_contato boolean NOT NULL DEFAULT false;
 
 COMMENT ON COLUMN public.lojas.is_contato IS
