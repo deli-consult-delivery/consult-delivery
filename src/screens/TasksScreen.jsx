@@ -94,7 +94,7 @@ export default function TasksScreen({ tenantDbId, userId }) {
   // Carregar lojas do tenant
   useEffect(() => {
     if (!tenantDbId) return;
-    supabase.from('lojas').select('id,nome').eq('tenant_id', tenantDbId).order('nome')
+    supabase.from('lojas').select('id,nome').eq('tenant_id', tenantDbId).eq('is_contato', false).order('nome')
       .then(({ data }) => setLojas(data || []))
       .catch(() => {});
   }, [tenantDbId]);

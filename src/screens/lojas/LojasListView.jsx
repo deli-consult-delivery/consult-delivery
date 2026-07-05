@@ -51,6 +51,7 @@ export default function LojasListView({ tenantDbId, userId, go }) {
       .select('id, nome, cidade, estado, segmento, status, logo_url, super_restaurante')
       .eq('tenant_id', tenantDbId)
       .eq('is_active', true)
+      .eq('is_contato', false)
       .order('nome')
       .limit(2000);
     setLojas(data || []);

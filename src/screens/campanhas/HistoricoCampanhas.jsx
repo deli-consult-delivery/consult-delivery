@@ -17,7 +17,7 @@ export default function HistoricoCampanhas({ go }) {
 
   useEffect(() => {
     async function load() {
-      const { data: ls } = await supabase.from('lojas').select('id,nome,logo_url');
+      const { data: ls } = await supabase.from('lojas').select('id,nome,logo_url').eq('is_contato', false);
       setLojas(ls||[]);
       await fetchCampanhas();
     }
