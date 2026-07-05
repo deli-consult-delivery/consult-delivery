@@ -13,6 +13,13 @@ const MODOS = [
   { v: 'ia', l: 'IA', d: 'agente executa direto onde for permitido' },
 ];
 
+const PROVIDERS = [
+  { v: '', l: 'Padrão da plataforma' },
+  { v: 'anthropic', l: 'Anthropic' },
+  { v: 'ollama', l: 'Ollama' },
+  { v: 'openrouter', l: 'OpenRouter' },
+];
+
 export default function AgenteConfig({ tenantDbId }) {
   const [agentes, setAgentes] = useState(null);
   const [cfg, setCfg] = useState({});
@@ -23,7 +30,7 @@ export default function AgenteConfig({ tenantDbId }) {
     if (!tenantDbId) return;
     const [{ data: tas }, { data: cfgs, error }] = await Promise.all([
       supabase.from('tenant_agents').select('agent_id, agents(id, name, role, letter)').eq('tenant_id', tenantDbId),
-      supabase.from('tenant_agent_config').select('agent_id, modo_override, enabled, config').eq('tenant_id', tenantDbId),
+      supabase.from('tenant_agent_config').select('agent_id, modo_override, enabled, config, provider, cost_limit_usd').eq('tenant_id', tenantDbId),
     ]);
     if (error) { setErro(error.message); }
     const cmap = {};
@@ -42,10 +49,12 @@ export default function AgenteConfig({ tenantDbId }) {
       modo_override: patch.modo_override ?? atual.modo_override ?? 'hibrido',
       enabled: patch.enabled != null ? patch.enabled : (atual.enabled != null ? atual.enabled : true),
       config: atual.config ?? {},
+      provider: patch.provider !== undefined ? (patch.provider || null) : (atual.provider ?? null),
+      cost_limit_usd: patch.cost_limit_usd !== undefined ? patch.cost_limit_usd : (atual.cost_limit_usd ?? null),
     }, { onConflict: 'tenant_id,agent_id' });
-    setAgindo(null);
-    if (error) { setErro(error.message); return; }
+    if (error) { setAgindo(null); setErro(error.message); return; }
     await carregar();
+    setAgindo(null);
   }
 
   return (
@@ -76,6 +85,28 @@ export default function AgenteConfig({ tenantDbId }) {
                 </button>
               ))}
               <span style={{ alignSelf: 'center', fontSize: 11.5, color: 'var(--tx2)' }}>{MODOS.find(m => m.v === modo)?.d}</span>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+              {PROVIDERS.map(p => (
+                <button key={p.v} disabled={agindo === a.id}
+                  className={(c.provider || '') === p.v ? 'cv2-btn' : 'cv2-btn sec'} onClick={() => salvar(a.id, { provider: p.v })}>
+                  {p.l}
+                </button>
+              ))}
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--tx2)' }}>
+                Limite US$/mês:
+                <input key={`${tenantDbId}:${a.id}:${c.cost_limit_usd ?? ''}`} type="number" min="0" step="0.01" defaultValue={c.cost_limit_usd ?? ''} placeholder="sem limite"
+                  disabled={agindo === a.id} style={{ width: 90 }}
+                  onBlur={e => {
+                    const raw = e.target.value;
+                    const v = raw === '' ? null : Number(raw);
+                    if (v !== null && (Number.isNaN(v) || v < 0)) { e.target.value = c.cost_limit_usd ?? ''; return; }
+                    if (v !== (c.cost_limit_usd ?? null)) salvar(a.id, { cost_limit_usd: v });
+                  }} />
+              </label>
+              <span title="O roteamento multi-provider e a aplicação do limite ainda não consomem esta configuração." style={{ fontSize: 11, color: 'var(--tx2)', cursor: 'help' }}>
+                ⓘ sem efeito em runtime ainda
+              </span>
             </div>
           </div>
         );
