@@ -52,9 +52,9 @@ export default function AgenteConfig({ tenantDbId }) {
       provider: patch.provider !== undefined ? (patch.provider || null) : (atual.provider ?? null),
       cost_limit_usd: patch.cost_limit_usd !== undefined ? patch.cost_limit_usd : (atual.cost_limit_usd ?? null),
     }, { onConflict: 'tenant_id,agent_id' });
-    setAgindo(null);
-    if (error) { setErro(error.message); return; }
+    if (error) { setAgindo(null); setErro(error.message); return; }
     await carregar();
+    setAgindo(null);
   }
 
   return (
@@ -95,7 +95,7 @@ export default function AgenteConfig({ tenantDbId }) {
               ))}
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--tx2)' }}>
                 Limite US$/mês:
-                <input type="number" min="0" step="0.01" defaultValue={c.cost_limit_usd ?? ''} placeholder="sem limite"
+                <input key={`${tenantDbId}:${a.id}:${c.cost_limit_usd ?? ''}`} type="number" min="0" step="0.01" defaultValue={c.cost_limit_usd ?? ''} placeholder="sem limite"
                   disabled={agindo === a.id} style={{ width: 90 }}
                   onBlur={e => {
                     const raw = e.target.value;
