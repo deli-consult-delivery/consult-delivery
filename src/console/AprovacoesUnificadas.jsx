@@ -182,6 +182,9 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
   const [casos, setCasos] = useState(null);
   const [erro, setErro] = useState(null);
   const [agindo, setAgindo] = useState(null);
+  const [filtroOrigem, setFiltroOrigem] = useState('');
+  const [filtroAgente, setFiltroAgente] = useState('');
+  const [filtroLoja, setFiltroLoja] = useState('');
 
   const carregar = useCallback(async () => {
     if (!tenantDbId) return;
@@ -189,14 +192,14 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
       const [{ data: dr, error: e1 }, { data: ca, error: e2 }] = await Promise.all([
         supabase
           .from('agent_drafts')
-          .select('id, agent_name, channel, target_id, subject, content, status, metadata, created_at')
+          .select('id, agent_name, channel, target_id, subject, content, status, metadata, created_at, loja_id, loja:lojas(id, nome)')
           .eq('tenant_id', tenantDbId)
           .in('status', DRAFT_STATUS_APROVAVEL)
           .order('created_at', { ascending: false })
           .limit(100),
         supabase
           .from('defesa_casos')
-          .select('id, tipo, canal, pedido_ref, valor_centavos, motivo, analise, draft_resposta, status, created_at')
+          .select('id, tipo, canal, pedido_ref, valor_centavos, motivo, analise, draft_resposta, status, criado_por_agente, created_at, loja_id, loja:lojas(id, nome)')
           .eq('tenant_id', tenantDbId)
           .eq('status', 'aguardando_ok')
           .order('created_at', { ascending: false })
@@ -340,6 +343,32 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
   const totalCasos = casos?.length ?? 0;
   const total = totalDrafts + totalCasos;
 
+  // Opcoes de filtro derivadas dos itens carregados (origem/agente/loja).
+  const agentesDisponiveis = [...new Set([
+    ...(drafts ?? []).map(d => d.agent_name).filter(Boolean),
+    ...(casos ?? []).map(c => c.criado_por_agente).filter(Boolean),
+  ])].sort();
+  const lojasDisponiveis = Object.values(
+    [...(drafts ?? []), ...(casos ?? [])].reduce((acc, item) => {
+      if (item.loja?.id) acc[item.loja.id] = item.loja;
+      return acc;
+    }, {})
+  ).sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+
+  const draftsFiltrados = (drafts ?? []).filter(d => {
+    if (filtroOrigem === 'defesa') return false;
+    if (filtroAgente && d.agent_name !== filtroAgente) return false;
+    if (filtroLoja && d.loja_id !== filtroLoja) return false;
+    return true;
+  });
+  const casosFiltrados = (casos ?? []).filter(c => {
+    if (filtroOrigem === 'draft') return false;
+    if (filtroAgente && c.criado_por_agente !== filtroAgente) return false;
+    if (filtroLoja && c.loja_id !== filtroLoja) return false;
+    return true;
+  });
+  const temFiltroAtivo = filtroOrigem || filtroAgente || filtroLoja;
+
   return (
     <div>
       <h1>Aprovacoes <span className="cv2-mock" style={{ background: total > 0 ? undefined : 'var(--green-soft)', color: total > 0 ? undefined : 'var(--green)' }}>
@@ -366,13 +395,40 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
         </div>
       </div>
 
+      {drafts && casos && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '14px 0' }}>
+          <select className="cv2-btn sec" style={{ fontSize: 12 }} value={filtroOrigem} onChange={e => setFiltroOrigem(e.target.value)}>
+            <option value="">Origem: todas</option>
+            <option value="draft">Mensagens de agentes</option>
+            <option value="defesa">Defesa Comercial</option>
+          </select>
+          <select className="cv2-btn sec" style={{ fontSize: 12 }} value={filtroAgente} onChange={e => setFiltroAgente(e.target.value)}>
+            <option value="">Agente: todos</option>
+            {agentesDisponiveis.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+          <select className="cv2-btn sec" style={{ fontSize: 12 }} value={filtroLoja} onChange={e => setFiltroLoja(e.target.value)}>
+            <option value="">Loja: todas</option>
+            {lojasDisponiveis.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
+          </select>
+          {temFiltroAtivo && (
+            <button
+              className="cv2-btn sec"
+              style={{ fontSize: 12 }}
+              onClick={() => { setFiltroOrigem(''); setFiltroAgente(''); setFiltroLoja(''); }}
+            >
+              Limpar filtros
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Mensagens de agentes */}
-      {drafts && drafts.length > 0 && (
+      {drafts && draftsFiltrados.length > 0 && (
         <>
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--tx2)', letterSpacing: '0.06em', margin: '16px 0 8px', textTransform: 'uppercase' }}>
-            Mensagens de agentes ({totalDrafts})
+            Mensagens de agentes ({draftsFiltrados.length})
           </div>
-          {drafts.map(d => (
+          {draftsFiltrados.map(d => (
             <ItemDraft
               key={d.id}
               item={d}
@@ -385,12 +441,12 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
       )}
 
       {/* Defesa Comercial */}
-      {casos && casos.length > 0 && (
+      {casos && casosFiltrados.length > 0 && (
         <>
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--tx2)', letterSpacing: '0.06em', margin: '16px 0 8px', textTransform: 'uppercase' }}>
-            Defesa Comercial ({totalCasos})
+            Defesa Comercial ({casosFiltrados.length})
           </div>
-          {casos.map(c => (
+          {casosFiltrados.map(c => (
             <ItemDefesa
               key={c.id}
               caso={c}
@@ -405,6 +461,12 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
       {drafts && casos && total === 0 && (
         <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>
           Fila limpa — nenhuma aprovacao pendente neste workspace.
+        </div>
+      )}
+
+      {drafts && casos && total > 0 && draftsFiltrados.length === 0 && casosFiltrados.length === 0 && (
+        <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>
+          Nenhum item pendente com esses filtros.
         </div>
       )}
 
