@@ -8,9 +8,16 @@ alteração manual no Supabase Studio.")
 
 Projeto Supabase: `czyanilrverorwenikqw`. Janela aprovada: **domingo, sem deploy**.
 
-**Ordem obrigatória (decisão travada 04/07):** backup completo → snapshot → este runbook →
-**SQL/comando de metadados aprovado pelo Wandson** → aplicar → validação em banco zerado →
-rollback documentado (já está neste mesmo PR).
+**Ordem obrigatória (decisão travada 04/07, com um refinamento técnico desta revisão):** backup
+completo → snapshot → este runbook → geração do baseline (dump read-only) → arquivamento →
+**validação em banco zerado ANTES de qualquer repair em prod** → **SQL/comando de metadados
+aprovado pelo Wandson** → aplicar o repair → rollback documentado (já está neste mesmo PR).
+A validação foi movida para antes do repair definitivo (revisão desta sessão): não faz sentido
+mutar o metadado de produção (`schema_migrations`) com base numa baseline que ainda não foi
+provada correta — se a validação falhar, paramos ali, sem nunca ter tocado prod além do dump.
+Isso não contradiz a decisão travada (backup → snapshot → runbook → SQL aprovado → aplicar →
+validação → rollback) — é uma reordenação de segurança dentro do "aplicar": primeiro provamos
+que a baseline reconstrói o schema, só depois pedimos aprovação para mexer no metadado real.
 
 ---
 
@@ -41,8 +48,8 @@ aplicada por esse mecanismo).
 mais de um arquivo (ex. `20260502_analises.sql` e `20260502_tarefas_analise.sql` têm o mesmo
 prefixo `20260502`). Isso significa que **não dá para assumir 1:1 entre nome de arquivo local e
 `version` real gravada em `supabase_migrations.schema_migrations`** — a lista de versões a
-reverter (seção 4) tem que vir de uma leitura real da tabela em prod, não da lista de arquivos
-locais. Está refletido no passo 4.1 abaixo.
+reverter (seção 5) tem que vir de uma leitura real da tabela em prod, não da lista de arquivos
+locais. Está refletido no passo 5.1 abaixo.
 
 ---
 
@@ -52,8 +59,14 @@ locais. Está refletido no passo 4.1 abaixo.
       Backups) OU confirmação de que o PITR (Point-in-Time Recovery) cobre a janela — projeto
       `czyanilrverorwenikqw`, plano atual precisa ter PITR/backup diário ativo. Anotar o
       timestamp do backup usado como ponto de restore.
-- [ ] **Snapshot manual adicional** antes de começar: rodar a query de contagem (seção 3) contra
-      prod e guardar o resultado — é o que valida a migração depois e alimenta o rollback.
+- [ ] **Snapshot manual de contagem** antes de começar — rodar contra **prod** (SQL Editor do
+      dashboard ou `psql`) e guardar o resultado íntegro, é o que a seção 4 (validação) compara
+      depois e o que sustenta a decisão de prosseguir ou não:
+      ```sql
+      SELECT count(*) AS tables   FROM information_schema.tables WHERE table_schema = 'public';
+      SELECT count(*) AS policies FROM pg_policies WHERE schemaname = 'public';
+      SELECT extname FROM pg_extension ORDER BY 1;
+      ```
 - [ ] **Janela sem deploy**: domingo (05/07/2026), confirmar que não há deploy agendado no
       GitHub Actions nem push planejado para `main` durante a janela.
 - [ ] **Credencial do Supabase CLI disponível**: `npx supabase login` (gera token interativo) OU
@@ -74,9 +87,14 @@ Comando exato (rodar na raiz do repo, com CLI autenticado):
 npx --yes supabase db dump --linked -f supabase/migrations/00000000000000_baseline.sql
 ```
 
+> **Atenção — isto NÃO é uma operação local/offline.** `--linked` faz o CLI abrir uma conexão
+> real e ao vivo com o banco de **produção** (projeto `czyanilrverorwenikqw`), pela rede, usando
+> a credencial ativa. É **read-only** — o dump só faz leitura de catálogo/schema, nenhum
+> `INSERT`/`UPDATE`/`DELETE`/DDL é executado — mas é prod de verdade sendo consultado, não um
+> arquivo local nem um banco de teste. Rodar só dentro da janela aprovada (domingo, sem deploy).
+
 - `--linked` usa o projeto já linkado (`supabase/.temp/project-ref` = `czyanilrverorwenikqw`,
   confirmado nesta sessão).
-- Operação é **read-only** contra prod (dump de schema, não de dados; não escreve nada).
 - Se faltar credencial, o comando falha rápido com `LegacyPlatformAuthRequiredError` e **não
   trava, não escreve nada** — confirmado nesta sessão (ver rodapé).
 
@@ -90,9 +108,9 @@ grep -c '^CREATE OR REPLACE FUNCTION\|^CREATE FUNCTION' supabase/migrations/0000
 ```
 
 Critério binário: os 4 números têm que ser **> 0** e a contagem de `CREATE TABLE` e
-`CREATE POLICY` tem que bater com a contagem tirada direto do prod (seção 3, snapshot "antes").
-Se `CREATE TABLE` = 0, o dump está vazio/incompleto — abortar, não arquivar nada (o script em
-`scripts/squash-baseline.sh` já aborta sozinho nesse caso).
+`CREATE POLICY` tem que bater com o snapshot tirado direto do prod (seção 1, checklist do
+snapshot). Se `CREATE TABLE` = 0, o dump está vazio/incompleto — abortar, não arquivar nada (o
+script em `scripts/squash-baseline.sh` já aborta sozinho nesse caso).
 
 ---
 
@@ -117,62 +135,12 @@ Isso é o que `scripts/squash-baseline.sh` automatiza (seção "Geração do bas
 
 ---
 
-## 4. SQL de metadados — o que o Wandson aprova
-
-O único toque em prod além do dump read-only é a tabela `supabase_migrations.schema_migrations`
-(rastreia quais migrations o CLI considera aplicadas). **Não escrevemos `INSERT`/`DELETE` bruto
-contra essa tabela** — o schema interno de colunas dela não está documentado publicamente de
-forma confiável (achado desta sessão: só existe confirmação da coluna `version`; `name` e
-`statements` aparecem em discussões da comunidade, não na doc oficial). Em vez de arriscar um
-`INSERT` com coluna errada direto em prod, usamos o comando oficial da CLI que existe
-exatamente para isso — `supabase migration repair` — que muta a tabela internamente sem exigir
-que a gente acerte o DDL na mão.
-
-### 4.1 Passo 0 (read-only, roda ANTES de qualquer repair) — captura o estado real
-
-```bash
-# Via SQL Editor do dashboard Supabase (ou psql), projeto czyanilrverorwenikqw:
-SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version;
-```
-
-**Guardar esse output integralmente** — é a fonte de verdade de "o que sai" (não a lista de
-arquivos locais — ver o achado sobre prefixos duplicados na seção "Inventário atual") e é o
-material bruto do rollback (seção 6).
-
-### 4.2 O que sai — reverter cada versão capturada no passo 4.1
-
-```bash
-npx --yes supabase migration repair --status reverted <versao_1> <versao_2> ... <versao_N> --linked
-```
-
-`<versao_1> ... <versao_N>` = a coluna `version` inteira, uma por uma, do resultado do passo
-4.1 (não uma lista adivinhada). Isso remove cada linha correspondente de
-`supabase_migrations.schema_migrations`.
-
-### 4.3 O que entra — registra a baseline como aplicada (sem executar o SQL dela)
-
-```bash
-npx --yes supabase migration repair --status applied 00000000000000 --linked
-```
-
-Insere a linha da versão `00000000000000` (baseline) em `schema_migrations`, **sem rodar** o
-conteúdo de `00000000000000_baseline.sql` contra o banco (o schema já é o de prod — rodar o
-dump de novo daria erro de "já existe"). É por isso que essa etapa é só metadado.
-
-### 4.4 Conferência pós-repair
-
-```bash
-npx --yes supabase migration list --linked
-```
-
-Esperado: uma única versão listada como remota, `00000000000000`, marcada como aplicada.
-
----
-
-## 5. Validação em banco zerado
+## 4. Validação em banco zerado (roda ANTES de tocar no metadado de prod)
 
 Objetivo: provar que `00000000000000_baseline.sql` sozinho recria o schema de prod, byte a byte
-em estrutura (não em dados).
+em estrutura (não em dados) — **antes** de aprovar/rodar qualquer repair contra
+`supabase_migrations.schema_migrations` na seção 5. Se esta seção falhar, paramos aqui: nada em
+prod foi tocado além do dump read-only da seção 2.
 
 ### Opção A — `supabase start` local (recomendada, sem custo)
 
@@ -183,7 +151,8 @@ npx --yes supabase db reset           # aplica supabase/migrations/*.sql do zero
 ```
 
 Depois, rodar contra o banco local (via `psql` na connection string que `supabase start`
-imprime, ou `supabase db execute` se disponível na versão da CLI):
+imprime, ou `supabase db execute` se disponível na versão da CLI) — a mesma query do snapshot
+de prod (seção 1):
 
 ```sql
 SELECT count(*) AS tables   FROM information_schema.tables WHERE table_schema = 'public';
@@ -198,20 +167,73 @@ migrations do zero — mesma verificação de contagem acima, sem tocar no proje
 
 ### Critérios binários de aceite
 
-- [ ] nº de tabelas no banco zerado == nº de tabelas capturado em prod (seção 3, snapshot antes)
-- [ ] nº de RLS policies no banco zerado == nº de policies capturado em prod
-- [ ] lista de extensões (`pg_extension`) no banco zerado == lista capturada em prod
+- [ ] nº de tabelas no banco zerado == nº de tabelas do snapshot de prod (seção 1)
+- [ ] nº de RLS policies no banco zerado == nº de policies do snapshot de prod (seção 1)
+- [ ] lista de extensões (`pg_extension`) no banco zerado == lista do snapshot de prod (seção 1)
 - [ ] `supabase db reset` roda sem erro (output bruto anexado ao PR desta etapa)
 
-Qualquer divergência → não prosseguir para prod. Investigar o dump antes de repetir 4.2/4.3.
+**Qualquer divergência → não prosseguir para a seção 5.** Investigar o dump e repetir a partir
+da seção 2 antes de sequer cogitar tocar em `schema_migrations`.
+
+---
+
+## 5. SQL de metadados — o que o Wandson aprova (só depois da seção 4 passar 100%)
+
+O único toque em prod além do dump read-only (seção 2) é a tabela
+`supabase_migrations.schema_migrations` (rastreia quais migrations o CLI considera aplicadas).
+**Não escrevemos `INSERT`/`DELETE` bruto contra essa tabela** — o schema interno de colunas dela
+não está documentado publicamente de forma confiável (achado desta sessão: só existe confirmação
+da coluna `version`; `name` e `statements` aparecem em discussões da comunidade, não na doc
+oficial). Em vez de arriscar um `INSERT` com coluna errada direto em prod, usamos o comando
+oficial da CLI que existe exatamente para isso — `supabase migration repair` — que muta a tabela
+internamente sem exigir que a gente acerte o DDL na mão.
+
+### 5.1 Captura (read-only) o estado real — pode rodar a qualquer momento antes do repair
+
+```bash
+# Via SQL Editor do dashboard Supabase (ou psql), projeto czyanilrverorwenikqw:
+SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version;
+```
+
+**Guardar esse output integralmente** — é a fonte de verdade de "o que sai" (não a lista de
+arquivos locais — ver o achado sobre prefixos duplicados na seção "Inventário atual") e é o
+material bruto do rollback (seção 6).
+
+### 5.2 O que sai — reverter cada versão capturada no passo 5.1
+
+```bash
+npx --yes supabase migration repair --status reverted <versao_1> <versao_2> ... <versao_N> --linked
+```
+
+`<versao_1> ... <versao_N>` = a coluna `version` inteira, uma por uma, do resultado do passo
+5.1 (não uma lista adivinhada). Isso remove cada linha correspondente de
+`supabase_migrations.schema_migrations`.
+
+### 5.3 O que entra — registra a baseline como aplicada (sem executar o SQL dela)
+
+```bash
+npx --yes supabase migration repair --status applied 00000000000000 --linked
+```
+
+Insere a linha da versão `00000000000000` (baseline) em `schema_migrations`, **sem rodar** o
+conteúdo de `00000000000000_baseline.sql` contra o banco (o schema já é o de prod — rodar o
+dump de novo daria erro de "já existe"). É por isso que essa etapa é só metadado.
+
+### 5.4 Conferência pós-repair
+
+```bash
+npx --yes supabase migration list --linked
+```
+
+Esperado: uma única versão listada como remota, `00000000000000`, marcada como aplicada.
 
 ---
 
 ## 6. Plano de rollback
 
-**Gatilho:** qualquer item do checklist da seção 5 falhar, OU `supabase migration list --linked`
-(seção 4.4) não bater com o esperado, OU qualquer deploy/push contra prod falhar depois do
-squash citando erro de migration history.
+**Gatilho:** qualquer item do checklist da seção 4 falhar (nesse caso a seção 5 nem deveria ter
+rodado), OU `supabase migration list --linked` (seção 5.4) não bater com o esperado, OU qualquer
+deploy/push contra prod falhar depois do squash citando erro de migration history.
 
 1. **Código (reversível via git):**
    ```bash
@@ -220,12 +242,13 @@ squash citando erro de migration history.
    Restaura `supabase/migrations/*.sql` originais e remove a baseline — `git mv` no commit
    original faz o revert ser limpo (arquivos voltam ao lugar, histórico intacto).
 
-2. **Metadados (`schema_migrations`), a partir do capturado no passo 4.1:**
+2. **Metadados (`schema_migrations`), a partir do capturado no passo 5.1** (só se a seção 5
+   chegou a rodar):
    ```bash
    npx --yes supabase migration repair --status reverted 00000000000000 --linked
    npx --yes supabase migration repair --status applied <versao_1> <versao_2> ... <versao_N> --linked
    ```
-   `<versao_1> ... <versao_N>` = exatamente a lista capturada no passo 4.1 antes do squash (por
+   `<versao_1> ... <versao_N>` = exatamente a lista capturada no passo 5.1 antes do squash (por
    isso esse output tem que ser salvo e anexado ao PR, não descartado).
 
 3. **Dados/schema:** se o backup completo (seção 1) precisar ser restaurado (cenário extremo —
@@ -264,3 +287,9 @@ migration foi arquivada, nada foi tocado em prod.
 
 Para rodar de fato na janela de domingo: `npx supabase login` (ou exportar
 `SUPABASE_ACCESS_TOKEN`) e então `bash scripts/squash-baseline.sh`.
+
+Além disso, o script `scripts/squash-baseline.sh` foi exercitado de ponta a ponta em sandboxes
+git isolados (fora deste repo, com CLI stubado) cobrindo 4 cenários: dump funciona (arquivamento
+correto), rodar de novo com baseline já existente (aborta, idempotente), dump falha por falta de
+credencial (nada é arquivado, `git status` limpo) e dump retorna schema vazio (aborta antes de
+arquivar). Os 4 se comportaram como esperado.

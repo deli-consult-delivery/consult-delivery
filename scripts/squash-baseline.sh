@@ -21,6 +21,8 @@ before_count=$(find "$MIGRATIONS_DIR" -maxdepth 1 -name '*.sql' | wc -l | tr -d 
 echo "Migrations atuais em $MIGRATIONS_DIR: $before_count"
 
 echo "== 2/4: dump do schema de produção (read-only, --linked) =="
+# --linked = conexão real e ao vivo com prod pela rede (não é local/offline); só leitura de
+# catálogo/schema, nenhum INSERT/UPDATE/DELETE/DDL é executado.
 "${SUPABASE_CMD[@]}" db dump --linked -f "$BASELINE_FILE" \
   || { echo "ERRO: dump falhou (provável falta de credencial — rode '${SUPABASE_CMD[*]} login' ou exporte SUPABASE_ACCESS_TOKEN). Nada foi arquivado." >&2; exit 1; }
 
