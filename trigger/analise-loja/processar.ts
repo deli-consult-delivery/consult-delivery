@@ -6,6 +6,7 @@ import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 import { notifyDeli } from "../_shared/notify-deli";
 import { lerMetricas } from "../_shared/radar-metricas";
+import { calcularCustoUsd } from "../_shared/pricing";
 
 // =====================================================
 // AGENTE ANÁLISE DE LOJA — processa a fila (PR plataforma completa)
@@ -53,16 +54,17 @@ export const analiseLojaProcessar = schedules.task({
           continue;
         }
 
+        const MODEL = "claude-sonnet-4-6";
         const client = getAnthropic();
         const resp = await client.messages.create({
-          model: "claude-sonnet-4-6",
+          model: MODEL,
           max_tokens: 1800,
           system: "Voce e o agente ANALISE DE LOJA da Consult Delivery, consultor senior de performance em delivery (iFood). A partir das metricas reais da loja, entregue um diagnostico acionavel. Portugues do Brasil, profissional, direto, ZERO emoji. Use 'oferta' nunca 'promocao'. Responda APENAS JSON: {\"resumo\":\"2-3 frases\",\"prioridades\":[{\"titulo\":\"\",\"porque\":\"\",\"acao\":\"\"}],\"plano\":[\"passo 1\",\"...\"],\"pontos_fortes\":[\"\"]}",
           messages: [{ role: "user", content: `Loja: ${loja_nome}\nMetricas do periodo:\n${fatos}` }],
         });
         const texto = resp.content.filter(b => b.type === "text").map(b => (b as Anthropic.TextBlock).text).join("");
         const diag = DiagnosticoSchema.parse(JSON.parse(texto.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim()));
-        const custoUsd = (resp.usage.input_tokens / 1e6) * 3 + (resp.usage.output_tokens / 1e6) * 15;
+        const custoUsd = calcularCustoUsd(MODEL, resp.usage);
 
         await sb.from("analise_loja").update({
           status: "processado", diagnostico: diag, custo_usd: custoUsd, processado_em: new Date().toISOString(),

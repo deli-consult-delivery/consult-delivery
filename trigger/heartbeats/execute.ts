@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getSupabase } from "../_shared/supabase";
 import { getAnthropic } from "../_shared/claude";
 import { logAgentRun } from "../_shared/audit";
+import { calcularCustoUsd } from "../_shared/pricing";
 
 const InputSchema = z.object({
   heartbeat_id: z.string().uuid(),
@@ -83,15 +84,16 @@ ${
 Responda de forma concisa e acionável. Se tomou alguma ação, descreva brevemente o que foi feito.`;
 
     // ── 4. Executar via Anthropic API ─────────────────────────────────────
+    const MODEL = "claude-haiku-4-5-20251001";
     let output     = "";
     let tokensUsed = 0;
-    let costUsd    = 0;
+    let costUsd: number | null = null;
     let status: "success" | "skipped" | "failed" = "success";
 
     try {
       const anthropic = getAnthropic();
       const response  = await anthropic.messages.create({
-        model:      "claude-haiku-4-5-20251001",
+        model:      MODEL,
         max_tokens: hb.max_tokens || 2048,
         system:     systemPrompt,
         messages:   [{ role: "user", content: hb.prompt }],
@@ -105,9 +107,7 @@ Responda de forma concisa e acionável. Se tomou alguma ação, descreva breveme
       tokensUsed =
         (response.usage?.input_tokens ?? 0) +
         (response.usage?.output_tokens ?? 0);
-      costUsd =
-        (response.usage?.input_tokens ?? 0) * 0.00000025 +
-        (response.usage?.output_tokens ?? 0) * 0.00000125;
+      costUsd = calcularCustoUsd(MODEL, response.usage);
 
       // Verificar se foi skipped via decision_prompt
       if (

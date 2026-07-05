@@ -9,6 +9,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { calcularCustoUsd } from "../_shared/pricing";
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -21,6 +22,8 @@ export interface ChatResponse {
   latencia_ms: number;
   tokens_in?: number;
   tokens_out?: number;
+  // null: provider não-Anthropic (Ollama Cloud) ou modelo fora da tabela de preços — nunca 0 fake.
+  cost_usd?: number | null;
 }
 
 const TIMEOUT_MS = 120_000;
@@ -117,6 +120,7 @@ async function chatAnthropic(messages: ChatMessage[]): Promise<ChatResponse> {
     latencia_ms: Date.now() - t0,
     tokens_in:  response.usage?.input_tokens,
     tokens_out: response.usage?.output_tokens,
+    cost_usd:   response.usage ? calcularCustoUsd(model, response.usage) : null,
   };
 }
 

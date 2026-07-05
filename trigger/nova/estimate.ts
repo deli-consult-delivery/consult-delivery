@@ -3,6 +3,7 @@ import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
+import { calcularCustoUsd } from "../_shared/pricing";
 
 const anthropic = new Anthropic();
 
@@ -112,6 +113,8 @@ Seja conservador nas estimativas de economia. Cronograma começa em ${today}.`;
       messages: [{ role: "user", content: userPrompt }],
     });
 
+    const costUsd = calcularCustoUsd("claude-haiku-4-5-20251001", response.usage);
+
     const rawText = response.content
       .filter((b) => b.type === "text")
       .map((b) => (b as Anthropic.TextBlock).text)
@@ -158,6 +161,7 @@ Seja conservador nas estimativas de economia. Cronograma começa em ${today}.`;
       tenantId: input.tenant_id,
       triggeredBy: input.user_id,
       durationMs: Date.now() - start,
+      costUsd,
     });
 
     return OutputSchema.parse({ ok: true, blueprint_id: input.blueprint_id, estimate });

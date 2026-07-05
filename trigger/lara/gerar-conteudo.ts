@@ -6,6 +6,7 @@ import { logAgentRun } from "../_shared/audit";
 import { notifyDeli } from "../_shared/notify-deli";
 import { notify } from "../_shared/notify";
 import { getClientContext, recordFact, logTimeline } from "../../src/agents/shared/runtime";
+import { calcularCustoUsd } from "../_shared/pricing";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -149,12 +150,14 @@ Objetivo: ${input.objetivo}${cupomInfo}${tomInfo}${ctxInfo}
 Gere 3 variações com estilos diferentes (produto, benefício, urgência).
 Retorne o JSON conforme solicitado.`;
 
+    let costUsd = 0;
     const resultado = await runClaudeWithWebSearch({
       systemPrompt,
       userPrompt,
       outputSchema: OutputSchema,
       maxRetries: 1,
       useWebSearch: false,
+      onUsage: (usage) => { costUsd += calcularCustoUsd("claude-sonnet-4-6", usage) ?? 0; },
     });
 
     const sb = getSupabase();
@@ -215,6 +218,7 @@ Retorne o JSON conforme solicitado.`;
       tenantId: input.tenant_id,
       triggeredBy: input.triggered_by,
       durationMs: Date.now() - startedAt,
+      costUsd,
     });
 
     // Atualiza campanha com resultado da geração

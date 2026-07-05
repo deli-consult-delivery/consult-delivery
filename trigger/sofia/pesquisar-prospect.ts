@@ -3,6 +3,7 @@ import { z } from "zod";
 import { runClaudeWithWebSearch } from "../_shared/claude";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
+import { calcularCustoUsd } from "../_shared/pricing";
 
 // =====================================================
 // SCHEMAS
@@ -47,6 +48,7 @@ export const sofiaPesquisarProspect = task({
     // OBRIGATÓRIO: validar input
     const input = InputSchema.parse(payload);
     const sb = getSupabase();
+    let costUsd = 0;
 
     logger.info("sofia-pesquisar-prospect iniciado", {
       tenant_id:   input.tenant_id,
@@ -120,6 +122,7 @@ Se não encontrar o dado, use null. Para avaliacao_ifood e num_avaliacoes, use n
         outputSchema: PesquisaResultSchema,
         maxRetries:   1,
         useWebSearch: true,
+        onUsage: (usage) => { costUsd += calcularCustoUsd("claude-sonnet-4-6", usage) ?? 0; },
       });
 
       logger.info("Pesquisa web concluída", {
@@ -188,6 +191,7 @@ Se não encontrar o dado, use null. Para avaliacao_ifood e num_avaliacoes, use n
         input,
         output: { ok: true, prospect_id: input.prospect_id, dados_encontrados: dadosEncontrados, fontes },
         status:  "success",
+        costUsd,
       });
 
       return OutputSchema.parse({
@@ -212,6 +216,7 @@ Se não encontrar o dado, use null. Para avaliacao_ifood e num_avaliacoes, use n
         input,
         output:      { error: errorMessage },
         status:      "failed",
+        costUsd: costUsd || undefined,
       });
 
       throw error;
