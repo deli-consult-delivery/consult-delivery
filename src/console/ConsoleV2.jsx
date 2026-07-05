@@ -6,7 +6,7 @@ import { CvSprite, Ico } from './CvIcons.jsx';
 import AtivarLoja from './AtivarLoja.jsx';
 import Clientes from './Clientes.jsx';
 import Estudio from './Estudio.jsx';
-import CustosIA from './CustosIA.jsx';
+import CustosIA, { buscarTodosRuns } from './CustosIA.jsx';
 import PainelAgentes from './PainelAgentes.jsx';
 import Execucoes from './Execucoes.jsx';
 import AprovacoesUnificadas from './AprovacoesUnificadas.jsx';
@@ -176,9 +176,7 @@ function GlobalSearch({ tenantDbId, onNavigate, allowedModules, isAdmin }) {
 const LEGADO = new Set(['chat-legado']);
 
 const OK_STATUSES = ['ok', 'completed', 'success'];
-const CREDITOS_MES = 10000; // freemium: 10k créditos/mês, 1 por execução de IA
 const fmtBRL = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const fmtK = n => (n >= 1000 ? (n / 1000).toFixed(1).replace('.', ',') + 'k' : String(n));
 
 // lista de tenants do usuário + seleção (seletor de tenant da topbar)
 function useTenants(userId, fallback) {
@@ -212,23 +210,24 @@ function useTenants(userId, fallback) {
   return [list, sel, setSel];
 }
 
-// créditos (execuções do mês) + notificações não-lidas
+// custo de IA do mês corrente (mesma fonte da tela Custos) + notificações não-lidas
 function useTopbar(tenantDbId, userId) {
-  const [s, setS] = useState({ runs: null, notif: 0 });
+  const [s, setS] = useState({ custoMes: null, notif: 0 });
   useEffect(() => {
     if (!tenantDbId) return;
     let alive = true;
     (async () => {
       try {
         const ini = new Date(); ini.setUTCDate(1); ini.setUTCHours(0, 0, 0, 0);
-        const [{ count: runs }, notifRes] = await Promise.all([
-          supabase.from('agent_runs').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantDbId).gte('created_at', ini.toISOString()),
+        const [runsMes, notifRes] = await Promise.all([
+          buscarTodosRuns(tenantDbId, ini.toISOString()),
           userId
             ? supabase.from('internal_notifications').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantDbId).is('read_at', null).or(`recipient_user_id.eq.${userId},recipient_user_id.is.null`)
             : Promise.resolve({ count: 0 }),
         ]);
-        if (alive) setS({ runs: runs ?? 0, notif: notifRes?.count ?? 0 });
-      } catch { if (alive) setS({ runs: 0, notif: 0 }); }
+        const custoMes = runsMes.reduce((s2, r) => s2 + (Number(r.cost_usd) || 0), 0);
+        if (alive) setS({ custoMes, notif: notifRes?.count ?? 0 });
+      } catch { if (alive) setS({ custoMes: 0, notif: 0 }); }
     })();
     return () => { alive = false; };
   }, [tenantDbId, userId]);
@@ -663,9 +662,9 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
   const tenantSlug = sel?.slug || tenantInfo?.id;
   const [brand, recarregarBrand] = useBranding(tenantDbId);
   const tenantNome = brand?.nome || sel?.nome || tenantInfo?.name || 'Workspace';
-  const { runs, notif } = useTopbar(tenantDbId, userId);
+  const { custoMes, notif } = useTopbar(tenantDbId, userId);
   const currentUser = useCurrentUser();
-  const creditosTxt = runs == null ? '…' : fmtK(Math.max(0, CREDITOS_MES - runs));
+  const creditosTxt = custoMes == null ? '…' : `US$ ${custoMes.toFixed(2)}`;
 
   useEffect(() => {
     if (!tenantDbId) return;
@@ -872,8 +871,8 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
               <span className="crumb">Console › <b>{LABELS[tela] || tela}</b></span>
               <GlobalSearch tenantDbId={tenantDbId} onNavigate={navWithParams} allowedModules={allowedModules} isAdmin={['owner', 'admin'].includes(sel?.role || tenantInfo?.role)} />
               {(!allowedModules || allowedModules.has('creditos-ia')) && (
-                <span className="cv2-pill" title={`Plano freemium · ${CREDITOS_MES.toLocaleString('pt-BR')} créditos/mês · 1 por execução de IA · ${runs ?? 0} usados`}>
-                  <Ico name="i-zap" size={13} /> Créditos IA <b>{creditosTxt}</b>
+                <span className="cv2-pill" title="Custo de IA no mês corrente (agent_runs.cost_usd) · ver tela Custos">
+                  <Ico name="i-zap" size={13} /> Custo IA <b>{creditosTxt}</b>
                 </span>
               )}
               {tenantsList.length > 1 ? (
