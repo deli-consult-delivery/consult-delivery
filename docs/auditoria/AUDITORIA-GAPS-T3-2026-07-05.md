@@ -197,3 +197,20 @@ select tipo, count(*) as qtd, count(distinct tenant_id) as tenants
 from templates
 group by tipo;
 ```
+
+---
+
+## Output bruto de produção (rodado pela orquestradora via MCP Supabase, 2026-07-05 ~01:30 BRT)
+
+| GAP | Resultado em produção | Leitura |
+|-----|----------------------|---------|
+| GAP-1 | `total_habilitacoes: 27` · `tenants_com_agente: 2` | ✅ dados reais fluindo |
+| GAP-2 | `tenant_agent_config`: 2 linhas, ambas `modo_override: null` | ⚠️ feature quase sem uso — nenhum override configurado |
+| GAP-3 | `drafts_pendentes: 322` · `defesa_pendente: 0` | ✅ fila com volume real (322 drafts) |
+| GAP-4 | `total_runs: 6092` · `runs_com_custo: 14` · `custo_total_usd: 0.4304` | 🔴 **gap real é instrumentação**: 99,8% dos runs NÃO gravam `cost_usd` — a tela agrega um dado que quase não existe |
+| GAP-5 | `agent_skills`: **0 linhas** | tela existe, zero uso |
+| GAP-6 | `total_eventos: 346` · `tenants_com_log: 2` · período 2026-05-20 → 2026-07-05 | ✅ dados reais |
+| GAP-7 | `total_grants: 3` · `usuarios_com_grant: 1` · `podem_invocar: 3` · `podem_aprovar: 3` | ✅ grants reais (uso baixo) |
+| GAP-8 | `templates`: **0 linhas** | tela existe, zero uso |
+
+**Correção ao T3**: o T3 citava "1686 runs já logados" com custo — em produção só 14 runs têm `cost_usd`. O fechamento efetivo do GAP-4 exige instrumentar a gravação de custo no wrapper compartilhado (`trigger/_shared/claude.ts` / `logAgentRun`), não melhorar a tela. Follow-up despachado na mesma madrugada (branch `wandson/gap4-instrumentar-custo`).
