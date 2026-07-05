@@ -208,6 +208,7 @@ app (filtrar `is_contato = false`) — **fora do escopo desta migration**:
 
 1. `CREATE TABLE contatos` (RLS por `accessible_tenant_ids()`, padrão atual do projeto) —
    cópia das linhas classificadas, com `loja_origem_id` apontando de volta pra `lojas.id`.
+   Índices: `tenant_id`, `loja_origem_id` (único) e `client_id` (lookup por cliente/CRM).
 2. `ALTER TABLE lojas ADD COLUMN is_real_business ... DEFAULT false` (NO-OP em prod, fecha o
    gap do §2) + `ADD COLUMN is_contato boolean DEFAULT false` — só marca, não apaga.
 3. `INSERT INTO contatos SELECT ...` das ~1.028 linhas do critério §3.2.
@@ -224,6 +225,14 @@ DROP TABLE contatos;
 UPDATE lojas SET is_contato = false;
 ALTER TABLE lojas DROP COLUMN is_contato;
 ```
+
+`is_real_business` **não** entra nesse rollback de forma automática — depende do ambiente:
+- **Prod:** a coluna já existia antes desta migration (criada fora de git em 2026-06-10); o
+  `ADD COLUMN` foi NO-OP. **Não** fazer `DROP COLUMN is_real_business` em prod — apagaria dado
+  do qual `admin-mcp/cd_lojas.js` depende e que não pertence a esta migration.
+- **Ambiente fresh** (`supabase db reset`/CI/staging, onde esta migration é a origem real da
+  coluna): opcionalmente `ALTER TABLE lojas DROP COLUMN is_real_business;` — seguro, nasceu ali.
+- Na dúvida, deixar a coluna (aditiva, default `false`) é sempre seguro.
 
 ---
 

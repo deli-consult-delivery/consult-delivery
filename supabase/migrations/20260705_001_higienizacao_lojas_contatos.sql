@@ -46,6 +46,21 @@
 --   UPDATE lojas SET is_contato = false;
 --   ALTER TABLE lojas DROP COLUMN is_contato;
 --
+--   ⚠️ is_real_business (passo 2) NÃO entra no rollback acima de forma automática
+--   — o comando certo depende do ambiente:
+--     • Em PROD: a coluna já existia ANTES desta migration (criada fora de git
+--       em 2026-06-10) — o ADD COLUMN daqui foi NO-OP. NÃO fazer
+--       DROP COLUMN is_real_business em prod (apagaria dado de 2026-06-10 que
+--       não pertence a esta migration e que outras ferramentas — admin-mcp/
+--       cd_lojas.js — dependem dele).
+--     • Em ambiente fresh (supabase db reset local/CI/staging, onde esta
+--       migration É a origem da coluna): opcionalmente
+--       `ALTER TABLE lojas DROP COLUMN is_real_business;` — seguro porque
+--       nasceu aqui.
+--   Na dúvida sobre qual ambiente, deixar a coluna (default false, aditiva) é
+--   sempre seguro — só o DROP TABLE contatos e o UPDATE is_contato=false acima
+--   já revertem o efeito visível da higienização.
+--
 -- ⚠️ NÃO APLICAR sem rodar antes o bloco de diagnóstico (read-only) em
 -- docs/estrategia/HIGIENIZACAO-LOJAS-ANALISE.md contra o prod e revisar com
 -- o Wandson a lista de "candidatos a contato" — o critério pode mudar
@@ -76,6 +91,7 @@ COMMENT ON TABLE public.contatos IS
 
 CREATE INDEX IF NOT EXISTS idx_contatos_tenant ON public.contatos(tenant_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_contatos_loja_origem ON public.contatos(loja_origem_id);
+CREATE INDEX IF NOT EXISTS idx_contatos_client_id ON public.contatos(client_id);
 
 ALTER TABLE public.contatos ENABLE ROW LEVEL SECURITY;
 
