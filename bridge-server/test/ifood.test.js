@@ -188,6 +188,54 @@ function restoreFetch() {
     clearCreds();
   });
 
+  // ── listarVendas — período default (7 dias) quando dataInicio/dataFim faltam ──
+  await check('listarVendas: sem período → default de 7 dias (beginSalesDate/endSalesDate)', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-vendas', expiresIn: 21600 });
+      }
+      return jsonResponse(200, { sales: [] });
+    });
+    const ifood = freshIfood();
+    const res = await ifood.listarVendas('merchant-1');
+    assert.deepStrictEqual(res, { sales: [] });
+
+    const salesCall = calls.find((c) => c.url.includes('/financial/v3.0/merchants/merchant-1/sales'));
+    assert.ok(salesCall, 'deveria ter chamado o endpoint de sales');
+    const parsedUrl = new URL(salesCall.url);
+    const begin = parsedUrl.searchParams.get('beginSalesDate');
+    const end = parsedUrl.searchParams.get('endSalesDate');
+    assert.match(begin, /^\d{4}-\d{2}-\d{2}$/, 'beginSalesDate deve estar em yyyy-MM-dd');
+    assert.match(end, /^\d{4}-\d{2}-\d{2}$/, 'endSalesDate deve estar em yyyy-MM-dd');
+    const diffDias = (new Date(end) - new Date(begin)) / (24 * 60 * 60 * 1000);
+    assert.strictEqual(diffDias, 7, 'default deve cobrir uma janela de 7 dias');
+    restoreFetch();
+    clearCreds();
+  });
+
+  await check('listarVendas: dataInicio/dataFim explícitos → usados sem alteração', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-vendas-2', expiresIn: 21600 });
+      }
+      return jsonResponse(200, { sales: [{ id: 'sale-1' }] });
+    });
+    const ifood = freshIfood();
+    const res = await ifood.listarVendas('merchant-1', { dataInicio: '2026-06-01', dataFim: '2026-06-15' });
+    assert.deepStrictEqual(res, { sales: [{ id: 'sale-1' }] });
+
+    const salesCall = calls.find((c) => c.url.includes('/sales'));
+    const parsedUrl = new URL(salesCall.url);
+    assert.strictEqual(parsedUrl.searchParams.get('beginSalesDate'), '2026-06-01');
+    assert.strictEqual(parsedUrl.searchParams.get('endSalesDate'), '2026-06-15');
+    restoreFetch();
+    clearCreds();
+  });
+
   // ── responderReview — POST correto, body {text}, sem retry ──────────────────
   await check('responderReview: monta POST correto com body {text}', async () => {
     setCreds();
