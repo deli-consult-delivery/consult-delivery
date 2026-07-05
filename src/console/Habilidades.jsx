@@ -15,6 +15,7 @@ export default function Habilidades({ tenantDbId, userId }) {
   const [conteudo, setConteudo] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState(null);
+  const [editingId, setEditingId] = useState(null);
 
   const carregar = useCallback(async () => {
     if (!tenantDbId) return;
@@ -27,14 +28,33 @@ export default function Habilidades({ tenantDbId, userId }) {
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  async function criar() {
+  async function salvar() {
     setErro(null);
     if (nome.trim().length < 2) { setErro('Informe o nome da habilidade.'); return; }
     setSalvando(true);
-    const { error } = await supabase.from('agent_skills').insert({ tenant_id: tenantDbId, nome: nome.trim(), descricao: descricao.trim() || null, conteudo, created_by: userId ?? null });
+    const payload = { nome: nome.trim(), descricao: descricao.trim() || null, conteudo };
+    const { error } = editingId
+      ? await supabase.from('agent_skills').update(payload).eq('id', editingId)
+      : await supabase.from('agent_skills').insert({ tenant_id: tenantDbId, ...payload, created_by: userId ?? null });
     setSalvando(false);
     if (error) { setErro(error.message); return; }
-    setNome(''); setDescricao(''); setConteudo('');
+    cancelarEdicao();
+    await carregar();
+  }
+
+  function editar(s) {
+    setEditingId(s.id); setNome(s.nome); setDescricao(s.descricao ?? ''); setConteudo(s.conteudo ?? '');
+  }
+
+  function cancelarEdicao() {
+    setEditingId(null); setNome(''); setDescricao(''); setConteudo('');
+  }
+
+  async function apagar(id) {
+    if (!window.confirm('Apagar esta habilidade? Essa ação não pode ser desfeita.')) return;
+    setErro(null);
+    const { error } = await supabase.from('agent_skills').delete().eq('id', id);
+    if (error) { setErro(error.message); return; }
     await carregar();
   }
 
@@ -44,11 +64,14 @@ export default function Habilidades({ tenantDbId, userId }) {
       <div className="cv2-rule" />
       <div className="cv2-sub">Instruções reutilizáveis (markdown) que os agentes usam como ferramenta. As globais são da Consult Delivery; você pode criar as suas.{erro ? ` · erro: ${erro}` : ''}</div>
       <div className="cv2-card" style={{ maxWidth: 620 }}>
-        <h3>Nova habilidade</h3>
+        <h3>{editingId ? 'Editar habilidade' : 'Nova habilidade'}</h3>
         <input style={inputStyle} placeholder="Nome (ex.: Resposta a avaliação 1 estrela)" value={nome} onChange={e => setNome(e.target.value)} />
         <input style={{ ...inputStyle, marginTop: 8 }} placeholder="Descrição curta" value={descricao} onChange={e => setDescricao(e.target.value)} />
         <textarea style={{ ...inputStyle, marginTop: 8, minHeight: 120, resize: 'vertical' }} placeholder="Conteúdo em markdown…" value={conteudo} onChange={e => setConteudo(e.target.value)} />
-        <div style={{ marginTop: 12 }}><button className="cv2-btn" disabled={salvando} onClick={criar}>{salvando ? 'Salvando…' : 'Criar habilidade'}</button></div>
+        <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+          <button className="cv2-btn" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando…' : editingId ? 'Salvar edição' : 'Criar habilidade'}</button>
+          {editingId && <button className="cv2-btn sec" disabled={salvando} onClick={cancelarEdicao}>Cancelar</button>}
+        </div>
       </div>
       {skills && skills.map(s => (
         <div key={s.id} className="cv2-card">
@@ -57,6 +80,12 @@ export default function Habilidades({ tenantDbId, userId }) {
             <span className={`cv2-bdg ${s.tenant_id ? 'mut' : 'ok'}`}>{s.tenant_id ? 'sua' : 'global'}</span>
           </div>
           {s.conteudo && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--tx2)', whiteSpace: 'pre-wrap', maxHeight: 120, overflow: 'auto' }}>{s.conteudo}</div>}
+          {s.tenant_id === tenantDbId && (
+            <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+              <button className="cv2-btn sec" onClick={() => editar(s)}>Editar</button>
+              <button className="cv2-btn sec" onClick={() => apagar(s.id)}>Apagar</button>
+            </div>
+          )}
         </div>
       ))}
       {skills && !skills.length && <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>Nenhuma habilidade ainda.</div>}
