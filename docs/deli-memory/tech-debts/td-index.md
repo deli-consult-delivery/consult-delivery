@@ -7,6 +7,38 @@ Plataforma Consult Delivery | Iniciado em 2026-05-24
 
 ---
 
+## Triagem 2026-07-05 — TD#36-55 (resumo)
+
+Contexto: squash de migrations (PR #746), remoção de telas órfãs, RLS hierárquica (Rota B), tenancy multi-nível — muitos TDs abertos em maio já tinham sido resolvidos por trabalho subsequente sem fechar o registro. Triagem confirmou 20/20 com evidência (grep + SQL via Supabase MCP).
+
+| TD | Status pós-triagem | Mudou? |
+|----|---------------------|--------|
+| #36 | ✅ FECHADO | confirmado, sem mudança |
+| #37 | ✅ FECHADO | confirmado, sem mudança |
+| #38 | 🔵 OBSERVAÇÃO | ainda vivo (0 runs novos) |
+| #39 | 🔵 OBSERVAÇÃO | ainda vivo (0 runs novos) |
+| #40 | ✅ FECHADO | confirmado, sem mudança |
+| #41 | ✅ RESOLVIDO | confirmado, sem mudança |
+| #42 | ✅ RESOLVIDO | **era ABERTO** → BRENO com 3.106 runs |
+| #43 | ✅ RESOLVIDO | **era OBSERVAÇÃO** → exclusão de `deli` removida do código |
+| #44 | 🟡 ABERTO | ainda vivo, duplica #57 |
+| #45 | ✅ FECHADO | confirmado, sem mudança |
+| #46 | ✅ CORRIGIDO | confirmado, sem mudança |
+| #47 | ✅ RESOLVIDO | **era parcial** → helpers unificados |
+| #48 | ✅ FECHADO | confirmado, sem mudança |
+| #49 | ✅ RESOLVIDO | **era ABERTO** → seed aplicado (4 triggers, 35 approvals) |
+| #50 | ✅ RESOLVIDO | **era ABERTO** → RBAC populado (16/202/5) |
+| #51 | ✅ RESOLVIDO | **era OBSERVAÇÃO** → loja_metricas com 29 linhas |
+| #52 | 🟡 PARCIAL | **era OBSERVAÇÃO** → timeline ativo, facts incipiente |
+| #53 | ✅ FECHADO | **ação nesta sessão** → ANALYZE executado |
+| #54 | 🟡 VIVO (reduzido) | 25→14 branches merged |
+| #55 | 🔴 VIVO (piorou) | 23→471 branches unmerged |
+| #57 | 🟡 ROADMAP | premissa (v3) desatualizada — stack já em v4.4.6 |
+
+**Sem fixes de código nesta sessão**: todos os itens que estavam de fato ABERTOS e eram corrigíveis (#42, #43, #49, #50, #51) já tinham sido resolvidos por trabalho de outras sessões — só faltava atualizar o registro. Os que continuam ABERTOS (#44/#57) exigem decisão de arquitetura (scheduler dinâmico), não um fix pequeno. #54/#55 são limpeza de repositório (decisão, não código). Única ação executada: `ANALYZE` (#53).
+
+---
+
 ## TD#36 — Schedulers BomDia + Encerramento com timeout
 **Status:** ✅ FECHADO — fix/p0-td36-td40
 **Descoberto em:** S1-G00 T1 (2026-05-24)
@@ -62,20 +94,20 @@ Model: `claude-haiku-4-5-20251001`. Sem tracking de tokens, custo, ou volume.
 ---
 
 ## TD#38 — loja-gpt sem runs nos últimos 2 dias (verificar)
-**Status:** 🔵 OBSERVAÇÃO (verificar com Wandson)
+**Status:** 🔵 OBSERVAÇÃO — CONFIRMADO AINDA VIVO (triagem 2026-07-05)
 **Descoberto em:** S1-G00 T1 (2026-05-24)
 
-loja-gpt é on-demand. Última run: 2026-05-22 20:15 UTC. Normal se não há demanda.
-Verificar se consultores estão usando o chat especialista por loja ou se feature está descartada.
+loja-gpt é on-demand. Última run: 2026-05-22 20:15 UTC (**mesma data 44 dias depois** — `SELECT max(created_at) FROM agent_runs WHERE agent_id ilike '%loja-gpt%'` retornou o mesmo timestamp, total=7 runs, nenhum novo).
+Feature dormente confirmada. **Recomendação:** decidir com Wandson se descontinua (remover de `agents`/UI) ou reativa divulgação para consultores.
 
 ---
 
 ## TD#39 — cora com apenas 1 run em 9 dias (POC)
-**Status:** 🔵 OBSERVAÇÃO
+**Status:** 🔵 OBSERVAÇÃO — CONFIRMADO AINDA VIVO (triagem 2026-07-05)
 **Descoberto em:** S1-G00 T1 (2026-05-24)
 
-CORA tem 1 run (2026-05-15). Disparada por webhook Asaas PAYMENT_OVERDUE.
-Confirmar se Asaas webhook está ativo em produção ou se CORA é ainda POC.
+CORA continua com **exatamente 1 run** (2026-05-15, mesmo registro 51 dias depois). Disparada por webhook Asaas PAYMENT_OVERDUE.
+POC nunca saiu do papel. **Recomendação:** decidir com Wandson — arquivar CORA (`tenant_agents`/status) ou retomar como track ativa.
 
 ---
 
@@ -120,46 +152,33 @@ Confirmado via SQL: `tenant_agent_config` tem coluna `agent_id`, não `agent_slu
 ---
 
 ## TD#42 — BRENO deployado no Trigger.dev? Nunca executou em produção
-**Status:** 🟡 ABERTO
+**Status:** ✅ RESOLVIDO (triagem 2026-07-05)
 **Descoberto em:** S1-G00 T2 (2026-05-24)
 **Severidade:** Média — feature planejada inoperante
 
-**Sintoma:**
-- `trigger/breno/processar-webhook.ts`, `responder.ts`, `resumir-conversa.ts` existem em código
-- `agent_runs` mostra **0 runs** para qualquer agent_id relacionado a BRENO
-- `tenant_agent_config` não tem nenhuma linha para `agent_id='breno'`
+**Evidência (SQL, 2026-07-05):** `agent_runs` tem **3.106 runs** com `agent_id ilike '%breno%'`. `tenant_agent_config` tem 1 linha para `agent_id='breno'` (habilitado). BRENO está deployado, rodando e configurado — provavelmente resolvido durante o trabalho de RBAC/tenancy (PRs #648/#647 mencionados no handoff da sessão anterior confirmam "consultor-ifood: skill + worker enviarResposta/runners" ativos, e o mesmo ciclo cobriu BRENO).
 
-**Possíveis causas:**
-1. Task nunca deployada no Trigger.dev cloud (task ID `breno-processar-webhook` não registrado)
-2. Bridge `POST /internal/agents/breno-processar-webhook/run` retornando erro 404
-3. `triggerBrenoIfNeeded()` na Edge Function falhando silenciosamente (fire-and-forget com `.catch`)
-
-**Fix:** Verificar se `breno-processar-webhook` aparece em cloud.trigger.dev → Runs. Rodar `npx trigger.dev@4.4.6 deploy` para garantir deploy. Inserir row em `tenant_agent_config`.
+**Original (histórico, já não se aplica):** task existia em código mas 0 runs / 0 config.
 
 ---
 
 ## TD#43 — @deli em grupo capturada mas não invocada
-**Status:** 🔵 OBSERVAÇÃO
+**Status:** ✅ RESOLVIDO (triagem 2026-07-05)
 **Descoberto em:** S1-G00 T2 (2026-05-24)
 **Severidade:** Baixa — design intencional, mas limita DELI ativa
 
-**Sintoma:**
-Linha 462 da `evolution-webhook/index.ts` exclui `deli` do `enqueueAgentInvoke()`.
-`@deli` em grupo é salva em `whatsapp_messages.mentioned_agent = 'deli'` mas nunca chama o Bridge.
-`whatsapp_messages.processed_by_deli` existe mas permanece `false`.
+**Evidência:** `evolution-webhook/index.ts:577-578` hoje enfileira **qualquer** `mentionedAgent` (incluindo `deli`) via `enqueueAgentInvoke()` → Bridge `/analise`. A exclusão específica de `deli` mencionada no TD original não existe mais no código atual — não foi resolvido pela sugestão original (Realtime listener em `processed_by_deli`), e sim por uma mudança arquitetural que unificou o roteamento de todos os agentes mencionados.
 
-**Contexto:** DELI foi projetada como cron-driven (revisao-matinal), não event-driven.
-
-**Extension point:**
-Para DELI responder a @menções: adicionar Realtime listener em `whatsapp_messages`
-WHERE `mentioned_agent = 'deli' AND processed_by_deli = false` → invocar Bridge.
+**Ressalva:** `SELECT * FROM whatsapp_messages WHERE mentioned_agent='deli'` retorna **0 linhas** em produção — ninguém mencionou `@deli` em grupo ainda, então o caminho nunca foi exercitado de ponta a ponta. Mecanismo existe e está cabeado; validação E2E real pendente na primeira menção real.
 
 ---
 
 ## TD#44 — bom_dia_config.hora_semana/hora_sabado não consumidas pelo cron
-**Status:** 🟡 ABERTO
+**Status:** 🟡 ABERTO — CONFIRMADO AINDA VIVO (triagem 2026-07-05). Duplica TD#57 (mesmo root cause).
 **Descoberto em:** S1-G00 T3 (2026-05-24)
 **Severidade:** Média — UI pode dar falsa impressão de controle de horário
+
+**Evidência (2026-07-05):** `trigger/bom-dia/envio-agendado.ts:111,116` — comentário explícito "hora_semana e hora_sabado são lidos para log/observabilidade" confirma que as colunas continuam decorativas, cron ainda fixo. Não é fix pequeno (exige scheduler dinâmico) — ver TD#57 para as opções de arquitetura.
 
 **Sintoma:**
 `bom_dia_config` tem colunas `hora_semana` (09:00) e `hora_sabado` (08:00).
@@ -224,6 +243,8 @@ Ambas as tasks de envio (`envio-agendado.ts`) já tinham `retry: { maxAttempts: 
 
 **Pendente (gerar-imagem layer):** Padronizar `withOverloadedRetry` / Recraft retry entre os dois `gerar-imagem.ts` files — deixar para próxima iteração.
 
+> **Atualização (triagem 2026-07-05): ✅ RESOLVIDO.** Os dois `gerar-imagem.ts` (bom-dia e encerramento) hoje chamam o mesmo helper Recraft local (3 tentativas, `AbortSignal.timeout(180_000)`, código idêntico linha a linha) e o mesmo `chat()` compartilhado de `trigger/agents/llm-client.ts` para Claude. A assimetria original não existe mais — ambos passaram a usar os mesmos caminhos de código. Gap remanescente: **nenhum dos dois** tem retry dedicado para erro 529 da Anthropic no `chat()` — mas isso agora é simétrico (não é mais uma inconsistência entre os dois arquivos), vira um TD novo se quiser tratar 529 explicitamente.
+
 ---
 
 ## TD#48 — BomDia: storage path diz 1920x1080 mas resolução real é 1820x1024
@@ -249,9 +270,11 @@ Atenção: a mudança invalida URLs já no Storage — considerar migração de 
 ---
 
 ## TD#49 — deli_triggers sem seed em produção — DELI sem regras de autonomia
-**Status:** 🟡 ABERTO
+**Status:** ✅ RESOLVIDO (triagem 2026-07-05)
 **Descoberto em:** S1-G00 T4 (2026-05-24)
 **Severidade:** Média — DELI opera sem regras Verde/Amarelo/Vermelho configuradas
+
+**Evidência (SQL, 2026-07-05):** `deli_triggers` tem **4 linhas** (era 0). `deli_pending_approvals` tem **35 linhas** — fluxo de aprovação Verde/Amarelo/Vermelho está ativo e sendo usado. Seed foi executado em algum momento entre maio e julho.
 
 **Sintoma:**
 Tabela `deli_triggers` tem 0 rows. CLAUDE.md §16 lista triggers iniciais que deveriam existir:
@@ -272,9 +295,11 @@ Nenhum desses seeds foi inserido em produção.
 ---
 
 ## TD#50 — RBAC schema criado mas tabelas vazias — permissões não aplicadas via DB
-**Status:** 🟡 ABERTO
+**Status:** ✅ RESOLVIDO (triagem 2026-07-05)
 **Descoberto em:** S1-G00 T4 (2026-05-24)
 **Severidade:** Média — RequireRole no React pode não ter dados reais para validar
+
+**Evidência (SQL, 2026-07-05):** `roles`=16 linhas, `role_permissions`=202 linhas, `user_roles`=5 linhas (eram 0/0/0). RBAC populado e em uso — condiz com o RBAC habilitado para tenant Karina Doceria mencionado no handoff anterior e com a Fase 1b/Rota B de tenancy concluída.
 
 **Sintoma:**
 `roles`, `role_permissions`, `user_roles` têm 0 rows.
@@ -290,9 +315,11 @@ o RBAC pode estar operando sem dados → acesso possivelmente não restrito via 
 ---
 
 ## TD#51 — loja_metricas sempre vazia — ingestão de métricas sem implementação
-**Status:** 🔵 OBSERVAÇÃO
+**Status:** ✅ RESOLVIDO (triagem 2026-07-05)
 **Descoberto em:** S1-G00 T4 (2026-05-24)
 **Severidade:** Baixa — não bloqueia operação atual
+
+**Evidência (SQL, 2026-07-05):** `loja_metricas` tem **29 linhas** (era 0) — alguma task passou a popular a tabela. `vera_metricas_snapshot` continua em paralelo com 159 linhas.
 
 **Sintoma:**
 `loja_metricas` (17 cols, tenant_id presente) tem 0 rows.
@@ -309,9 +336,11 @@ Tabela ficou órfã. VERA usa `vera_metricas_snapshot` (3 rows) como alternativa
 ---
 
 ## TD#52 — client_facts e client_timeline vazios — Memória Central nunca usada
-**Status:** 🔵 OBSERVAÇÃO
+**Status:** 🟡 PARCIAL (triagem 2026-07-05) — melhorou, não plenamente adotado
 **Descoberto em:** S1-G00 T4 (2026-05-24)
 **Severidade:** Baixa — sistema de memória de agentes inoperante
+
+**Evidência (SQL, 2026-07-05):** `client_timeline` tem **114 linhas** (era 0) — em uso ativo. `client_facts` tem apenas **2 linhas** (era 0) — mecanismo existe mas quase nenhum agente escreve fatos-chave ainda. **Recomendação:** decidir se vale expandir `client_facts` para mais agentes (DELI/VERA) ou se `client_timeline` sozinho já cobre a necessidade.
 
 **Sintoma:**
 `client_facts` e `client_timeline` têm 0 rows.
@@ -326,9 +355,12 @@ Agentes operam sem contexto persistente sobre lojas.
 ---
 
 ## TD#53 — pg_stat stale para múltiplas tabelas — rowcounts via monitoramento não confiáveis
-**Status:** 🔵 OBSERVAÇÃO
+**Status:** ✅ FECHADO (ação nesta sessão, 2026-07-05)
 **Descoberto em:** S1-G00 T4 (2026-05-24)
 **Severidade:** Baixa — afeta apenas observabilidade, não funcionalidade
+
+**Ação aplicada:** `ANALYZE customers, analises, agents, whatsapp_groups, conversation_events;` executado via Supabase MCP em 2026-07-05. Confirmado depois: `pg_stat_user_tables.n_live_tup` agora bate com `COUNT(*)` real (customers 0→1172, whatsapp_groups 0→70, agents 5→26, analises 0→16, conversation_events 62→1844).
+**Nota:** é uma correção pontual — sem autovacuum/ANALYZE periódico o stat volta a ficar stale. Se recorrer, considerar `pg_cron` semanal com `ANALYZE;`.
 
 **Sintoma:**
 `pg_stat_user_tables.n_live_tup` retorna 0 para tabelas que têm dados:
@@ -345,14 +377,16 @@ Agentes operam sem contexto persistente sobre lojas.
 
 ---
 
-*Atualizado em: 2026-05-24 S1-G00 T3, T4, T5 | 2026-05-25 batch TDs P1 | 2026-06-10 sessão 31 (TD#37/#45/#48 fechados via PR #298)*
+*Atualizado em: 2026-05-24 S1-G00 T3, T4, T5 | 2026-05-25 batch TDs P1 | 2026-06-10 sessão 31 (TD#37/#45/#48 fechados via PR #298) | 2026-07-05 triagem TD#36-55 (branch `wandson/td-triagem-2026-07`)*
 
 ---
 
 ## TD#57 — bom_dia_config: schedule dinâmica por-tenant não suportada pelo Trigger.dev v3
-**Status:** 🟡 ROADMAP
+**Status:** 🟡 ROADMAP — premissa desatualizada (triagem 2026-07-05). Duplica TD#44 (mesmo sintoma).
 **Descoberto em:** batch TDs P1 (2026-05-25)
 **Severidade:** Baixa — schedule atual (fixo UTC) funciona; hora por-tenant é melhoria
+
+**Atualização (2026-07-05):** `package.json` confirma `@trigger.dev/sdk: 4.4.6` — a stack já está na v4.4.5+ decidida em D2 (`docs/evonexus-replica/DECISAO-001-runtime-provider-custo.md`). A premissa original ("v3 não suporta") está desatualizada; falta reavaliar se `schedules.create()` dinâmico da v4 resolve o caso antes de escolher entre as opções A/B/C abaixo. **Recomendação:** não implementar agora — pesquisar suporte v4 a dynamic schedules na próxima vez que este TD for priorizado.
 
 **Sintoma:**
 `bom_dia_config` tem colunas `hora_semana` e `hora_sabado` por tenant, mas o scheduler usa
@@ -374,9 +408,12 @@ Opção C: Usar Supabase pg_cron com invocação via HTTP para cada tenant.
 ---
 
 ## TD#54 — 25 branches merged não removidos do remote
-**Status:** 🔵 OBSERVAÇÃO
+**Status:** 🟡 VIVO (reduzido) — triagem 2026-07-05: 14 branches merged (era 25)
 **Descoberto em:** S1-G00 T5 (2026-05-24)
 **Severidade:** Baixa — higiene de repositório
+
+**Evidência:** `git branch -r --merged origin/main` retorna 14 branches (`git status` confirma clean). Alguém já limpou parte do lote original.
+**Recomendação (não implementado — decisão de repo, fora do escopo desta triagem):** ativar "Auto-delete head branches" nas Settings do GitHub (resolve de raiz, evita recorrência) + `git push origin --delete` nas 14 restantes numa sessão dedicada.
 
 **Sintoma:**
 `git branch -r --merged origin/main` retorna 25 branches além de main/gh-pages.
@@ -390,9 +427,12 @@ Ou ativar "Auto-delete head branches" nas Settings do GitHub repo.
 ---
 
 ## TD#55 — 23 branches unmerged potencialmente stale (lote 2026-05-15)
-**Status:** 🟡 MÉDIA
+**Status:** 🔴 VIVO — PIOROU MUITO (triagem 2026-07-05: 471 branches unmerged, era 23)
 **Descoberto em:** S1-G00 T5 (2026-05-24)
 **Severidade:** Média — risco de código pendente não mergeado e acúmulo de drift
+
+**Evidência:** `git branch -r --no-merged origin/main` retorna **471** branches. Maioria é `claude/*` (nomes gerados automaticamente por sessões headless, ex. `claude/agitated-cray-5d3b5e`) e `ao/*` (worktrees do orquestrador, ex. `ao/consult-delivery-22/root`) — volume cresceu por causa da automação (AO orchestrator + sessões Claude), não do fluxo manual de PRs original.
+**Recomendação (não implementado — decisão/triagem grande, fora do escopo "queimar pequeno"):** script dedicado que (1) separa `claude/*`/`ao/*` (prováveis descartáveis, confirmar se órfãos antes de deletar) dos `wandson/*`/`feat/*`/`fix/*` manuais (revisar 1-a-1: merge ou delete explícito), (2) aplica idade mínima (>15 dias) antes de considerar stale.
 
 **Sintoma:**
 29 branches no remote não mergeados em main. Após excluir os 6 ativos da série piloto:
