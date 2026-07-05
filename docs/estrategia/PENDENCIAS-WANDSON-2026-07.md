@@ -6,6 +6,64 @@
 
 ---
 
+## ⚠️ RECLASSIFICAÇÃO 2026-07-05 (tarde) — pós-autorizações do dia
+
+Hoje o Wandson deu autorização ampla em sessão (squash da baseline, higienização, restart da VPS via SSH `root@187.127.25.24`, credenciais iFood no `.env` do bridge). Isso reabriu a pergunta: quais dos 12 itens abaixo dependiam só de acesso operacional (VPS/SQL) que a sessão de hoje já demonstrou ter, versus quais seguem exigindo o Wandson fisicamente (dinheiro, celular/2FA, decisão de conteúdo, sistema externo)?
+
+Cada item foi verificado contra o estado real (SQL no Supabase, `git log`, `gh run list`, grep no código) antes de qualquer ação — nada foi reclassificado "de olho".
+
+| # | Reclassificação | Justificativa (1 linha) |
+|---|------------------|--------------------------|
+| 1 | 🖥️ EXECUTÁVEL NA VPS (não aqui) | Requer SSH root + `hermes`/`systemctl` — comandos prontos abaixo, para a orquestradora rodar na VPS |
+| 2 | 👤 AINDA DELE | Rotacionar token exige gerar chave nova no **portal do ERP** (sistema externo, sem API self-service) |
+| 3 | 👤 AINDA DELE | Fluxo E2E depende de código OOB que cai no Telegram do CEO (celular do Wandson) |
+| 4 | 👤 AINDA DELE | Recarga de crédito = cartão/dinheiro |
+| 5 | ✅ JÁ RESOLVIDO | `SELECT id FROM agents WHERE id IN ('revisor','pedro','estela','vitor')` → **as 4 linhas existem** (verificado agora via Supabase MCP). Migration aplicada, nada a fazer |
+| 6 | ✅ EXECUTADO AGORA | `deli_triggers`: `cliente_sumiu_7d` já estava `enabled=true` (flipado em sessão anterior, sem incidente). Guardrail confere (`is_consultoria_ativa`=15 lojas, não mais 1000) → **habilitei `metrica_caiu_20pct` agora** (`UPDATE ... RETURNING` confirma `enabled=true`). Reversível com 1 UPDATE se algo soar estranho no 1º ciclo |
+| 7 | 👤 AINDA DELE (aguardando evento) | Só é observável quando a próxima leva real de avaliações chegar — não dá pra forçar |
+| 8 | 👤 AINDA DELE (aguardando evento) | Depende do CRM externo do cliente disparar o webhook — não acionável até 1º cliente com CRM ativo |
+| 9 | 🖥️ EXECUTÁVEL (fora deste PR) | Smoke visual não exige o Wandson especificamente, mas exige sessão de browser automation logada como admin `karina-doceria` — não é código/config, fora do lote de hoje |
+| 10 | ✅ JÁ RESOLVIDO | Debt de bookkeeping (ver detalhe original item 10) — fechado formalmente aqui, sem ação pendente |
+| 11 | ✅ JÁ RESOLVIDO (branch stale) | A feature já está em produção via outra implementação (`bridge-server/routes/asaas-dashboard.js` + `SitCard` em `src/console/Cora.jsx`, wired em `index.js:1726`). A branch `origin/wandson/cora-situacao-dashboard` diverge **187 commits** de `main` — mergear destruiria arquivos que hoje existem. **NÃO mergear.** Recomendado (não executado aqui): `git push origin --delete wandson/cora-situacao-dashboard` |
+| 12 | ✅ EXECUTADO AGORA (achado real) | Auditoria confirmou: `.github/workflows/deploy.yml` job `deploy-bridge` roda `git reset --hard origin/main` em `/root/consult-delivery` **automaticamente em todo push a `main`**, via self-hosted runner (desde PR #148, `gh run view` confirma sucesso nos últimos 10 runs). Isso NÃO é regra manual como a doc antiga dizia — é automação real e é a causa-raiz de qualquer "deploy manual sobrescrito". `memory/vps-infra.md` atualizado com o achado |
+
+### O que foi executado neste PR
+- SQL (Supabase, reversível): `UPDATE deli_triggers SET enabled = true WHERE name = 'metrica_caiu_20pct'` — religa o 2º gatilho da DELI (item 6). `cliente_sumiu_7d` já estava ligado.
+- Doc: `memory/vps-infra.md` corrigido — o deploy do bridge é automático (self-hosted runner), não manual.
+- Este doc: reclassificação completa dos 12 itens com evidência.
+- **Não executado** (fora do escopo "código/config" ou requer acesso que esta sessão não tem): delete da branch stale (item 11), qualquer coisa na VPS (item 1).
+
+### Comandos prontos — item 1 (Hermes GATE 0), para rodar na VPS como `root`
+```bash
+# (a) mover hermes-gateway + admin-mcp de root para claudedev (systemd)
+#     — checar primeiro quem já roda o quê: `systemctl status hermes-gateway`
+# (b)+(c) segredos no Trigger.dev — TELEGRAM_BOT_TOKEN, CEO_TELEGRAM_CHAT_ID,
+#     INTERNAL_BRIDGE_TOKEN, BRIDGE_URL: via dashboard do Trigger.dev (projeto
+#     proj_slexhoelcjwgbopmbzzr) → Environment Variables. NOTA: INTERNAL_BRIDGE_TOKEN
+#     já é usado por trigger/deli/orchestrator-5min.ts, trigger/gestor/coleta-diaria.ts
+#     e outros tasks confirmados funcionando em prod — forte indício de que (c) já
+#     está setado. Confirmar com 1 rodada do Hermes antes de re-setar.
+cd /root/consult-delivery/hermes
+bash deploy-hermes.sh              # dry-run primeiro
+bash deploy-hermes.sh --apply
+hermes gateway restart
+
+# (d) registrar os 3 MCPs de ação (repetir para ifood, asaas, evolution)
+hermes mcp add <nome> --command node --args /root/consult-delivery/<nome>-mcp/src/server.js \
+  --env BRIDGE_URL=http://127.0.0.1:3001 INTERNAL_BRIDGE_TOKEN=<valor> \
+        SUPABASE_URL=<valor> SUPABASE_SERVICE_KEY=<valor_de_SUPABASE_SERVICE_ROLE_KEY>
+hermes mcp list
+hermes mcp test <nome>
+cd /root/consult-delivery/<nome>-mcp && npm run live-smoke
+```
+
+### Comando recomendado (não executado) — item 11
+```bash
+git push origin --delete wandson/cora-situacao-dashboard
+```
+
+---
+
 ## Tabela consolidada
 
 | # | Categoria | Pendência (resumo) | Ação concreta | Destrava | Origem (linha) |
