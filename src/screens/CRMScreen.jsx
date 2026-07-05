@@ -4,10 +4,9 @@ import Icon from '../components/Icon.jsx';
 import AgentAvatar from '../components/AgentAvatar.jsx';
 import UserAvatar from '../components/UserAvatar.jsx';
 import { supabase } from '../lib/supabase.js';
-import { TENANTS } from '../data.js';
 import CustomFieldsSection from '../components/CustomFieldsSection.jsx';
 
-const CrmScreen = ({ tenant, tenantDbId, onNavigate }) => {
+const CrmScreen = ({ tenant, tenantNome, tenantDbId, onNavigate }) => {
   const [mode, setMode] = uSCrm('clientes');
   const [showImportModal, setShowImportModal] = uSCrm(false);
   const [leadsRefreshKey, setLeadsRefreshKey] = uSCrm(0);
@@ -37,7 +36,7 @@ const CrmScreen = ({ tenant, tenantDbId, onNavigate }) => {
       </div>
 
       {mode === 'clientes' ? (
-        <ClientesView tenant={tenant} tenantDbId={tenantDbId} onNavigate={onNavigate} onImportClick={() => { setMode('leads'); setShowImportModal(true); }}/>
+        <ClientesView tenantNome={tenantNome} tenantDbId={tenantDbId} onNavigate={onNavigate} onImportClick={() => { setMode('leads'); setShowImportModal(true); }}/>
       ) : (
         <LeadsView tenantDbId={tenantDbId} onImportClick={() => setShowImportModal(true)} refreshKey={leadsRefreshKey} onNavigate={onNavigate}/>
       )}
@@ -77,7 +76,7 @@ function mapCustomerRow(row) {
   };
 }
 
-const ClientesView = ({ tenant, tenantDbId, onNavigate, onImportClick }) => {
+const ClientesView = ({ tenantNome, tenantDbId, onNavigate, onImportClick }) => {
   const [customers, setCustomers] = uSCrm([]);
   const [loading, setLoading] = uSCrm(true);
   const [loadError, setLoadError] = uSCrm(null);
@@ -145,7 +144,7 @@ const ClientesView = ({ tenant, tenantDbId, onNavigate, onImportClick }) => {
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', marginBottom: 24 }}>
         <div>
           <h1 className="page-h1">Clientes / CRM</h1>
-          <p className="page-sub">Base completa de contatos · {stats.total} clientes na {TENANTS.find(t=>t.id===tenant)?.name}</p>
+          <p className="page-sub">Base completa de contatos · {stats.total} clientes na {tenantNome}</p>
         </div>
         <div style={{ display:'flex', gap: 8 }}>
           <button className="btn-secondary" onClick={onImportClick}><Icon name="paper" size={14}/> Importar CSV</button>

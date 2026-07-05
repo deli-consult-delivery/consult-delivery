@@ -743,7 +743,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
       case 'deli': return <Deli tenantDbId={tenantDbId} userId={userId} />;
       case 'gestor': return <Gestor tenantDbId={tenantDbId} userId={userId} />;
       case 'gestor-dashboard': return <GestorDashboard tenantDbId={tenantDbId} userId={userId} onNavigate={nav} />;
-      case 'crm': return <CRM tenantSlug={tenantSlug} tenantDbId={tenantDbId} onNavigate={nav} />;
+      case 'crm': return <CRM tenantSlug={tenantSlug} tenantDbId={tenantDbId} tenantNome={tenantNome} onNavigate={nav} />;
       case 'lojas': return <Lojas tenantDbId={tenantDbId} userId={userId} />;
       case 'mia': return <MiaAudit tenantDbId={tenantDbId} userId={userId} />;
       case 'aprovacoes': return <AprovacoesUnificadas tenantDbId={tenantDbId} userId={userId} />;

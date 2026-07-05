@@ -1,4 +1,4 @@
-import { AGENTS } from '../data.js';
+import { AGENTS } from '../lib/agentsCatalog.js';
 
 export default function AgentAvatar({ id, size = 32 }) {
   const agent = AGENTS.find(a => a.id === id);
