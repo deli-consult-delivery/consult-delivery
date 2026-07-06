@@ -28,8 +28,16 @@ function fmtBRL(v) {
     : '—';
 }
 
-function hoje() { return new Date().toISOString().slice(0, 10); }
-function diasAtras(n) { return new Date(Date.now() - n * 86400000).toISOString().slice(0, 10); }
+// Data LOCAL (não UTC): toISOString() converte pra UTC e depois das ~21h BRT
+// já é o dia seguinte em UTC — "hoje"/"7 dias atrás" ficavam errados à noite.
+function localDateStr(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function hoje() { return localDateStr(new Date()); }
+function diasAtras(n) { return localDateStr(new Date(Date.now() - n * 86400000)); }
 
 // Sales (confirmado): sales[].saleGrossValue = {bag, deliveryFee, serviceFee}.
 // "Bruto" = soma dos 3 campos; "líquido" não tem campo próprio documentado
@@ -45,8 +53,14 @@ function valorBrutoDaVenda(venda) {
 export default function FinanceiroIfood({ tenantDbId }) {
   const [lojas, setLojas] = useState(null);
   const [lojaId, setLojaId] = useState('');
+  // dataInicio/dataFim = filtro APLICADO (dispara o fetch); os "Draft" abaixo
+  // acompanham os inputs em tempo real e só viram filtro aplicado no clique de
+  // "Aplicar" (ou num atalho) — sem isso, cada tecla digitada numa data
+  // disparava uma chamada à API (a UI-spec pede busca só no clique).
   const [dataInicio, setDataInicio] = useState(diasAtras(7));
   const [dataFim, setDataFim] = useState(hoje());
+  const [dataInicioDraft, setDataInicioDraft] = useState(dataInicio);
+  const [dataFimDraft, setDataFimDraft] = useState(dataFim);
   const [vendas, setVendas] = useState(null);
   const [repasses, setRepasses] = useState(undefined); // undefined = ainda não tentou; null = indisponível/"em breve"
   const [erro, setErro] = useState(null);
@@ -92,9 +106,20 @@ export default function FinanceiroIfood({ tenantDbId }) {
 
   useEffect(() => { carregar(); }, [carregar]);
 
+  function aplicarFiltro() {
+    setDataInicio(dataInicioDraft);
+    setDataFim(dataFimDraft);
+  }
+
+  // Atalho é uma ação explícita (clique), não digitação — aplica na hora,
+  // sem esperar um 2º clique em "Aplicar".
   function atalho(dias) {
-    setDataInicio(dias === 0 ? hoje() : diasAtras(dias));
-    setDataFim(hoje());
+    const ini = dias === 0 ? hoje() : diasAtras(dias);
+    const fim = hoje();
+    setDataInicioDraft(ini);
+    setDataFimDraft(fim);
+    setDataInicio(ini);
+    setDataFim(fim);
   }
 
   const totalBruto = (vendas || []).reduce((s, v) => s + valorBrutoDaVenda(v), 0);
@@ -117,13 +142,13 @@ export default function FinanceiroIfood({ tenantDbId }) {
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, color: 'var(--tx2)' }}>
           De
-          <input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} />
+          <input type="date" value={dataInicioDraft} onChange={e => setDataInicioDraft(e.target.value)} />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, color: 'var(--tx2)' }}>
           Até
-          <input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} />
+          <input type="date" value={dataFimDraft} onChange={e => setDataFimDraft(e.target.value)} />
         </label>
-        <button className="cv2-btn" onClick={carregar} disabled={carregando}>{carregando ? 'Carregando…' : 'Aplicar'}</button>
+        <button className="cv2-btn" onClick={aplicarFiltro} disabled={carregando}>{carregando ? 'Carregando…' : 'Aplicar'}</button>
         <button className="cv2-btn sec" onClick={() => atalho(0)}>Hoje</button>
         <button className="cv2-btn sec" onClick={() => atalho(7)}>7 dias</button>
         <button className="cv2-btn sec" onClick={() => atalho(30)}>30 dias</button>
@@ -144,7 +169,7 @@ export default function FinanceiroIfood({ tenantDbId }) {
           <div className="d mut">{vendas && vendas.length ? 'no período' : 'sem vendas no período'}</div>
         </div>
         <div className="cv2-kpi">
-          <div className="l">Vendas líquidas</div>
+          <div className="l">Vendas (bruto)</div>
           <div className="v">{vendas && vendas.length ? fmtBRL(totalBruto) : '—'}</div>
           <div className="d mut">taxas/comissão ainda não confirmadas (ver Settlement)</div>
         </div>
