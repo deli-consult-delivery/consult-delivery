@@ -40,18 +40,21 @@
 |---|---|---|---|
 | `reviews` | `service_full_access` sem `TO` (valia pra todos); `anon_select` dump completo via anon; `anon_insert`/`anon_update` sem filtro (qualquer review, qualquer tenant) | `20260706_007`, `20260706_008_reviews_anon_write_scope`, `20260706_009` | #757 → #764 |
 | `evolution_instances` | `api_key`/`evolution_url` legíveis via PostgREST (`?select=api_key`) apesar de o front não usar mais essas colunas | `20260706_008_evolution_instances_column_privileges` (REVOKE/GRANT por coluna) | #761 |
+| `messages` | policy solta `messages_auth_all` anulava o escopo por tenant das outras 4 policies | `20260706_014` (backfill de `tenant_id`) → `20260706_011` (drop da policy) | #776 |
+| `deli_agenda` | INSERT aberto pra `PUBLIC` (nome sugeria `service_role`, `TO` faltando) | `20260706_012` | #776 |
+| `channel_members`/`channel_messages`/`internal_channels` | sem `TO` (=PUBLIC, cobre `anon`) — chat interno lido/gravável por qualquer um na internet | `20260706_013` | #776 |
 
 ---
 
-## P1 — exposto além do necessário (authenticated, sem `anon`) — documentado, sem migration nesta PR
+## P1 — exposto além do necessário (authenticated, sem `anon`) — migrations na branch `wandson/rls-p1-0607`
 
-| Tabela | Policy | Exposição | Colunas sensíveis | Nota |
+| Tabela | Policy | Exposição | Colunas sensíveis | Fix |
 |---|---|---|---|---|
-| `onboarding_wizard_sessions` | `wizard_sessions_authenticated_select` (`SELECT TO authenticated USING(true)`) | Qualquer usuário logado (qualquer tenant) vê `email`/`whatsapp`/`cnpj`/`nome_negocio`/`faturamento_mensal_range` de **todos** os leads em onboarding, de todos os tenants | `email`, `cnpj` | PII de prospecção — sem `tenant_id` na tabela, precisa de coluna nova ou lógica de dono antes de escopar |
-| `val_desempenho_coleta` | `val_desempenho_read` (`SELECT TO authenticated USING(true)`) | Qualquer logado vê métricas de desempenho de **todas** as lojas monitoradas (não só as suas) | — | Dado operacional interno (QA/homologação iFood), não é dado de cliente; sem coluna `tenant_id` na tabela (só `loja` texto) |
-| `val_kpi_coleta_diaria` | `val_kpi_read` (idem) | Idem, KPIs diários (pedidos/cancelamentos/semáforo) de todas as lojas | — | Idem — mesma raiz (tabelas de validação do GESTOR, criadas fora do modelo multi-tenant) |
+| `onboarding_wizard_sessions` | `wizard_sessions_authenticated_select` (`SELECT TO authenticated USING(true)`) | Qualquer usuário logado (qualquer tenant) vê `email`/`whatsapp`/`cnpj`/`nome_negocio`/`faturamento_mensal_range` de **todos** os leads em onboarding, de todos os tenants | `email`, `cnpj` | `20260706_015` — escopa pra `TO service_role` (zero consumidor `authenticated` achado no repo; único uso real é `bridge-server/routes/wizard-publico.js`, já via service_role) |
+| `val_desempenho_coleta` | `val_desempenho_read` (`SELECT TO authenticated USING(true)`) | Qualquer logado vê métricas de desempenho de **todas** as lojas monitoradas (não só as suas) | — | `20260706_016` — escopa pra `TO service_role` (zero consumidor no repo — dado alimentado por processo externo) |
+| `val_kpi_coleta_diaria` | `val_kpi_read` (idem) | Idem, KPIs diários (pedidos/cancelamentos/semáforo) de todas as lojas | — | `20260706_017` — idem |
 
-**Por que não entrou nesta PR:** o brief pediu migration só pra P0. Os 3 P1 acima exigem decisão de produto (criar coluna de dono/tenant nas tabelas de validação; ou aceitar que são ferramentas internas de uso único-equipe e documentar como aceito) antes de escrever a policy certa — proponho como próxima rodada.
+**Por que não escopamos por tenant:** as 3 tabelas não têm coluna `tenant_id` (o desenho original não previu multi-tenant nelas), então `accessible_tenant_ids()` não dá pra aplicar direto — exigiria adicionar coluna + backfill, mudança maior que o P1 justifica agora. Como nenhuma delas tem consumidor legítimo via `authenticated` no repo (grep exaustivo, documentado no cabeçalho de cada migration), o fix escolhido foi o mesmo do `deli_agenda` (P0-2): escopar a policy pra `service_role`, fechando o acesso amplo sem quebrar nada que exista hoje. **Residual documentado em cada migration:** se existir uma ferramenta externa (BI/Retool) lendo alguma dessas 3 tabelas com um usuário `authenticated` direto no Supabase, ela pararia — verificar antes de aplicar.
 
 ---
 
@@ -66,6 +69,8 @@
 ---
 
 ## Apêndice — todas as 177 tabelas de `public`
+
+**Nota de status (pós-#776):** as classificações `P0` de `messages`, `deli_agenda`, `channel_members`, `channel_messages` e `internal_channels` nesta tabela refletem o estado NO MOMENTO DA AUDITORIA — todas as 5 já foram fechadas (migrations aplicadas em prod, ver seção "Migrations dos P0" acima). `onboarding_wizard_sessions`, `val_desempenho_coleta` e `val_kpi_coleta_diaria` seguem `P1` — migrations prontas (`_015`/`_016`/`_017`) mas ainda não aplicadas.
 
 Legenda: RLS = `ENABLE ROW LEVEL SECURITY` presente (todas as 177 têm). "Policies" resume comando/role de cada policy da tabela (role `PUBLIC(sem TO!)` = sem cláusula `TO`, vale pra `anon` **e** `authenticated` — só é problema quando o `USING`/`WITH CHECK` também é `true`, que é exatamente o que este documento cobre acima; nas demais o `USING` filtra por tenant/membership mesmo sem `TO` explícito).
 
@@ -253,11 +258,19 @@ Legenda: RLS = `ENABLE ROW LEVEL SECURITY` presente (todas as 177 têm). "Polici
 
 ---
 
-## Migrations desta PR (branch `wandson/rls-audit-0607`, NÃO aplicadas)
+## Migrations dos P0 (branch `wandson/rls-audit-0607`, PR #776 — MERGEADO e APLICADO em prod)
 
-1. `supabase/migrations/20260706_014_messages_backfill_tenant_id.sql` — **aplicar ANTES da 011** (backfill de dado; ver P0-1 acima)
+1. `supabase/migrations/20260706_014_messages_backfill_tenant_id.sql` — aplicada antes da 011 (backfill de dado; ver P0-1 acima)
 2. `supabase/migrations/20260706_011_messages_drop_redundant_auth_all.sql`
 3. `supabase/migrations/20260706_012_deli_agenda_insert_service_role_scope.sql`
 4. `supabase/migrations/20260706_013_canais_internos_remove_anon_access.sql`
 
-Cada uma: aditiva, idempotente, com teste de isolamento (ou contagem antes/depois, no caso da 014) documentado no cabeçalho (não executado — a orquestradora aplica com teste real). Reversibilidade: 011/012/013 revertem por `CREATE POLICY` (documentado no rollback de cada cabeçalho); 014 é backfill de dado, sem rollback possível (documentado no próprio cabeçalho).
+Testes de isolamento confirmados em prod após aplicar: `anon` → 0 linhas nos canais internos; DELETE de mensagem da agência preservado; 0 mensagens com `tenant_id NULL`.
+
+## Migrations dos P1 (branch `wandson/rls-p1-0607`, esta PR — NÃO aplicadas)
+
+5. `supabase/migrations/20260706_015_onboarding_wizard_sessions_service_role_scope.sql`
+6. `supabase/migrations/20260706_016_val_desempenho_coleta_service_role_scope.sql`
+7. `supabase/migrations/20260706_017_val_kpi_coleta_diaria_service_role_scope.sql`
+
+Mesma receita: aditivas, idempotentes, teste de isolamento documentado no cabeçalho (não executado), consumidores mapeados via grep exaustivo (zero consumidores `authenticated` encontrados nas 3 — só a `service_role`/Bridge usa, quando usa). Reversibilidade: todas revertem por `CREATE POLICY` (documentado no rollback de cada cabeçalho).
