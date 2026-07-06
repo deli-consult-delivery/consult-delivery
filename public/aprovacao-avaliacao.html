@@ -347,8 +347,9 @@ const SUPABASE_URL  = 'https://czyanilrverorwenikqw.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6eWFuaWxydmVyb3J3ZW5pa3F3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwNTg5MzksImV4cCI6MjA5MjYzNDkzOX0.k_EIEgnM5a-4Ub52-w5VJw9WJBEPNQmmwgz8AEuyoAw';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-let singleReviewId = null;
-let multiReviews   = [];
+let singleReviewId    = null;
+let singleReviewToken = null;
+let multiReviews      = [];
 let approvedIds    = new Set();
 
 const STAR_COLORS = { 1:'#ef4444', 2:'#f97316', 3:'#eab308', 4:'#84cc16', 5:'#22c55e' };
@@ -433,6 +434,7 @@ async function loadSingle(token) {
   if (res.error||!res.data) { showError('Avaliação não encontrada ou link expirado.'); return; }
   var d = res.data;
   singleReviewId = d.id;
+  singleReviewToken = d.token;
   if (['approved','modified','published'].includes(d.status)) { showState('success'); return; }
   document.getElementById('store-name').textContent      = d.store;
   document.getElementById('order-id').textContent        = d.order_id;
@@ -455,7 +457,7 @@ async function loadSingle(token) {
 async function handleApprove() {
   setSingleBtns(true);
   var text = document.getElementById('response-text').value.trim();
-  var res = await sb.from('reviews').update({status:'approved',final_response:text,approved_at:new Date().toISOString()}).eq('id',singleReviewId);
+  var res = await sb.rpc('update_review_by_token', { p_token: singleReviewToken, p_status: 'approved', p_final_response: text });
   if (res.error) { alert('Erro ao salvar. Tente novamente.'); setSingleBtns(false); return; }
   showState('success');
 }
@@ -463,7 +465,7 @@ async function handleModify() {
   var ta = document.getElementById('response-text');
   if (!ta.value.trim()) { ta.focus(); return; }
   setSingleBtns(true);
-  var res = await sb.from('reviews').update({status:'modified',final_response:ta.value.trim(),approved_at:new Date().toISOString()}).eq('id',singleReviewId);
+  var res = await sb.rpc('update_review_by_token', { p_token: singleReviewToken, p_status: 'modified', p_final_response: ta.value.trim() });
   if (res.error) { alert('Erro ao salvar. Tente novamente.'); setSingleBtns(false); return; }
   showState('success');
 }
@@ -533,7 +535,7 @@ async function handleApproveSingle(id) {
   var text = ta ? ta.value.trim() : '';
   var orig = multiReviews.find(function(r){ return r.id===id; });
   var status = (orig && text!==(orig.suggested_response||'').trim()) ? 'modified' : 'approved';
-  var res = await sb.from('reviews').update({status:status,final_response:text,approved_at:new Date().toISOString()}).eq('id',id);
+  var res = await sb.rpc('update_review_by_token', { p_token: orig.token, p_status: status, p_final_response: text });
   if (res.error) { alert('Erro ao salvar. Tente novamente.'); if(btn) btn.disabled=false; return; }
   markCardApproved(id);
   approvedIds.add(id);
@@ -549,7 +551,7 @@ async function handleApproveAll() {
     var ta = document.getElementById('ta-'+r.id);
     var text = ta ? ta.value.trim() : (r.suggested_response||'');
     var status = (text!==(r.suggested_response||'').trim()) ? 'modified' : 'approved';
-    return sb.from('reviews').update({status:status,final_response:text,approved_at:new Date().toISOString()}).eq('id',r.id);
+    return sb.rpc('update_review_by_token', { p_token: r.token, p_status: status, p_final_response: text });
   });
   var results = await Promise.all(updates);
   if (results.some(function(r){ return r.error; })) { alert('Erro ao salvar algumas respostas. Tente novamente.'); if(btnAll) btnAll.disabled=false; return; }
