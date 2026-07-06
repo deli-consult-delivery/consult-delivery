@@ -1,5 +1,6 @@
 import { task, logger } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
+import { createHash } from "node:crypto";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 import { notify } from "../_shared/notify";
@@ -29,6 +30,19 @@ const OutputSchema = z.object({
 
 type Input  = z.infer<typeof InputSchema>;
 type Output = z.infer<typeof OutputSchema>;
+
+// UUID determinístico a partir de uma seed (ex: ctx.run.id) — usado quando
+// precisamos de um valor com formato UUID mas a fonte real não é UUID.
+// Determinístico (não crypto.randomUUID()) de propósito: esta task tem
+// retry:{maxAttempts:2} — ctx.run.id é ESTÁVEL entre tentativas do mesmo run,
+// então gerar aleatório a cada execução criaria um message_id novo a cada
+// retry, quebrando a idempotência (brenoResponder seria enfileirado de novo
+// com um id diferente, duplicando resposta/breno_interactions se o retry
+// acontecer depois de um enqueue que já deu certo).
+export function uuidDeterministico(seed: string): string {
+  const hex = createHash("sha1").update(seed).digest("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
 
 export const brenoProcessarWebhook = task({
   id: "breno-processar-webhook",
@@ -265,17 +279,19 @@ export const brenoProcessarWebhook = task({
     try {
       // brenoResponder exige message_id como UUID (InputSchema z.string().uuid());
       // se vier do webhook pode não ser UUID válido. ctx.run.id NÃO serve de
-      // fallback (formato "run_xxx", nunca é UUID) — isso já causou o mesmo bug
-      // que estamos corrigindo aqui: brenoResponder falha com ZodError na própria
-      // execução (assíncrona, fora do try/catch deste arquivo) e BRENO fica mudo
-      // em silêncio. message_id só é usado como inbound_message_id em
-      // breno_interactions (auditoria) — não há join/dedup por ele em nenhum
-      // outro lugar do código — então gerar um UUID novo aqui é seguro pelo
-      // contrato do breno-responder.
+      // fallback DIRETO (formato "run_xxx", nunca é UUID) — isso já causou o
+      // mesmo bug que estamos corrigindo aqui: brenoResponder falha com
+      // ZodError na própria execução (assíncrona, fora do try/catch deste
+      // arquivo) e BRENO fica mudo em silêncio. Usamos uuidDeterministico(seed)
+      // em vez de crypto.randomUUID() — precisa ser ESTÁVEL entre os retries
+      // desta task (ver comentário da função). message_id só é usado como
+      // inbound_message_id em breno_interactions (auditoria) — não há
+      // join/dedup por ele em nenhum outro lugar do código — então gerar um
+      // UUID (determinístico) aqui é seguro pelo contrato do breno-responder.
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const safeMessageId = uuidRegex.test(messageIdForResponder)
         ? messageIdForResponder
-        : crypto.randomUUID();
+        : uuidDeterministico(ctx.run.id);
 
       responderHandle = await brenoResponder.trigger({
         tenant_id:       input.tenant_id,

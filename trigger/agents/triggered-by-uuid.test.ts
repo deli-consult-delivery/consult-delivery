@@ -10,8 +10,10 @@
 import assert from "node:assert";
 import { InputSchema as ExecutarTarefaInputSchema } from "./executar-tarefa";
 import { InputSchema as ResponderConclusaoInputSchema } from "./responder-conclusao";
+import { uuidDeterministico } from "../breno/processar-webhook";
 
 const UUID = "11111111-1111-1111-1111-111111111111";
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function run() {
   // agent-executar-tarefa ────────────────────────────────────────────────────
@@ -44,7 +46,17 @@ function run() {
   });
   assert.strictEqual(responderSemTriggeredBy.success, true, "responder-conclusao deveria aceitar triggered_by ausente");
 
-  console.log("OK — triggered-by-uuid.test.ts: InputSchema rejeita 'run_abc' e aceita ausente (executar-tarefa + responder-conclusao)");
+  // uuidDeterministico (fallback de message_id em processar-webhook.ts) ───────
+  // Precisa ser: (1) formato UUID válido, (2) ESTÁVEL pro mesmo seed — é isso
+  // que preserva a idempotência entre os retries da task (retry:{maxAttempts:2}).
+  const runId = "run_abc123";
+  const uuid1 = uuidDeterministico(runId);
+  const uuid2 = uuidDeterministico(runId);
+  assert.match(uuid1, UUID_REGEX, "uuidDeterministico deveria produzir formato UUID válido");
+  assert.strictEqual(uuid1, uuid2, "uuidDeterministico deveria ser determinístico (mesmo seed → mesmo UUID, preserva idempotência em retries)");
+  assert.notStrictEqual(uuidDeterministico("run_outro"), uuid1, "seeds diferentes deveriam produzir UUIDs diferentes");
+
+  console.log("OK — triggered-by-uuid.test.ts: InputSchema rejeita 'run_abc' e aceita ausente (executar-tarefa + responder-conclusao); uuidDeterministico é estável");
 }
 
 run();
