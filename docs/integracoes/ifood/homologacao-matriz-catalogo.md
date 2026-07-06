@@ -5,17 +5,18 @@
 > onde está implementado → evidência (teste offline, smoke live, ou LACUNA), sem maquiagem —
 > reporta lacuna como lacuna.
 >
-> **Estado dos PRs no momento desta matriz (2026-07-06, `main` em `b5b7118`+)**: #799 (rota
-> `GET /ifood-api/catalogo/:lojaId`) **MERGEADO**. #800 (research, este worker) **MERGEADO**.
-> #801 (tela `CardapioIfood` conecta `fonte_dados='api'` por loja) **ABERTO, em fix** — lido
-> direto via `git show origin/wandson/cardapio-api` para esta matriz, mas **não está em `main`**
-> ainda. Escrita de preço está **em desenvolvimento pelo worker 86** — sem branch/PR neste
-> momento, marcada como tal abaixo.
+> **v2 (2026-07-06, fechamento) — atualização desta matriz.** Desde a v1 (PR #805):
+> **#801** (tela `CardapioIfood` per-loja) **MERGEADO** — o descompasso de rota do §1 da v1
+> (`cardapio` vs `catalogo`) foi **encontrado em revisão e corrigido dentro da própria branch**
+> antes do merge (ver §1 abaixo, agora "RESOLVIDO"). **#806** (alterar preço via draft→aprovação)
+> **MERGEADO** — resolve a decisão de M7 (escolheu `PATCH /items/{itemId}` síncrono, não o
+> mecanismo em lote). **Smoke live da rota `/ifood-api/catalogo/:lojaId`** confirmado
+> (`report-88-catalogo.md`, 2026-07-06): `200`, catálogo real do sandbox (1 catálogo → 1
+> categoria "Teste-Cd" → 1 item "X-Burger Teste Cd").
 >
-> Base: `docs/integracoes/ifood/catalogo-endpoints.md` (research, PR #800) + PR #799 + branch
-> `wandson/cardapio-api` (PR #801, lida via `git show`, não mergeada) + código pré-existente de
-> Catalog v2.0 (fases anteriores do `PLANO-INTEGRACAO-IFOOD.md`, nunca documentado num doc
-> dedicado até o #800).
+> Base: `catalogo-endpoints.md` (research, #800) + #799 (rota, mergeado) + #801 (tela per-loja,
+> mergeado) + #806 (preço, mergeado) + `report-88-catalogo.md` (smoke live) + código pré-existente
+> de Catalog v2.0 (disponibilidade, fases anteriores do plano).
 
 ## Legenda
 
@@ -23,105 +24,101 @@
 |---|---|
 | ✅ IMPLEMENTADO | Código existe, testado offline (e/ou confirmado live) |
 | 🟡 PARCIAL | Parte do fluxo existe, ou existe mas com risco/divergência não resolvida |
-| 🟠 EM DESENVOLVIMENTO | Trabalho em andamento por outro worker nesta mesma leva, ainda sem branch/PR visível a este worker |
 | ❌ LACUNA | Não implementado |
-| 🔵 SMOKE LIVE | Só confirmável com credencial real — não testável offline |
+| 🔵 CONFIRMADO LIVE | Testado contra o sandbox real (credencial de verdade) |
 | ⚠️ | Achado desta matriz que precisa de decisão/ação antes de fechar |
 
 ---
 
-## 1. Achado desta matriz — descompasso de nome de rota entre backend (#799) e frontend (#801)
+## 1. Achado da v1 — descompasso de nome de rota — ✅ RESOLVIDO no #801
 
-O #799 (mergeado) implementou `GET /ifood-api/catalogo/:lojaId`. O #801 (aberto, branch
-`wandson/cardapio-api`) foi escrito **antes** do #799 mergear e assumiu um contrato próprio —
-`src/lib/api.js` (`getCardapioApiLoja`, branch do #801) chama:
+A v1 desta matriz (PR #805) sinalizou como bloqueante: o #799 (mergeado) implementou
+`GET /ifood-api/catalogo/:lojaId`, mas a branch do #801 (escrita ANTES do #799 mergear) chamava
+`/ifood-api/**cardapio**/:lojaId` — nome diferente, ia 404 pra sempre, mascarado como "ainda não
+disponível".
 
-```js
-const res = await fetch(`${BRIDGE}/api/ifood-api/cardapio/${lojaId}`, { ... });
-```
-
-`cardapio` ≠ `catalogo` — **rota diferente da que existe em `main`**. Efeito prático: quando o
-#801 mergear como está, essa chamada vai devolver **404** (rota inexistente) em vez de bater no
-endpoint real do #799. Mitigado por design (comentário explícito no código do #801:
-*"pode ainda não existir (404): erro carrega `.status` pro chamador decidir entre 'erro real' e
-'ainda não disponível'"*) — o usuário não vê um crash, vê o estado "Cardápio via API oficial
-ainda não disponível para esta loja — em desenvolvimento" (T3 abaixo). **Isso mascara o bug**:
-parece "feature ainda não pronta" quando na verdade já está pronta do lado do backend, só com o
-nome errado do lado do front. Ver M1/T3 na tabela — bloqueante pra fechar o App 3, mas conserto
-trivial (renomear 1 string em `api.js`, ou renomear a rota no backend — decisão de qual lado
-muda é do time, não deste worker de matriz).
+**Confirmado corrigido**: o próprio #801, em revisão interna antes do merge, encontrou o mesmo
+problema (classificado `[HIGH]` no changelog do PR) e corrigiu o path em
+`src/lib/api.js:getCardapioApiLoja` para `/ifood-api/catalogo/:lojaId` — bate exatamente com o
+`report-88-catalogo.md` (smoke live 200 na mesma rota). Também endureceu a distinção entre 404
+"rota ausente" (`Cannot GET`, sem envelope `{ok:...}`) e 404 "condição de negócio" (`resolveLojaGated`,
+sempre com `{ok:false,...}`) via `err.rotaAusente` — só o primeiro cai no estado "em
+desenvolvimento"; o segundo aparece como erro real. Sem essa distinção, um bug de rota real
+(regressão futura) voltaria a ser mascarado como "feature pendente" — boa blindagem.
 
 ---
 
 ## Leitura — Catalog v2.0
 
-| # | Endpoint/Critério | Status | Client (`lib/ifood.js`) | Rota (`routes/*.js`) | Front (`CardapioIfood.jsx`) | Evidência |
+| # | Endpoint/Critério | Status | Client (`lib/ifood.js`) | Rota | Front (`CardapioIfood.jsx`) | Evidência |
 |---|---|---|---|---|---|---|
-| M1 | Cardápio agregado (catálogo→categorias→itens, disponibilidade efetiva por canal) | 🟡 PARCIAL — ⚠️ ver §1 (rota nova quebrada pelo nome) | `getCardapio` (`lib/ifood.js:814`, reusa `listarCatalogos`/`listarCategorias`/`listarItensCategoria`) — **pré-existente**, já tinha smoke live registrado (05/07, sandbox com 1 catálogo real, citado no commit do #799) | Rota antiga `GET /ifood/cardapio?tenant_id=` (`routes/ifood.js:160`, tenant-scoped) ✅ funcionando em `main` hoje · Rota nova `GET /ifood-api/catalogo/:lojaId` (`routes/ifood-api.js`, #799, gated por `fonte_dados`) ✅ mergeada, testada offline | `main` hoje: só usa a rota antiga tenant-wide, funcional (`CardapioIfood.jsx:103`). Branch #801 (não mergeada): tenta migrar pro padrão per-loja, mas chama `/ifood-api/**cardapio**/:lojaId` — path errado, ver §1 | Offline: +2 cenários do #799 em `test/ifood-api-routes.test.js` (200 com árvore completa; 404 sem `ifood_merchants`) — 37 cenários totais na suíte. Rota antiga sem teste dedicado (pré-existente). Smoke live: só a rota antiga foi confirmada (05/07); a rota nova (#799) e a integração do #801 nunca rodaram contra o sandbox real |
-| M2 | Itens não-vendáveis (`unsellableItems`, arquivados/fora do catálogo ativo) | ❌ LACUNA | Nenhuma função | Nenhuma rota | Nenhum consumo — `CardapioIfood.jsx` só lista itens vendáveis via `getCardapio` | Documentado como gap em `catalogo-endpoints.md §2` — path usa `{catalogId}` (diferente de `sellableItems`, que usa `{groupId}`) |
-| M3 | Versão do catálogo (`/catalog/version`) | ❌ LACUNA | Nenhuma função | Nenhuma rota | Não se aplica hoje (só relevante se algum merchant estiver preso em Catalog v1) | Documentado em `catalogo-endpoints.md §2` — baixa prioridade |
+| M1 | Cardápio agregado (catálogo→categorias→itens, disponibilidade efetiva por canal) | ✅ IMPLEMENTADO + 🔵 CONFIRMADO LIVE | `getCardapio` (`lib/ifood.js:814`, reusa `listarCatalogos`/`listarCategorias`/`listarItensCategoria`) | `GET /ifood/cardapio?tenant_id=` (rota antiga, tenant-wide) **e** `GET /ifood-api/catalogo/:lojaId` (#799, gated por `fonte_dados`) — ambas ativas | Fluxo dual: tenant sem loja em `fonte_dados='api'` → rota antiga (zero regressão); tenant com loja(s) migrada(s) → rota nova por-loja, seletor de loja (`CardapioIfood.jsx:103-152`) | Offline: 2 cenários do #799 em `test/ifood-api-routes.test.js` (200 árvore completa; 404 sem `ifood_merchants`) — 37 cenários totais na suíte. **🔵 Smoke live** (`report-88-catalogo.md`, 2026-07-06): `GET /ifood-api/catalogo/:lojaId` real (loja `2494ee86...`, merchant `92a0ec17...`) → `200`, `cardapio.catalogos[0].categorias[0].itens[0]` = item real do sandbox (`X-Burger Teste Cd`, `preco:25`, `disponivel:true`) |
+| M2 | Itens não-vendáveis (`unsellableItems`, arquivados/fora do catálogo ativo) | ❌ LACUNA | Nenhuma função | Nenhuma rota | Nenhum consumo — `CardapioIfood.jsx` só lista itens vendáveis via `getCardapio` | Documentado como gap em `catalogo-endpoints.md §2` — path usa `{catalogId}` (diferente de `sellableItems`, que usa `{groupId}`). Sem mudança desde a v1 |
+| M3 | Versão do catálogo (`/catalog/version`) | ❌ LACUNA | Nenhuma função | Nenhuma rota | Não se aplica hoje (só relevante se algum merchant estiver preso em Catalog v1) | Baixa prioridade, sem mudança desde a v1 |
 
 ## Escrita — Disponibilidade (pausar/reabrir item)
 
 | # | Item | Status | Evidência |
 |---|---|---|---|
-| M4 | `PATCH /items/{itemId}` `{status}` — pausar/reabrir item | ✅ IMPLEMENTADO end-to-end, **pré-existente** (não é trabalho desta leva) | Client: `pausarItem`/`reabrirItem` (`lib/ifood.js:604,615`). Dispatch: `OPERACOES_ESCRITA['ifood.pausar_item'\|'ifood.reabrir_item']` (`routes/ifood.js:30-31`) → draft `agent_name='BRENO'`, `autonomy_level='amarelo'` → `POST /ifood/aprovar/:draftId` executa de fato. UI: botão "Pausar"/"Reabrir" em `CardapioIfood.jsx:82-89`, cria o draft via `POST /api/ifood/acao` (nunca chama a API do iFood direto) |
-| M5 | Resolução `item_nome` → `itemId` (evita chutar o item errado) | ✅ IMPLEMENTADO, **pré-existente** | `buscarItemPorNomeOuExternalCode` (`lib/ifood.js`) + `resolverItem` (`routes/ifood.js:204+`) — 0 ou >1 match devolve candidatos pro humano desambiguar, nunca aplica ação num item ambíguo |
+| M4 | `PATCH /items/{itemId}` `{status}` — pausar/reabrir item | ✅ IMPLEMENTADO end-to-end, **pré-existente** (não é trabalho desta leva) | Client: `pausarItem`/`reabrirItem` (`lib/ifood.js:604,615`). Dispatch: `OPERACOES_ESCRITA['ifood.pausar_item'\|'ifood.reabrir_item']` (`routes/ifood.js:30-31`) → draft `agent_name='BRENO'`, `autonomy_level='amarelo'` → `POST /ifood/aprovar/:draftId` executa de fato. UI: botão "Pausar"/"Reabrir" em `CardapioIfood.jsx:91-98`, cria o draft via `POST /api/ifood/acao` (nunca chama a API do iFood direto) |
+| M5 | Resolução `item_nome` → `itemId` (evita chutar o item errado) | ✅ IMPLEMENTADO, **pré-existente**, reusado por M6 | `buscarItemPorNomeOuExternalCode` (`lib/ifood.js`) + `resolverItem` (`routes/ifood.js`) — 0 ou >1 match devolve candidatos pro humano desambiguar, nunca aplica ação num item ambíguo. O #806 reusa exatamente esta função para resolver o item antes de trocar o preço |
 
-## Escrita — Preço
-
-| # | Item | Status | Evidência |
-|---|---|---|---|
-| M6 | Editar preço de item | 🟠 EM DESENVOLVIMENTO (worker 86, sem branch/PR visível a este worker no momento desta matriz) | `criarOuAtualizarItem` (`PUT /items`, `lib/ifood.js:578`) existe mas exige o payload **completo** do item (não é "só preço") — não serve como atalho de edição rápida. Decisão registrada no commit do #799: "não implementado nesta leva — decisão informada, não código especulativo" |
-| M7 | ⚠️ Endpoint exato para "só preço" — 3 candidatos não resolvidos | ❌ LACUNA DE DECISÃO, bloqueia M6 | `catalogo-endpoints.md §3`: (a) `PATCH /items/{itemId}` (síncrono, 1 item) — nota antiga do repo (`00-api-reference.md:96`) diz que é o atual e que os outros dois estão deprecados; (b) `PATCH /items/price` (lote, assíncrono, `batchId`+`GET /batch/{batchId}`) — busca pública atual (2026-07) diz o oposto, que é este o endpoint de homologação; (c) `PATCH /products/price` (lote de produtos, citado em `PLANO-INTEGRACAO-IFOOD.md:98`). **Nenhum confirmado contra o sandbox.** Recomendação ao worker 86: testar os 3 contra o merchant de teste antes de escolher — risco real de "alterar o campo errado" (preço não refletir no app) se escolher o candidato errado |
-
-## Multi-contexto (preço/disponibilidade por canal)
+## Escrita — Preço — ✅ decisão tomada e implementada (#806)
 
 | # | Item | Status | Evidência |
 |---|---|---|---|
-| M8 | `contextModifiers` — preço/status independentes por canal (Delivery/Cardápio Digital/Consumo no Local) | 🟡 PARCIAL/RISCO — ⚠️ **achado do #800, ainda não corrigido** | `pickContextModifier`/`montarItem` (`lib/ifood.js:793,798`) busca `catalogContext === 'DEFAULT'`, caindo em `mods[0]` como fallback. Busca pública não encontrou nenhum contexto chamado `DEFAULT` — valores documentados são `DELIVERY`/`INDOOR`/`WHITELABEL`. **Se `'DEFAULT'` nunca bate, o cardápio sempre usa o primeiro modifier da lista (ordem não garantida) em vez do contexto correto** — preço/disponibilidade exibidos podem estar errados para lojas com múltiplos contextos configurados. Não corrigido ainda; sem smoke live pra confirmar se o sandbox de teste tem >1 contexto (se só tiver 1, o bug fica invisível hoje) |
+| M6 | Editar preço de item, via draft→aprovação | ✅ IMPLEMENTADO (offline) | `alterarPrecoItem(merchantId, itemId, novoPreco, tenantId)` (`lib/ifood.js:633`) — `PATCH /catalog/v2.0/merchants/{id}/items/{itemId}` `{price:{value}}`. Validação server-side: preço deve ser número finito > 0 (rejeita ANTES de tocar a rede). `OPERACOES_ESCRITA['ifood.alterar_preco']` (`routes/ifood.js:36`) + branch de resolução de item + validação de preço em `prepararDraftIfood` (`routes/ifood.js:295-334`) — preço inválido (`<=0`/NaN) → 400, nunca cria draft; item ambíguo/não encontrado → 422 com candidatos |
+| M7 | ⚠️ Decisão do endpoint — **RESOLVIDA**: `PATCH /items/{itemId}` síncrono (não o mecanismo em lote) | ✅ DECISÃO INFORMADA, registrada no código | O #806 escolheu explicitamente o MESMO endpoint síncrono já usado por `pausarItem`/`reabrirItem` (só troca o campo do merge patch, de `status` pra `price`), em vez do mecanismo em lote assíncrono (`PATCH /items/price` → `202 {batchId}` + `GET /batch/{id}`) que o research #800 encontrou mas nunca confirmou contra o sandbox. Nota explícita no código (`lib/ifood.js:633+`): decisão informada, não especulativa — o PATCH direto já é usado e validado neste client. **Ainda não confirmado contra o sandbox real** (sem smoke live de alteração de preço até o momento desta matriz) — só testado offline |
+| M8 | Testes offline de M6/M7 | ✅ IMPLEMENTADO | `lib/ifood.js`: +2 casos em `test/ifood.test.js` (PATCH correto com `{price:{value}}`; preço `<=0`/NaN rejeitado antes da rede) — suíte em 46 asserções totais. Rotas: +3 casos em `test/ifood-routes-acao-aprovar.test.js` (draft criado com `item_id`/`price` corretos; `price<=0` → 400 sem criar draft; aprovar despacha `alterarPrecoItem` com os 4 argumentos certos) — suíte em 13 cenários totais |
+| T5 | Preço na UI (`CardapioIfood.jsx`) | ❌ LACUNA — backend/draft pronto, **sem botão/campo na tela** | `grep -n "preco\|alterar_preco" src/console/CardapioIfood.jsx` só retorna a exibição do preço formatado (`fmtBRL`), nenhum controle de edição. Hoje só é possível disparar `ifood.alterar_preco` via chamada direta ao Bridge (Hermes/API), não pelo Console. Diferente de M4/T2 (disponibilidade), que tem client+dispatch+UI completos — preço tem client+dispatch mas falta o último passo (UI) |
+
+## Multi-contexto (preço/disponibilidade por canal) — sem mudança desde a v1
+
+| # | Item | Status | Evidência |
+|---|---|---|---|
+| M9 | `contextModifiers` — preço/status independentes por canal (Delivery/Cardápio Digital/Consumo no Local) | 🟡 PARCIAL/RISCO — ⚠️ **achado do #800, ainda NÃO corrigido nem confirmado** | `pickContextModifier`/`montarItem` (`lib/ifood.js:793,798`, linhas inalteradas desde a v1) busca `catalogContext === 'DEFAULT'`, caindo em `mods[0]` como fallback. Busca pública não encontrou nenhum contexto chamado `DEFAULT` — valores documentados são `DELIVERY`/`INDOOR`/`WHITELABEL`. O smoke live do `report-88-catalogo.md` tem só **1 catálogo** no sandbox — não exercita múltiplos `contextModifiers`, então **não prova nem desmente** o risco. Continua sem correção e sem confirmação |
 
 ## Tela `CardapioIfood.jsx` (Console v2)
 
 | # | Item | Status | Evidência |
 |---|---|---|---|
-| T1 | Leitura tenant-wide (rota antiga) | ✅ IMPLEMENTADO, em `main` hoje | `CardapioIfood.jsx:103` consome `GET /ifood/cardapio?tenant_id=` — categorias + itens, badge Disponível/Pausado, preço formatado BRL |
-| T2 | Escrita — botão Pausar/Reabrir | ✅ IMPLEMENTADO, em `main` hoje | `CardapioIfood.jsx:82-89` → cria draft, nunca executa direto; mensagem "Solicitação enviada para aprovação" |
-| T3 | Migração per-loja (`fonte_dados='api'`, seletor de loja) | 🟡 PARCIAL, PR #801 aberto, **⚠️ com o bug do §1** | Branch `wandson/cardapio-api`: fluxo dual (tenant sem loja em `fonte_dados='api'` → comportamento idêntico ao de hoje, zero regressão; tenant com loja(s) em `fonte_dados='api'` → seletor de loja + `GET /ifood-api/**cardapio**/:lojaId`, que hoje 404 contra o real `/ifood-api/**catalogo**/:lojaId` do #799). Estado vazio decente no 404 ("em desenvolvimento") — não crasha, mas está sempre caindo nesse estado por engano assim que uma loja migrar pra `fonte_dados='api'` |
-| T4 | Reset de `lojaId` ao trocar de tenant | ✅ IMPLEMENTADO no #801 (achado de revisão já corrigido dentro da própria branch) | Commit `6bdd355` na branch #801 — reset imediato de `lojaId`/`lojasApi` antes do fetch, evita vazamento cross-tenant (loja de um tenant sendo consultada com o merchant de outro) |
-| T5 | Preço na UI | ❌ Fora da v1 da tela — depende de M6/M7 (worker 86) | Nenhum campo/botão de edição de preço em `CardapioIfood.jsx` |
-| T6 | Visual (console.css) | ✅ — usa `cv2-card`/`cv2-btn`/`cv2-bdg`/`cv2-sub`, mesmo padrão das demais telas | `CardapioIfood.jsx` inteiro |
+| T1 | Leitura tenant-wide (rota antiga) | ✅ IMPLEMENTADO, em `main` | `CardapioIfood.jsx:142` — fallback quando não há loja selecionada em `fonte_dados='api'` |
+| T2 | Escrita — botão Pausar/Reabrir | ✅ IMPLEMENTADO, em `main` | `CardapioIfood.jsx:91-98` → cria draft, nunca executa direto |
+| T3 | Migração per-loja (`fonte_dados='api'`, seletor de loja) | ✅ IMPLEMENTADO + 🔵 CONFIRMADO LIVE (#801 mergeado) | Fluxo dual completo (`CardapioIfood.jsx:103-152`); path corrigido pra `/ifood-api/catalogo/:lojaId` (§1); confirmado contra o sandbox real no `report-88-catalogo.md` |
+| T4 | Reset de `lojaId` ao trocar de tenant (anti-vazamento cross-tenant) | ✅ IMPLEMENTADO, em `main` | `CardapioIfood.jsx:116-133` — reset de `lojasApi`/`lojaId` ANTES do fetch, não só depois |
+| T5' | Distinção 404 "rota ausente" × 404 "condição de negócio" | ✅ IMPLEMENTADO (achado de revisão do #801, ver §1) | `CardapioIfood.jsx:147` (`e.rotaAusente`) + contrato em `src/lib/api.js:getCardapioApiLoja` |
+| T6 | Race guard (troca rápida de loja não deixa resposta atrasada sobrescrever estado) | ✅ IMPLEMENTADO (achado de revisão do #801) | `reqIdRef` em `CardapioIfood.jsx:110,137,143,146,150` |
+| T7 | Preço na UI | ❌ LACUNA — ver M6/T5 acima (tabela de Preço) | — |
+| T8 | Visual (console.css) | ✅ — usa `cv2-card`/`cv2-btn`/`cv2-bdg`/`cv2-sub`, mesmo padrão das demais telas | `CardapioIfood.jsx` inteiro |
 
 ---
 
-## Resumo executivo
+## Resumo executivo (v2 — fechamento)
 
-- **Leitura (M1/T1)**: funciona hoje em produção via rota antiga tenant-wide — não é trabalho
-  novo, é herança de fases anteriores do plano de integração. A rota nova gated (#799) está
-  pronta e testada offline, mas **a integração do front com ela (#801) está quebrada por um
-  descompasso de nome de rota** (§1) — bloqueante pra fechar a migração per-loja, não pra usar o
-  app hoje (a rota antiga continua funcionando em paralelo).
-- **Escrita de disponibilidade (M4/T2)**: completa e correta, ponta a ponta, desde antes desta
-  leva — sem gaps.
-- **Escrita de preço (M6/M7)**: bloqueada por decisão técnica não tomada — 3 endpoints candidatos,
-  nenhum confirmado contra o sandbox, e uma nota antiga do repo que contradiz a busca pública
-  atual sobre qual é o "certo". Em desenvolvimento pelo worker 86; recomendo à orquestradora
-  garantir que ele veja `catalogo-endpoints.md §3` antes de escolher o endpoint.
-- **Multi-contexto (M8)**: risco silencioso já em produção (não é regressão desta leva) — o
-  cardápio pode estar mostrando preço/disponibilidade do contexto errado para lojas com mais de
-  1 canal configurado, e ninguém percebeu ainda porque talvez o sandbox de teste só tenha 1
-  contexto. Merece 1 smoke live dedicado antes de considerar o App 3 pronto para ticket.
-- **Nada de Catalog foi confirmado contra a API real nesta leva especificamente** — o único smoke
-  live existente (05/07, "1 catálogo real") é de uma sessão anterior, pré-App 3, e cobre só a
-  rota antiga de leitura.
+- **Leitura (M1/T1/T3)**: ✅ completa, testada offline E confirmada live contra o sandbox real
+  (`report-88-catalogo.md`). O bug de rota da v1 desta matriz foi pego e corrigido em revisão
+  antes do #801 mergear — o processo funcionou como deveria.
+- **Escrita de disponibilidade (M4/M5/T2)**: ✅ completa e correta, ponta a ponta, desde antes
+  desta leva — sem gaps, sem mudança.
+- **Escrita de preço (M6/M7/M8)**: ✅ decisão tomada e implementada, testada offline (13+46
+  asserções). Escolheu o endpoint síncrono já validado (`PATCH /items/{itemId}`) em vez do
+  mecanismo em lote não confirmado — decisão correta e conservadora. **Falta**: (a) smoke live da
+  alteração de preço em si (nunca rodou contra o sandbox real); (b) UI na tela — hoje só
+  acionável via chamada direta ao Bridge, não pelo Console (T5/T7).
+- **Multi-contexto (M9)**: 🟡 risco silencioso segue em produção, sem mudança desde a v1 — o
+  sandbox de teste só tem 1 catálogo/contexto, então o smoke live disponível não prova nem
+  desmente o problema. Continua sendo o maior risco não resolvido da categoria Catálogo.
+- **Itens não-vendáveis/versão de catálogo (M2/M3)**: ❌ lacunas conhecidas, baixa prioridade,
+  sem mudança.
 
 ### Pendências recomendadas antes de qualquer ticket de homologação Catálogo
 
-1. **Corrigir o descompasso de rota do §1** — `cardapio` vs `catalogo` — antes de mergear o #801.
-2. **Fechar a decisão de M7** (endpoint de preço) contra o sandbox real, incluindo o worker 86.
-3. **Smoke live de M8** (`contextModifiers`) — confirmar quais valores de `catalogContext` o
-   merchant de teste realmente devolve, corrigir `pickContextModifier` se `'DEFAULT'` não bater.
-4. Implementar `unsellableItems` (M2) se a homologação ou o produto exigir mostrar itens
-   arquivados — hoje não é uma exigência confirmada, só um gap conhecido.
-5. 1 rodada de smoke live cobrindo a rota nova (#799) e o fluxo per-loja (#801, após corrigido) —
-   nenhum dos dois rodou contra o iFood real ainda.
+1. **Smoke live de M9** (`contextModifiers`) — precisa de um item de teste com >1 contexto
+   configurado no sandbox (o catálogo de teste atual só tem 1); sem isso, o risco de
+   `pickContextModifier` usando `'DEFAULT'` errado permanece não verificável.
+2. **Smoke live de M6/M7** (alterar preço) — confirmar que `PATCH /items/{itemId}` com `{price}`
+   realmente reflete no app, já que só foi testado offline até agora.
+3. **UI de preço (T5/T7)** — decidir se entra no escopo do App 3 v1 ou fica para depois; hoje é
+   a única ação de escrita implementada no backend sem controle correspondente no Console.
+4. Itens não-vendáveis (M2) — implementar só se a homologação ou o produto exigir mostrar itens
+   arquivados; não é bloqueante hoje.
