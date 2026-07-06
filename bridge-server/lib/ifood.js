@@ -262,16 +262,35 @@ async function getStatusLoja(merchantId, tenantId) {
 // da Review API v2.0 — o checklist do portal documenta o request com
 // `pageSize`, não `size`; usamos `size` como nome interno do parâmetro (mesmo
 // contrato já exposto pro front/bridge) e só traduzimos pra `pageSize` na
-// query real enviada ao iFood. NÃO confirmado contra chamada real ainda
-// (sandbox de reviews vazio no smoke de 05/07) — ajustar aqui se o 1º retorno
-// live divergir. size > 50 é responsabilidade do chamador rejeitar antes (o
-// iFood responde 400 nesse caso, conforme doc do portal).
-async function listarReviews(merchantId, { page, size } = {}, tenantId) {
+// query real enviada ao iFood. dataInicio/dataFim (yyyy-MM-dd) filtram por
+// período — traduzidos pra `dateFrom`/`dateTo` (ISO 8601 date-time, ex.
+// 2021-04-05T08:30:00-03:00), nomes documentados em developer.ifood.com.br/.../review
+// (não confirmados ainda contra uma chamada real — ajustar aqui se o 1º
+// retorno live divergir, mesmo ressalva já feita acima pra pageSize). Offset
+// -03:00 (BRT, fixo — sem DST no Brasil desde 2019): limites em UTC (Z)
+// excluiriam o fim da noite local (ex. review às 23h BRT cai no dia seguinte
+// em UTC e ficaria fora do período pedido).
+// size > 50 é responsabilidade do chamador rejeitar antes (o iFood responde
+// 400 nesse caso, conforme doc do portal).
+async function listarReviews(merchantId, { page, size, dataInicio, dataFim } = {}, tenantId) {
   const query = {};
   if (page !== undefined && page !== null) query.page = page;
   if (size !== undefined && size !== null) query.pageSize = size;
+  if (dataInicio) query.dateFrom = `${dataInicio}T00:00:00-03:00`;
+  if (dataFim) query.dateTo = `${dataFim}T23:59:59-03:00`;
   return withRetry(() =>
     ifoodFetch(`/review/v2.0/merchants/${merchantId}/reviews`, { query }, tenantId)
+  ).then(tolerant);
+}
+
+// Avaliações — detalhe de UMA review (todos os campos V2, replies[].from
+// MERCHANT|CUSTOMER). 404 se reviewId não existir — propaga como IfoodApiError
+// status 404 (o chamador HTTP mapeia 1:1, sem tratamento especial aqui).
+async function getReviewDetalhe(merchantId, reviewId, tenantId) {
+  assertPathId(merchantId, 'merchantId');
+  assertPathId(reviewId, 'reviewId');
+  return withRetry(() =>
+    ifoodFetch(`/review/v2.0/merchants/${merchantId}/reviews/${reviewId}`, {}, tenantId)
   ).then(tolerant);
 }
 
@@ -677,6 +696,7 @@ module.exports = {
   listarSellableItems,
   getStatusLoja,
   listarReviews,
+  getReviewDetalhe,
   getSummaryReviews,
   listarVendas,
   // escrita (Catalog v2.0) — sem retry

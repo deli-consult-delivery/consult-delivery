@@ -278,6 +278,98 @@ function restoreFetch() {
     clearCreds();
   });
 
+  // ── listarReviews — filtro por data (dataInicio/dataFim → dateFrom/dateTo) ──
+  await check('listarReviews: dataInicio/dataFim viram dateFrom/dateTo (ISO date-time, offset BRT -03:00) na querystring', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-datafiltro', expiresIn: 21600 });
+      }
+      return jsonResponse(200, { reviews: [] });
+    });
+    const ifood = freshIfood();
+    await ifood.listarReviews('merchant-1', { dataInicio: '2026-07-01', dataFim: '2026-07-06' });
+    const reviewsCall = calls.find((c) => c.url.includes('/reviews'));
+    const parsedUrl = new URL(reviewsCall.url);
+    assert.strictEqual(parsedUrl.searchParams.get('dateFrom'), '2026-07-01T00:00:00-03:00');
+    assert.strictEqual(parsedUrl.searchParams.get('dateTo'), '2026-07-06T23:59:59-03:00');
+    restoreFetch();
+    clearCreds();
+  });
+
+  await check('listarReviews: sem dataInicio/dataFim → dateFrom/dateTo ausentes na URL', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-semfiltro', expiresIn: 21600 });
+      }
+      return jsonResponse(200, { reviews: [] });
+    });
+    const ifood = freshIfood();
+    await ifood.listarReviews('merchant-1');
+    const reviewsCall = calls.find((c) => c.url.includes('/reviews'));
+    assert.ok(!reviewsCall.url.includes('dateFrom'), 'sem filtro, dateFrom não deveria aparecer na URL');
+    assert.ok(!reviewsCall.url.includes('dateTo'), 'sem filtro, dateTo não deveria aparecer na URL');
+    restoreFetch();
+    clearCreds();
+  });
+
+  // ── getReviewDetalhe — path correto + 404 propagado ─────────────────────────
+  await check('getReviewDetalhe: path correto, devolve todos os campos V2', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-detalhe', expiresIn: 21600 });
+      }
+      return jsonResponse(200, {
+        id: 'review-1', score: 5, comment: 'Ótimo!',
+        replies: [{ from: 'MERCHANT', text: 'Obrigado!' }],
+      });
+    });
+    const ifood = freshIfood();
+    const res = await ifood.getReviewDetalhe('merchant-1', 'review-1');
+    assert.strictEqual(res.id, 'review-1');
+    assert.strictEqual(res.replies[0].from, 'MERCHANT');
+    const call = calls.find((c) => c.url.includes('/reviews/review-1'));
+    assert.strictEqual(call.url, 'https://sandbox.ifood.test/review/v2.0/merchants/merchant-1/reviews/review-1');
+    restoreFetch();
+    clearCreds();
+  });
+
+  await check('getReviewDetalhe: reviewId inexistente → 404 propagado como IfoodApiError', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-404review', expiresIn: 21600 });
+      }
+      return jsonResponse(404, { message: 'review not found' });
+    });
+    const ifood = freshIfood();
+    await assert.rejects(() => ifood.getReviewDetalhe('merchant-1', 'review-inexistente'), (err) => err.status === 404);
+    const reviewCalls = calls.filter((c) => c.url.includes('/reviews/review-inexistente'));
+    assert.strictEqual(reviewCalls.length, 1, '404 não é retentável — só 1 tentativa');
+    restoreFetch();
+    clearCreds();
+  });
+
+  await check('getReviewDetalhe: merchantId/reviewId inválido → rejeita antes de tocar a rede', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, () => { throw new Error('não deveria chamar fetch com id inválido'); });
+    const ifood = freshIfood();
+    await assert.rejects(
+      () => ifood.getReviewDetalhe('../etc/passwd', 'review-1'),
+      (err) => err.status === 0
+    );
+    assert.strictEqual(calls.length, 0);
+    restoreFetch();
+    clearCreds();
+  });
+
   // ── listarVendas — período default (7 dias) quando dataInicio/dataFim faltam ──
   await check('listarVendas: sem período → default de 7 dias (beginSalesDate/endSalesDate)', async () => {
     setCreds();

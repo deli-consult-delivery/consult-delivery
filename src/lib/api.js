@@ -703,13 +703,20 @@ async function ifoodBridgeFetch(path, { method = 'GET', body } = {}) {
   return json;
 }
 
-export async function listIfoodReviews({ lojaId, page, size } = {}) {
+export async function listIfoodReviews({ lojaId, page, size, dataInicio, dataFim } = {}) {
   const qs = new URLSearchParams();
   if (page != null) qs.set('page', String(page));
   if (size != null) qs.set('size', String(size));
+  if (dataInicio) qs.set('dataInicio', dataInicio);
+  if (dataFim) qs.set('dataFim', dataFim);
   const q = qs.toString();
   const json = await ifoodBridgeFetch(`/ifood-api/reviews/${encodeURIComponent(lojaId)}${q ? `?${q}` : ''}`);
   return json?.data;
+}
+
+export async function getIfoodReviewDetalhe({ lojaId, reviewId }) {
+  const json = await ifoodBridgeFetch(`/ifood-api/reviews/${encodeURIComponent(lojaId)}/${encodeURIComponent(reviewId)}`);
+  return json?.data?.review;
 }
 
 export async function criarDraftRespostaReview({ lojaId, reviewId, texto }) {
