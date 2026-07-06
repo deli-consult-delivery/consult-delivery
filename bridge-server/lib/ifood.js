@@ -121,18 +121,36 @@ async function getAccessToken(tenantId) {
 
 // ---------------------------------------------------------------------------
 // Retry — só em 429 (rate limit) e 5xx. 4xx (exceto 429) e status 0 = não retenta.
+// 5xx usa backoff EXPONENCIAL com jitter (exigência literal do checklist de
+// homologação Merchant: "retry com backoff exponencial para erros 5xx") — evita
+// que retries concorrentes de várias chamadas sincronizem no mesmo instante.
 // Em 429, respeita o header Retry-After do iFood (ifoodFetch anexa retryAfterMs
-// ao erro) no lugar do backoff fixo — cap de 30s por segurança.
+// ao erro) no lugar do backoff — cap de 30s por segurança (prioridade sobre o
+// backoff exponencial: o iFood já disse quanto esperar).
 // ---------------------------------------------------------------------------
 function shouldRetry(status) {
   return status === 429 || status >= 500;
 }
 
+const BACKOFF_BASE_MS = 500;
+const BACKOFF_CAP_MS = 8_000;
+
+// attempt=0 (1ª tentativa) nunca espera. attempt>=1: base×2^attempt, jitter
+// ±25% (evita retries sincronizados), capado em 8s. attempt=1→~1000ms,
+// attempt=2→~2000ms — mesma ordem de grandeza do schedule fixo anterior
+// [0,1000,2000], só que exponencial de verdade (extensível se maxAttempts
+// crescer) e com jitter.
+function backoffComJitter(attempt) {
+  if (attempt <= 0) return 0;
+  const exp = Math.min(BACKOFF_BASE_MS * 2 ** attempt, BACKOFF_CAP_MS);
+  const jitter = 1 + (Math.random() * 0.5 - 0.25); // ±25%
+  return Math.round(exp * jitter);
+}
+
 async function withRetry(fn, maxAttempts = 3) {
-  const delaysMs = [0, 1000, 2000];
   let nextDelayOverrideMs = null;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const delay = nextDelayOverrideMs ?? (delaysMs[attempt] ?? 2000);
+    const delay = nextDelayOverrideMs ?? backoffComJitter(attempt);
     nextDelayOverrideMs = null;
     if (delay > 0) await new Promise((r) => setTimeout(r, delay));
     try {

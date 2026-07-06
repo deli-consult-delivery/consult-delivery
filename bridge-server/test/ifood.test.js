@@ -140,6 +140,31 @@ function restoreFetch() {
     clearCreds();
   });
 
+  // ── Retry: 5xx usa backoff EXPONENCIAL com jitter (não mais delay fixo) ─────
+  await check('withRetry: 5xx sem Retry-After → 1ª tentativa imediata, 2ª com backoff ~1000ms±25%', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-backoff', expiresIn: 21600 });
+      }
+      const n = calls.filter((c) => c.url.includes('/interruptions')).length;
+      if (n === 1) return jsonResponse(503, { message: 'indisponível' });
+      return jsonResponse(200, []);
+    });
+    const ifood = freshIfood();
+    const inicio = Date.now();
+    const res = await ifood.listarInterrupcoes('merchant-1');
+    assert.deepStrictEqual(res, []);
+    const decorrido = Date.now() - inicio;
+    // base 500ms × 2^1 = 1000ms, jitter ±25% → [750,1250]; margem extra pro overhead do teste/CI.
+    assert.ok(decorrido >= 650 && decorrido <= 1600, `esperava backoff exponencial ~1000ms±25% (500×2^1, capado em 8s), levou ${decorrido}ms`);
+    const chamadas = calls.filter((c) => c.url.includes('/interruptions'));
+    assert.strictEqual(chamadas.length, 2, 'deveria ter retentado 1x após o 503');
+    restoreFetch();
+    clearCreds();
+  });
+
   // ── Retry: 404 não é retentável (só 429/5xx) ────────────────────────────────
   await check('withRetry: 404 não retenta (só 429/5xx)', async () => {
     setCreds();
