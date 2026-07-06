@@ -26,9 +26,9 @@ async function sbUpdateNote(id, notes) {
   if (error) throw new Error(error.message);
 }
 
-// ─── Arquivada = publicada OU prazo já vencido ────────────────────────────────
+// ─── Arquivada = prazo vencido E não publicada ───────────────────────────────
 function isArchivedFn(r, today) {
-  return r.status === 'published' || (!!r.deadline && r.deadline < today);
+  return r.status !== 'published' && !!r.deadline && r.deadline < today;
 }
 
 function fmtDate(iso) {
@@ -1047,8 +1047,12 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
   function flash(msg) { setNotice(msg); setTimeout(() => setNotice(null), 4000); }
 
   const filtered = activeReviews.filter(r => {
-    if (filterStatus !== 'all' && r.status !== filterStatus) return false;
-    if (filterStore  !== 'all' && r.store  !== filterStore)  return false;
+    if (filterStatus !== 'all') {
+      if (filterStatus === 'approved') {
+        if (r.status !== 'approved' && r.status !== 'modified') return false;
+      } else if (r.status !== filterStatus) return false;
+    }
+    if (filterStore !== 'all' && r.store !== filterStore) return false;
     return true;
   });
 
@@ -1136,7 +1140,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
         <div className="cv2-kpi">
           <div className="l">Arquivadas</div>
           <div className="v">{archivedReviews.length}</div>
-          <div className="d mut">publicadas + vencidas</div>
+          <div className="d mut">prazo vencido (não pub.)</div>
         </div>
       </div>
 
@@ -1147,8 +1151,8 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
             <option value="all">Todos</option>
             <option value="pending">Aguardando envio</option>
             <option value="sent_to_client">Enviado ao cliente</option>
-            <option value="approved">Aprovado</option>
-            <option value="modified">Com alteração</option>
+            <option value="approved">Aprovado / Com alteração</option>
+            <option value="published">Publicado</option>
           </select>
         </div>
         <div>
@@ -1200,7 +1204,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
             <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--tx2)' }}>
               📦 Arquivadas ({archivedReviews.length})
             </span>
-            <span style={{ fontSize: 12, color: 'var(--tx2)' }}>publicadas e com prazo vencido</span>
+            <span style={{ fontSize: 12, color: 'var(--tx2)' }}>prazo vencido (não publicadas)</span>
             <button
               className="cv2-btn sec"
               style={{ fontSize: 12, marginLeft: 'auto' }}
