@@ -171,10 +171,21 @@ module.exports = function ({ requireJwtOrInternal, ifood, supabaseSelect, assert
   }));
 
   // ── Avaliações — paginação opcional (?page=&size=) ──────────────────────────
+  // size máx. 50 — o iFood responde 400 acima disso; rejeitamos antes de
+  // gastar uma chamada à rede (mesma checagem de /ifood-api/reviews/:lojaId).
   router.get('/ifood/reviews', requireJwtOrInternal, handle(async (req, res) => {
     const ctx = await resolveContext(req, res);
     if (!ctx) return;
     const { page, size } = req.query;
+    if (size !== undefined && (!Number.isFinite(Number(size)) || Number(size) < 1 || Number(size) > 50)) {
+      res.status(400).json({
+        ok: false,
+        error: 'size deve ser um número entre 1 e 50',
+        code: 'PAGE_SIZE_INVALIDO',
+        message: 'O tamanho da página (size) deve ser no máximo 50.',
+      });
+      return;
+    }
     return ifood.listarReviews(ctx.merchantId, { page, size }, ctx.tenantId);
   }));
 
