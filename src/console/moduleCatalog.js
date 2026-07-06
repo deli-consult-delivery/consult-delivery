@@ -20,6 +20,7 @@ export const GRUPOS = [
     { id: 'defesa', ic: 'i-shield', label: 'Defesa Comercial' },
     { id: 'radar', ic: 'i-radio', label: 'iFood: Dashboard' },
     { id: 'cardapio-ifood', ic: 'i-menu', label: 'iFood: Cardápio' },
+    { id: 'financeiro-ifood', ic: 'i-dollar', label: 'iFood: Financeiro' },
     { id: 'espacos', ic: 'i-layers', label: 'Espaços' },
     { id: 'ativar', ic: 'i-plug', label: 'Ativar loja' },
     { id: 'campanhas', ic: 'i-flag', label: 'Campanhas' },

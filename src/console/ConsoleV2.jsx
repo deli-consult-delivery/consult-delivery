@@ -27,6 +27,7 @@ import Marca from './Marca.jsx';
 import { Gatilhos, Topicos, TarefasAgendadas, Links, Provedores, Integracoes, Sistemas, Arquivos } from './CvNovas.jsx';
 import VendaErpPainel from './VendaErpPainel.jsx';
 import CardapioIfood from './CardapioIfood.jsx';
+import FinanceiroIfood from './FinanceiroIfood.jsx';
 import Disparos from './Disparos.jsx';
 import LaraEditorial from './LaraEditorial.jsx';
 import Onboarding from './Onboarding.jsx';
@@ -822,6 +823,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
       case 'defesa': return defesaOn === false ? <PaywallDefesa /> : <Defesa tenantDbId={tenantDbId} userId={userId} />;
       case 'radar': return <RadarReal tenantNome={tenantNome} tenantDbId={tenantDbId} />;
       case 'cardapio-ifood': return <CardapioIfood tenantDbId={tenantDbId} />;
+      case 'financeiro-ifood': return <FinanceiroIfood tenantDbId={tenantDbId} />;
       case 'avaliacoes': return <Avaliacoes tenantDbId={tenantDbId} userId={userId} />;
       case 'resp-avaliacoes': return <PainelAvaliacoesConsultor tenantDbId={tenantDbId} userId={userId} />;
       case 'csat': return <AtendimentoAvaliacoes tenantDbId={tenantDbId} userId={userId} />;

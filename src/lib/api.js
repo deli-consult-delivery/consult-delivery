@@ -719,6 +719,28 @@ export async function getIfoodReviewDetalhe({ lojaId, reviewId }) {
   return json?.data?.review;
 }
 
+// ── iFood Financeiro (App 2) — Sales já live; Repasses/Settlement quando o
+// worker 83 entregar (rota pode não existir ainda — o chamador trata o erro
+// como estado vazio, nunca card de erro pra "ainda não implementado").
+// Sales é tenant-scoped (rota antiga /ifood/vendas, sem :lojaId) — Repasses
+// já nasce no padrão novo (:lojaId, gated por resolveLojaGated).
+export async function getIfoodVendas({ tenantId, dataInicio, dataFim } = {}) {
+  const qs = new URLSearchParams({ tenant_id: tenantId });
+  if (dataInicio) qs.set('dataInicio', dataInicio);
+  if (dataFim) qs.set('dataFim', dataFim);
+  const json = await ifoodBridgeFetch(`/ifood/vendas?${qs.toString()}`);
+  return json?.data;
+}
+
+export async function getIfoodRepasses({ lojaId, dataInicio, dataFim } = {}) {
+  const qs = new URLSearchParams();
+  if (dataInicio) qs.set('dataInicio', dataInicio);
+  if (dataFim) qs.set('dataFim', dataFim);
+  const q = qs.toString();
+  const json = await ifoodBridgeFetch(`/ifood-api/repasses/${encodeURIComponent(lojaId)}${q ? `?${q}` : ''}`);
+  return json?.data?.repasses;
+}
+
 export async function criarDraftRespostaReview({ lojaId, reviewId, texto }) {
   const json = await ifoodBridgeFetch(`/ifood-api/reviews/${encodeURIComponent(lojaId)}/${encodeURIComponent(reviewId)}/draft`, {
     method: 'POST',
