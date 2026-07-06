@@ -269,5 +269,29 @@ const supabaseInsertStub = async () => ({});
     passed++;
   }
 
+  // 10) metadata corrompido (arg ausente) → 400 SEM marcar o draft como 'failed'
+  //     (bug de programação, não falha do iFood — draft segue 'pending' pra investigar)
+  {
+    const { sbFetch, drafts } = buildSbFetchStub();
+    let chamado = false;
+    const ifood = { removerInterrupcao: async () => { chamado = true; return null; } };
+    const app = buildApp({ sbFetch, ifood, supabaseSelect: supabaseSelectStub, supabaseInsert: supabaseInsertStub });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+
+    // draft "corrompido": metadata sem interruption_id (nunca aconteceria via /acao normal)
+    drafts.set('draft-corrompido', {
+      id: 'draft-corrompido', tenant_id: 'tenant-1', status: 'pending', autonomy_level: 'amarelo',
+      metadata: { operacao: 'ifood.despausar_loja', merchant_id: 'merch-1' },
+    });
+
+    const r = await request(server, 'POST', '/api/ifood/aprovar/draft-corrompido', { tenant_id: 'tenant-1' });
+    assert.strictEqual(r.status, 400, JSON.stringify(r.body));
+    assert.strictEqual(chamado, false, 'não deveria ter chamado a API do iFood com arg ausente');
+    assert.strictEqual(drafts.get('draft-corrompido').status, 'pending', 'draft não deveria virar failed por bug de metadata');
+    server.close();
+    passed++;
+  }
+
   process.stdout.write(`\nifood-routes-acao-aprovar: todos os ${passed} cenários passaram.\n`);
 })();
