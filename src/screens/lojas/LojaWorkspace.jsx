@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import Icon from '../../components/Icon.jsx';
 import AtribuirConsultorModal from './AtribuirConsultorModal.jsx';
@@ -28,7 +28,8 @@ const SEG_LABEL = {
   acai: 'Açaí', sobremesa: 'Sobremesa', padaria: 'Padaria', outro: 'Outro',
 };
 const PAPEL_LABEL = { principal: 'Principal', colaborador: 'Colaborador', observador: 'Observador' };
-const TABS = ['Visão Geral', 'Métricas', 'Consultores', 'Campanhas', 'Histórico', 'Tarefas', 'IA Especialista', 'Análises'];
+const BASE_TABS = ['Visão Geral', 'Métricas', 'Consultores', 'Campanhas', 'Histórico', 'Tarefas', 'IA Especialista', 'Análises'];
+const MERCHANT_TAB_INDEX = BASE_TABS.length; // só existe quando loja.fonte_dados === 'api'
 
 const STATUS_TAREFA_LABEL = {
   rascunho: 'Rascunho',
@@ -177,6 +178,8 @@ export default function LojaWorkspace({ tenantDbId, userId, go, lojaId }) {
   if (!loja) return <div style={{ padding: 24, color: '#ef4444', fontSize: 14 }}>Loja não encontrada.</div>;
 
   const statusColor = STATUS_COLORS[loja.status] || '#6b7280';
+  const isFonteApi = loja.fonte_dados === 'api';
+  const tabs = isFonteApi ? [...BASE_TABS, 'Merchant iFood'] : BASE_TABS;
 
   return (
     <div style={{ padding: 24, maxWidth: 1100, margin: '0 auto' }}>
@@ -220,7 +223,7 @@ export default function LojaWorkspace({ tenantDbId, userId, go, lojaId }) {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid #2a2a2a', marginBottom: 22 }}>
-        {TABS.map((t, i) => (
+        {tabs.map((t, i) => (
           <button
             key={t}
             onClick={() => setTab(i)}
@@ -254,10 +257,11 @@ export default function LojaWorkspace({ tenantDbId, userId, go, lojaId }) {
           onRemove={removeConsultor}
         />
       )}
-      {(tab === 3 || tab === 4) && <TabEmConstrucao nome={TABS[tab]} />}
+      {(tab === 3 || tab === 4) && <TabEmConstrucao nome={tabs[tab]} />}
       {tab === 5 && <TabTarefas lojaId={lojaId} tenantDbId={tenantDbId} />}
       {tab === 6 && <TabIaEspecialista lojaId={lojaId} userId={userId} />}
       {tab === 7 && <TabAnalises lojaId={lojaId} userId={userId} onGoToTarefas={(analiseId) => setTab(5)} />}
+      {tab === MERCHANT_TAB_INDEX && isFonteApi && <TabMerchantIfood lojaId={lojaId} tenantDbId={tenantDbId} />}
 
       {showAtribuir && (
         <AtribuirConsultorModal
@@ -448,6 +452,259 @@ function TabConsultores({ consultores, onAtribuir, onRemove }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── TabMerchantIfood ─────────────────────────────────────────────────────────
+// Módulo Merchant da API oficial do iFood (homologação). Status com polling
+// ≥30s (exigência literal do checklist — NUNCA menos), pausar/despausar loja
+// e atualizar horários SEMPRE via draft→aprovação (nunca POST/DELETE direto
+// do front — mesmo padrão de CardapioIfood.jsx). Horários só em leitura aqui;
+// edição fica para uma sessão futura (o bridge já expõe o PUT via draft).
+const STATUS_MERCHANT_COLOR = { OK: '#10b981', WARNING: '#f59e0b', CLOSED: '#6b7280', ERROR: '#ef4444' };
+// GET /merchants/{id}/status devolve um ARRAY (um estado por operation/salesChannel),
+// não um objeto único — agregamos pelo PIOR estado (ERROR > CLOSED > WARNING > OK),
+// senão o card fica preso em "Desconhecido" pra sempre (status?.state de um array é undefined).
+const STATUS_MERCHANT_SEVERIDADE = { ERROR: 3, CLOSED: 2, WARNING: 1, OK: 0 };
+function piorStatusMerchant(raw) {
+  const lista = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+  if (lista.length === 0) return null;
+  return lista.reduce((pior, atual) => {
+    const sAtual = STATUS_MERCHANT_SEVERIDADE[atual?.state] ?? -1;
+    const sPior = STATUS_MERCHANT_SEVERIDADE[pior?.state] ?? -1;
+    return sAtual > sPior ? atual : pior;
+  }, lista[0]);
+}
+const DIA_LABEL = {
+  MONDAY: 'Segunda', TUESDAY: 'Terça', WEDNESDAY: 'Quarta', THURSDAY: 'Quinta',
+  FRIDAY: 'Sexta', SATURDAY: 'Sábado', SUNDAY: 'Domingo',
+};
+const MERCHANT_STATUS_POLL_MS = 30_000; // ponytail: mínimo exigido pelo checklist — não reduzir.
+
+function erroIfoodParaMensagem(err) {
+  const status = err?.status;
+  // prioriza a mensagem de NEGÓCIO do iFood (err.message vem de details.message no
+  // bridgeFetchIfood) — só cai pro genérico "iFood API retornou 400: ..." quando o
+  // iFood não devolveu detalhe nenhum.
+  if (status === 401) return 'Erro de autenticação com a API do iFood (token inválido/expirado).';
+  if (status === 403) return 'Sem permissão para essa operação nesta loja no iFood.';
+  if (status === 409) return `Conflito${err.code ? ` (${err.code})` : ''}: ${err.message}`;
+  if (status === 429) return `Limite de requisições do iFood atingido${err.retryAfter ? ` — tente novamente em ${err.retryAfter}s` : ''}.`;
+  if (status === 400) return `Parâmetros inválidos${err.code ? ` (${err.code})` : ''}: ${err.message}`;
+  return err?.message || 'Erro desconhecido';
+}
+
+async function bridgeFetchIfood(path, { method = 'GET', body } = {}) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const res = await fetch(`${BRIDGE}${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${session?.access_token ?? ''}`,
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok || json?.ok === false) {
+    // prioriza a mensagem de negócio do iFood (details.message, ex. "start deve
+    // ser anterior a end") sobre o genérico "iFood API retornou 400: Bad Request".
+    const msg = json?.details?.message || json?.error || `Bridge retornou ${res.status}`;
+    const err = new Error(msg);
+    err.status = json?.status ?? res.status;
+    err.code = json?.details?.code ?? null;
+    err.retryAfter = json?.retryAfterSeconds ?? null;
+    throw err;
+  }
+  return json?.data ?? json;
+}
+
+function TabMerchantIfood({ lojaId, tenantDbId }) {
+  const [status, setStatus] = useState(null);
+  const [interrupcoes, setInterrupcoes] = useState([]);
+  const [horarios, setHorarios] = useState(null);
+  const [erro, setErro] = useState(null);
+  const [carregando, setCarregando] = useState(true);
+  const [agindo, setAgindo] = useState(false);
+  const [pausaForm, setPausaForm] = useState({ inicio: '', fim: '', motivo: '' });
+
+  const carregarStatus = useCallback(async () => {
+    try {
+      const r = await bridgeFetchIfood(`/api/ifood-api/merchant-status/${lojaId}`);
+      setStatus(piorStatusMerchant(r.status));
+      setErro(null);
+    } catch (e) {
+      setErro(erroIfoodParaMensagem(e));
+    }
+  }, [lojaId]);
+
+  const carregarTudo = useCallback(async () => {
+    setCarregando(true);
+    try {
+      const [statusRes, interrRes, horRes] = await Promise.all([
+        bridgeFetchIfood(`/api/ifood-api/merchant-status/${lojaId}`),
+        bridgeFetchIfood(`/api/ifood-api/merchant-interruptions/${lojaId}`),
+        bridgeFetchIfood(`/api/ifood-api/merchant-opening-hours/${lojaId}`),
+      ]);
+      setStatus(piorStatusMerchant(statusRes.status));
+      setInterrupcoes(Array.isArray(interrRes.interrupcoes) ? interrRes.interrupcoes : (interrRes.interrupcoes?.interruptions ?? []));
+      setHorarios(Array.isArray(horRes.horarios) ? horRes.horarios : (horRes.horarios?.shifts ?? []));
+      setErro(null);
+    } catch (e) {
+      setErro(erroIfoodParaMensagem(e));
+    } finally {
+      setCarregando(false);
+    }
+  }, [lojaId]);
+
+  useEffect(() => { carregarTudo(); }, [carregarTudo]);
+
+  // Polling do status — exigência literal do checklist: mínimo 30s, NUNCA menos.
+  useEffect(() => {
+    const id = setInterval(carregarStatus, MERCHANT_STATUS_POLL_MS);
+    return () => clearInterval(id);
+  }, [carregarStatus]);
+
+  async function pausarLoja(e) {
+    e.preventDefault();
+    if (!pausaForm.inicio || !pausaForm.fim) return;
+    setAgindo(true); setErro(null);
+    try {
+      await bridgeFetchIfood(`/api/ifood/acao?tenant_id=${encodeURIComponent(tenantDbId)}`, {
+        method: 'POST',
+        body: {
+          operacao: 'ifood.pausar_loja',
+          parametros: {
+            start: new Date(pausaForm.inicio).toISOString(),
+            end: new Date(pausaForm.fim).toISOString(),
+            description: pausaForm.motivo || undefined,
+          },
+        },
+      });
+      setPausaForm({ inicio: '', fim: '', motivo: '' });
+      alert('Pausa enviada para aprovação (draft amarelo).');
+    } catch (e2) {
+      setErro(erroIfoodParaMensagem(e2));
+    } finally {
+      setAgindo(false);
+    }
+  }
+
+  async function removerPausa(interruptionId) {
+    if (!interruptionId || !window.confirm('Remover esta pausa (enviar para aprovação)?')) return;
+    setAgindo(true); setErro(null);
+    try {
+      await bridgeFetchIfood(`/api/ifood/acao?tenant_id=${encodeURIComponent(tenantDbId)}`, {
+        method: 'POST',
+        body: { operacao: 'ifood.despausar_loja', parametros: { interruption_id: interruptionId } },
+      });
+      alert('Remoção de pausa enviada para aprovação (draft amarelo).');
+    } catch (e2) {
+      setErro(erroIfoodParaMensagem(e2));
+    } finally {
+      setAgindo(false);
+    }
+  }
+
+  if (carregando) {
+    return <div style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', padding: '40px 0' }}>Carregando dados do iFood…</div>;
+  }
+
+  const statusColor = STATUS_MERCHANT_COLOR[status?.state] || '#6b7280';
+
+  return (
+    <div>
+      {erro && (
+        <div style={{ background: '#ef444420', border: '1px solid #ef444440', borderRadius: 10, padding: '10px 14px', marginBottom: 16, color: '#ef4444', fontSize: 13 }}>
+          {erro}
+        </div>
+      )}
+
+      {/* Status — polling automático a cada 30s */}
+      <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 12, padding: 16, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ width: 10, height: 10, borderRadius: '50%', background: statusColor, flexShrink: 0 }} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{status?.state || 'Desconhecido'}</div>
+          <div style={{ fontSize: 11, color: '#6b7280' }}>Atualiza automaticamente a cada 30s.</div>
+        </div>
+        <button onClick={carregarTudo} disabled={agindo}
+          style={{ background: '#2a2a2a', border: '1px solid #3a3a3a', color: '#9ca3af', padding: '6px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+          Atualizar
+        </button>
+      </div>
+
+      {/* Pausar loja — cria draft, nunca chama a API direto */}
+      <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 12, padding: 16, marginBottom: 20 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Pausar loja
+        </div>
+        <form onSubmit={pausarLoja} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <Field label="Início *" width={190}>
+            <input type="datetime-local" value={pausaForm.inicio} onChange={e => setPausaForm(p => ({ ...p, inicio: e.target.value }))} required style={{ ...mini, width: 190 }} />
+          </Field>
+          <Field label="Fim *" width={190}>
+            <input type="datetime-local" value={pausaForm.fim} onChange={e => setPausaForm(p => ({ ...p, fim: e.target.value }))} required style={{ ...mini, width: 190 }} />
+          </Field>
+          <Field label="Motivo" width={200}>
+            <input type="text" value={pausaForm.motivo} onChange={e => setPausaForm(p => ({ ...p, motivo: e.target.value }))} placeholder="Ex: sem entregador" style={{ ...mini, width: 200 }} />
+          </Field>
+          <button type="submit" disabled={agindo}
+            style={{ background: '#B70C00', border: 'none', color: '#fff', padding: '7px 14px', borderRadius: 7, cursor: agindo ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, opacity: agindo ? 0.7 : 1, height: 34 }}>
+            {agindo ? '…' : 'Solicitar pausa'}
+          </button>
+        </form>
+        <div style={{ fontSize: 11, color: '#6b7280', marginTop: 8 }}>Cria um draft (amarelo) — só pausa de verdade após sua aprovação.</div>
+      </div>
+
+      {/* Pausas ativas/agendadas */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Pausas ativas/agendadas ({interrupcoes.length})
+        </div>
+        {interrupcoes.length === 0 ? (
+          <div style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', padding: '20px 0', background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 12 }}>
+            Nenhuma pausa ativa.
+          </div>
+        ) : (
+          <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 12, overflow: 'hidden' }}>
+            {interrupcoes.map((it, i) => (
+              <div key={it.id || i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderTop: i > 0 ? '1px solid #1f1f1f' : undefined }}>
+                <div style={{ flex: 1, fontSize: 12.5, color: '#e5e7eb' }}>
+                  {it.start ? new Date(it.start).toLocaleString('pt-BR') : '—'} → {it.end ? new Date(it.end).toLocaleString('pt-BR') : '—'}
+                  {it.description && <span style={{ color: '#6b7280' }}> · {it.description}</span>}
+                </div>
+                <button onClick={() => removerPausa(it.id)} disabled={agindo || !it.id}
+                  style={{ background: '#2a2a2a', border: '1px solid #3a3a3a', color: '#9ca3af', padding: '5px 12px', borderRadius: 7, cursor: agindo ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600 }}>
+                  Remover
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Horários de funcionamento — leitura */}
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Horários de funcionamento
+        </div>
+        {!horarios || horarios.length === 0 ? (
+          <div style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', padding: '20px 0', background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 12 }}>
+            Nenhum turno cadastrado.
+          </div>
+        ) : (
+          <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 12, overflow: 'hidden' }}>
+            {horarios.map((h, i) => (
+              <div key={i} style={{ display: 'flex', gap: 16, padding: '10px 16px', borderTop: i > 0 ? '1px solid #1f1f1f' : undefined, fontSize: 12.5 }}>
+                <div style={{ width: 100, color: '#9ca3af' }}>{DIA_LABEL[h.dayOfWeek] || h.dayOfWeek}</div>
+                <div style={{ color: '#e5e7eb' }}>
+                  {h.start} · {h.duration ? `${Math.floor(h.duration / 60)}h${h.duration % 60 ? `${h.duration % 60}min` : ''}` : '—'}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
