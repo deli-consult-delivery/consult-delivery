@@ -141,10 +141,6 @@ As telas estão agrupadas por uso, não pela ordem do menu. Formato de cada item
 - **O que é:** gestão de tenants (clientes que usam a plataforma): criar tenant, convidar usuário (e-mail de convite via Bridge `POST /api/users/invite`), ligar Defesa, vincular assinatura Asaas.
 - **Estado real:** ✅ funcionando. Hoje só existe o tenant da CD — o segundo tenant real é meta da onda 3 do M2.
 
-### `cobranca` — Cobrança / Inadimplentes
-- **O que é:** painel de inadimplência (tela `InadimplentesScreen`), alimentado pelo Asaas: a sincronização de cobranças roda a cada 2h (`trigger/asaas/sync-charges.ts:15`) e o webhook do Asaas atualiza status na hora (pagamento confirmado → "em dia"; vencido → "atrasado"; `bridge-server/routes/asaas-webhook.js`).
-- **Estado real:** ✅ os dados entram sozinhos. ⚠️ A **ação** de cobrar é manual hoje: a CORA (agente de cobrança) está **parada desde 15/05** (POC — decisão de produto pendente; M2 recomenda religar só em modo propõe-e-aprova).
-
 ### Telas que são só casca (não usar ainda)
 - **`provedores`, `integracoes`, `sistemas`** — existem no menu mas são **somente leitura / estado vazio**, sem CRUD (`src/console/CvNovas.jsx:442-481`). Não há o que operar nelas hoje.
 
@@ -216,7 +212,7 @@ Formato: **o que faz** → **quando roda** → **estado real (com números)** �
 
 ### CORA — cobrança inteligente
 - **O que faz (quando ligada):** analisa devedor, gera mensagem de cobrança (Claude Haiku), cria cobrança, escalona.
-- **Estado real:** 🔴 **PARADA desde 15/05** (POC — esperado; auditoria). Decisão de produto pendente. M2 recomenda religar **só leitura + draft** (propõe cobrança, humano envia). Enquanto isso, cobrança é manual via tela `cobranca` + Asaas.
+- **Estado real:** 🔴 **PARADA desde 15/05** (POC — esperado; auditoria). Decisão de produto pendente. M2 recomenda religar **só leitura + draft** (propõe cobrança, humano envia). Enquanto isso, cobrança é manual via tela `cora` + Asaas.
 
 ### Defesa (vigia + analista) — o robô do produto F1
 - **O que faz:** o vigia roda a cada 5 min (`trigger/defesa/vigia.ts:40`) detectando menção `@defesa`, cancelamentos e avaliações ruins → abre caso em `defesa_casos`; o analista monta a defesa. Comandos no grupo: `@defesa ok` / `@defesa descartar` (só quem está na lista `defesa_aprovadores`). Assinaturas Asaas do produto sincronizam sozinhas (`trigger/asaas/defesa-sync-assinaturas.ts:16` a cada 15 min; criação `defesa-criar-assinatura.ts:16` a cada 5 min).
@@ -259,7 +255,7 @@ A tabela que importa: pra cada processo da CD, como é manual hoje, o que a plat
 | **Conteúdo: posts, legendas, artes** | Canva na mão / encomendar arte | Estúdio gera arte+legenda de um brief em ~2–4 min; LARA gera variações de copy; BomDia gera arte diária sozinho | telas `estudio`/`modelos`; `trigger/estudio/gerar.ts:91`; `trigger/bom-dia/*` | **Recarregar OpenRouter ($2.81 < $5)** — sem isso a frente de imagem toda para |
 | **Vídeo** | Gravar Loom na mão | Só embute Loom na análise (TabAnalises) — **não gera vídeo** | — | Geração de vídeo não existe (HEYGEN_API_KEY está no Infisical, mas sem fluxo cabeado — não prometer) |
 | **Prospecção** | Procurar lead no Google/Instagram, abordar na mão | SOFIA pesquisa prospect com IA+web, qualifica e redige abordagem (draft); batch diário 9h | SOFIA (`trigger/sofia/sofia-prospect.ts:37`, `pesquisar-prospect.ts`) ; tela `crm` | **Fonte de leads + cadência** (feature pequena, G7) |
-| **Cobrança / inadimplência** | Olhar Asaas, cobrar no WhatsApp manualmente | Dados entram sozinhos (sync 2h + webhook em tempo real); painel pronto. A ação de cobrar seria da CORA | tela `cobranca`; `trigger/asaas/sync-charges.ts:15`; `bridge-server/routes/asaas-webhook.js` | **Decisão de produto: religar CORA em modo propõe-e-aprova** (parada desde 15/05) |
+| **Cobrança / inadimplência** | Olhar Asaas, cobrar no WhatsApp manualmente | Dados entram sozinhos (sync 2h + webhook em tempo real); painel pronto. A ação de cobrar seria da CORA | tela `cora`; `trigger/asaas/sync-charges.ts:15`; `bridge-server/routes/asaas-webhook.js` | **Decisão de produto: religar CORA em modo propõe-e-aprova** (parada desde 15/05) |
 | **Reuniões e resumo semanal pro cliente** | Montar resumo na mão (ou não mandar — valor invisível = churn) | VERA gera o resumo toda segunda 8h; timeline da loja vira "o que fizemos em 90 dias" | VERA (`trigger/vera/relatorio-semanal.ts:41`); tela `memoria` | **Ritual de entrega**: revisar→aprovar→enviar a 3 pilotos (onda 1 M2) |
 | **Base de conhecimento + especialistas** | Saber de cabeça / perguntar pro Wandson | Tela `conhecimento` alimenta BRENO; analise-loja é o especialista iFood; MAX é o esqueleto do especialista técnico | telas `conhecimento`/`topicos`/`arquivos`; `trigger/max/` | **Alimentar a base com FAQs dos sistemas revendidos** (F2 M2); especialistas novos = Oracle (só spec aprovada, sem código) |
 | **Suporte aos sistemas que a CD revende** | Wandson responde tudo | BRENO nível 1 lendo a base de conhecimento; MAX pra diagnóstico técnico | BRENO + `max_knowledge_base` | Mesma de cima: conteúdo na base, não código |
@@ -331,7 +327,7 @@ A tabela que importa: pra cada processo da CD, como é manual hoje, o que a plat
 - ⚠️ Limite atual: sem fonte de leads automática + cadência, o motor não gira sozinho — é semi-manual.
 
 ## Receita 9 — Cobrar um inadimplente (estado atual, sem CORA)
-1. `cobranca` — o painel já está atualizado sozinho (sync 2h + webhook Asaas em tempo real).
+1. `cora` — o painel já está atualizado sozinho (sync 2h + webhook Asaas em tempo real).
 2. Escolher o devedor, decidir o tom (1º aviso ≠ escalonado).
 3. **Hoje a mensagem é manual** (CORA parada desde 15/05). Enviar pelo `chat` ou pelo Asaas.
 4. Registrar na timeline da loja.
