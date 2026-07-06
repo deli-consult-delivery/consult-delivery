@@ -520,5 +520,48 @@ function sbFetchStub(routes) {
     passed++;
   }
 
+  // 25) upstream 401 (token inválido/expirado) — repassado como 401, nunca mascarado como 502
+  // (matriz de cobertura homologação: critério "401 → mensagem clara sobre autenticação")
+  {
+    const IfoodApiError = class extends Error {
+      constructor(msg, status) { super(msg); this.name = 'IfoodApiError'; this.status = status; }
+    };
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => p.startsWith('ifood_merchants?'), value: [{ merchant_id: 'merch-1' }] },
+    ]);
+    const ifood = { getStatusLoja: async () => { throw new IfoodApiError('iFood API retornou 401: Unauthorized', 401); } };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/merchant-status/loja-1');
+    assert.strictEqual(r.status, 401);
+    assert.strictEqual(r.body.ok, false);
+    server.close();
+    passed++;
+  }
+
+  // 26) upstream 403 (sem acesso à loja) — repassado como 403
+  // (matriz de cobertura homologação: critério "403 → erro indica permissão insuficiente")
+  {
+    const IfoodApiError = class extends Error {
+      constructor(msg, status) { super(msg); this.name = 'IfoodApiError'; this.status = status; }
+    };
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => p.startsWith('ifood_merchants?'), value: [{ merchant_id: 'merch-1' }] },
+      { test: (p) => p.startsWith('avaliacoes?'), value: [] },
+    ]);
+    const ifood = { listarReviews: async () => { throw new IfoodApiError('iFood API retornou 403: Forbidden', 403); } };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/reviews/loja-1');
+    assert.strictEqual(r.status, 403);
+    assert.strictEqual(r.body.ok, false);
+    server.close();
+    passed++;
+  }
+
   process.stdout.write(`\nifood-api-routes: todos os ${passed} cenários passaram.\n`);
 })();
