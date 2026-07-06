@@ -14,6 +14,7 @@ import RequireRole from '../components/auth/RequireRole.jsx';
 const BRIDGE = import.meta.env.VITE_BRIDGE_URL || 'https://bridge.consultdelivery.com.br';
 const PUBLIC_URL = import.meta.env.VITE_PUBLIC_URL || 'https://app.consultdelivery.com.br';
 const LIMIT_COMENTARIOS = 20;
+const LIMIT_DRAFTS_REGUA = 20;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -157,6 +158,56 @@ function ChipStatus({ status, count, pct }) {
     <span className={`cv2-bdg ${COR[status] || 'mut'}`} style={{ fontSize: 12, padding: '4px 10px' }}>
       {LABEL[status] || status}: <b>{count}</b> <span style={{ opacity: .7 }}>({pct}%)</span>
     </span>
+  );
+}
+
+// ── Régua de Reengajamento (LARA, #792) — visibilidade da fila, SOMENTE LEITURA ──
+// Nunca cria/edita/aprova draft aqui — aprovação continua exclusivamente em
+// Aprovações (AprovacoesUnificadas.jsx). Este card só existe pra dar contexto
+// ao Wandson antes de ele ir aprovar a fila.
+const DRAFT_STATUS_COR = { pending: 'warn', approved: 'ok', sent: 'ok', rejected: 'err', failed: 'err', edited: 'mut' };
+const DRAFT_STATUS_LABEL = { pending: 'Pendente', approved: 'Aprovado', sent: 'Enviado', rejected: 'Rejeitado', failed: 'Falhou', edited: 'Editado' };
+
+function ChipDraftStatus({ status, count }) {
+  return (
+    <span className={`cv2-bdg ${DRAFT_STATUS_COR[status] || 'mut'}`} style={{ fontSize: 12, padding: '4px 10px' }}>
+      {DRAFT_STATUS_LABEL[status] || status}: <b>{count}</b>
+    </span>
+  );
+}
+
+function BadgeDraftStatus({ status }) {
+  return (
+    <span className={`cv2-bdg ${DRAFT_STATUS_COR[status] || 'mut'}`} style={{ fontSize: 11 }}>
+      {DRAFT_STATUS_LABEL[status] || status}
+    </span>
+  );
+}
+
+function calcReguaPorStatus(drafts) {
+  const counts = {};
+  drafts.forEach(d => { counts[d.status] = (counts[d.status] || 0) + 1; });
+  return Object.entries(counts).map(([status, count]) => ({ status, count }));
+}
+
+function ItemDraftRegua({ draft }) {
+  const meta = draft.metadata || {};
+  return (
+    <div className="cv2-card" style={{ marginBottom: 8, padding: '10px 14px' }}>
+      <div className="flex items-center gap-2 flex-wrap mb-2">
+        <BadgeDraftStatus status={draft.status} />
+        {typeof meta.dias_sem_resposta === 'number' && (
+          <span className="cv2-bdg mut" style={{ fontSize: 11 }}>{meta.dias_sem_resposta}d sem resposta</span>
+        )}
+        {meta.ticket_code && (
+          <span className="cv2-bdg mut" style={{ fontSize: 11 }} title="Ticket do atendimento original">🎫 #{meta.ticket_code}</span>
+        )}
+        <span style={{ fontSize: 11, color: 'var(--tx2)', marginLeft: 'auto' }}>
+          {new Date(draft.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+        </span>
+      </div>
+      <p style={{ margin: 0, fontSize: 13, color: 'var(--ink)', lineHeight: 1.55, wordBreak: 'break-word' }}>{draft.content}</p>
+    </div>
   );
 }
 
@@ -339,6 +390,10 @@ function AtendimentoAvaliacoesContent({ tenantDbId, userId }) {
   const [carregandoResumo, setCarregandoResumo] = useState(false);
   const [erroResumo, setErroResumo] = useState(null);
 
+  // régua de reengajamento (LARA, #792) — só leitura, aprovação fica em Aprovações
+  const [draftsRegua, setDraftsRegua] = useState(null);
+  const [erroRegua, setErroRegua] = useState(null);
+
   // ── fetch inicial ─────────────────────────────────────────────────────────
   const fetchRows = useCallback(async () => {
     if (!tenantDbId) return;
@@ -375,10 +430,28 @@ function AtendimentoAvaliacoesContent({ tenantDbId, userId }) {
     setTotais({ pendentes: pend.count ?? 0, expiradas: exp.count ?? 0, respondidas: respRows });
   }, [tenantDbId]);
 
+  // Drafts da régua de reengajamento (trigger/lara/csat-reengajamento.ts, #792) —
+  // SÓ LEITURA. Nunca cria/atualiza draft aqui; aprovação continua exclusivamente
+  // em Aprovações (AprovacoesUnificadas.jsx).
+  const fetchRegua = useCallback(async () => {
+    if (!tenantDbId) return;
+    setErroRegua(null);
+    const { data, error: err } = await supabase
+      .from('agent_drafts')
+      .select('id, status, content, created_at, metadata')
+      .eq('tenant_id', tenantDbId)
+      .eq('agent_name', 'lara')
+      .filter('metadata->>tipo', 'eq', 'csat_reengajamento')
+      .order('created_at', { ascending: false });
+    if (err) { setErroRegua(err.message); return; }
+    setDraftsRegua(data ?? []);
+  }, [tenantDbId]);
+
   useEffect(() => {
     fetchRows();
     fetchTotais();
-  }, [fetchRows, fetchTotais]);
+    fetchRegua();
+  }, [fetchRows, fetchTotais, fetchRegua]);
 
   // ── tratativa de detrator ─────────────────────────────────────────────────
   async function salvarTratativa(id, novoStatus, novaObs) {
@@ -436,6 +509,9 @@ function AtendimentoAvaliacoesContent({ tenantDbId, userId }) {
   const atendentes = calcAtendentes(lista);
   const comentarios = lista.filter(r => r.comentario).slice(0, LIMIT_COMENTARIOS);
   const detratores = lista.filter(r => r.nota != null && r.nota <= 2 && ['pendente', 'em_andamento'].includes(r.tratativa_status));
+  const reguaDrafts = draftsRegua ?? [];
+  const reguaPorStatus = calcReguaPorStatus(reguaDrafts);
+  const reguaPendentes = reguaDrafts.filter(d => d.status === 'pending');
 
   // ── render ────────────────────────────────────────────────────────────────
   return (
@@ -503,6 +579,44 @@ function AtendimentoAvaliacoesContent({ tenantDbId, userId }) {
             <div className="flex gap-2 flex-wrap">
               {statusPcts.map(s => <ChipStatus key={s.status} {...s} />)}
             </div>
+          </div>
+
+          {/* ── Régua de Reengajamento (LARA) — só leitura, aprovação em Aprovações ── */}
+          <div className="cv2-card">
+            <div className="flex items-center gap-2 mb-3">
+              <h3 style={{ margin: 0 }}>Régua de Reengajamento (LARA)</h3>
+              {reguaPendentes.length > 0 && (
+                <span className="cv2-bdg warn" style={{ fontSize: 12 }}>{reguaPendentes.length} aguardando aprovação</span>
+              )}
+            </div>
+            <div className="cv2-sub" style={{ marginTop: 0, marginBottom: 12 }}>
+              Lembretes gerados automaticamente para quem recebeu a pesquisa há 3+ dias e não respondeu — 1 por avaliação, nunca reenviado. Aprovação continua na tela Aprovações; aqui é só visibilidade.
+              {erroRegua && <span style={{ color: 'var(--red)' }}> · Erro: {erroRegua}</span>}
+            </div>
+            {draftsRegua === null ? (
+              <div style={{ color: 'var(--tx2)', fontSize: 13 }}>Carregando…</div>
+            ) : reguaDrafts.length === 0 ? (
+              <div style={{ color: 'var(--tx2)', fontSize: 13 }}>Nenhum lembrete de reengajamento gerado ainda.</div>
+            ) : (
+              <>
+                <div className="flex gap-2 flex-wrap mb-3">
+                  {reguaPorStatus.map(s => <ChipDraftStatus key={s.status} {...s} />)}
+                </div>
+                {reguaPendentes.length > 0 && (
+                  <div style={{ marginTop: 4 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--tx2)', textTransform: 'uppercase', letterSpacing: '.3px', marginBottom: 8 }}>
+                      Pendentes de aprovação ({reguaPendentes.length})
+                    </div>
+                    {reguaPendentes.slice(0, LIMIT_DRAFTS_REGUA).map(d => <ItemDraftRegua key={d.id} draft={d} />)}
+                    {reguaPendentes.length > LIMIT_DRAFTS_REGUA && (
+                      <div style={{ fontSize: 12, color: 'var(--tx2)', textAlign: 'center', marginTop: 4 }}>
+                        + {reguaPendentes.length - LIMIT_DRAFTS_REGUA} não exibidos aqui — ver todos em Aprovações
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           {/* ── Desempenho por atendente ───────────────────────────────────── */}
