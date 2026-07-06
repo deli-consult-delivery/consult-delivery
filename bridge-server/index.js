@@ -4,6 +4,13 @@ require('dotenv').config();
 const express  = require('express');
 const crypto   = require('crypto');
 const { analisarMensagem } = require('./routes/mia');
+const {
+  safeTokenEqual,
+  requireInternalToken,
+  requireJwt,
+  requireJwtOrInternal,
+  makeAssertTenantMember,
+} = require('./lib/auth-middleware');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -52,59 +59,9 @@ app.use((req, res, next) => {
 // ── Health ────────────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
-// ── Middleware: JWT Supabase ──────────────────────────────────────────────────
-async function requireJwt(req, res, next) {
-  const auth = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '').trim();
-  if (!auth) return res.status(401).json({ error: 'missing token' });
-  if (!SUPABASE_ANON_KEY) {
-    req.user = { id: 'dev' };
-    return next();
-  }
-  try {
-    const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-      headers: { Authorization: `Bearer ${auth}`, apikey: SUPABASE_ANON_KEY },
-    });
-    if (!r.ok) return res.status(401).json({ error: 'invalid token' });
-    req.user = await r.json();
-    req.jwt  = auth;
-    next();
-  } catch (err) {
-    res.status(401).json({ error: 'auth error', detail: err.message });
-  }
-}
-
-// ── Helper: comparação de token constant-time (anti timing side-channel) ──────
-// GATE 0: usar timingSafeEqual como o HMAC do nexus já faz; nunca `!==` puro.
-function safeTokenEqual(provided, expected) {
-  if (typeof provided !== 'string' || typeof expected !== 'string') return false;
-  const a = Buffer.from(provided);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
-}
-
-// ── Middleware: internal token (FAIL-CLOSED) ──────────────────────────────────
-// GATE 0: sem token configurado, recusar TUDO (antes: `return next()` = fail-open).
-function requireInternalToken(req, res, next) {
-  if (!INTERNAL_BRIDGE_TOKEN)
-    return res.status(503).json({ error: 'internal auth not configured' });
-  if (!safeTokenEqual(req.headers['x-internal-token'], INTERNAL_BRIDGE_TOKEN))
-    return res.status(401).json({ error: 'unauthorized' });
-  next();
-}
-
-// ── Middleware: JWT or internal token (para endpoints chamados por Trigger.dev) ─
-async function requireJwtOrInternal(req, res, next) {
-  const internalToken = req.headers['x-internal-token'];
-  if (internalToken) {
-    if (!INTERNAL_BRIDGE_TOKEN)
-      return res.status(503).json({ error: 'internal auth not configured' });
-    if (!safeTokenEqual(internalToken, INTERNAL_BRIDGE_TOKEN))
-      return res.status(401).json({ error: 'unauthorized' });
-    return next();
-  }
-  return requireJwt(req, res, next);
-}
+// requireJwt / safeTokenEqual / requireInternalToken / requireJwtOrInternal
+// movidos para lib/auth-middleware.js (testável offline sem side effects do
+// resto deste arquivo) — ver require no topo.
 
 // ── Middleware: escrita VendaERP — token dedicado, fail-closed (GATE 0) ────────
 // Escrita no ERP (boleto/NFE/lançamento/oportunidade/estoque) é mais sensível que
@@ -1169,24 +1126,9 @@ async function sbFetch(path, { method = 'GET', body, prefer, headers: xh = {} } 
   return txt ? JSON.parse(txt) : null;
 }
 
-// Helper: verifica se req.user é membro do tenant_id solicitado
-async function assertTenantMember(req, res, tenant_id) {
-  // Guard: caminho interno (x-internal-token) não popula req.user. Nenhum caller
-  // atual chega aqui sem req.user, mas sem isto um futuro caller interno crasharia
-  // com TypeError ao ler req.user.id. Responde 401 explícito em vez de estourar.
-  if (!req.user?.id) {
-    res.status(401).json({ error: 'Autenticação de usuário obrigatória para esta verificação' });
-    return false;
-  }
-  const rows = await sbFetch(
-    `tenant_members?tenant_id=eq.${encodeURIComponent(tenant_id)}&user_id=eq.${encodeURIComponent(req.user.id)}&select=tenant_id&limit=1`
-  );
-  if (!rows?.length) {
-    res.status(403).json({ error: 'Acesso negado: usuário não é membro deste tenant' });
-    return false;
-  }
-  return true;
-}
+// assertTenantMember movido para lib/auth-middleware.js (factory injetando
+// sbFetch) — testável offline com um stub de sbFetch.
+const assertTenantMember = makeAssertTenantMember(sbFetch);
 
 // GET /api/lojas  — lista com filtros e paginação
 app.get('/api/lojas', requireJwt, async (req, res) => {
