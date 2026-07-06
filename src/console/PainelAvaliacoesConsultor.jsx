@@ -639,7 +639,7 @@ function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, st
   const publishedRevs  = reviews.filter(r => r.status === 'published');
   const publishedCount = publishedRevs.length;
 
-  const resolvedGroup = reviews.find(r => r.whatsappGroup)?.whatsappGroup || storeGroups[storeName] || null;
+  const resolvedGroup = storeGroups[storeName] || reviews.find(r => r.whatsappGroup)?.whatsappGroup || null;
 
   const today       = new Date().toISOString().slice(0, 10);
   const tomorrow    = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
@@ -887,7 +887,8 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
   const storeGroups = useMemo(() => {
     const sg = {};
     lojas.forEach(l => { if (l.whatsapp_group_jid) sg[l.nome] = l.whatsapp_group_jid; });
-    reviews.forEach(r => { if (r.store && r.whatsappGroup) sg[r.store] = r.whatsappGroup; });
+    // reviews só preenchem fallback — loja tem prioridade
+    reviews.forEach(r => { if (r.store && r.whatsappGroup && !sg[r.store]) sg[r.store] = r.whatsappGroup; });
     return sg;
   }, [lojas, reviews]);
 
@@ -980,7 +981,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
 
   async function handleSendStore(storeName, pendingReviews) {
     if (!pendingReviews.length) return;
-    const groupId = pendingReviews.find(r => r.whatsappGroup)?.whatsappGroup || storeGroups[storeName];
+    const groupId = storeGroups[storeName] || pendingReviews.find(r => r.whatsappGroup)?.whatsappGroup;
     if (!groupId) { setError(`Loja "${storeName}" sem grupo WhatsApp cadastrado.`); return; }
     setBusyStore(storeName); setError(null);
     try {
@@ -1004,7 +1005,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
   async function handleSendSingle(id, draft) {
     const rev = reviews.find(r => r.id === id);
     if (!rev) return;
-    const groupId = rev.whatsappGroup || storeGroups[rev.store];
+    const groupId = storeGroups[rev.store] || rev.whatsappGroup;
     if (!groupId) { setError(`Loja "${rev.store}" sem grupo WhatsApp cadastrado.`); return; }
     setBusyId(id); setError(null);
     try {
