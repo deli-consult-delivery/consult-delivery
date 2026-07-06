@@ -249,8 +249,9 @@ export const brenoProcessarWebhook = task({
     }
 
     // 4b. Modos "hibrido" e "ia" — chamar breno-responder em background
-    // Precisamos de um message_id para o responder; geramos um UUID determinístico
-    // baseado no message_id do webhook quando disponível ou usamos o run.id.
+    // Precisamos de um message_id para o responder; usamos o do webhook quando
+    // disponível (só para log abaixo — a validação/fallback real de UUID
+    // acontece em safeMessageId, mais adiante).
     const messageIdForResponder = input.message_id ?? ctx.run.id;
 
     logger.info("breno-processar-webhook: disparando breno-responder", {
@@ -262,12 +263,19 @@ export const brenoProcessarWebhook = task({
 
     let responderHandle: { id: string } | undefined;
     try {
-      // brenoResponder espera message_id como UUID; se vier do webhook pode não ser
-      // UUID válido. Validamos antes de passar.
+      // brenoResponder exige message_id como UUID (InputSchema z.string().uuid());
+      // se vier do webhook pode não ser UUID válido. ctx.run.id NÃO serve de
+      // fallback (formato "run_xxx", nunca é UUID) — isso já causou o mesmo bug
+      // que estamos corrigindo aqui: brenoResponder falha com ZodError na própria
+      // execução (assíncrona, fora do try/catch deste arquivo) e BRENO fica mudo
+      // em silêncio. message_id só é usado como inbound_message_id em
+      // breno_interactions (auditoria) — não há join/dedup por ele em nenhum
+      // outro lugar do código — então gerar um UUID novo aqui é seguro pelo
+      // contrato do breno-responder.
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const safeMessageId = uuidRegex.test(messageIdForResponder)
         ? messageIdForResponder
-        : ctx.run.id; // fallback para UUID do próprio run
+        : crypto.randomUUID();
 
       responderHandle = await brenoResponder.trigger({
         tenant_id:       input.tenant_id,
