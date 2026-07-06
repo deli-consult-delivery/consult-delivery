@@ -260,6 +260,18 @@ module.exports = function ({ requireJwtOrInternal, ifood, sbFetch, assertTenantM
     return { loja_id: ctx.loja.id, merchant_id: ctx.merchantId, summary };
   }));
 
+  // ── GET /ifood-api/catalogo/:lojaId — árvore catálogo→categorias→itens ──────
+  // Leitura agregada (App 3 Catálogo). Reusa ifood.getCardapio, já existente e
+  // validado live 05/07 (sandbox tem 1 catálogo real) — mesmo dado que
+  // CardapioIfood.jsx já consome via /ifood/cardapio (rota antiga, tenant-scoped
+  // por ?tenant_id=); esta é a versão gated por :lojaId (padrão novo, resolveLojaGated).
+  router.get('/ifood-api/catalogo/:lojaId', requireJwtOrInternal, handle(async (req, res) => {
+    const ctx = await resolveLojaGated(req, res);
+    if (!ctx) return;
+    const cardapio = await ifood.getCardapio(ctx.merchantId, ctx.loja.tenant_id);
+    return { loja_id: ctx.loja.id, merchant_id: ctx.merchantId, cardapio };
+  }));
+
   // ── GET /ifood-api/repasses/:lojaId — Settlement API (liquidação/repasses) ──
   // Filtro opcional ?dataInicio=&dataFim= (yyyy-MM-dd) — default 7 dias (mesmo
   // comportamento de listarVendas). CONFIRMADO LIVE (smoke 2026-07-06).
