@@ -42,9 +42,12 @@ function Tela({ titulo, sub, kpis, cols, rows, acao, nota }) {
 // ---------- estilos de formulário (consistentes com o design system) ---------
 const inp = { background: '#faf9f8', border: '1px solid var(--line)', borderRadius: 4, padding: '8px 11px', fontSize: 13, outline: 'none', fontWeight: 500, color: 'var(--tx)', fontFamily: 'inherit', minWidth: 0 };
 function Campo({ f, value, onChange }) {
-  if (f.type === 'select') {
+  if (f.type === 'select' || f.type === 'boolean') {
+    // String() cobre o caso do campo boolean (ativo/inativo): valor vindo do banco é
+    // JS boolean (true/false), mas as options usam string ('true'/'false') — sem essa
+    // coerção o <select> não reflete o valor real ao editar uma linha existente.
     return (
-      <select style={inp} value={value ?? f.default ?? ''} onChange={e => onChange(e.target.value)}>
+      <select style={inp} value={String(value ?? f.default ?? '')} onChange={e => onChange(e.target.value)}>
         {f.options.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
       </select>
     );
@@ -84,6 +87,7 @@ function CrudTela({ titulo, sub, table, tenantDbId, userId, cols, fields, toRow,
       if (v === undefined || v === '') v = f.default ?? null;
       if (f.type === 'datetime' && v) v = new Date(v).toISOString();
       if (f.type === 'number' && v != null && v !== '') v = Number(v);
+      if (f.type === 'boolean' && v != null && v !== '') v = v === 'true' || v === true;
       payload[f.key] = v;
     }
     const missing = fields.filter(f => f.required && !payload[f.key]);
@@ -134,6 +138,7 @@ function CrudTela({ titulo, sub, table, tenantDbId, userId, cols, fields, toRow,
       if (v === undefined || v === '') v = f.default ?? null;
       if (f.type === 'datetime' && v) v = new Date(v).toISOString();
       if (f.type === 'number' && v != null && v !== '') v = Number(v);
+      if (f.type === 'boolean' && v != null && v !== '') v = v === 'true' || v === true;
       patch[f.key] = v;
     }
     const missing = fields.filter(f => f.required && !patch[f.key]);
@@ -240,13 +245,14 @@ const ST_TAREFA = { agendada: ['warn', 'agendada'], executando: ['ok', 'executan
 export function Gatilhos({ tenantDbId, userId }) {
   return <CrudTela titulo="Gatilhos" sub="Reações automáticas a eventos externos (WhatsApp, Asaas, iFood)."
     table="tenant_gatilhos" tenantDbId={tenantDbId} userId={userId}
-    cols={['Gatilho', 'Fonte', 'Ação', 'Execuções 7d']}
+    cols={['Gatilho', 'Fonte', 'Ação', 'Execuções 7d', 'Status']}
     fields={[
       { key: 'nome', label: 'Gatilho', type: 'text', required: true, wide: true },
       { key: 'fonte', label: 'Fonte', type: 'select', default: 'whatsapp', options: [{ v: 'whatsapp', l: 'WhatsApp' }, { v: 'asaas', l: 'Asaas' }, { v: 'ifood', l: 'iFood' }, { v: 'manual', l: 'Manual' }] },
       { key: 'acao', label: 'Ação', type: 'text', wide: true },
+      { key: 'ativo', label: 'Status', type: 'boolean', default: 'true', options: [{ v: 'true', l: 'Ativo' }, { v: 'false', l: 'Inativo' }] },
     ]}
-    toRow={r => [r.nome, <Bdg cls="mut">{r.fonte}</Bdg>, r.acao || '—', r.execucoes_7d ?? 0]}
+    toRow={r => [r.nome, <Bdg cls="mut">{r.fonte}</Bdg>, r.acao || '—', r.execucoes_7d ?? 0, <Bdg cls={r.ativo ? 'ok' : 'mut'}>{r.ativo ? 'ativo' : 'inativo'}</Bdg>]}
     acao="+ Novo gatilho" />;
 }
 
@@ -313,6 +319,8 @@ export function Arquivos({ tenantDbId, userId }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [editId, setEditId] = useState(null);   // renomear/mover pasta (UPDATE — só metadado, arquivo em si é imutável)
+  const [editForm, setEditForm] = useState({ name: '', folder: '' });
   const fileRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -368,6 +376,25 @@ export function Arquivos({ tenantDbId, userId }) {
     if (!error) setRows(rs => rs.filter(r => r.id !== rec.id));
   }
 
+  // Renomear/mover pasta — só metadado (tenant_files), nunca toca o objeto no
+  // Storage (o path físico já tem UUID, não precisa mudar). Único UPDATE real
+  // que fazia sentido pra um arquivo: o conteúdo em si não é editável inline.
+  function startEdit(rec) { setErr(''); setEditId(rec.id); setEditForm({ name: rec.name, folder: rec.folder || '/' }); }
+  function cancelEdit() { setEditId(null); }
+
+  async function saveEdit() {
+    const name = editForm.name.trim();
+    if (!name) { setErr('Nome do arquivo é obrigatório'); return; }
+    setBusy(true); setErr('');
+    const { data, error } = await supabase.from('tenant_files')
+      .update({ name, folder: editForm.folder.trim() || '/' })
+      .eq('id', editId).eq('tenant_id', tenantDbId).select().single();
+    setBusy(false);
+    if (error) { setErr(error.message); return; }
+    setRows(rs => rs.map(r => r.id === editId ? (data || r) : r));
+    cancelEdit();
+  }
+
   return (
     <div>
       <h1>Arquivos</h1>
@@ -391,6 +418,18 @@ export function Arquivos({ tenantDbId, userId }) {
             {loading ? (
               <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--tx2)', padding: 28 }}>carregando…</td></tr>
             ) : rows.length ? rows.map(rec => (
+              editId === rec.id ? (
+                <tr key={rec.id} style={{ background: '#faf9f8' }}>
+                  <td><input style={inp} value={editForm.name} onChange={e => setEditForm(s => ({ ...s, name: e.target.value }))} /></td>
+                  <td><input style={inp} value={editForm.folder} onChange={e => setEditForm(s => ({ ...s, folder: e.target.value }))} /></td>
+                  <td>{fmtTam(rec.size_bytes)}</td>
+                  <td>{fmtDataCurta(rec.updated_at || rec.created_at)}</td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button className="cv2-btn" disabled={busy} onClick={saveEdit} style={{ padding: '4px 10px', fontSize: 11, marginRight: 6 }}>{busy ? 'Salvando…' : 'Salvar'}</button>
+                    <button className="cv2-btn sec" disabled={busy} onClick={cancelEdit} style={{ padding: '4px 10px', fontSize: 11 }}>Cancelar</button>
+                  </td>
+                </tr>
+              ) : (
               <tr key={rec.id}>
                 <td>
                   {rec.storage_path
@@ -400,10 +439,12 @@ export function Arquivos({ tenantDbId, userId }) {
                 <td>{rec.folder || '/'}</td>
                 <td>{fmtTam(rec.size_bytes)}</td>
                 <td>{fmtDataCurta(rec.updated_at || rec.created_at)}</td>
-                <td style={{ textAlign: 'right' }}>
+                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <button className="cv2-btn sec" disabled={busy} onClick={() => startEdit(rec)} style={{ padding: '4px 10px', fontSize: 11, marginRight: 6 }}>Renomear</button>
                   <button className="cv2-btn danger" disabled={busy} onClick={() => remove(rec)} style={{ padding: '4px 10px', fontSize: 11 }}>Excluir</button>
                 </td>
               </tr>
+              )
             )) : (
               <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--tx2)', padding: 28 }}>— nenhum registro ainda —</td></tr>
             )}
