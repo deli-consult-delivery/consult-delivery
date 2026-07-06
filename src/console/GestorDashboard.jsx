@@ -93,17 +93,19 @@ export default function GestorDashboard({ tenantDbId, userId, onNavigate }) {
         .eq('loja_id', lojaId).eq('tenant_id', tenantDbId)
         .gte('data', desde).order('data', { ascending: false }),
       supabase.from('client_timeline')
-        .select('id, event_type, summary, metadata, created_at, agent_name')
+        .select('id, event_type, title, payload, ts, agent_name')
         .eq('loja_id', lojaId).eq('tenant_id', tenantDbId)
-        .order('created_at', { ascending: false }).limit(30),
+        .order('ts', { ascending: false }).limit(30),
       supabase.from('agent_drafts')
-        .select('id, channel, body, subject, created_at')
+        .select('id, channel, content, subject, created_at')
         .eq('loja_id', lojaId).eq('tenant_id', tenantDbId)
         .eq('agent_name', 'gestor').eq('status', 'pending')
         .order('created_at', { ascending: false }),
     ]);
 
     if (metricasRes.error) setErro(metricasRes.error.message);
+    else if (diarioRes.error) setErro(diarioRes.error.message);
+    else if (sugestoesRes.error) setErro(sugestoesRes.error.message);
     const linhasMetricas = metricasRes.data ?? [];
     setMetricas(linhasMetricas);
     setAvaliadas(linhasMetricas.filter(r => r.avaliacao != null));
@@ -227,9 +229,9 @@ export default function GestorDashboard({ tenantDbId, userId, onNavigate }) {
             <div key={ev.id} style={{ borderBottom: '1px solid var(--line)', padding: '10px 0' }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
                 <span className="cv2-bdg mut">{ev.event_type}</span>
-                <span style={{ fontSize: 11.5, color: 'var(--tx2)' }}>{fmtDataHora(ev.created_at)}</span>
+                <span style={{ fontSize: 11.5, color: 'var(--tx2)' }}>{fmtDataHora(ev.ts)}</span>
               </div>
-              <div style={{ fontSize: 13, marginTop: 4 }}>{ev.summary}</div>
+              <div style={{ fontSize: 13, marginTop: 4 }}>{ev.title}</div>
             </div>
           ))
         )}
@@ -252,7 +254,7 @@ export default function GestorDashboard({ tenantDbId, userId, onNavigate }) {
                 <span style={{ fontSize: 11.5, color: 'var(--tx2)' }}>{fmtDataHora(s.created_at)}</span>
               </div>
               {s.subject && <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>{s.subject}</div>}
-              <div style={{ fontSize: 12.5, color: 'var(--tx2)' }}>{String(s.body || '').slice(0, 180)}{(s.body || '').length > 180 ? '…' : ''}</div>
+              <div style={{ fontSize: 12.5, color: 'var(--tx2)' }}>{String(s.content || '').slice(0, 180)}{(s.content || '').length > 180 ? '…' : ''}</div>
             </div>
           ))
         )}

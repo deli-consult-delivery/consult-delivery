@@ -2121,7 +2121,7 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
     if (!conv) return;
 
     if (conv.customer_id) {
-      supabase.from('customers').select('id, name, phone, email, document, created_at').eq('id', conv.customer_id).maybeSingle()
+      supabase.from('customers').select('id, name, phone, email, created_at').eq('id', conv.customer_id).maybeSingle()
         .then(({ data }) => setActiveCustomer(data ?? null));
       return;
     }
@@ -2140,7 +2140,7 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
         phoneVariants.push(phoneDigits.slice(0, 4) + '9' + phoneDigits.slice(4));
       }
       supabase.from('customers')
-        .select('id, name, phone, email, document, created_at')
+        .select('id, name, phone, email, created_at')
         .eq('tenant_id', tenantDbId)
         .in('phone_normalized', phoneVariants)
         .limit(1)
@@ -5335,7 +5335,6 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
                     <FieldRow label="Nome"      value={activeCustomer.name} />
                     <FieldRow label="Telefone"  value={activeCustomer.phone} hint="—" />
                     <FieldRow label="E-mail"    value={activeCustomer.email} hint="—" />
-                    <FieldRow label="Documento" value={activeCustomer.document} hint="—" />
                   </CollapseSection>
                 ) : active.whatsapp_chat_id ? (
                   <CollapseSection title="Perfil" open={openPerfil} onToggle={() => setOpenPerfil(v => !v)}>

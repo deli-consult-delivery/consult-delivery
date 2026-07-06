@@ -1012,11 +1012,11 @@ export default function Cora({ tenantDbId, userId }) {
     if (!tenantDbId) return;
     const { data } = await supabase
       .from('tenant_agent_config')
-      .select('mode')
+      .select('modo_override')
       .eq('tenant_id', tenantDbId)
       .eq('agent_id', 'cora')
       .maybeSingle();
-    if (data?.mode) setModo(data.mode);
+    if (data?.modo_override) setModo(data.modo_override);
   }, [tenantDbId]);
 
   const loadSaldo = useCallback(async () => {
@@ -1055,7 +1055,7 @@ export default function Cora({ tenantDbId, userId }) {
     if (!tenantDbId) return;
     setSavingModo(true);
     await supabase.from('tenant_agent_config').upsert(
-      { tenant_id: tenantDbId, agent_id: 'cora', mode: novoModo },
+      { tenant_id: tenantDbId, agent_id: 'cora', modo_override: novoModo },
       { onConflict: 'tenant_id,agent_id' }
     );
     setModo(novoModo);
