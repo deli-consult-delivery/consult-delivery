@@ -637,7 +637,7 @@ export function subscribeToDrafts(tenantId, callback) {
 export async function listLojasConsultoria(tenantId) {
   const { data, error } = await supabase
     .from('lojas')
-    .select('id, nome, super_restaurante, whatsapp_group_jid')
+    .select('id, nome, super_restaurante, whatsapp_group_jid, fonte_dados')
     .eq('tenant_id', tenantId)
     .eq('is_consultoria_ativa', true)
     .order('nome');
@@ -676,6 +676,56 @@ export async function getIfoodSummary(lojaId) {
   }
   const json = await res.json();
   return json.data?.summary ?? null;
+}
+
+// ── iFood Review API (fluxo draft→aprovação, homologação App Avaliações) ────
+// Erros trazem status/code/message/retryAfterSeconds do Bridge (routes/ifood*.js)
+// pra o front tratar 400/409/429 com mensagem clara — não um Error genérico.
+async function ifoodBridgeFetch(path, { method = 'GET', body } = {}) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token || '';
+  const res = await fetch(`${BRIDGE}/api${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  const text = await res.text().catch(() => '');
+  let json = null;
+  try { json = text ? JSON.parse(text) : null; } catch { /* corpo não-JSON */ }
+  if (!res.ok) {
+    const err = new Error(json?.message || json?.error || `HTTP ${res.status}`);
+    err.status = res.status;
+    err.code = json?.code ?? null;
+    err.details = json?.details ?? null;
+    err.retryAfterSeconds = json?.retryAfterSeconds ?? null;
+    throw err;
+  }
+  return json;
+}
+
+export async function listIfoodReviews({ lojaId, page, size } = {}) {
+  const qs = new URLSearchParams();
+  if (page != null) qs.set('page', String(page));
+  if (size != null) qs.set('size', String(size));
+  const q = qs.toString();
+  const json = await ifoodBridgeFetch(`/ifood-api/reviews/${encodeURIComponent(lojaId)}${q ? `?${q}` : ''}`);
+  return json?.data;
+}
+
+export async function criarDraftRespostaReview({ lojaId, reviewId, texto }) {
+  const json = await ifoodBridgeFetch(`/ifood-api/reviews/${encodeURIComponent(lojaId)}/${encodeURIComponent(reviewId)}/draft`, {
+    method: 'POST',
+    body: { texto },
+  });
+  return json?.data;
+}
+
+export async function aprovarDraftIfood({ draftId, tenantId }) {
+  const json = await ifoodBridgeFetch(`/ifood/aprovar/${encodeURIComponent(draftId)}`, {
+    method: 'POST',
+    body: { tenant_id: tenantId },
+  });
+  return json?.data;
 }
 
 export async function getAvaliacoesConfig(lojaId) {

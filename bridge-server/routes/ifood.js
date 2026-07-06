@@ -20,11 +20,15 @@
 // ANTES de interpolar na URL (anti path traversal / injeção de path).
 const MERCHANT_ID_RE = /^[0-9A-Za-z-]+$/;
 
-// Operações de ESCRITA suportadas no MVP gated (F2 onda 1). Cada uma mapeia para
-// um método SEM retry do lib/ifood.js, despachado SÓ no /aprovar.
+// Operações de ESCRITA suportadas no MVP gated (F2 onda 1 + homologação Review).
+// Cada uma mapeia para um método SEM retry do lib/ifood.js, despachado SÓ no
+// /aprovar. `argKeys` lista os campos de metadata (na ordem) passados ao método
+// APÓS merchantId e ANTES de tenantId — pausar/reabrir usam só item_id;
+// responder_review precisa de review_id + texto (assinatura própria do método).
 const OPERACOES_ESCRITA = {
-  'ifood.pausar_item': { metodo: 'pausarItem', verbo: 'Pausar', agent: 'BRENO' },
-  'ifood.reabrir_item': { metodo: 'reabrirItem', verbo: 'Reabrir', agent: 'BRENO' },
+  'ifood.pausar_item': { metodo: 'pausarItem', verbo: 'Pausar', agent: 'BRENO', argKeys: ['item_id'] },
+  'ifood.reabrir_item': { metodo: 'reabrirItem', verbo: 'Reabrir', agent: 'BRENO', argKeys: ['item_id'] },
+  'ifood.responder_review': { metodo: 'responderReview', verbo: 'Responder avaliação', agent: 'BRENO', argKeys: ['review_id', 'texto'] },
 };
 
 module.exports = function ({ requireJwtOrInternal, ifood, supabaseSelect, assertTenantMember, sbFetch, supabaseInsert }) {
@@ -52,6 +56,9 @@ module.exports = function ({ requireJwtOrInternal, ifood, supabaseSelect, assert
           // só campos seguros do erro de negócio do iFood; nunca o body cru
           details: err?.body && typeof err.body === 'object'
             ? { message: err.body.message ?? null, code: err.body.code ?? null }
+            : null,
+          retryAfterSeconds: status === 429 && typeof err?.retryAfterMs === 'number'
+            ? Math.ceil(err.retryAfterMs / 1000)
             : null,
         });
       }
@@ -158,11 +165,12 @@ module.exports = function ({ requireJwtOrInternal, ifood, supabaseSelect, assert
     return ifood.getStatusLoja(ctx.merchantId, ctx.tenantId);
   }));
 
-  // ── Avaliações ───────────────────────────────────────────────────────────────
+  // ── Avaliações — paginação opcional (?page=&size=) ──────────────────────────
   router.get('/ifood/reviews', requireJwtOrInternal, handle(async (req, res) => {
     const ctx = await resolveContext(req, res);
     if (!ctx) return;
-    return ifood.listarReviews(ctx.merchantId, ctx.tenantId);
+    const { page, size } = req.query;
+    return ifood.listarReviews(ctx.merchantId, { page, size }, ctx.tenantId);
   }));
 
   // ── Vendas — por período (?dataInicio=&dataFim=) ─────────────────────────────
@@ -339,15 +347,18 @@ module.exports = function ({ requireJwtOrInternal, ifood, supabaseSelect, assert
       return;
     }
     const merchantId = meta.merchant_id ? String(meta.merchant_id) : null;
-    const itemId = meta.item_id ? String(meta.item_id) : null;
-    if (!merchantId || !itemId) {
-      res.status(400).json({ ok: false, error: 'metadata incompleto: merchant_id/item_id ausente' });
+    const argKeys = spec.argKeys || ['item_id'];
+    const args = argKeys.map((k) => meta[k]);
+    if (!merchantId || args.some((v) => v === undefined || v === null || v === '')) {
+      res.status(400).json({ ok: false, error: `metadata incompleto: merchant_id/${argKeys.join('/')} ausente` });
       return;
     }
+    // usado nas mensagens de audit_log/erro abaixo (item_id OU review_id, conforme a operação)
+    const alvoId = String(args[0]);
 
     let resultado;
     try {
-      resultado = await ifood[spec.metodo](merchantId, itemId, tenantId); // escrita SEM retry
+      resultado = await ifood[spec.metodo](merchantId, ...args, tenantId); // escrita SEM retry
     } catch (err) {
       // marca failed + grava o erro (só campos seguros — não o body cru do iFood)
       const lastError = String(err?.message || 'erro desconhecido').slice(0, 400);
@@ -361,7 +372,7 @@ module.exports = function ({ requireJwtOrInternal, ifood, supabaseSelect, assert
           user_id: req.user?.id ?? null,
           agent_name: spec.agent,
           action: `${meta.operacao}.falhou`,
-          resource: `ifood:item:${itemId}`,
+          resource: `ifood:${argKeys[0]}:${alvoId}`,
           metadata: { draft_id: draftId, merchant_id: merchantId, error: lastError },
         }).catch((e) => console.error('[ifood/aprovar] audit_log falhou:', e.message));
       }
@@ -378,8 +389,10 @@ module.exports = function ({ requireJwtOrInternal, ifood, supabaseSelect, assert
         user_id: req.user?.id ?? null,
         agent_name: spec.agent,
         action: meta.operacao,
-        resource: `ifood:item:${itemId}`,
-        metadata: { draft_id: draftId, merchant_id: merchantId, content: draft.content },
+        resource: `ifood:${argKeys[0]}:${alvoId}`,
+        // resultado persiste o retorno da API (createdAt/reviewId/text no caso de
+        // responder_review) — a única cópia duradoura além da resposta HTTP transiente.
+        metadata: { draft_id: draftId, merchant_id: merchantId, content: draft.content, resultado },
       }).catch((e) => console.error('[ifood/aprovar] audit_log falhou:', e.message));
     }
     return { draft_id: draftId, operacao: meta.operacao, resultado };

@@ -312,6 +312,64 @@ function restoreFetch() {
     clearCreds();
   });
 
+  // ── listarReviews — paginação (?page=&size=) ────────────────────────────────
+  await check('listarReviews: page/size viram querystring (pageSize no request ao iFood); omitidos não aparecem na URL', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-page', expiresIn: 21600 });
+      }
+      return jsonResponse(200, { reviews: [], page: 2, size: 10, total: 0, pageCount: 0 });
+    });
+    const ifood = freshIfood();
+    await ifood.listarReviews('merchant-1', { page: 2, size: 10 });
+    const reviewsCall = calls.find((c) => c.url.includes('/reviews'));
+    const parsedUrl = new URL(reviewsCall.url);
+    assert.strictEqual(parsedUrl.searchParams.get('page'), '2');
+    assert.strictEqual(parsedUrl.searchParams.get('pageSize'), '10');
+    assert.strictEqual(parsedUrl.searchParams.get('size'), null, 'o iFood usa pageSize, não size, no request');
+
+    await ifood.listarReviews('merchant-1');
+    const semParamsCall = calls.filter((c) => c.url.includes('/reviews')).at(-1);
+    assert.ok(!semParamsCall.url.includes('page='), 'sem page/size, a URL não deveria ter esses params');
+    restoreFetch();
+    clearCreds();
+  });
+
+  // ── Retry-After (429) — respeita o header no lugar do backoff fixo ──────────
+  await check('withRetry: 429 com Retry-After curto → espera o valor do header, não o backoff fixo', async () => {
+    setCreds();
+    const calls = [];
+    let statusCallCount = 0;
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-ra', expiresIn: 21600 });
+      }
+      statusCallCount++;
+      if (statusCallCount === 1) {
+        return {
+          ok: false,
+          status: 429,
+          statusText: 'status-429',
+          headers: { get: (h) => (h.toLowerCase() === 'retry-after' ? '0' : null) },
+          text: async () => JSON.stringify({ message: 'rate limited' }),
+        };
+      }
+      return jsonResponse(200, { available: true });
+    });
+    const ifood = freshIfood();
+    const t0 = Date.now();
+    const res = await ifood.getStatusLoja('merchant-ra');
+    const elapsed = Date.now() - t0;
+    assert.deepStrictEqual(res, { available: true });
+    assert.strictEqual(statusCallCount, 2, 'deveria ter retentado 1x após o 429');
+    // Retry-After: 0 → deveria pular o backoff fixo de 1000ms do 2º attempt.
+    assert.ok(elapsed < 900, `esperava respeitar Retry-After:0 (rápido), levou ${elapsed}ms`);
+    restoreFetch();
+    clearCreds();
+  });
+
   restoreFetch();
   if (failures > 0) {
     process.stdout.write(`\n${failures} falha(s) de ${passes + failures}.\n`);
