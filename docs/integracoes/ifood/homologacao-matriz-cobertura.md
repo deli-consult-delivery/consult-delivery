@@ -3,6 +3,7 @@
 > Gerada em 2026-07-06, a partir de `origin/main` pós-#758/#759/#760.
 > **Atualizada em 2026-07-06** contra `origin/main` pós-#761/#762/#764 (rebase) — #762 fechou quase toda a lacuna de Merchant (interruptions/opening-hours/tela `lojas`).
 > **2ª atualização em 2026-07-06** contra `origin/main` pós-#763 (agora MERGEADO — summary: 404 "sem reviews"→estado vazio decente) — ver nota em R8.
+> **3ª atualização em 2026-07-06** contra `origin/main` pós-#768 (MERGEADO) — fechou os 2 últimos critérios pendentes de Review (filtro por data e detalhe de 1 review). Fila de PRs desta homologação esvaziada.
 > Mapeia CADA critério de `docs/integracoes/ifood/homologacao-checklist-avaliacoes.md` → onde está implementado → evidência (teste offline, smoke live já rodado, ou LACUNA).
 > **Regra**: lacuna é reportada como lacuna, sem maquiagem — esta matriz é para o Wandson decidir o que falta antes do ticket.
 
@@ -21,7 +22,7 @@
 
 | Critério | Status | Nota |
 |---|---|---|
-| Aplicativo pronto p/ teste (sessão remota ~45min) | 🟡 PARCIAL | Review 8/11 pronto e Merchant com interruptions/opening-hours/status já entregues (ver módulos abaixo); restam lacunas pequenas (filtro de data, detalhe de review/merchant) — nenhuma bloqueia a demo central |
+| Aplicativo pronto p/ teste (sessão remota ~45min) | 🟡 PARCIAL | Review 10/11 pronto (só falta o link de política ser confirmado) e Merchant com interruptions/opening-hours/status já entregues (ver módulos abaixo); resta só M2 (detalhe root do merchant, baixo risco) — nada bloqueia a demo central |
 | Conta Profissional (CNPJ) | 🔵 SMOKE LIVE | Depende do cadastro no portal do desenvolvedor — fora do código |
 | Token de acesso válido (onboarding) | ✅ IMPLEMENTADO | `IFOOD_CLIENT_ID`/`IFOOD_CLIENT_SECRET` no `.env` do Bridge na VPS (confirmado ligado 2026-07-05, memória `project_ifood_api_sandbox`) |
 | Ticket de homologação aberto | 🔵 SMOKE LIVE | Ação do Wandson no portal, não é código |
@@ -52,23 +53,23 @@
 |---|---|---|---|---|---|---|
 | R1 | Listar avaliações — 200, campos `id/status/replies[]/version/visibility`, paginação `page/size/total/pageCount` | 🟡 PARCIAL | `listarReviews(merchantId,{page,size},tenantId)` — `lib/ifood.js:270` (traduz `size`→`pageSize` na query real ao iFood, ver nota R1b) | `GET /ifood/reviews` — `routes/ifood.js:169`; `GET /ifood-api/reviews/:lojaId` — `routes/ifood-api.js:95` | `AvaliacoesReviewApi.jsx` (lista + pagina) | `test/ifood.test.js:316` (page/size→query); `test/ifood-api-routes.test.js` cenário 10 (linha 235, `size=51`→400) |
 | R1b | Shape dos campos (`version`,`visibility`, `replies[].from`) | 🔵 SMOKE LIVE | `tolerant()` (`lib/ifood.js:214`) só garante objeto/array via passthrough Zod — não valida schema específico | — | — | Sandbox de reviews está **vazio** (confirmado 05/07) — schema real só confirmável no smoke live |
-| R2 | Filtro por data (retorna só reviews do período) | ❌ LACUNA | `listarReviews` só aceita `page`/`size` — sem `startDate`/`endDate` | ❌ | ❌ (front não expõe filtro de data) | — |
+| R2 | Filtro por data (retorna só reviews do período) | ✅ IMPLEMENTADO (era ❌ LACUNA — fechado pelo #768) | `listarReviews(merchantId,{page,size,dataInicio,dataFim})` — `lib/ifood.js:275` (traduz `dataInicio`/`dataFim` yyyy-MM-dd pra `dateFrom`/`dateTo` ISO 8601 date-time na query real ao iFood; nomes NÃO confirmados contra chamada real — mesma ressalva já feita pro `pageSize`) | `GET /ifood-api/reviews/:lojaId?dataInicio=&dataFim=` — `routes/ifood-api.js:121`, valida formato → 400 `code:DATA_INVALIDA` | `AvaliacoesReviewApi.jsx` — 2 inputs `type="date"` que resetam a página ao mudar (linhas 213-247) | `test/ifood.test.js` (filtro aplicado/ausente); `test/ifood-api-routes.test.js` cenários 20-21 (data inválida→400 `DATA_INVALIDA`; data válida repassada ao client) |
 | R3 | Paginação: `pageSize>50`→400, lista vazia→`reviews:[]` | ✅ IMPLEMENTADO | — | `routes/ifood-api.js:95` valida `size>50` antes de gastar rede | `AvaliacoesReviewApi.jsx` limita front a `PAGE_SIZE=20` | `test/ifood-api-routes.test.js` cenário 10 (linha 235: `size=51`→400 `code:PAGE_SIZE_INVALIDO`) |
-| R4 | Obter detalhes de 1 review (200 completo; 404 se inexistente) | ❌ LACUNA | nenhuma função `obterReview(merchantId,reviewId)` — só existe listagem em massa | ❌ | ❌ | — |
+| R4 | Obter detalhes de 1 review (200 completo; 404 se inexistente) | ✅ IMPLEMENTADO (era ❌ LACUNA — fechado pelo #768) | `getReviewDetalhe(merchantId,reviewId)` — `lib/ifood.js:289` (GET, sem retry — 4xx propaga direto) | `GET /ifood-api/reviews/:lojaId/:reviewId` — `routes/ifood-api.js:165`; reviewId malformado → 400 `REVIEW_ID_INVALIDO` antes de tocar a rede | `AvaliacoesReviewApi.jsx` — botão "Ver detalhes" abre `ReviewDetalheModal` (linhas 44-104) com score/comentário/`replies[]` (Lojista/Cliente) e 404 tratado via `mensagemErro()` | `test/ifood-api-routes.test.js` cenários 22-24 (200 com `replies[].from`; 404 repassado do iFood com `details.message`; reviewId malformado→400 sem chamar o client) |
 | R5 | Responder avaliação — texto 10–300→201 com `createdAt/reviewId/text` | ✅ IMPLEMENTADO | `responderReview` — `lib/ifood.js:438` | Draft: `POST /ifood-api/reviews/:lojaId/:reviewId/draft` (`routes/ifood-api.js:131`, valida 10–300→400 `code:TEXTO_INVALIDO`); Aprovação: `POST /ifood/aprovar/:draftId` (`routes/ifood.js:320`, despacha `ifood.responder_review` via `OPERACOES_ESCRITA`, persiste `resultado` no `audit_log`) | `AvaliacoesReviewApi.jsx` — fluxo "Salvar rascunho"→"Aprovar e enviar", validação 10–300 no input (linhas 51,98-102,111) | `test/ifood.test.js:267` (POST correto); `test/ifood-aprovar-routes.test.js` cenário 1 (linha 79: sucesso, `resultado.reviewId` persistido) |
 | R6 | Status ≠ `NOT_REPLIED` → 409 ou 422 | ✅ IMPLEMENTADO | `responderReview` sem retry (não-idempotente) | `routes/ifood.js:320` repassa `err.status`/`err.body.{message,code}` via `details` | `mensagemErro()` no front prefere `err.details?.message` (ex. "já respondida") sobre o `err.message` genérico | `test/ifood-aprovar-routes.test.js` cenário 2 (linha 105: 409 repassado, draft marcado `failed`) |
 | R7 | Texto <10 ou >300 → 400 | ✅ IMPLEMENTADO | `responderReview` valida texto não-vazio (`lib/ifood.js:441`) — mas a validação de **tamanho** 10–300 é no Bridge/front, não no client (design correto: o client só valida o essencial pra não quebrar a URL/body) | `routes/ifood-api.js:138-146` valida 10–300→400 `code:TEXTO_INVALIDO` | Front bloqueia o botão "Salvar rascunho" fora do range + mostra contador (linha 102) | `test/ifood-api-routes.test.js` cenário 11 (linha 255: texto curto→400) |
 | R8 | Obter resumo `/summary` — 200, `totalReviewsCount≥listadas`, `validReviewsCount≤total`, `score=média` | 🟡 PARCIAL (caso de borda "0 reviews" fechado pelo #763) | `getSummaryReviews` — `lib/ifood.js:287` (passthrough + cache 60s TTL; #763 estendeu com tratamento do 404 "Summary not found" → `null`, ver nota abaixo) | `GET /ifood-api/summary/:lojaId` — `routes/ifood-api.js:205` (deixa `summary: null` passar sem tratamento especial) | `getIfoodSummary()` (`src/lib/api.js:667`) alimenta o card "Notas iFood" da Visão Geral — `src/console/ConsoleV2.jsx:417`; card mostra "Sem avaliações ainda." quando `summary === null` | Mecânica testada: `test/ifood-api-routes.test.js` cenários 8–9 (passthrough + gate `fonte_dados`) e cenário 19 (#763: `getSummaryReviews→null` → rota 200 `summary:null`); **aritmética do `score`/`totalReviewsCount`/`validReviewsCount` NÃO testável offline** — quem calcula é o iFood, não nosso código; só confirmável comparando o JSON real no smoke live |
 | R9 | Link "Política de Avaliações" visível na UI | 🟡 PARCIAL (⚠️ risco) | — | — | `AvaliacoesReviewApi.jsx:159` — link presente e sempre visível | ⚠️ **URL não confirmada contra fonte oficial** — foi escrita no PR #760 sem link canônico documentado no projeto (nenhuma referência anterior em `docs/`). **Ação antes da sessão de homologação: o Wandson precisa confirmar/corrigir a URL real no portal do desenvolvedor.** |
-| R10 | Erros 401/403/404 (Review) | ✅ IMPLEMENTADO | mesmo pipeline genérico de M6 | mesmo `handle()` genérico | `mensagemErro()` mapeia 401/403/404 pra texto claro em pt-BR (`AvaliacoesReviewApi.jsx:26-28`) | `test/ifood-api-routes.test.js` cenários 20–21 (upstream 401/403 repassados) |
+| R10 | Erros 401/403/404 (Review) | ✅ IMPLEMENTADO | mesmo pipeline genérico de M6 | mesmo `handle()` genérico | `mensagemErro()` mapeia 401/403/404 pra texto claro em pt-BR (`AvaliacoesReviewApi.jsx:26-28`) | `test/ifood-api-routes.test.js` cenários 25–26 (upstream 401/403 repassados) |
 | R11 | Rate limit 429 (Retry-After) | ✅ IMPLEMENTADO | `withRetry` respeita `Retry-After` real (cap 30s) — `lib/ifood.js:126-152` | `retryAfterSeconds` no JSON de erro (`routes/ifood.js`,`routes/ifood-api.js`) | `mensagemErro()` mostra "tente novamente em Xs" (`AvaliacoesReviewApi.jsx:29-32`) | `test/ifood.test.js:341` (Retry-After curto → não espera o backoff fixo) |
 
 **Nota R8 — PR #763 (MERGEADO)**: trata um caso de borda real e já confirmado live — o merchant sandbox de homologação tem 0 reviews hoje, e nesse caso o iFood não devolve `{totalReviewsCount:0,...}`, devolve **404** `{"errorMessage":"Summary not found"}` (condição de negócio, não erro). Antes do fix, o Bridge propagava esse 404 como erro e o card "Notas iFood" mostrava um card vermelho de erro com JSON cru em vez de "Sem avaliações ainda." O #763 faz `getSummaryReviews` reconhecer especificamente esse `errorMessage` (não qualquer 404 — um 404 por merchantId errado continua propagando erro normalmente) e devolver `summary: null`; a rota (`routes/ifood-api.js:205`) e `CardNotasIfood` (`ConsoleV2.jsx`) tratam `summary: null` como "sem avaliações ainda", não erro. Testado offline (o 404 específico vira sucesso — cenário 19 em `test/ifood-api-routes.test.js`; outro 404 genérico continua propagando erro — cenário próprio do #763 em `test/ifood.test.js`). **Já em `main` — a loja de homologação (0 reviews hoje) mostra o card correto na sessão com o analista.**
 
 **Nota sobre PR #764 (mergeado, fora do escopo desta matriz)**: título menciona "reviews", mas é sobre a tabela `public.reviews` do Supabase (RLS anon insert/update) — usada SÓ por `PainelAvaliacoesConsultor.jsx` (fluxo antigo de aprovação de resposta via WhatsApp, mediado por consultor, sem API do iFood). Não tem nenhuma relação com o módulo Review API (`lib/ifood.js`, `routes/ifood-api.js`, `AvaliacoesReviewApi.jsx`) mapeado nesta matriz — confirmado via grep (`public.reviews` só é referenciado por aquele componente). Nenhuma linha desta matriz muda por causa do #764.
 
-### Resumo Review
-**8 de 11 critérios ✅ IMPLEMENTADOS e testados offline (R3, R5, R6, R7, R10, R11 completos ponta-a-ponta; R1/R8 parciais só por causa de nuances externas — schema não confirmado / aritmética é da API). 2 lacunas reais de feature (R2 filtro de data, R4 detalhe de 1 review) — nenhuma delas bloqueia o fluxo central de "responder avaliação", mas ambas aparecem no checklist final do analista.** R9 (política) tem um risco de conteúdo, não de código — URL precisa de confirmação humana.
+### Resumo Review (atualizado pós-#768 — módulo Review 100% fechado)
+**10 de 11 critérios ✅ IMPLEMENTADOS e testados offline (R2, R3, R4, R5, R6, R7, R10, R11 completos ponta-a-ponta; R1/R8 parciais só por causa de nuances externas — schema não confirmado / aritmética é da API). Zero lacunas reais de feature restantes** — o #768 fechou os 2 últimos critérios (filtro de data, detalhe de 1 review). R9 (política) tem um risco de conteúdo, não de código — URL precisa de confirmação humana.
 
 ---
 
@@ -76,10 +77,10 @@
 
 | Item do checklist | Cobertura |
 |---|---|
-| Lista de avaliações retorna todas as reviews | 🟡 sim, mas sem filtro de data (R2 lacuna) |
-| Filtro por data funciona | ❌ R2 — não implementado |
+| Lista de avaliações retorna todas as reviews | ✅ R1 |
+| Filtro por data funciona | ✅ R2 (fechado pelo #768) |
 | Paginação correta | ✅ R1+R3 |
-| Detalhes completos de uma review | ❌ R4 — não implementado |
+| Detalhes completos de uma review | ✅ R4 (fechado pelo #768) |
 | Resposta criada com sucesso (201) | ✅ R5 |
 | Rejeição de status inválido (409) | ✅ R6 |
 | Rejeição de texto inválido (400) | ✅ R7 |
@@ -88,7 +89,7 @@
 | Tratamento de erros 401/403/404 | ✅ R10 |
 | Tratamento de rate limit 429 | ✅ R11 |
 
-**6 de 11 itens do checklist final 100% prontos. 2 lacunas de feature (filtro de data, detalhe de review). 1 risco de conteúdo (URL da política). 1 item parcialmente smoke-live-dependente (summary).**
+**9 de 11 itens do checklist final 100% prontos (atualizado — #768 fechou filtro de data e detalhe de review). Zero lacunas de feature restantes. 1 risco de conteúdo (URL da política). 1 item parcialmente smoke-live-dependente (summary — a aritmética é calculada pelo iFood, não testável offline).**
 
 ---
 
@@ -104,21 +105,22 @@
 
 ---
 
-## Resumo executivo (atualizado pós-#761/#762/#763/#764 — todos já mergeados)
+## Resumo executivo (atualizado pós-#761/#762/#763/#764/#768 — todos já mergeados)
 
-- **Review (o "coração" do App Avaliações)**: 8/11 critérios prontos e testados offline. Faltam filtro de data e detalhe de review individual — nenhum bloqueia a demo central (listar → responder → aprovar), mas ambos aparecem no checklist final que o analista confere.
+- **Review (o "coração" do App Avaliações) — 100% dos critérios de feature fechados**: 10/11 critérios prontos e testados offline. O #768 fechou os 2 últimos (filtro de data, detalhe de review individual). Só resta R9 (conteúdo — confirmar URL da política) e R8 (aritmética do summary, inerentemente smoke-live).
 - **Merchant — MUDANÇA GRANDE desde a versão original desta matriz**: o #762 fechou a lacuna que era o maior risco do ticket. Status, interruptions (pausar/despausar) e opening-hours (leitura) agora existem ponta-a-ponta com UI e polling de 30s (`TabMerchantIfood` em `LojaWorkspace.jsx`). Só restam: M2 (detalhe root do merchant — baixo risco, não é cenário de teste do checklist) e a edição de horários no front (backend PUT pronto, sem botão ainda — aceitável, checklist só exige leitura mínima).
-- **Maior risco não-técnico, ainda aberto**: URL da Política de Avaliações nunca foi confirmada contra o portal oficial — pode estar errada.
-- **Risco de timing RESOLVIDO**: PR #763 mergeou — o caso real "loja com 0 reviews → iFood devolve 404, não sucesso vazio" agora vira "Sem avaliações ainda." no card de resumo, em vez de um card de erro. Sem pendência.
+- **Maior risco não-técnico, ainda aberto (o único risco real que sobra nesta matriz)**: URL da Política de Avaliações nunca foi confirmada contra o portal oficial — pode estar errada.
+- **Risco de timing RESOLVIDO**: PR #763 mergeou — o caso real "loja com 0 reviews → iFood devolve 404, não sucesso vazio" agora vira "Sem avaliações ainda." no card de resumo, em vez de um card de erro.
 - **PR #764 (mergeado)**: sobre a tabela `public.reviews` (fluxo antigo de aprovação via WhatsApp) — confirmado sem relação com o módulo Review API mapeado aqui, nenhuma linha desta matriz mudou por causa dele.
-- **Testes novos neste PR**: 2 cenários cobrindo 401/403 upstream repassados pela rota (antes só testados no client `lib/ifood.js`, não no caminho HTTP completo) — ver `test/ifood-api-routes.test.js` cenários 20–21 (renumerados 2x: primeiro pelo rebase com o #762 que adicionou seus próprios cenários 16–18, depois pelo #763 que inseriu o cenário 19 na frente dos meus).
-- **Nada aqui foi testado contra a API real** — o sandbox de reviews está vazio (confirmado 05/07); tudo que exige dado real do iFood (shape exato dos campos V2, aritmética do summary) está marcado 🔵 SMOKE LIVE.
+- **PR #768 (mergeado)**: fechou filtro de data (`dataInicio`/`dataFim` → `dateFrom`/`dateTo`) e detalhe de review (`getReviewDetalhe` + modal "Ver detalhes" no front) — ver R2/R4 acima.
+- **Testes novos neste PR (matriz)**: 2 cenários cobrindo 401/403 upstream repassados pela rota (antes só testados no client `lib/ifood.js`, não no caminho HTTP completo) — ver `test/ifood-api-routes.test.js` cenários 25–26 (renumerados 3x ao longo dos rebases sucessivos com #762/#763/#768, que foram inserindo seus próprios cenários na frente dos meus).
+- **Nada aqui foi testado contra a API real** — o sandbox de reviews está vazio (confirmado 05/07); tudo que exige dado real do iFood (shape exato dos campos V2, aritmética do summary, nomes de query `pageSize`/`dateFrom`/`dateTo` não confirmados) está marcado 🔵 SMOKE LIVE.
 
 ### Pendências recomendadas antes de abrir o ticket de homologação
 
 1. ~~**Bloqueante**: construir M4 (interruptions) + M5 (opening-hours) + tela `lojas` com polling~~ — **RESOLVIDO pelo #762.**
-2. **Bloqueante leve**: R2 (filtro de data) e R4 (detalhe de review) — aparecem no checklist final do analista.
-3. **Rápido, sem código**: confirmar a URL real da Política de Avaliações no portal do desenvolvedor e corrigir `AvaliacoesReviewApi.jsx:15` se necessário.
+2. ~~**Bloqueante leve**: R2 (filtro de data) e R4 (detalhe de review)~~ — **RESOLVIDO pelo #768.**
+3. **Rápido, sem código**: confirmar a URL real da Política de Avaliações no portal do desenvolvedor e corrigir `AvaliacoesReviewApi.jsx:15` se necessário. **Única pendência de conteúdo restante.**
 4. ~~**Decisão rápida**: mergear o #763 antes da sessão~~ — **RESOLVIDO, #763 já está em `main`.**
-5. **Smoke live obrigatório antes da sessão**: rodar ao menos 1 review real através do fluxo completo (listar→responder→aprovar), o `/summary` (com e sem reviews cadastradas), e ao menos 1 pausa/despausa de loja + leitura de horários contra o merchant de teste `92a0ec17-6951-4a9b-9c02-ee12963be5f1`, pra confirmar os shapes que hoje são só suposição documentada em comentários `ponytail` no código.
+5. **Smoke live obrigatório antes da sessão**: rodar ao menos 1 review real através do fluxo completo (listar→responder→aprovar), filtro por data, detalhe de 1 review, o `/summary` (com e sem reviews cadastradas), e ao menos 1 pausa/despausa de loja + leitura de horários contra o merchant de teste `92a0ec17-6951-4a9b-9c02-ee12963be5f1`, pra confirmar os shapes que hoje são só suposição documentada em comentários `ponytail` no código (`pageSize`, `dateFrom`/`dateTo`).
 6. **Opcional, baixo risco**: M2 (detalhe root do merchant) e M1 (rota/UI para listar merchants) — nenhum dos dois é citado como cenário de teste explícito no checklist Merchant, só como linha da tabela de endpoints; avaliar se vale a pena implementar antes do ticket ou deixar para depois.
