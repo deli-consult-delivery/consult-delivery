@@ -622,6 +622,27 @@ async function reabrirItem(merchantId, itemId, tenantId) {
   ).then(tolerant);
 }
 
+// Altera o preço de um item via PATCH (JSON Merge Patch) — MESMO endpoint
+// síncrono de pausarItem/reabrirItem (PATCH /items/{itemId}), só que no campo
+// `price` em vez de `status`. Pesquisa (#800) achou também um mecanismo batch
+// (PATCH /items/price → 202 {batchId} + GET /batch/{id}) não confirmado contra
+// o sandbox — não implementado aqui; o PATCH direto por item já é usado e
+// validado neste client, então espelhamos ele (decisão informada, ver PR).
+// Validação: price precisa ser número finito > 0 (preço zero/negativo é erro
+// de programação do chamador, não do iFood — não retentável).
+async function alterarPrecoItem(merchantId, itemId, novoPreco, tenantId) {
+  assertPathId(merchantId, 'merchantId');
+  assertPathId(itemId, 'itemId');
+  if (typeof novoPreco !== 'number' || !Number.isFinite(novoPreco) || novoPreco <= 0) {
+    throw new IfoodApiError('alterarPrecoItem: novoPreco deve ser um número maior que zero', 0, null);
+  }
+  return ifoodFetch(
+    `/catalog/v2.0/merchants/${merchantId}/items/${itemId}`,
+    { method: 'PATCH', body: { price: { value: novoPreco } } },
+    tenantId
+  ).then(tolerant);
+}
+
 // Deleta uma categoria (cleanup). DELETE sem corpo → tolerant() ignora null.
 async function deletarCategoria(merchantId, categoryId, tenantId) {
   assertPathId(merchantId, 'merchantId');
@@ -882,6 +903,7 @@ module.exports = {
   listarItensCategoria,
   pausarItem,
   reabrirItem,
+  alterarPrecoItem,
   deletarCategoria,
   responderReview,
   // escrita (Merchant v1.0) — sem retry
