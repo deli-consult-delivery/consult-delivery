@@ -37,8 +37,14 @@ module.exports = ({ requireJwt, sbFetch, assertTenantMember }) => {
         signal: AbortSignal.timeout(timeoutMs),
       });
       const text = await r.text();
-      const data = text ? JSON.parse(text) : null;
-      if (!r.ok) return res.status(r.status).json({ error: `Evolution ${r.status}`, detail: data ?? text });
+      let data = null;
+      if (text) {
+        // Evolution/nginx pode devolver HTML (ex.: 502) — sem o try, isso
+        // estoura no catch de baixo e vira 500 genérico, mascarando o status
+        // real (r.status) que o front precisaria para diferenciar os erros.
+        try { data = JSON.parse(text); } catch { data = text; }
+      }
+      if (!r.ok) return res.status(r.status).json({ error: `Evolution ${r.status}`, detail: data });
       return res.json(data);
     } catch (err) {
       console.error(`[evolution-actions ${evoPath('?')}]`, err.message);

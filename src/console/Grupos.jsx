@@ -166,7 +166,14 @@ function TabWhatsApp({ tenantDbId }) {
     if (form.id) {
       const updates = { group_name: form.group_name };
       if (form.evolution_jid) {
-        try { await updateWAGroupSubject(selInstance, form.evolution_jid, form.group_name); } catch { /* ignora */ }
+        try {
+          await updateWAGroupSubject(selInstance, form.evolution_jid, form.group_name);
+        } catch (e) {
+          // não atualiza o Supabase nem fecha o modal — evita divergência
+          // silenciosa Supabase×WhatsApp (nome diferente nos dois lados)
+          showToast('err', 'Erro ao renomear no WhatsApp — nada foi salvo: ' + (e.message || e));
+          return;
+        }
       }
       await supabase.from('whatsapp_groups').update(updates).eq('id', form.id);
       showToast('ok', 'Grupo atualizado!');
