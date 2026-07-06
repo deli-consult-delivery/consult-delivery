@@ -6,7 +6,7 @@ import NovaLojaModal from './NovaLojaModal.jsx';
 const STATUS_COLORS = {
   onboarding: '#f59e0b',
   ativo: '#10b981', ativa: '#10b981',
-  pausado: '#6b7280', pausada: '#6b7280',
+  pausado: '#76716c', pausada: '#76716c', // hex (não var(--tx2)) — usado com +'20' de alpha abaixo
   encerrado: '#ef4444', encerrada: '#ef4444',
   inativo: '#ef4444', inativa: '#ef4444',
 };
@@ -72,7 +72,7 @@ export default function LojasListView({ tenantDbId, userId, go }) {
     <div style={{ padding: 24, maxWidth: 1100, margin: '0 auto' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, gap: 12 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: '#fff', margin: 0 }}>Lojas</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink)', margin: 0 }}>Lojas</h1>
         <button
           onClick={() => setShowModal(true)}
           style={{ background: '#B70C00', border: 'none', color: '#fff', padding: '8px 14px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 13 }}
@@ -84,18 +84,18 @@ export default function LojasListView({ tenantDbId, userId, go }) {
       {/* Filters */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 180 }}>
-          <Icon name="search" size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#6b7280', pointerEvents: 'none' }} />
+          <Icon name="search" size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--tx2)', pointerEvents: 'none' }} />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar por nome ou cidade…"
-            style={{ width: '100%', background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, color: '#fff', padding: '8px 10px 8px 32px', fontSize: 13, boxSizing: 'border-box' }}
+            style={{ width: '100%', background: 'var(--panel,#fff)', border: '1px solid var(--line)', borderRadius: 8, color: 'var(--ink)', padding: '8px 10px 8px 32px', fontSize: 13, boxSizing: 'border-box' }}
           />
         </div>
         <select
           value={filterStatus}
           onChange={e => setFilterStatus(e.target.value)}
-          style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, color: filterStatus ? '#fff' : '#6b7280', padding: '8px 10px', fontSize: 13, cursor: 'pointer' }}
+          style={{ background: 'var(--panel,#fff)', border: '1px solid var(--line)', borderRadius: 8, color: filterStatus ? 'var(--ink)' : 'var(--tx2)', padding: '8px 10px', fontSize: 13, cursor: 'pointer' }}
         >
           <option value="">Todos os status</option>
           {STATUSES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -103,12 +103,12 @@ export default function LojasListView({ tenantDbId, userId, go }) {
         <select
           value={filterSegmento}
           onChange={e => setFilterSegmento(e.target.value)}
-          style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, color: filterSegmento ? '#fff' : '#6b7280', padding: '8px 10px', fontSize: 13, cursor: 'pointer' }}
+          style={{ background: 'var(--panel,#fff)', border: '1px solid var(--line)', borderRadius: 8, color: filterSegmento ? 'var(--ink)' : 'var(--tx2)', padding: '8px 10px', fontSize: 13, cursor: 'pointer' }}
         >
           <option value="">Todos os segmentos</option>
           {SEGMENTOS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
-        <span style={{ marginLeft: 'auto', fontSize: 12, color: '#6b7280', alignSelf: 'center' }}>
+        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--tx2)', alignSelf: 'center' }}>
           {filtered.length} {filtered.length === 1 ? 'loja' : 'lojas'}
         </span>
       </div>
@@ -117,13 +117,13 @@ export default function LojasListView({ tenantDbId, userId, go }) {
       {loading ? (
         <div style={{ display: 'grid', gap: 8 }}>
           {[1, 2, 3, 4].map(i => (
-            <div key={i} style={{ height: 56, background: '#1a1a1a', borderRadius: 10, animation: 'pulse 1.5s infinite' }} />
+            <div key={i} style={{ height: 56, background: 'var(--panel,#fff)', borderRadius: 10, animation: 'pulse 1.5s infinite' }} />
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 20px', color: '#6b7280' }}>
+        <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--tx2)' }}>
           <div style={{ marginBottom: 12, opacity: 0.4 }}><Icon name="building" size={44} /></div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: '#9ca3af' }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--tx2)' }}>
             {lojas.length === 0 ? 'Nenhuma loja cadastrada' : 'Nenhuma loja encontrada'}
           </div>
           <div style={{ marginTop: 4, fontSize: 13 }}>
@@ -141,11 +141,11 @@ export default function LojasListView({ tenantDbId, userId, go }) {
           )}
         </div>
       ) : (
-        <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ background: 'var(--panel,#fff)', border: '1px solid var(--line)', borderRadius: 12, overflow: 'hidden' }}>
           <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <table style={{ width: '100%', minWidth: 540, borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid #2a2a2a' }}>
+              <tr style={{ borderBottom: '1px solid var(--line)' }}>
                 <th style={thStyle}>Logo</th>
                 <th style={thStyle}>Nome</th>
                 <th style={thStyle}>Cidade / UF</th>
@@ -157,20 +157,20 @@ export default function LojasListView({ tenantDbId, userId, go }) {
               {filtered.map((l, i) => (
                 <tr
                   key={l.id}
-                  style={{ borderTop: i > 0 ? '1px solid #1f1f1f' : undefined, cursor: 'pointer', transition: 'background 0.15s' }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#222'}
+                  style={{ borderTop: i > 0 ? '1px solid var(--line)' : undefined, cursor: 'pointer', transition: 'background 0.15s' }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#f5f4f2'}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                   onClick={() => go('workspace', { lojaId: l.id })}
                 >
                   <td style={{ padding: '10px 14px', width: 44 }}>
                     {l.logo_url
                       ? <img src={l.logo_url} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover' }} />
-                      : <div style={{ width: 32, height: 32, borderRadius: 6, background: '#2a2a2a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      : <div style={{ width: 32, height: 32, borderRadius: 6, background: 'var(--bg2,#f5f4f2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <Icon name="building" size={14} />
                         </div>
                     }
                   </td>
-                  <td style={{ padding: '10px 14px', color: '#fff', fontWeight: 500 }}>
+                  <td style={{ padding: '10px 14px', color: 'var(--ink)', fontWeight: 500 }}>
                     {l.nome}
                     {l.super_restaurante && (
                       <span style={{ marginLeft: 6, fontSize: 10, background: '#f59e0b20', color: '#f59e0b', borderRadius: 4, padding: '1px 5px' }}>
@@ -178,17 +178,17 @@ export default function LojasListView({ tenantDbId, userId, go }) {
                       </span>
                     )}
                   </td>
-                  <td style={{ padding: '10px 14px', color: '#9ca3af' }}>
+                  <td style={{ padding: '10px 14px', color: 'var(--tx2)' }}>
                     {[l.cidade, l.estado].filter(Boolean).join(' / ') || '—'}
                   </td>
-                  <td style={{ padding: '10px 14px', color: '#9ca3af' }}>
+                  <td style={{ padding: '10px 14px', color: 'var(--tx2)' }}>
                     {l.segmento ? (SEG_LABEL[l.segmento] || l.segmento) : '—'}
                   </td>
                   <td style={{ padding: '10px 14px' }}>
                     <span style={{
                       fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20,
-                      background: (STATUS_COLORS[l.status] || '#6b7280') + '20',
-                      color: STATUS_COLORS[l.status] || '#6b7280',
+                      background: (STATUS_COLORS[l.status] || '#76716c') + '20',
+                      color: STATUS_COLORS[l.status] || '#76716c',
                     }}>
                       {STATUS_LABEL[l.status] || l.status || '—'}
                     </span>
@@ -221,7 +221,7 @@ const thStyle = {
   padding: '10px 14px',
   textAlign: 'left',
   fontWeight: 500,
-  color: '#6b7280',
+  color: 'var(--tx2)',
   fontSize: 11,
   textTransform: 'uppercase',
   letterSpacing: '0.05em',

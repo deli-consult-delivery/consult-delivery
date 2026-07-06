@@ -11,7 +11,7 @@ const BRIDGE = import.meta.env.VITE_BRIDGE_URL || 'https://bridge.consultdeliver
 const STATUS_COLORS = {
   onboarding: '#f59e0b',
   ativo: '#10b981', ativa: '#10b981',
-  pausado: '#6b7280', pausada: '#6b7280',
+  pausado: '#76716c', pausada: '#76716c', // hex (não var(--tx2)) — usado com +'20' de alpha abaixo
   encerrado: '#ef4444', encerrada: '#ef4444',
   inativo: '#ef4444', inativa: '#ef4444',
 };
@@ -43,16 +43,17 @@ const STATUS_TAREFA_LABEL = {
   cancelada: 'Cancelada',
 };
 
+// Hex (não var(--tx2)) — todas usadas com +'20' de alpha nos badges abaixo.
 const STATUS_TAREFA_COLOR = {
-  rascunho: '#6b7280',
-  aguardando_envio: '#6b7280',
+  rascunho: '#76716c',
+  aguardando_envio: '#76716c',
   aguardando_aprovacao: '#f59e0b',
   aprovada: '#3b82f6',
   rejeitada: '#ef4444',
   em_execucao: '#f97316',
   aguardando_validacao: '#8b5cf6',
   concluida: '#10b981',
-  cancelada: '#374151',
+  cancelada: '#76716c',
 };
 
 const BLOCO_LABEL = {
@@ -73,7 +74,7 @@ const PRIORIDADES_OPCOES = ['quick_win', 'estrutural', 'material_cliente'];
 
 const METRIC_EMPTY = { data: '', faturamento: '', pedidos: '', avaliacao_media: '', fonte: 'manual' };
 
-export default function LojaWorkspace({ tenantDbId, userId, go, lojaId }) {
+export default function LojaWorkspace({ tenantDbId, userId, go, lojaId, allowedModules }) {
   const [tab, setTab] = useState(0);
   const [loja, setLoja] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -174,38 +175,46 @@ export default function LojaWorkspace({ tenantDbId, userId, go, lojaId }) {
     loadConsultores();
   }
 
-  if (loading) return <div style={{ padding: 24, color: '#9ca3af', fontSize: 14 }}>Carregando…</div>;
+  if (loading) return <div style={{ padding: 24, color: 'var(--tx2)', fontSize: 14 }}>Carregando…</div>;
   if (!loja) return <div style={{ padding: 24, color: '#ef4444', fontSize: 14 }}>Loja não encontrada.</div>;
 
-  const statusColor = STATUS_COLORS[loja.status] || '#6b7280';
+  const statusColor = STATUS_COLORS[loja.status] || '#76716c';
   const isFonteApi = loja.fonte_dados === 'api';
   const tabs = isFonteApi ? [...BASE_TABS, 'Merchant iFood'] : BASE_TABS;
+  // Tenant com allowlist restrita (ex: T-HOMOLOG) — sem branding de agentes/
+  // consultoria: só Visão Geral + Merchant iFood ficam visíveis na barra de
+  // abas. NÃO reindexamos `tabs` (a troca de conteúdo abaixo é hardcoded por
+  // índice numérico, ex. `tab === MERCHANT_TAB_INDEX`) — só filtramos quais
+  // botões aparecem, preservando o índice original de cada aba.
+  const tabsVisiveis = allowedModules
+    ? tabs.map((t, i) => ({ t, i })).filter(({ i }) => i === 0 || i === MERCHANT_TAB_INDEX)
+    : tabs.map((t, i) => ({ t, i }));
 
   return (
     <div style={{ padding: 24, maxWidth: 1100, margin: '0 auto' }}>
       {/* Breadcrumb */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, fontSize: 13, color: '#6b7280' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, fontSize: 13, color: 'var(--tx2)' }}>
         <button
           onClick={() => go('list')}
-          style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}
+          style={{ background: 'none', border: 'none', color: 'var(--tx2)', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}
         >
           <Icon name="building" size={14} /> Lojas
         </button>
         <span style={{ opacity: 0.4 }}>/</span>
-        <span style={{ color: '#fff' }}>{loja.nome}</span>
+        <span style={{ color: 'var(--ink)' }}>{loja.nome}</span>
       </div>
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 22 }}>
         {loja.logo_url
           ? <img src={loja.logo_url} alt="" style={{ width: 52, height: 52, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }} />
-          : <div style={{ width: 52, height: 52, borderRadius: 10, background: '#2a2a2a', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          : <div style={{ width: 52, height: 52, borderRadius: 10, background: 'var(--bg2,#f5f4f2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <Icon name="building" size={22} />
             </div>
         }
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <h1 style={{ fontSize: 20, fontWeight: 700, color: '#fff', margin: 0 }}>{loja.nome}</h1>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--ink)', margin: 0 }}>{loja.nome}</h1>
             <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: statusColor + '20', color: statusColor }}>
               {STATUS_LABEL[loja.status] || loja.status}
             </span>
@@ -215,22 +224,22 @@ export default function LojaWorkspace({ tenantDbId, userId, go, lojaId }) {
               </span>
             )}
           </div>
-          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 3 }}>
+          <div style={{ fontSize: 12, color: 'var(--tx2)', marginTop: 3 }}>
             {[loja.segmento ? SEG_LABEL[loja.segmento] : null, loja.cidade, loja.estado].filter(Boolean).join(' · ') || 'Sem detalhes cadastrados'}
           </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid #2a2a2a', marginBottom: 22 }}>
-        {tabs.map((t, i) => (
+      <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--line)', marginBottom: 22 }}>
+        {tabsVisiveis.map(({ t, i }) => (
           <button
             key={t}
             onClick={() => setTab(i)}
             style={{
               background: 'none', border: 'none', padding: '8px 16px', cursor: 'pointer',
               fontSize: 13, fontWeight: tab === i ? 600 : 400,
-              color: tab === i ? '#fff' : '#6b7280',
+              color: tab === i ? 'var(--ink)' : 'var(--tx2)',
               borderBottom: tab === i ? '2px solid #B70C00' : '2px solid transparent',
               marginBottom: -1, transition: 'color 0.15s',
             }}
@@ -310,26 +319,26 @@ function TabVisaoGeral({ loja, lojaId, tenantDbId }) {
       {stats != null && (stats.totais?.total ?? 0) > 0 && (
         <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
           {[
-            { label: 'Total de tarefas', value: stats.totais?.total || 0, color: '#6b7280' },
+            { label: 'Total de tarefas', value: stats.totais?.total || 0, color: 'var(--tx2)' },
             { label: 'Concluídas', value: stats.totais?.por_status?.concluida || 0, color: '#10b981' },
             { label: 'Em execução', value: (stats.totais?.por_status?.em_execucao || 0) + (stats.totais?.por_status?.aguardando_validacao || 0), color: '#f97316' },
             { label: 'Pendentes', value: (stats.totais?.total || 0) - (stats.totais?.por_status?.concluida || 0) - (stats.totais?.por_status?.cancelada || 0) - (stats.totais?.por_status?.em_execucao || 0) - (stats.totais?.por_status?.aguardando_validacao || 0), color: '#f59e0b' },
           ].map(s => (
-            <div key={s.label} style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 10, padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <span style={{ fontSize: 11, color: '#6b7280' }}>{s.label}</span>
+            <div key={s.label} style={{ background: 'var(--panel,#fff)', border: '1px solid var(--line)', borderRadius: 10, padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{ fontSize: 11, color: 'var(--tx2)' }}>{s.label}</span>
               <span style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</span>
             </div>
           ))}
         </div>
       )}
       {!rows.length ? (
-        <div style={{ color: '#6b7280', fontSize: 14 }}>Nenhuma informação cadastrada.</div>
+        <div style={{ color: 'var(--tx2)', fontSize: 14 }}>Nenhuma informação cadastrada.</div>
       ) : (
-        <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ background: 'var(--panel,#fff)', border: '1px solid var(--line)', borderRadius: 12, overflow: 'hidden' }}>
           {rows.map(([label, value], i) => (
-            <div key={label} style={{ display: 'flex', gap: 16, padding: '12px 16px', borderTop: i > 0 ? '1px solid #1f1f1f' : undefined }}>
-              <div style={{ width: 160, flexShrink: 0, fontSize: 12, color: '#6b7280', paddingTop: 1 }}>{label}</div>
-              <div style={{ fontSize: 13, color: '#e5e7eb', wordBreak: 'break-word' }}>
+            <div key={label} style={{ display: 'flex', gap: 16, padding: '12px 16px', borderTop: i > 0 ? '1px solid var(--line)' : undefined }}>
+              <div style={{ width: 160, flexShrink: 0, fontSize: 12, color: 'var(--tx2)', paddingTop: 1 }}>{label}</div>
+              <div style={{ fontSize: 13, color: 'var(--tx)', wordBreak: 'break-word' }}>
                 {label === 'Link iFood'
                   ? <a href={value} target="_blank" rel="noreferrer" style={{ color: '#B70C00' }}>{value}</a>
                   : value}
@@ -348,8 +357,8 @@ function TabMetricas({ metricas, form, setForm, onSubmit, saving }) {
 
   return (
     <div>
-      <form onSubmit={onSubmit} style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 12, padding: 16, marginBottom: 20 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+      <form onSubmit={onSubmit} style={{ background: 'var(--panel,#fff)', border: '1px solid var(--line)', borderRadius: 12, padding: 16, marginBottom: 20 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx2)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           Adicionar métrica
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -379,29 +388,29 @@ function TabMetricas({ metricas, form, setForm, onSubmit, saving }) {
       </form>
 
       {metricas.length === 0 ? (
-        <div style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', padding: '40px 0' }}>
+        <div style={{ color: 'var(--tx2)', fontSize: 13, textAlign: 'center', padding: '40px 0' }}>
           Nenhuma métrica registrada ainda.
         </div>
       ) : (
-        <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 12, overflow: 'auto' }}>
+        <div style={{ background: 'var(--panel,#fff)', border: '1px solid var(--line)', borderRadius: 12, overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 640 }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid #2a2a2a' }}>
+              <tr style={{ borderBottom: '1px solid var(--line)' }}>
                 {['Data', 'Faturamento', 'Pedidos', 'Ticket Médio', 'Avaliação', 'Cancelamentos', 'Fonte'].map(h => (
-                  <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontWeight: 500, color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
+                  <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontWeight: 500, color: 'var(--tx2)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {metricas.map((m, i) => (
-                <tr key={m.id} style={{ borderTop: i > 0 ? '1px solid #1f1f1f' : undefined }}>
+                <tr key={m.id} style={{ borderTop: i > 0 ? '1px solid var(--line)' : undefined }}>
                   <td style={tdStyle}>{m.data}</td>
                   <td style={tdStyle}>{m.faturamento != null ? `R$ ${parseFloat(m.faturamento).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'}</td>
                   <td style={tdStyle}>{m.pedidos ?? '—'}</td>
                   <td style={tdStyle}>{m.ticket_medio != null ? `R$ ${parseFloat(m.ticket_medio).toFixed(2)}` : '—'}</td>
                   <td style={tdStyle}>{m.avaliacao_media != null ? `${m.avaliacao_media} ★` : '—'}</td>
                   <td style={tdStyle}>{m.cancelamentos ?? '—'}</td>
-                  <td style={{ ...tdStyle, color: '#6b7280', fontSize: 11 }}>{m.fonte}</td>
+                  <td style={{ ...tdStyle, color: 'var(--tx2)', fontSize: 11 }}>{m.fonte}</td>
                 </tr>
               ))}
             </tbody>
@@ -422,30 +431,30 @@ function TabConsultores({ consultores, onAtribuir, onRemove }) {
       </div>
 
       {consultores.length === 0 ? (
-        <div style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', padding: '40px 0' }}>
+        <div style={{ color: 'var(--tx2)', fontSize: 13, textAlign: 'center', padding: '40px 0' }}>
           Nenhum consultor atribuído a esta loja.
         </div>
       ) : (
-        <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ background: 'var(--panel,#fff)', border: '1px solid var(--line)', borderRadius: 12, overflow: 'hidden' }}>
           {consultores.map((c, i) => (
-            <div key={c.user_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderTop: i > 0 ? '1px solid #1f1f1f' : undefined }}>
-              <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#2a2a2a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#9ca3af', flexShrink: 0 }}>
+            <div key={c.user_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderTop: i > 0 ? '1px solid var(--line)' : undefined }}>
+              <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--bg2,#f5f4f2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: 'var(--tx2)', flexShrink: 0 }}>
                 {c.profile?.full_name?.[0]?.toUpperCase() || '?'}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {c.profile?.full_name || 'Sem nome'}
                 </div>
-                <div style={{ fontSize: 11, color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.profile?.email}</div>
+                <div style={{ fontSize: 11, color: 'var(--tx2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.profile?.email}</div>
               </div>
               <span style={{
                 fontSize: 11, padding: '2px 8px', borderRadius: 20, fontWeight: 600,
-                background: c.papel === 'principal' ? '#B70C0020' : '#2a2a2a',
-                color: c.papel === 'principal' ? '#B70C00' : '#9ca3af',
+                background: c.papel === 'principal' ? '#B70C0020' : 'var(--bg2,#f5f4f2)',
+                color: c.papel === 'principal' ? '#B70C00' : 'var(--tx2)',
               }}>
                 {PAPEL_LABEL[c.papel] || c.papel}
               </span>
-              <button onClick={() => onRemove(c.user_id)} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: 4 }} title="Remover">
+              <button onClick={() => onRemove(c.user_id)} style={{ background: 'none', border: 'none', color: 'var(--tx2)', cursor: 'pointer', padding: 4 }} title="Remover">
                 <Icon name="x" size={14} />
               </button>
             </div>
@@ -462,7 +471,11 @@ function TabConsultores({ consultores, onAtribuir, onRemove }) {
 // e atualizar horários SEMPRE via draft→aprovação (nunca POST/DELETE direto
 // do front — mesmo padrão de CardapioIfood.jsx). Horários só em leitura aqui;
 // edição fica para uma sessão futura (o bridge já expõe o PUT via draft).
-const STATUS_MERCHANT_COLOR = { OK: '#10b981', WARNING: '#f59e0b', CLOSED: '#6b7280', ERROR: '#ef4444' };
+const STATUS_MERCHANT_COLOR = { OK: '#10b981', WARNING: '#f59e0b', CLOSED: 'var(--tx2)', ERROR: '#ef4444' };
+// Rótulo pt-BR amigável — o state cru da API ("ERROR") não diz nada pro analista/
+// lojista. Confirmado live (smoke rodada 2): o payload real do iFood traz
+// message.title (ex: "Loja fechada") — mostramos "rótulo — title" quando existir.
+const STATUS_MERCHANT_LABEL = { OK: 'Aberta', WARNING: 'Atenção', CLOSED: 'Fechada', ERROR: 'Fechada' };
 // GET /merchants/{id}/status devolve um ARRAY (um estado por operation/salesChannel),
 // não um objeto único — agregamos pelo PIOR estado (ERROR > CLOSED > WARNING > OK),
 // senão o card fica preso em "Desconhecido" pra sempre (status?.state de um array é undefined).
@@ -640,10 +653,13 @@ function TabMerchantIfood({ lojaId, tenantDbId }) {
   }
 
   if (carregando) {
-    return <div style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', padding: '40px 0' }}>Carregando dados do iFood…</div>;
+    return <div style={{ color: 'var(--tx2)', fontSize: 13, textAlign: 'center', padding: '40px 0' }}>Carregando dados do iFood…</div>;
   }
 
-  const statusColor = STATUS_MERCHANT_COLOR[status?.state] || '#6b7280';
+  const statusColor = STATUS_MERCHANT_COLOR[status?.state] || 'var(--tx2)';
+  const statusLabel = status
+    ? [STATUS_MERCHANT_LABEL[status.state] || status.state, status.message?.title].filter(Boolean).join(' — ')
+    : 'Desconhecido';
 
   return (
     <div>
@@ -659,21 +675,21 @@ function TabMerchantIfood({ lojaId, tenantDbId }) {
       )}
 
       {/* Status — polling automático a cada 30s */}
-      <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 12, padding: 16, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ background: 'var(--panel,#fff)', border: '1px solid var(--line)', borderRadius: 12, padding: 16, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
         <span style={{ width: 10, height: 10, borderRadius: '50%', background: statusColor, flexShrink: 0 }} />
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{status?.state || 'Desconhecido'}</div>
-          <div style={{ fontSize: 11, color: '#6b7280' }}>Atualiza automaticamente a cada 30s.</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{statusLabel}</div>
+          <div style={{ fontSize: 11, color: 'var(--tx2)' }}>Atualiza automaticamente a cada 30s.</div>
         </div>
         <button onClick={carregarTudo} disabled={agindo}
-          style={{ background: '#2a2a2a', border: '1px solid #3a3a3a', color: '#9ca3af', padding: '6px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+          style={{ background: 'var(--bg2,#f5f4f2)', border: '1px solid var(--line)', color: 'var(--tx2)', padding: '6px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
           Atualizar
         </button>
       </div>
 
       {/* Pausar loja — cria draft, nunca chama a API direto */}
-      <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 12, padding: 16, marginBottom: 20 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+      <div style={{ background: 'var(--panel,#fff)', border: '1px solid var(--line)', borderRadius: 12, padding: 16, marginBottom: 20 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx2)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           Pausar loja
         </div>
         <form onSubmit={pausarLoja} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -691,28 +707,28 @@ function TabMerchantIfood({ lojaId, tenantDbId }) {
             {agindo ? '…' : 'Solicitar pausa'}
           </button>
         </form>
-        <div style={{ fontSize: 11, color: '#6b7280', marginTop: 8 }}>Cria um draft (amarelo) — só pausa de verdade após sua aprovação.</div>
+        <div style={{ fontSize: 11, color: 'var(--tx2)', marginTop: 8 }}>Cria um draft (amarelo) — só pausa de verdade após sua aprovação.</div>
       </div>
 
       {/* Pausas ativas/agendadas */}
       <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx2)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           Pausas ativas/agendadas ({interrupcoes.length})
         </div>
         {interrupcoes.length === 0 ? (
-          <div style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', padding: '20px 0', background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 12 }}>
+          <div style={{ color: 'var(--tx2)', fontSize: 13, textAlign: 'center', padding: '20px 0', background: 'var(--panel,#fff)', border: '1px solid var(--line)', borderRadius: 12 }}>
             Nenhuma pausa ativa.
           </div>
         ) : (
-          <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 12, overflow: 'hidden' }}>
+          <div style={{ background: 'var(--panel,#fff)', border: '1px solid var(--line)', borderRadius: 12, overflow: 'hidden' }}>
             {interrupcoes.map((it, i) => (
-              <div key={it.id || i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderTop: i > 0 ? '1px solid #1f1f1f' : undefined }}>
-                <div style={{ flex: 1, fontSize: 12.5, color: '#e5e7eb' }}>
+              <div key={it.id || i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderTop: i > 0 ? '1px solid var(--line)' : undefined }}>
+                <div style={{ flex: 1, fontSize: 12.5, color: 'var(--tx)' }}>
                   {it.start ? new Date(it.start).toLocaleString('pt-BR') : '—'} → {it.end ? new Date(it.end).toLocaleString('pt-BR') : '—'}
-                  {it.description && <span style={{ color: '#6b7280' }}> · {it.description}</span>}
+                  {it.description && <span style={{ color: 'var(--tx2)' }}> · {it.description}</span>}
                 </div>
                 <button onClick={() => removerPausa(it.id)} disabled={agindo || cooldown || !it.id}
-                  style={{ background: '#2a2a2a', border: '1px solid #3a3a3a', color: '#9ca3af', padding: '5px 12px', borderRadius: 7, cursor: (agindo || cooldown) ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600 }}>
+                  style={{ background: 'var(--bg2,#f5f4f2)', border: '1px solid var(--line)', color: 'var(--tx2)', padding: '5px 12px', borderRadius: 7, cursor: (agindo || cooldown) ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600 }}>
                   Remover
                 </button>
               </div>
@@ -723,19 +739,19 @@ function TabMerchantIfood({ lojaId, tenantDbId }) {
 
       {/* Horários de funcionamento — leitura */}
       <div>
-        <div style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx2)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           Horários de funcionamento
         </div>
         {!horarios || horarios.length === 0 ? (
-          <div style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', padding: '20px 0', background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 12 }}>
+          <div style={{ color: 'var(--tx2)', fontSize: 13, textAlign: 'center', padding: '20px 0', background: 'var(--panel,#fff)', border: '1px solid var(--line)', borderRadius: 12 }}>
             Nenhum turno cadastrado.
           </div>
         ) : (
-          <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 12, overflow: 'hidden' }}>
+          <div style={{ background: 'var(--panel,#fff)', border: '1px solid var(--line)', borderRadius: 12, overflow: 'hidden' }}>
             {horarios.map((h, i) => (
-              <div key={i} style={{ display: 'flex', gap: 16, padding: '10px 16px', borderTop: i > 0 ? '1px solid #1f1f1f' : undefined, fontSize: 12.5 }}>
-                <div style={{ width: 100, color: '#9ca3af' }}>{DIA_LABEL[h.dayOfWeek] || h.dayOfWeek}</div>
-                <div style={{ color: '#e5e7eb' }}>
+              <div key={i} style={{ display: 'flex', gap: 16, padding: '10px 16px', borderTop: i > 0 ? '1px solid var(--line)' : undefined, fontSize: 12.5 }}>
+                <div style={{ width: 100, color: 'var(--tx2)' }}>{DIA_LABEL[h.dayOfWeek] || h.dayOfWeek}</div>
+                <div style={{ color: 'var(--tx)' }}>
                   {h.start} · {h.duration ? `${Math.floor(h.duration / 60)}h${h.duration % 60 ? `${h.duration % 60}min` : ''}` : '—'}
                 </div>
               </div>
@@ -749,9 +765,9 @@ function TabMerchantIfood({ lojaId, tenantDbId }) {
 
 function TabEmConstrucao({ nome }) {
   return (
-    <div style={{ textAlign: 'center', padding: '60px 20px', color: '#6b7280' }}>
+    <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--tx2)' }}>
       <div style={{ fontSize: 34, marginBottom: 12 }}>🚧</div>
-      <div style={{ fontSize: 15, fontWeight: 600, color: '#9ca3af' }}>{nome} — Em construção</div>
+      <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--tx2)' }}>{nome} — Em construção</div>
       <div style={{ marginTop: 6, fontSize: 13 }}>Implementado nas próximas fases do PILOTO.</div>
     </div>
   );
@@ -837,7 +853,7 @@ function TabTarefas({ lojaId, tenantDbId }) {
     : tarefas;
 
   if (loading) {
-    return <div style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', padding: '40px 0' }}>Carregando tarefas…</div>;
+    return <div style={{ color: 'var(--tx2)', fontSize: 13, textAlign: 'center', padding: '40px 0' }}>Carregando tarefas…</div>;
   }
 
   return (
@@ -854,14 +870,14 @@ function TabTarefas({ lojaId, tenantDbId }) {
             <option key={v} value={v}>{l}</option>
           ))}
         </select>
-        <span style={{ fontSize: 12, color: '#6b7280' }}>
+        <span style={{ fontSize: 12, color: 'var(--tx2)' }}>
           {filtradas.length} tarefa{filtradas.length !== 1 ? 's' : ''}
         </span>
         <div style={{ flex: 1 }} />
         <button
           onClick={openRelatorio}
           disabled={loadingRelatorio}
-          style={{ background: '#2a2a2a', border: '1px solid #3a3a3a', color: '#9ca3af', padding: '8px 14px', borderRadius: 8, cursor: loadingRelatorio ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, opacity: loadingRelatorio ? 0.6 : 1 }}
+          style={{ background: 'var(--bg2,#f5f4f2)', border: '1px solid var(--line)', color: 'var(--tx2)', padding: '8px 14px', borderRadius: 8, cursor: loadingRelatorio ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, opacity: loadingRelatorio ? 0.6 : 1 }}
         >
           {loadingRelatorio ? 'Gerando…' : 'Gerar relatório'}
         </button>
@@ -875,53 +891,53 @@ function TabTarefas({ lojaId, tenantDbId }) {
 
       {/* Lista */}
       {filtradas.length === 0 ? (
-        <div style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', padding: '40px 0' }}>
+        <div style={{ color: 'var(--tx2)', fontSize: 13, textAlign: 'center', padding: '40px 0' }}>
           {statusFilter ? 'Nenhuma tarefa com esse status.' : 'Nenhuma tarefa criada ainda.'}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {filtradas.map(t => {
             const isOpen      = expanded === t.id;
-            const statusColor = STATUS_TAREFA_COLOR[t.status] || '#6b7280';
-            const priorColor  = PRIORIDADE_COLOR[t.prioridade] || '#6b7280';
+            const statusColor = STATUS_TAREFA_COLOR[t.status] || '#76716c';
+            const priorColor  = PRIORIDADE_COLOR[t.prioridade] || '#76716c';
             return (
-              <div key={t.id} style={{ background: '#1a1a1a', border: `1px solid ${isOpen ? '#3a3a3a' : '#2a2a2a'}`, borderRadius: 10, overflow: 'hidden' }}>
+              <div key={t.id} style={{ background: 'var(--panel,#fff)', border: `1px solid ${isOpen ? 'var(--tx2)' : 'var(--line)'}`, borderRadius: 10, overflow: 'hidden' }}>
                 {/* Row header */}
                 <button
                   onClick={() => setExpanded(isOpen ? null : t.id)}
                   style={{ width: '100%', background: 'none', border: 'none', padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left' }}
                 >
                   <span style={{ width: 8, height: 8, borderRadius: '50%', background: priorColor, flexShrink: 0 }} title={PRIORIDADE_LABEL[t.prioridade]} />
-                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#e5e7eb', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--tx)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {t.titulo}
                   </span>
-                  <span style={{ fontSize: 11, color: '#6b7280', flexShrink: 0 }}>{BLOCO_LABEL[t.bloco] || t.bloco}</span>
+                  <span style={{ fontSize: 11, color: 'var(--tx2)', flexShrink: 0 }}>{BLOCO_LABEL[t.bloco] || t.bloco}</span>
                   <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: statusColor + '20', color: statusColor, flexShrink: 0 }}>
                     {STATUS_TAREFA_LABEL[t.status] || t.status}
                   </span>
-                  <Icon name="chevdown" size={13} style={{ color: '#6b7280', transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s', flexShrink: 0 }} />
+                  <Icon name="chevdown" size={13} style={{ color: 'var(--tx2)', transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s', flexShrink: 0 }} />
                 </button>
 
                 {/* Expanded detail */}
                 {isOpen && (
-                  <div style={{ borderTop: '1px solid #2a2a2a', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.5 }}>
-                      <strong style={{ color: '#6b7280', display: 'block', marginBottom: 2 }}>Situação</strong>
+                  <div style={{ borderTop: '1px solid var(--line)', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ fontSize: 12, color: 'var(--tx2)', lineHeight: 1.5 }}>
+                      <strong style={{ color: 'var(--tx2)', display: 'block', marginBottom: 2 }}>Situação</strong>
                       {t.situacao}
                     </div>
-                    <div style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.5 }}>
-                      <strong style={{ color: '#6b7280', display: 'block', marginBottom: 2 }}>O que será feito</strong>
+                    <div style={{ fontSize: 12, color: 'var(--tx2)', lineHeight: 1.5 }}>
+                      <strong style={{ color: 'var(--tx2)', display: 'block', marginBottom: 2 }}>O que será feito</strong>
                       {t.o_que_sera_feito}
                     </div>
                     {t.por_que_importa && (
-                      <div style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.5 }}>
-                        <strong style={{ color: '#6b7280', display: 'block', marginBottom: 2 }}>Por que importa</strong>
+                      <div style={{ fontSize: 12, color: 'var(--tx2)', lineHeight: 1.5 }}>
+                        <strong style={{ color: 'var(--tx2)', display: 'block', marginBottom: 2 }}>Por que importa</strong>
                         {t.por_que_importa}
                       </div>
                     )}
                     {t.prazo_estimado && (
-                      <div style={{ fontSize: 12, color: '#6b7280' }}>
-                        Prazo estimado: <span style={{ color: '#9ca3af' }}>{t.prazo_estimado}</span>
+                      <div style={{ fontSize: 12, color: 'var(--tx2)' }}>
+                        Prazo estimado: <span style={{ color: 'var(--tx2)' }}>{t.prazo_estimado}</span>
                       </div>
                     )}
                     {/* Lifecycle actions */}
@@ -995,7 +1011,7 @@ function TabTarefas({ lojaId, tenantDbId }) {
                               ❌ Revisão recusada
                             </span>
                             {t.revisao_motivo && (
-                              <span style={{ fontSize: 11, color: '#9ca3af', paddingLeft: 4 }}>
+                              <span style={{ fontSize: 11, color: 'var(--tx2)', paddingLeft: 4 }}>
                                 Motivo: {t.revisao_motivo}
                               </span>
                             )}
@@ -1003,7 +1019,7 @@ function TabTarefas({ lojaId, tenantDbId }) {
                         )}
                       </>)}
                       {(t.status === 'em_execucao' || t.status === 'aguardando_validacao') && (
-                        <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
+                        <span style={{ fontSize: 11, color: 'var(--tx2)', fontStyle: 'italic' }}>
                           {t.status === 'em_execucao' ? 'Em execução…' : 'Aguardando validação…'}
                         </span>
                       )}
@@ -1135,11 +1151,11 @@ function MarcarConcluidaModal({ tarefaId, onClose, onDone }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000b', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9200, padding: 20 }}>
-      <div style={{ background: '#141414', border: '1px solid #2a2a2a', borderRadius: 14, width: '100%', maxWidth: 480, padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#fff' }}>Marcar como concluída</h3>
+      <div style={{ background: 'var(--bg2,#f5f4f2)', border: '1px solid var(--line)', borderRadius: 14, width: '100%', maxWidth: 480, padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>Marcar como concluída</h3>
 
         <div>
-          <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 6 }}>Resultado / observação</label>
+          <label style={{ fontSize: 12, color: 'var(--tx2)', display: 'block', marginBottom: 6 }}>Resultado / observação</label>
           <textarea
             value={nota}
             onChange={e => setNota(e.target.value)}
@@ -1150,16 +1166,16 @@ function MarcarConcluidaModal({ tarefaId, onClose, onDone }) {
         </div>
 
         <div>
-          <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 6 }}>
-            Prints / evidências <span style={{ color: '#4b5563' }}>(até 5 · jpg, png, pdf · 5 MB cada)</span>
+          <label style={{ fontSize: 12, color: 'var(--tx2)', display: 'block', marginBottom: 6 }}>
+            Prints / evidências <span style={{ color: 'var(--tx2)' }}>(até 5 · jpg, png, pdf · 5 MB cada)</span>
           </label>
           <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" onChange={handleFiles}
-            style={{ fontSize: 12, color: '#e5e7eb', width: '100%' }} />
+            style={{ fontSize: 12, color: 'var(--tx)', width: '100%' }} />
           {files.length > 0 && (
             <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
               {files.map((f, i) => (
-                <div key={i} style={{ fontSize: 12, color: '#9ca3af' }}>
-                  {f.name} <span style={{ color: '#4b5563' }}>({(f.size / 1024).toFixed(0)} KB)</span>
+                <div key={i} style={{ fontSize: 12, color: 'var(--tx2)' }}>
+                  {f.name} <span style={{ color: 'var(--tx2)' }}>({(f.size / 1024).toFixed(0)} KB)</span>
                 </div>
               ))}
             </div>
@@ -1170,7 +1186,7 @@ function MarcarConcluidaModal({ tarefaId, onClose, onDone }) {
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
           <button onClick={onClose} disabled={saving}
-            style={{ background: 'none', border: '1px solid #2a2a2a', color: '#9ca3af', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
+            style={{ background: 'none', border: '1px solid var(--line)', color: 'var(--tx2)', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
             Cancelar
           </button>
           <button onClick={submit} disabled={saving}
@@ -1223,24 +1239,24 @@ function RelatorioModal({ relatorio, onClose }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000b', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9200, padding: 20 }}>
-      <div style={{ background: '#141414', border: '1px solid #2a2a2a', borderRadius: 14, width: '100%', maxWidth: 720, maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: 'var(--bg2,#f5f4f2)', border: '1px solid var(--line)', borderRadius: 14, width: '100%', maxWidth: 720, maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}>
 
         {/* Header */}
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #2a2a2a', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
           <div style={{ flex: 1 }}>
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#fff' }}>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>
               Relatório — {loja.nome || loja.id}
             </h3>
-            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 3 }}>Gerado em {dataFormatada}</div>
-            <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 6, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <span><strong style={{ color: '#fff' }}>{total}</strong> tarefas</span>
-              <span style={{ color: '#4b5563' }}>·</span>
+            <div style={{ fontSize: 12, color: 'var(--tx2)', marginTop: 3 }}>Gerado em {dataFormatada}</div>
+            <div style={{ fontSize: 12, color: 'var(--tx2)', marginTop: 6, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <span><strong style={{ color: 'var(--ink)' }}>{total}</strong> tarefas</span>
+              <span style={{ color: 'var(--tx2)' }}>·</span>
               <span><strong style={{ color: '#10b981' }}>{concluidas}</strong> concluídas</span>
-              <span style={{ color: '#4b5563' }}>·</span>
+              <span style={{ color: 'var(--tx2)' }}>·</span>
               <span><strong style={{ color: '#10b981' }}>{quickWins}</strong> quick wins</span>
             </div>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: 4, flexShrink: 0 }}>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--tx2)', cursor: 'pointer', padding: 4, flexShrink: 0 }}>
             <Icon name="x" size={16} />
           </button>
         </div>
@@ -1248,24 +1264,24 @@ function RelatorioModal({ relatorio, onClose }) {
         {/* Body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
           {empty ? (
-            <div style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', padding: '48px 0' }}>
+            <div style={{ color: 'var(--tx2)', fontSize: 13, textAlign: 'center', padding: '48px 0' }}>
               Sem tarefas cadastradas.
             </div>
           ) : (
             BLOCOS_ORDER.filter(b => byBloco[b]?.length).map(bloco => (
               <div key={bloco} style={{ marginBottom: 24 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid #2a2a2a' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--tx2)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid var(--line)' }}>
                   {BLOCO_LABEL[bloco]}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {byBloco[bloco].map((t, i) => {
-                    const sc = STATUS_TAREFA_COLOR[t.status] || '#6b7280';
-                    const pc = PRIORIDADE_COLOR[t.prioridade] || '#6b7280';
+                    const sc = STATUS_TAREFA_COLOR[t.status] || '#76716c';
+                    const pc = PRIORIDADE_COLOR[t.prioridade] || '#76716c';
                     return (
-                      <div key={t.id} style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, padding: '12px 14px' }}>
+                      <div key={t.id} style={{ background: 'var(--panel,#fff)', border: '1px solid var(--line)', borderRadius: 8, padding: '12px 14px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: '#6b7280' }}>{i + 1}.</span>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: '#fff', flex: 1, minWidth: 0 }}>{t.titulo}</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--tx2)' }}>{i + 1}.</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', flex: 1, minWidth: 0 }}>{t.titulo}</span>
                           <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 20, background: sc + '20', color: sc, flexShrink: 0 }}>
                             {STATUS_TAREFA_LABEL[t.status] || t.status}
                           </span>
@@ -1274,19 +1290,19 @@ function RelatorioModal({ relatorio, onClose }) {
                           </span>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                          <div style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.5 }}>
-                            <strong style={{ color: '#6b7280' }}>Situação:</strong> {t.situacao}
+                          <div style={{ fontSize: 12, color: 'var(--tx2)', lineHeight: 1.5 }}>
+                            <strong style={{ color: 'var(--tx2)' }}>Situação:</strong> {t.situacao}
                           </div>
-                          <div style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.5 }}>
-                            <strong style={{ color: '#6b7280' }}>O que será feito:</strong> {t.o_que_sera_feito}
+                          <div style={{ fontSize: 12, color: 'var(--tx2)', lineHeight: 1.5 }}>
+                            <strong style={{ color: 'var(--tx2)' }}>O que será feito:</strong> {t.o_que_sera_feito}
                           </div>
                           {t.por_que_importa && (
-                            <div style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.5 }}>
-                              <strong style={{ color: '#6b7280' }}>Por que importa:</strong> {t.por_que_importa}
+                            <div style={{ fontSize: 12, color: 'var(--tx2)', lineHeight: 1.5 }}>
+                              <strong style={{ color: 'var(--tx2)' }}>Por que importa:</strong> {t.por_que_importa}
                             </div>
                           )}
                           {t.prazo_estimado && (
-                            <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>Prazo: {t.prazo_estimado}</div>
+                            <div style={{ fontSize: 11, color: 'var(--tx2)', marginTop: 2 }}>Prazo: {t.prazo_estimado}</div>
                           )}
                         </div>
                       </div>
@@ -1299,25 +1315,25 @@ function RelatorioModal({ relatorio, onClose }) {
         </div>
 
         {/* Footer */}
-        <div style={{ padding: '12px 20px', borderTop: '1px solid #2a2a2a', display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+        <div style={{ padding: '12px 20px', borderTop: '1px solid var(--line)', display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
           <button
             onClick={handleCopy}
             disabled={empty}
-            style={{ background: '#2a2a2a', border: 'none', color: empty ? '#4b5563' : '#9ca3af', padding: '8px 14px', borderRadius: 8, cursor: empty ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600 }}
+            style={{ background: 'var(--bg2,#f5f4f2)', border: 'none', color: empty ? 'var(--tx2)' : 'var(--tx2)', padding: '8px 14px', borderRadius: 8, cursor: empty ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600 }}
           >
             Copiar markdown
           </button>
           <button
             onClick={handlePDF}
             disabled={empty}
-            style={{ background: '#2a2a2a', border: 'none', color: empty ? '#4b5563' : '#9ca3af', padding: '8px 14px', borderRadius: 8, cursor: empty ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600 }}
+            style={{ background: 'var(--bg2,#f5f4f2)', border: 'none', color: empty ? 'var(--tx2)' : 'var(--tx2)', padding: '8px 14px', borderRadius: 8, cursor: empty ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600 }}
           >
             Baixar PDF
           </button>
           <button
             disabled
             title="Disponível na Onda 04"
-            style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', color: '#374151', padding: '8px 14px', borderRadius: 8, cursor: 'not-allowed', fontSize: 13, fontWeight: 600 }}
+            style={{ background: 'var(--panel,#fff)', border: '1px solid var(--line)', color: 'var(--tx2)', padding: '8px 14px', borderRadius: 8, cursor: 'not-allowed', fontSize: 13, fontWeight: 600 }}
           >
             Enviar via WhatsApp
           </button>
@@ -1374,10 +1390,10 @@ function NovaTarefaOverlay({ lojaId, onClose, onSaved }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000a', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9000, padding: 20 }}>
-      <div style={{ background: '#141414', border: '1px solid #2a2a2a', borderRadius: 14, padding: 24, width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto' }}>
+      <div style={{ background: 'var(--bg2,#f5f4f2)', border: '1px solid var(--line)', borderRadius: 14, padding: 24, width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#fff' }}>Nova tarefa</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: 4 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>Nova tarefa</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--tx2)', cursor: 'pointer', padding: 4 }}>
             <Icon name="x" size={16} />
           </button>
         </div>
@@ -1411,7 +1427,7 @@ function NovaTarefaOverlay({ lojaId, onClose, onSaved }) {
           </Field>
           {err && <div style={{ color: '#ef4444', fontSize: 12 }}>{err}</div>}
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', paddingTop: 4 }}>
-            <button type="button" onClick={onClose} style={{ background: '#2a2a2a', border: 'none', color: '#9ca3af', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
+            <button type="button" onClick={onClose} style={{ background: 'var(--bg2,#f5f4f2)', border: 'none', color: 'var(--tx2)', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
               Cancelar
             </button>
             <button type="submit" disabled={saving} style={{ background: '#B70C00', border: 'none', color: '#fff', padding: '8px 16px', borderRadius: 8, cursor: saving ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, opacity: saving ? 0.7 : 1 }}>
@@ -1483,29 +1499,29 @@ function TarefaDetailModal({ tarefaId, tenantDbId, onClose, onRefresh }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000b', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9100, padding: 20 }}>
-      <div style={{ background: '#141414', border: '1px solid #2a2a2a', borderRadius: 14, width: '100%', maxWidth: 640, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: 'var(--bg2,#f5f4f2)', border: '1px solid var(--line)', borderRadius: 14, width: '100%', maxWidth: 640, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
         {/* Header */}
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid #2a2a2a', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 10 }}>
           {t && (
-            <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: (STATUS_TAREFA_COLOR[t.status] || '#6b7280') + '20', color: STATUS_TAREFA_COLOR[t.status] || '#6b7280', flexShrink: 0 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: (STATUS_TAREFA_COLOR[t.status] || '#76716c') + '20', color: STATUS_TAREFA_COLOR[t.status] || '#76716c', flexShrink: 0 }}>
               {STATUS_TAREFA_LABEL[t.status] || t.status}
             </span>
           )}
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--ink)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {t?.titulo || 'Carregando…'}
           </h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: 4, flexShrink: 0 }}>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--tx2)', cursor: 'pointer', padding: 4, flexShrink: 0 }}>
             <Icon name="x" size={16} />
           </button>
         </div>
 
         {/* Inner tabs */}
-        <div style={{ display: 'flex', gap: 2, padding: '0 20px', borderBottom: '1px solid #2a2a2a' }}>
+        <div style={{ display: 'flex', gap: 2, padding: '0 20px', borderBottom: '1px solid var(--line)' }}>
           {INNER_TABS.map((label, i) => (
             <button key={label} onClick={() => setInnerTab(i)} style={{
               background: 'none', border: 'none', padding: '8px 12px', cursor: 'pointer',
               fontSize: 12, fontWeight: innerTab === i ? 600 : 400,
-              color: innerTab === i ? '#fff' : '#6b7280',
+              color: innerTab === i ? 'var(--ink)' : 'var(--tx2)',
               borderBottom: innerTab === i ? '2px solid #B70C00' : '2px solid transparent',
               marginBottom: -1,
             }}>{label}</button>
@@ -1515,7 +1531,7 @@ function TarefaDetailModal({ tarefaId, tenantDbId, onClose, onRefresh }) {
         {/* Content */}
         <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
           {loading && (
-            <div style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', padding: '40px 0' }}>Carregando…</div>
+            <div style={{ color: 'var(--tx2)', fontSize: 13, textAlign: 'center', padding: '40px 0' }}>Carregando…</div>
           )}
 
           {/* Detalhes */}
@@ -1531,7 +1547,7 @@ function TarefaDetailModal({ tarefaId, tenantDbId, onClose, onRefresh }) {
               <DetailField label="O que será feito" value={t.o_que_sera_feito} />
               {t.por_que_importa && <DetailField label="Por que importa" value={t.por_que_importa} />}
               <div style={{ display: 'flex', gap: 10, paddingTop: 4 }}>
-                <span style={{ fontSize: 11, color: '#6b7280' }}>
+                <span style={{ fontSize: 11, color: 'var(--tx2)' }}>
                   {t.comentarios_count} comentário{t.comentarios_count !== 1 ? 's' : ''} · {t.prints_count} print{t.prints_count !== 1 ? 's' : ''}
                 </span>
               </div>
@@ -1543,19 +1559,19 @@ function TarefaDetailModal({ tarefaId, tenantDbId, onClose, onRefresh }) {
           {!loading && t && innerTab === 1 && (
             <div>
               {(!t.aprovacoes || t.aprovacoes.length === 0) ? (
-                <div style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', padding: '30px 0' }}>Nenhum registro no histórico.</div>
+                <div style={{ color: 'var(--tx2)', fontSize: 13, textAlign: 'center', padding: '30px 0' }}>Nenhum registro no histórico.</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
                   {t.aprovacoes.map((a, i) => (
                     <div key={a.id} style={{ display: 'flex', gap: 12, paddingBottom: 16 }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                         <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#B70C00', flexShrink: 0, marginTop: 4 }} />
-                        {i < t.aprovacoes.length - 1 && <div style={{ width: 2, flex: 1, background: '#2a2a2a', minHeight: 12, marginTop: 4 }} />}
+                        {i < t.aprovacoes.length - 1 && <div style={{ width: 2, flex: 1, background: 'var(--bg2,#f5f4f2)', minHeight: 12, marginTop: 4 }} />}
                       </div>
                       <div style={{ flex: 1, paddingBottom: 4 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: '#e5e7eb', textTransform: 'capitalize' }}>{(a.acao || '').replace(/_/g, ' ')}</div>
-                        {a.nota && <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4, lineHeight: 1.5 }}>{a.nota}</div>}
-                        <div style={{ fontSize: 11, color: '#4b5563', marginTop: 4 }}>{new Date(a.created_at).toLocaleString('pt-BR')}</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx)', textTransform: 'capitalize' }}>{(a.acao || '').replace(/_/g, ' ')}</div>
+                        {a.nota && <div style={{ fontSize: 12, color: 'var(--tx2)', marginTop: 4, lineHeight: 1.5 }}>{a.nota}</div>}
+                        <div style={{ fontSize: 11, color: 'var(--tx2)', marginTop: 4 }}>{new Date(a.created_at).toLocaleString('pt-BR')}</div>
                       </div>
                     </div>
                   ))}
@@ -1569,11 +1585,11 @@ function TarefaDetailModal({ tarefaId, tenantDbId, onClose, onRefresh }) {
             <div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
                 {(!t.comentarios || t.comentarios.length === 0) ? (
-                  <div style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', padding: '20px 0' }}>Nenhum comentário ainda.</div>
+                  <div style={{ color: 'var(--tx2)', fontSize: 13, textAlign: 'center', padding: '20px 0' }}>Nenhum comentário ainda.</div>
                 ) : t.comentarios.map(c => (
-                  <div key={c.id} style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, padding: '10px 12px' }}>
-                    <div style={{ fontSize: 13, color: '#e5e7eb', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{c.conteudo}</div>
-                    <div style={{ fontSize: 11, color: '#4b5563', marginTop: 6 }}>{new Date(c.created_at).toLocaleString('pt-BR')}</div>
+                  <div key={c.id} style={{ background: 'var(--panel,#fff)', border: '1px solid var(--line)', borderRadius: 8, padding: '10px 12px' }}>
+                    <div style={{ fontSize: 13, color: 'var(--tx)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{c.conteudo}</div>
+                    <div style={{ fontSize: 11, color: 'var(--tx2)', marginTop: 6 }}>{new Date(c.created_at).toLocaleString('pt-BR')}</div>
                   </div>
                 ))}
               </div>
@@ -1600,20 +1616,20 @@ function TarefaDetailModal({ tarefaId, tenantDbId, onClose, onRefresh }) {
           {!loading && innerTab === 3 && (
             <div>
               {loadingAnexos ? (
-                <div style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', padding: '30px 0' }}>Carregando…</div>
+                <div style={{ color: 'var(--tx2)', fontSize: 13, textAlign: 'center', padding: '30px 0' }}>Carregando…</div>
               ) : anexos.length === 0 ? (
-                <div style={{ color: '#6b7280', fontSize: 13, textAlign: 'center', padding: '30px 0' }}>Nenhum print anexado nesta tarefa.</div>
+                <div style={{ color: 'var(--tx2)', fontSize: 13, textAlign: 'center', padding: '30px 0' }}>Nenhum print anexado nesta tarefa.</div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12 }}>
                   {anexos.map(a => (
                     <a key={a.id} href={a.url} target="_blank" rel="noreferrer"
-                      style={{ display: 'block', background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, overflow: 'hidden', textDecoration: 'none' }}>
+                      style={{ display: 'block', background: 'var(--panel,#fff)', border: '1px solid var(--line)', borderRadius: 8, overflow: 'hidden', textDecoration: 'none' }}>
                       {a.mime_type.startsWith('image/') ? (
                         <img src={a.url} alt="" style={{ width: '100%', height: 120, objectFit: 'cover', display: 'block' }} />
                       ) : (
-                        <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 13 }}>PDF</div>
+                        <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--tx2)', fontSize: 13 }}>PDF</div>
                       )}
-                      <div style={{ padding: '6px 8px', fontSize: 11, color: '#9ca3af' }}>
+                      <div style={{ padding: '6px 8px', fontSize: 11, color: 'var(--tx2)' }}>
                         {(a.size_bytes / 1024).toFixed(0)} KB · {new Date(a.created_at).toLocaleDateString('pt-BR')}
                       </div>
                     </a>
@@ -1631,8 +1647,8 @@ function TarefaDetailModal({ tarefaId, tenantDbId, onClose, onRefresh }) {
 function InfoChip({ label, value, color }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <span style={{ fontSize: 10, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
-      <span style={{ fontSize: 13, fontWeight: 600, color: color || '#e5e7eb' }}>{value}</span>
+      <span style={{ fontSize: 10, color: 'var(--tx2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: 600, color: color || 'var(--tx)' }}>{value}</span>
     </div>
   );
 }
@@ -1640,8 +1656,8 @@ function InfoChip({ label, value, color }) {
 function DetailField({ label, value }) {
   return (
     <div>
-      <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
-      <div style={{ fontSize: 13, color: '#e5e7eb', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{value}</div>
+      <div style={{ fontSize: 11, color: 'var(--tx2)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
+      <div style={{ fontSize: 13, color: 'var(--tx)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{value}</div>
     </div>
   );
 }
@@ -1692,14 +1708,14 @@ function markdownToHtml(md) {
 function Field({ label, width, children }) {
   return (
     <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <span style={{ fontSize: 11, color: '#6b7280' }}>{label}</span>
+      <span style={{ fontSize: 11, color: 'var(--tx2)' }}>{label}</span>
       {children}
     </label>
   );
 }
 
 const mini = {
-  background: '#111', border: '1px solid #2a2a2a', borderRadius: 6,
-  color: '#fff', padding: '6px 9px', fontSize: 13, boxSizing: 'border-box',
+  background: 'var(--panel,#fff)', border: '1px solid var(--line)', borderRadius: 6,
+  color: 'var(--ink)', padding: '6px 9px', fontSize: 13, boxSizing: 'border-box',
 };
-const tdStyle = { padding: '9px 12px', color: '#e5e7eb' };
+const tdStyle = { padding: '9px 12px', color: 'var(--tx)' };
