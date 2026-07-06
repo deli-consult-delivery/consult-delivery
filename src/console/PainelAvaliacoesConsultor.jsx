@@ -868,12 +868,13 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
   }, [tenantDbId]);
 
   useEffect(() => {
+    if (!tenantDbId) return;
     setGroupsLoading(true);
-    listEvoGroups()
+    listEvoGroups(tenantDbId)
       .then(data => { setGroups(data); setGroupsError(null); })
       .catch(e => setGroupsError(e.message))
       .finally(() => setGroupsLoading(false));
-  }, []);
+  }, [tenantDbId]);
 
   useEffect(() => {
     load();
