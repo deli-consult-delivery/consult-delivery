@@ -177,5 +177,43 @@ function sbFetchStub(routes) {
     passed++;
   }
 
+  // 8) summary: resolve merchant e devolve o resumo do client iFood
+  {
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => p.startsWith('ifood_merchants?'), value: [{ merchant_id: 'merch-1' }] },
+    ]);
+    const ifood = {
+      getSummaryReviews: async (merchantId) => ({
+        merchantId, totalReviewsCount: 12, validReviewsCount: 10, score: 4.6,
+      }),
+    };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/summary/loja-1');
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.body.data.summary.totalReviewsCount, 12);
+    assert.strictEqual(r.body.data.summary.validReviewsCount, 10);
+    assert.strictEqual(r.body.data.summary.score, 4.6);
+    server.close();
+    passed++;
+  }
+
+  // 9) summary: flag em 'portal' sem ?dryrun=1 → 409, nunca chama o client
+  {
+    let ifoodChamado = false;
+    const sbFetch = sbFetchStub([{ test: (p) => p.startsWith('lojas?'), value: [LOJA_PORTAL] }]);
+    const ifood = { getSummaryReviews: async () => { ifoodChamado = true; return {}; } };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/summary/loja-2');
+    assert.strictEqual(r.status, 409);
+    assert.strictEqual(ifoodChamado, false);
+    server.close();
+    passed++;
+  }
+
   process.stdout.write(`\nifood-api-routes: todos os ${passed} cenários passaram.\n`);
 })();

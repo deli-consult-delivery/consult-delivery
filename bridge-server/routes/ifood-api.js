@@ -90,5 +90,13 @@ module.exports = function ({ requireJwtOrInternal, ifood, sbFetch, assertTenantM
     return { loja_id: ctx.loja.id, merchant_id: ctx.merchantId, reviews: apiReviews, diff };
   }));
 
+  // ── GET /ifood-api/summary/:lojaId — resumo de notas (Review API /summary) ──
+  router.get('/ifood-api/summary/:lojaId', requireJwtOrInternal, handle(async (req, res) => {
+    const ctx = await resolveLojaGated(req, res);
+    if (!ctx) return;
+    const summary = await ifood.getSummaryReviews(ctx.merchantId, ctx.loja.tenant_id);
+    return { loja_id: ctx.loja.id, merchant_id: ctx.merchantId, summary };
+  }));
+
   return router;
 };

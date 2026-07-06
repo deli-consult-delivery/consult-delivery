@@ -188,6 +188,33 @@ function restoreFetch() {
     clearCreds();
   });
 
+  // ── getSummaryReviews — path correto + cache curto em memória ───────────────
+  await check('getSummaryReviews: path correto e reusa cache dentro do TTL', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-summary', expiresIn: 21600 });
+      }
+      if (url.includes('/review/v2.0/merchants/merchant-1/summary')) {
+        return jsonResponse(200, { totalReviewsCount: 5, validReviewsCount: 4, score: 4.2 });
+      }
+      return jsonResponse(404, {});
+    });
+    const ifood = freshIfood();
+
+    const s1 = await ifood.getSummaryReviews('merchant-1');
+    assert.deepStrictEqual(s1, { totalReviewsCount: 5, validReviewsCount: 4, score: 4.2 });
+    const s2 = await ifood.getSummaryReviews('merchant-1');
+    assert.deepStrictEqual(s2, s1);
+
+    const summaryCalls = calls.filter((c) => c.url.includes('/summary'));
+    assert.strictEqual(summaryCalls.length, 1, 'segunda chamada deveria reusar o cache em memória (TTL 60s)');
+    assert.strictEqual(summaryCalls[0].opts.headers.Authorization, 'Bearer tok-summary');
+    restoreFetch();
+    clearCreds();
+  });
+
   // ── listarVendas — período default (7 dias) quando dataInicio/dataFim faltam ──
   await check('listarVendas: sem período → default de 7 dias (beginSalesDate/endSalesDate)', async () => {
     setCreds();
