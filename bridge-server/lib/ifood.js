@@ -287,9 +287,22 @@ async function getSummaryReviews(merchantId, tenantId) {
   assertPathId(merchantId, 'merchantId');
   const cached = summaryCache.get(merchantId);
   if (cached && cached.expiresAt > Date.now()) return cached.data;
-  const data = await withRetry(() =>
-    ifoodFetch(`/review/v2.0/merchants/${merchantId}/summary`, {}, tenantId)
-  ).then(tolerant);
+  let data;
+  try {
+    data = await withRetry(() =>
+      ifoodFetch(`/review/v2.0/merchants/${merchantId}/summary`, {}, tenantId)
+    ).then(tolerant);
+  } catch (err) {
+    // Merchant sem reviews → iFood responde 404 "Summary not found" (condição de
+    // negócio confirmada live no sandbox, não erro de fato) — trata como sucesso
+    // com summary null. Cacheado pelo mesmo TTL: sem isso, cada mount do card
+    // bateria na API sem proteção de rate limit enquanto a loja não tiver reviews.
+    if (err instanceof IfoodApiError && err.status === 404) {
+      data = null;
+    } else {
+      throw err;
+    }
+  }
   summaryCache.set(merchantId, { data, expiresAt: Date.now() + SUMMARY_CACHE_TTL_MS });
   return data;
 }
