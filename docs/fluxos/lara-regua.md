@@ -159,4 +159,81 @@ LARA SEMPRE consulta `client_facts` ANTES de iniciar onboarding — se a loja j�
 
 ---
 
-*Documento gerado em 06/05/2026. Atualizar quando arquitetura mudar.*
+## 8. Régua de Reengajamento CSAT (2026-07)
+
+> **Pipeline distinto do fluxo de campanhas de marketing (seções 1-7 acima).** Aquele é
+> o fluxo legado LARA↔OpenClaw/Nexus (arquitetura descontinuada — OpenClaw é só POC,
+> ver `CLAUDE.md` §STACK "Em avaliação"). Este é o pipeline **ativo**: Trigger.dev puro,
+> sem OpenClaw/Nexus, focado em reengajar clientes que receberam a pesquisa CSAT
+> pós-atendimento e não responderam. PR #775.
+
+### 8.1 Contexto
+
+QA da leva 4 (05/07) detectou taxa de resposta CSAT de 3% (32 respostas) na Karina
+Doceria. A régua varre `atendimento_avaliacoes` pendentes há ≥3 dias e gera **1 draft de
+lembrete por pesquisa** — nunca reenvia sozinha (DRAFTS/`CLAUDE.md`: "nenhum agente
+envia mensagem a cliente sem aprovação").
+
+### 8.2 Fluxo (detecção → draft → aprovação)
+
+```mermaid
+flowchart TD
+    CRON["Cron diário 11h BRT<br/>lara-csat-reengajamento-schedule"] -->|trigger| TASK["Task de negócio<br/>lara-csat-reengajamento"]
+    TASK -->|"SELECT pendente<br/>msg_enviada_at &lt;= agora-3d<br/>token válido<br/>msg_enviada_status != reengajado"| CAND[("atendimento_avaliacoes<br/>candidatos, limit 50")]
+    CAND --> LOOP{"Para cada candidato"}
+    LOOP -->|"SELECT agent_drafts<br/>metadata.avaliacao_id + tipo"| DEDUP{"Já existe<br/>reengajamento?"}
+    DEDUP -- "erro na query" --> FALHA["status=falhou<br/>não prossegue (fail-closed)"]
+    DEDUP -- "sim" --> SKIP["status=ja_reengajado<br/>pula"]
+    DEDUP -- "não" --> DECIDE["decidirReengajamento<br/>(função pura, testável)"]
+    DECIDE -- "não elegível" --> SKIP2["status=nao_elegivel<br/>pula"]
+    DECIDE -- "elegível" --> DRAFT["INSERT agent_drafts<br/>agent_name=lara, channel=whatsapp<br/>autonomy_level=amarelo, status=pending"]
+    DRAFT --> MARCA["UPDATE atendimento_avaliacoes<br/>msg_enviada_status=reengajado"]
+    MARCA --> FILA[("Fila de aprovação<br/>Console — AprovacoesUnificadas")]
+    FILA -->|"Wandson aprova/rejeita"| HUMANO{"Decisão humana"}
+    HUMANO -- "aprovado" --> GAP["⚠️ envio real ainda não conectado<br/>p/ agent_name=lara + channel=whatsapp<br/>(gap conhecido — ver 8.5)"]
+    HUMANO -- "rejeitado" --> FIM["Fim — sem novo reengajamento<br/>(dedup bloqueia 2ª tentativa)"]
+```
+
+### 8.3 Regras de elegibilidade (`decidirReengajamento`)
+
+| Condição | Resultado |
+|---|---|
+| `status != 'pendente'` (já respondida ou expirada) | não cria |
+| `public_token_expires_at <= agora` (link morto) | não cria |
+| `msg_enviada_at` nulo (nunca enviada) | não cria |
+| enviada há menos de 3 dias | não cria (`dentro_do_prazo`) |
+| `msg_enviada_status = 'reengajado'` OU já existe draft de reengajamento p/ essa avaliação | não cria (dedup — máx. 1 por pesquisa) |
+| nenhuma das anteriores | cria draft |
+
+### 8.4 Anti-starvation (fix pós-review, PR #775)
+
+A primeira versão usava `order(msg_enviada_at asc) + limit(50)` com dedup só em memória
+(consulta a `agent_drafts` por avaliação). Em volume alto (~1000 pendentes na Karina),
+isso causava **starvation**: as mesmas 50 linhas mais antigas voltavam todo dia como
+`ja_reengajado` e o resto da fila nunca era varrido. Fix: ao criar o draft, a própria
+linha de `atendimento_avaliacoes` é marcada (`msg_enviada_status='reengajado'`) e a
+query fonte passa a **excluir** (`.neq`) essas linhas — a janela avança a cada execução.
+O dedup via `agent_drafts` virou apenas retry-safety-net (cobre o caso raro de a
+marcação da linha falhar depois do draft já ter sido criado).
+
+### 8.5 Gap conhecido — envio pós-aprovação
+
+`src/console/AprovacoesUnificadas.jsx` só dispara envio real ao aprovar drafts de
+`agent_name='gestor'`, `operacao.startsWith('ifood.')` ou
+`channel='whatsapp' AND agent_name='breno'`. Para `agent_name='lara' + channel='whatsapp'`
+(este fluxo), aprovar hoje só marca `status='approved'` — **a mensagem não sai**.
+Resolver exige decidir o canal por registro (`origem='interno'` → Evolution via
+`contact_identifier`; `origem='crm_externo'` → DataCrazy via `contact_identifier=conv.id`,
+como em `sendDatacrazyCsatMessage` no poller). Escopo de PR futuro.
+
+### 8.6 Arquivos
+
+| Arquivo | Papel |
+|---|---|
+| `trigger/lara/csat-reengajamento.ts` | `laraCsatReengajamentoSchedule` (cron) + `laraCsatReengajamento` (task de negócio) + `decidirReengajamento` (função pura) |
+| `trigger/lara/csat-reengajamento.test.ts` | Testes offline da detecção/dedup/mensagem |
+| `supabase/migrations/00000000000000_baseline.sql` | Colunas usadas: `atendimento_avaliacoes.msg_enviada_status/msg_enviada_at/public_token_expires_at`, `agent_drafts.metadata` |
+
+---
+
+*Documento gerado em 06/05/2026. Seção 8 adicionada em 06/07/2026. Atualizar quando arquitetura mudar.*
