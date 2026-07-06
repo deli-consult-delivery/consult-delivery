@@ -981,7 +981,9 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
 
   async function handleSendStore(storeName, pendingReviews) {
     if (!pendingReviews.length) return;
-    const groupId = storeGroups[storeName] || pendingReviews.find(r => r.whatsappGroup)?.whatsappGroup;
+    // Busca grupo: 1) lojas (por nome exato), 2) qualquer review já enviada desta loja
+    const groupId = storeGroups[storeName]
+      || reviews.find(r => r.store === storeName && r.whatsappGroup)?.whatsappGroup;
     if (!groupId) { setError(`Loja "${storeName}" sem grupo WhatsApp cadastrado.`); return; }
     setBusyStore(storeName); setError(null);
     try {
@@ -993,6 +995,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
         sbUpdate({ id: rev.id }, {
           status: isParabens ? 'published' : 'sent_to_client',
           sent_at: now,
+          whatsapp_group: groupId,
           ...(isParabens ? { published_at: now } : {}),
         })
       ));
@@ -1005,13 +1008,14 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
   async function handleSendSingle(id, draft) {
     const rev = reviews.find(r => r.id === id);
     if (!rev) return;
-    const groupId = storeGroups[rev.store] || rev.whatsappGroup;
+    const groupId = storeGroups[rev.store]
+      || reviews.find(r => r.store === rev.store && r.whatsappGroup)?.whatsappGroup;
     if (!groupId) { setError(`Loja "${rev.store}" sem grupo WhatsApp cadastrado.`); return; }
     setBusyId(id); setError(null);
     try {
       const msg = buildWaMsg(rev, draft);
       await enviarWhatsAppAvaliacao({ tenantId: tenantDbId, chatId: groupId, texto: msg });
-      await sbUpdate({ id }, { status: 'sent_to_client', suggested_response: draft, sent_at: new Date().toISOString() });
+      await sbUpdate({ id }, { status: 'sent_to_client', suggested_response: draft, sent_at: new Date().toISOString(), whatsapp_group: groupId });
       flash('Reenvio individual feito ✓');
       await load();
     } catch (e) { setError('Erro ao reenviar: ' + e.message); }
