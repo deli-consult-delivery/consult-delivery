@@ -429,7 +429,8 @@ function VisaoGeralAvaliacao({ tenantNome, tenantDbId, onNav }) {
 
 function VisaoGeral({ tenantNome, tenantDbId, onNav, allowedModules }) {
   const { kpis, erro } = useKpisReais(tenantDbId);
-  const alertas = useAlertas(tenantDbId);
+  // allowlist: esconde alertas cujo destino o tenant não tem (o guard devolveria p/ 'visao' — botão morto)
+  const alertas = useAlertas(tenantDbId).filter(a => !allowedModules || allowedModules.has(a.ir));
   const fmt = n => (n ?? 0).toLocaleString('pt-BR');
 
   // allowlist sem 'radar' = tenant so-avaliacao (ex.: Karina) -> overview CSAT/NPS;
@@ -471,9 +472,11 @@ function VisaoGeral({ tenantNome, tenantDbId, onNav, allowedModules }) {
         <div style={{ fontSize: 13, color: 'var(--tx2)', lineHeight: 1.8 }}>
           1. Os agentes vigiam cancelamentos e avaliações das suas lojas · 2. Preparam a contestação ou a resposta com a melhor chance de vitória · 3. <b style={{ color: 'var(--ink)' }}>Você só dá o OK</b> · 4. O painel mostra o dinheiro defendido, mês a mês.
         </div>
-        <div style={{ marginTop: 12 }}>
-          <button className="cv2-btn" onClick={() => onNav('defesa')}>Abrir fila de Defesa</button>
-        </div>
+        {(!allowedModules || allowedModules.has('defesa')) && (
+          <div style={{ marginTop: 12 }}>
+            <button className="cv2-btn" onClick={() => onNav('defesa')}>Abrir fila de Defesa</button>
+          </div>
+        )}
       </div>
     </div>
   );
