@@ -789,6 +789,118 @@ function restoreFetch() {
   // teste dedicado — validar via timer real levaria ~30s no suite. Cobertura do
   // mecanismo de respeitar o header (valores curtos) já está nos testes acima.
 
+  // ── listarEventos / confirmarEventos — módulo Events (esqueleto mínimo) ─────
+  await check('listarEventos: sem merchantIds → sem header x-polling-merchants', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-ev', expiresIn: 21600 });
+      }
+      return jsonResponse(200, []);
+    });
+    const ifood = freshIfood();
+    const res = await ifood.listarEventos();
+    assert.deepStrictEqual(res, []);
+    const pollCall = calls.find((c) => c.url.includes('/events/v1.0/events:polling'));
+    assert.ok(pollCall, 'deveria ter chamado o endpoint de polling');
+    assert.strictEqual(pollCall.opts.headers['x-polling-merchants'], undefined);
+    restoreFetch();
+    clearCreds();
+  });
+
+  await check('listarEventos: merchantIds (string) → header x-polling-merchants; groups/types → querystring', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-ev2', expiresIn: 21600 });
+      }
+      return jsonResponse(200, [{ id: 'evt-1', fullCode: 'ORDER_PLACED' }]);
+    });
+    const ifood = freshIfood();
+    const res = await ifood.listarEventos({ merchantIds: 'merchant-1', groups: 'ORDER_STATUS', types: ['CFM', 'CAN'] });
+    assert.deepStrictEqual(res, [{ id: 'evt-1', fullCode: 'ORDER_PLACED' }]);
+    const pollCall = calls.find((c) => c.url.includes('/events:polling'));
+    assert.strictEqual(pollCall.opts.headers['x-polling-merchants'], 'merchant-1');
+    const parsedUrl = new URL(pollCall.url);
+    assert.strictEqual(parsedUrl.searchParams.get('groups'), 'ORDER_STATUS');
+    assert.strictEqual(parsedUrl.searchParams.get('types'), 'CFM,CAN');
+    restoreFetch();
+    clearCreds();
+  });
+
+  await check('listarEventos: merchantId em formato inválido → IfoodApiError status 0, zero chamada de rede', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, () => { throw new Error('não deveria chamar fetch com merchantId inválido'); });
+    const ifood = freshIfood();
+    await assert.rejects(
+      () => ifood.listarEventos({ merchantIds: '../etc/passwd' }),
+      (err) => err.status === 0
+    );
+    assert.strictEqual(calls.length, 0);
+    restoreFetch();
+    clearCreds();
+  });
+
+  await check('listarEventos: mais de 100 merchantIds → IfoodApiError status 0, zero chamada (limite documentado do header)', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, () => { throw new Error('não deveria chamar fetch acima do limite'); });
+    const ifood = freshIfood();
+    const muitos = Array.from({ length: 101 }, (_, i) => `merchant-${i}`);
+    await assert.rejects(
+      () => ifood.listarEventos({ merchantIds: muitos }),
+      (err) => err.status === 0
+    );
+    assert.strictEqual(calls.length, 0);
+    restoreFetch();
+    clearCreds();
+  });
+
+  await check('confirmarEventos: monta POST com body [{id}], um item por eventId', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-ack', expiresIn: 21600 });
+      }
+      return jsonResponse(202, null);
+    });
+    const ifood = freshIfood();
+    await ifood.confirmarEventos(['evt-1', 'evt-2']);
+    const ackCall = calls.find((c) => c.url.includes('/events/acknowledgment'));
+    assert.ok(ackCall, 'deveria ter chamado o endpoint de acknowledgment');
+    assert.strictEqual(ackCall.opts.method, 'POST');
+    assert.deepStrictEqual(JSON.parse(ackCall.opts.body), [{ id: 'evt-1' }, { id: 'evt-2' }]);
+    restoreFetch();
+    clearCreds();
+  });
+
+  await check('confirmarEventos: array vazio → IfoodApiError status 0, zero chamada de rede', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, () => { throw new Error('não deveria chamar fetch com eventIds vazio'); });
+    const ifood = freshIfood();
+    await assert.rejects(() => ifood.confirmarEventos([]), (err) => err.status === 0);
+    assert.strictEqual(calls.length, 0);
+    restoreFetch();
+    clearCreds();
+  });
+
+  await check('confirmarEventos: mais de 2000 ids → IfoodApiError status 0, zero chamada (limite documentado)', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, () => { throw new Error('não deveria chamar fetch acima do limite'); });
+    const ifood = freshIfood();
+    const muitos = Array.from({ length: 2001 }, (_, i) => `evt-${i}`);
+    await assert.rejects(() => ifood.confirmarEventos(muitos), (err) => err.status === 0);
+    assert.strictEqual(calls.length, 0);
+    restoreFetch();
+    clearCreds();
+  });
+
   restoreFetch();
   if (failures > 0) {
     process.stdout.write(`\n${failures} falha(s) de ${passes + failures}.\n`);

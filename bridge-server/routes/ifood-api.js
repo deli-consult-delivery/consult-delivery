@@ -333,5 +333,45 @@ module.exports = function ({ requireJwtOrInternal, ifood, sbFetch, assertTenantM
     return { loja_id: ctx.loja.id, merchant_id: ctx.merchantId, ocorrencias };
   }));
 
+  // ── Events (módulo /events/v1.0) — ESQUELETO MÍNIMO, NÃO usado pela tela de
+  // Finanças. Ver docs/integracoes/ifood/events-modulo-analise.md: este módulo é
+  // o barramento de eventos de PEDIDOS (Order/PDV), não dado financeiro. Mantido
+  // read-safe (poll + ack) só para não deixar código especulativo sem cobertura;
+  // nenhuma tela/task chama estas rotas hoje.
+  //
+  // GET /ifood-api/events/:lojaId — polling de eventos novos (filtrado pelo
+  // merchant da loja via header x-polling-merchants). ?groups=&types= opcionais
+  // (passthrough, aceitam lista separada por vírgula).
+  router.get('/ifood-api/events/:lojaId', requireJwtOrInternal, handle(async (req, res) => {
+    const ctx = await resolveLojaGated(req, res);
+    if (!ctx) return;
+    const { groups, types } = req.query;
+    const eventos = await ifood.listarEventos(
+      { merchantIds: ctx.merchantId, groups, types },
+      ctx.loja.tenant_id
+    );
+    return { loja_id: ctx.loja.id, merchant_id: ctx.merchantId, eventos };
+  }));
+
+  // ── POST /ifood-api/events/:lojaId/ack — acknowledgment de eventos recebidos
+  // no polling. Body: { eventIds: string[] } (1-2000 ids). NÃO confirma pedido
+  // (Order confirm/dispatch) — só o protocolo do módulo Events ("recebi").
+  router.post('/ifood-api/events/:lojaId/ack', requireJwtOrInternal, handle(async (req, res) => {
+    const eventIds = Array.isArray(req.body?.eventIds) ? req.body.eventIds : null;
+    if (!eventIds || eventIds.length === 0) {
+      res.status(400).json({
+        ok: false,
+        error: 'eventIds (array não-vazio) é obrigatório',
+        code: 'EVENT_IDS_INVALIDO',
+        message: 'Informe eventIds como um array não-vazio de IDs de evento.',
+      });
+      return;
+    }
+    const ctx = await resolveLojaGated(req, res);
+    if (!ctx) return;
+    const resultado = await ifood.confirmarEventos(eventIds, ctx.loja.tenant_id);
+    return { loja_id: ctx.loja.id, merchant_id: ctx.merchantId, ack: resultado, total: eventIds.length };
+  }));
+
   return router;
 };

@@ -173,7 +173,7 @@ async function withRetry(fn, maxAttempts = 3) {
 // `path` já inclui o prefixo da API (cada módulo iFood tem o seu: /merchant/v1.0,
 // /catalog/v2.0, /financial/v3.0, /review/v2.0).
 // ---------------------------------------------------------------------------
-async function ifoodFetch(path, { method = 'GET', query, body } = {}, tenantId) {
+async function ifoodFetch(path, { method = 'GET', query, body, headers: extraHeaders } = {}, tenantId) {
   const { baseUrl } = getIfoodConfig(tenantId);
   const token = await getAccessToken(tenantId);
   const url = `${baseUrl}${path}${qs(query)}`;
@@ -181,6 +181,7 @@ async function ifoodFetch(path, { method = 'GET', query, body } = {}, tenantId) 
   const headers = {
     accept: 'application/json',
     Authorization: `Bearer ${token}`,
+    ...extraHeaders,
   };
   if (body !== undefined && body !== null) headers['Content-Type'] = 'application/json';
 
@@ -450,6 +451,71 @@ function assertPathId(value, label) {
   if (typeof value !== 'string' || !MERCHANT_ID_RE.test(value)) {
     throw new IfoodApiError(`${label} inválido (esperado UUID/alfanumérico): ${value}`, 0, null);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Events — /events/v1.0 (polling + acknowledgment). ESQUELETO MÍNIMO.
+//
+// Achado de pesquisa (docs/integracoes/ifood/events-modulo-analise.md): este
+// módulo é o barramento de eventos do fluxo de PEDIDOS (Order/PDV) — novo
+// pedido, confirmado, despachado etc. NÃO é fonte de dado financeiro e NÃO
+// serve ao app de Finanças/BI (fase 2 deste sprint, "mata o scraping").
+// PLANO-INTEGRACAO-IFOOD.md já classificava como "exclusivo PDV — F3", com
+// homologação própria (reunião + `/generate-test-order`) separada da Financial.
+// Implementado só como client read-safe (poll + ack) — NUNCA chama
+// confirm/dispatch de Order. Path/payload vêm do 00-api-reference.md interno;
+// NÃO confirmados contra uma chamada real — ajustar se o 1º smoke live
+// divergir (mesma ressalva já usada em listarReviews/responderReview acima).
+// ---------------------------------------------------------------------------
+
+const MAX_POLLING_MERCHANTS = 100; // limite documentado do header x-polling-merchants
+const MAX_ACK_IDS = 2000; // limite documentado do POST acknowledgment
+
+// Busca novos eventos (polling). merchantIds (string|string[]) filtra via header
+// x-polling-merchants — sem isso, o iFood devolve eventos de TODOS os merchants
+// vinculados ao token (indesejado num Bridge multi-tenant). groups/types
+// (string|string[]) filtram por categoria — passthrough pro iFood.
+async function listarEventos({ merchantIds, groups, types } = {}, tenantId) {
+  const query = {};
+  if (groups) query.groups = Array.isArray(groups) ? groups.join(',') : groups;
+  if (types) query.types = Array.isArray(types) ? types.join(',') : types;
+
+  const headers = {};
+  if (merchantIds) {
+    const list = Array.isArray(merchantIds) ? merchantIds : [merchantIds];
+    if (list.length === 0) {
+      throw new IfoodApiError('listarEventos: merchantIds não pode ser array vazio', 0, null);
+    }
+    if (list.length > MAX_POLLING_MERCHANTS) {
+      throw new IfoodApiError(
+        `listarEventos: x-polling-merchants aceita no máx. ${MAX_POLLING_MERCHANTS} merchants por chamada`,
+        0,
+        null
+      );
+    }
+    for (const id of list) assertPathId(id, 'merchantIds'); // mesma validação anti-injeção do path, aplicada ao header
+    headers['x-polling-merchants'] = list.join(',');
+  }
+
+  return withRetry(() =>
+    ifoodFetch('/events/v1.0/events:polling', { query, headers }, tenantId)
+  ).then(tolerant);
+}
+
+// Confirma (acknowledgment) os eventos recebidos no polling — housekeeping do
+// PROTOCOLO Events ("recebi, pode parar de reenviar"). NÃO é confirmar pedido
+// (Order confirm/dispatch) — este client nunca chama isso. SEM retry (mesma
+// regra de escrita do arquivo): reenvio cego fica a critério do chamador.
+async function confirmarEventos(eventIds, tenantId) {
+  const ids = Array.isArray(eventIds) ? eventIds : [eventIds];
+  if (ids.length === 0) {
+    throw new IfoodApiError('confirmarEventos: eventIds não pode ser vazio', 0, null);
+  }
+  if (ids.length > MAX_ACK_IDS) {
+    throw new IfoodApiError(`confirmarEventos: máx. ${MAX_ACK_IDS} ids por chamada`, 0, null);
+  }
+  const body = ids.map((id) => ({ id: String(id) }));
+  return ifoodFetch('/events/v1.0/events/acknowledgment', { method: 'POST', body }, tenantId).then(tolerant);
 }
 
 // ---------------------------------------------------------------------------
@@ -787,6 +853,9 @@ module.exports = {
   listarRepasses,
   listarAntecipacoes,
   listarOcorrencias,
+  // events (esqueleto mínimo — não se aplica a Finanças/BI, ver comentário acima)
+  listarEventos,
+  confirmarEventos,
   // escrita (Catalog v2.0) — sem retry
   listarCategorias,
   criarCategoria,
