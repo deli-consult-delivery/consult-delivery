@@ -28,8 +28,7 @@ async function sbUpdateNote(id, notes) {
 
 // ─── Arquivada = enviada ao cliente, publicada ou prazo vencido ──────────────
 function isArchivedFn(r, today) {
-  return r.status === 'sent_to_client'
-    || r.status === 'published'
+  return r.status === 'published'
     || (!!r.deadline && r.deadline < today);
 }
 
@@ -576,6 +575,15 @@ function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSen
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
             {review.status === 'sent_to_client' && (
               <button
+                className="cv2-btn" style={{ fontSize: 11.5 }}
+                disabled={busy || !draft.trim()}
+                onClick={() => onPublish(review.id, draft)}
+              >
+                {busy ? '…' : 'Publicar manualmente'}
+              </button>
+            )}
+            {review.status === 'sent_to_client' && (
+              <button
                 className="cv2-btn sec" style={{ fontSize: 11.5 }}
                 disabled={busy || over || !draft.trim() || !effectiveGroup}
                 onClick={() => onSendSingle(review.id, draft)}
@@ -626,6 +634,55 @@ function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSen
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ParabensIncentivoCard({ loja, resolvedGroup, busy, onSend }) {
+  const lojaDisplay = loja.ifood_portal_nome || loja.nome;
+  const defaultMsg = `🎉 Parabéns! Nenhuma avaliação negativa foi detectada hoje no iFood para a loja *${lojaDisplay}*!\n\nIsso é sinal de que a operação está no caminho certo 👏\n\n💡 *Aproveite e incentive mais avaliações 5⭐:*\n\n📝 *Bilhete na embalagem* — coloque um recadinho no pedido pedindo a avaliação\n🍬 *Doce ou balinha* — ofereça um brindezinho com a mensagem "nos avalie e apareça no topo!"\n👥 *Treine a equipe* — peça para agradecer e solicitar feedback em todo pedido\n🎯 *Crie um incentivo* — "avalie seu pedido e ganhe desconto na próxima!" funciona muito bem\n📲 *QR Code* — deixe um adesivo na embalagem com link direto para a avaliação\n\nCada nova avaliação aumenta sua visibilidade no iFood e gera mais pedidos! 🚀`;
+
+  const [msg, setMsg] = useState(defaultMsg);
+
+  return (
+    <div style={{
+      border: '1px solid #86efac', borderRadius: 8, marginBottom: 10,
+      background: '#f0fdf4', overflow: 'hidden', padding: '12px 14px',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontWeight: 700, fontSize: 14, color: '#15803d' }}>🎉 {lojaDisplay}</span>
+        <span style={{
+          fontSize: 12, color: '#15803d', background: '#dcfce7',
+          padding: '2px 8px', borderRadius: 10, border: '1px solid #86efac',
+        }}>Sem avaliações hoje</span>
+        {!resolvedGroup && (
+          <span style={{ fontSize: 11, color: 'var(--red)' }}>⚠ sem grupo WA</span>
+        )}
+      </div>
+      <div style={{ marginBottom: 8 }}>
+        <span style={{ fontSize: 11, color: '#15803d', fontWeight: 700, display: 'block', marginBottom: 4 }}>
+          MENSAGEM PARA O CLIENTE (editável)
+        </span>
+        <textarea
+          value={msg}
+          onChange={e => setMsg(e.target.value)}
+          rows={12}
+          style={{
+            width: '100%', fontFamily: 'inherit', fontSize: 12, padding: '8px 10px',
+            border: '1px solid #86efac', borderRadius: 4, background: '#fff',
+            color: 'var(--ink)', resize: 'vertical', boxSizing: 'border-box',
+          }}
+        />
+      </div>
+      <button
+        className="cv2-btn"
+        style={{ fontSize: 11.5, background: '#16a34a', borderColor: '#16a34a' }}
+        disabled={busy || !resolvedGroup || !msg.trim()}
+        title={!resolvedGroup ? 'Configure o grupo WA desta loja primeiro' : ''}
+        onClick={() => onSend(loja, msg)}
+      >
+        {busy ? '…' : '📲 Enviar parabéns ao cliente'}
+      </button>
     </div>
   );
 }
@@ -1087,11 +1144,30 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
 
   const kpi = {
     pending:  activeReviews.filter(r => r.status === 'pending').length,
-    sent:     reviews.filter(r => r.status === 'sent_to_client').length,
+    sent:     activeReviews.filter(r => r.status === 'sent_to_client').length,
     approved: activeReviews.filter(r => r.status === 'approved' || r.status === 'modified').length,
   };
 
   const lojasSemGrupo = [...new Set(reviews.map(r => r.store).filter(Boolean))].filter(s => !storeGroups[s]);
+
+  const lojasZeroReviews = useMemo(() => {
+    const storesWithReviews = new Set(reviews.map(r => r.store).filter(Boolean));
+    return lojas.filter(l => {
+      const ifoodNome = l.ifood_portal_nome || l.nome;
+      return !storesWithReviews.has(ifoodNome) && !storesWithReviews.has(l.nome) && l.ifood_portal_nome;
+    });
+  }, [lojas, reviews]);
+
+  async function handleSendParabensIncentivo(loja, msg) {
+    const groupId = storeGroups[loja.nome] || storeGroups[loja.ifood_portal_nome];
+    if (!groupId) { setError(`Loja "${loja.nome}" sem grupo WhatsApp cadastrado.`); return; }
+    setBusyStore(loja.nome); setError(null);
+    try {
+      await enviarWhatsAppAvaliacao({ tenantId: tenantDbId, chatId: groupId, texto: msg });
+      flash(`Mensagem de parabéns enviada para "${loja.ifood_portal_nome || loja.nome}" ✓`);
+    } catch (e) { setError('Erro ao enviar: ' + e.message); }
+    setBusyStore(null);
+  }
 
   return (
     <div>
@@ -1153,7 +1229,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
         <div className="cv2-kpi">
           <div className="l">Arquivadas</div>
           <div className="v">{archivedReviews.length}</div>
-          <div className="d mut">enviadas, publicadas ou vencidas</div>
+          <div className="d mut">publicadas ou vencidas</div>
         </div>
       </div>
 
@@ -1163,8 +1239,8 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...inp, width: 'auto' }}>
             <option value="all">Todos</option>
             <option value="pending">Aguardando envio</option>
+            <option value="sent_to_client">Enviado ao cliente</option>
             <option value="approved">Aprovado / Com alteração</option>
-            <option value="published">Publicado</option>
           </select>
         </div>
         <div>
@@ -1210,13 +1286,33 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
         />
       ))}
 
+      {lojasZeroReviews.length > 0 && (
+        <div style={{ marginTop: 20, borderTop: '2px solid #86efac', paddingTop: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#15803d' }}>
+              🎉 Lojas sem avaliações hoje ({lojasZeroReviews.length})
+            </span>
+            <span style={{ fontSize: 12, color: '#15803d' }}>nenhuma avaliação coletada — envie parabéns e incentivo</span>
+          </div>
+          {lojasZeroReviews.map(loja => (
+            <ParabensIncentivoCard
+              key={loja.id}
+              loja={loja}
+              resolvedGroup={storeGroups[loja.nome] || storeGroups[loja.ifood_portal_nome] || null}
+              busy={busyStore === loja.nome}
+              onSend={handleSendParabensIncentivo}
+            />
+          ))}
+        </div>
+      )}
+
       {archivedReviews.length > 0 && (
         <div style={{ marginTop: 20, borderTop: '2px solid var(--line)', paddingTop: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--tx2)' }}>
               📦 Arquivadas ({archivedReviews.length})
             </span>
-            <span style={{ fontSize: 12, color: 'var(--tx2)' }}>enviadas ao cliente, publicadas ou com prazo vencido</span>
+            <span style={{ fontSize: 12, color: 'var(--tx2)' }}>publicadas ou com prazo vencido</span>
             <button
               className="cv2-btn sec"
               style={{ fontSize: 12, marginLeft: 'auto' }}
