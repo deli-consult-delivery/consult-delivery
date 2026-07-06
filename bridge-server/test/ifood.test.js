@@ -565,6 +565,40 @@ function restoreFetch() {
     clearCreds();
   });
 
+  // ── alterarPrecoItem — PATCH correto, body {price:{value}}, sem retry ───────
+  await check('alterarPrecoItem: monta PATCH correto com body {price:{value}}', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-preco', expiresIn: 21600 });
+      }
+      return jsonResponse(200, { id: 'item-1', price: { value: 29.9 } });
+    });
+    const ifood = freshIfood();
+    const res = await ifood.alterarPrecoItem('merchant-1', 'item-1', 29.9);
+    assert.deepStrictEqual(res, { id: 'item-1', price: { value: 29.9 } });
+    const call = calls.find((c) => c.url.includes('/items/item-1'));
+    assert.strictEqual(call.url, 'https://sandbox.ifood.test/catalog/v2.0/merchants/merchant-1/items/item-1');
+    assert.strictEqual(call.opts.method, 'PATCH');
+    assert.deepStrictEqual(JSON.parse(call.opts.body), { price: { value: 29.9 } });
+    restoreFetch();
+    clearCreds();
+  });
+
+  await check('alterarPrecoItem: preço <= 0 ou não-numérico → IfoodApiError status 0, zero chamada', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, () => { throw new Error('não deveria chamar fetch com preço inválido'); });
+    const ifood = freshIfood();
+    await assert.rejects(() => ifood.alterarPrecoItem('merchant-1', 'item-1', 0), (err) => err.status === 0);
+    await assert.rejects(() => ifood.alterarPrecoItem('merchant-1', 'item-1', -5), (err) => err.status === 0);
+    await assert.rejects(() => ifood.alterarPrecoItem('merchant-1', 'item-1', NaN), (err) => err.status === 0);
+    assert.strictEqual(calls.length, 0);
+    restoreFetch();
+    clearCreds();
+  });
+
   // ── responderReview — POST correto, body {text}, sem retry ──────────────────
   await check('responderReview: monta POST correto com body {text}', async () => {
     setCreds();

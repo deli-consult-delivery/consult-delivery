@@ -33,6 +33,7 @@ const OPERACOES_ESCRITA = {
   'ifood.pausar_loja': { metodo: 'criarInterrupcao', verbo: 'Pausar loja', agent: 'BRENO', argKeys: ['interrupcao'] },
   'ifood.despausar_loja': { metodo: 'removerInterrupcao', verbo: 'Despausar loja', agent: 'BRENO', argKeys: ['interruption_id'] },
   'ifood.atualizar_horarios': { metodo: 'atualizarHorarios', verbo: 'Atualizar horários', agent: 'BRENO', argKeys: ['shifts'] },
+  'ifood.alterar_preco': { metodo: 'alterarPrecoItem', verbo: 'Alterar preço', agent: 'BRENO', argKeys: ['item_id', 'price'] },
 };
 
 module.exports = function ({ requireJwtOrInternal, ifood, supabaseSelect, assertTenantMember, sbFetch, supabaseInsert }) {
@@ -284,6 +285,45 @@ module.exports = function ({ requireJwtOrInternal, ifood, supabaseSelect, assert
           operacao,
           merchant_id: ctx.merchantId,
           item_id: resolved.item.itemId,
+          product_id: resolved.item.productId ?? null,
+          item_nome: resolved.item.nome ?? null,
+          tenant_id: ctx.tenantId,
+        },
+      };
+    }
+
+    if (operacao === 'ifood.alterar_preco') {
+      const item_nome = parametros?.item_nome ? String(parametros.item_nome) : null;
+      const external_code = parametros?.external_code ? String(parametros.external_code) : null;
+      if (!item_nome && !external_code) {
+        res.status(400).json({ ok: false, error: 'parametros.item_nome ou parametros.external_code obrigatório' });
+        return null;
+      }
+      const price = Number(parametros?.price);
+      if (!Number.isFinite(price) || price <= 0) {
+        res.status(400).json({ ok: false, error: 'parametros.price deve ser um número maior que zero' });
+        return null;
+      }
+      const resolved = await resolverItem(ctx.merchantId, ctx.tenantId, { item_nome, external_code });
+      if (!resolved.ok) {
+        res.status(422).json({
+          ok: false,
+          error: resolved.motivo === 'ambiguo'
+            ? 'Mais de um item casou — desambigue.'
+            : 'Nenhum item casou com o nome/externalCode informado.',
+          motivo: resolved.motivo,
+          candidatos: resolved.candidatos,
+        });
+        return null;
+      }
+      const alvo = item_nome || external_code;
+      return {
+        content: `${spec.verbo} ${resolved.item.nome || alvo} no iFood para R$ ${price.toFixed(2)}`,
+        metadata: {
+          operacao,
+          merchant_id: ctx.merchantId,
+          item_id: resolved.item.itemId,
+          price,
           product_id: resolved.item.productId ?? null,
           item_nome: resolved.item.nome ?? null,
           tenant_id: ctx.tenantId,

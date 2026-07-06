@@ -293,5 +293,71 @@ const supabaseInsertStub = async () => ({});
     passed++;
   }
 
+  // 10) alterar_preco: cria draft com metadata.item_id + metadata.price
+  {
+    const { sbFetch, drafts } = buildSbFetchStub();
+    const ifood = {
+      listarCatalogos: async () => [{ catalogId: 'cat-1' }],
+      listarCategorias: async () => [{ id: 'catg-1' }],
+      buscarItemPorNomeOuExternalCode: async () => ({ ok: true, item: { itemId: 'item-1', productId: 'prod-1', nome: 'Combo X' } }),
+    };
+    const app = buildApp({ sbFetch, ifood, supabaseSelect: supabaseSelectStub, supabaseInsert: supabaseInsertStub });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+
+    const r = await request(server, 'POST', '/api/ifood/acao?tenant_id=tenant-1', {
+      operacao: 'ifood.alterar_preco', parametros: { item_nome: 'Combo X', price: 29.9 },
+    });
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    const draft = drafts.get(r.body.data.draft_id);
+    assert.strictEqual(draft.metadata.item_id, 'item-1');
+    assert.strictEqual(draft.metadata.price, 29.9);
+    server.close();
+    passed++;
+  }
+
+  // 11) alterar_preco: price <= 0 → 400, NÃO cria draft
+  {
+    const { sbFetch, drafts } = buildSbFetchStub();
+    const app = buildApp({ sbFetch, ifood: {}, supabaseSelect: supabaseSelectStub, supabaseInsert: supabaseInsertStub });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+
+    const r = await request(server, 'POST', '/api/ifood/acao?tenant_id=tenant-1', {
+      operacao: 'ifood.alterar_preco', parametros: { item_nome: 'Combo X', price: 0 },
+    });
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(drafts.size, 0);
+    server.close();
+    passed++;
+  }
+
+  // 12) aprovar alterar_preco → despacha ifood.alterarPrecoItem(merchantId, itemId, price, tenantId)
+  {
+    const { sbFetch, drafts } = buildSbFetchStub();
+    let chamado = null;
+    const ifood = {
+      listarCatalogos: async () => [{ catalogId: 'cat-1' }],
+      listarCategorias: async () => [{ id: 'catg-1' }],
+      buscarItemPorNomeOuExternalCode: async () => ({ ok: true, item: { itemId: 'item-1', productId: 'prod-1', nome: 'Combo X' } }),
+      alterarPrecoItem: async (merchantId, itemId, price, tenantId) => { chamado = { merchantId, itemId, price, tenantId }; return { price: { value: price } }; },
+    };
+    const app = buildApp({ sbFetch, ifood, supabaseSelect: supabaseSelectStub, supabaseInsert: supabaseInsertStub });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+
+    const criar = await request(server, 'POST', '/api/ifood/acao?tenant_id=tenant-1', {
+      operacao: 'ifood.alterar_preco', parametros: { item_nome: 'Combo X', price: 29.9 },
+    });
+    const draftId = criar.body.data.draft_id;
+
+    const r = await request(server, 'POST', `/api/ifood/aprovar/${draftId}`, { tenant_id: 'tenant-1' });
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    assert.deepStrictEqual(chamado, { merchantId: 'merch-1', itemId: 'item-1', price: 29.9, tenantId: 'tenant-1' });
+    assert.strictEqual(drafts.get(draftId).status, 'sent');
+    server.close();
+    passed++;
+  }
+
   process.stdout.write(`\nifood-routes-acao-aprovar: todos os ${passed} cenários passaram.\n`);
 })();
