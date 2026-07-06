@@ -1510,6 +1510,12 @@ app.use('/api', require('./routes/users')({
   SUPABASE_SERVICE_KEY,
 }));
 
+// ── Onboarding self-service: agência cria loja (tenant_type='store') filha ──
+app.use('/api', require('./routes/tenant-onboarding')({
+  requireJwt,
+  sbFetch,
+}));
+
 // ── Sprint 1 — Heartbeats: agentes proativos agendados ───────────────────────
 app.use('/api', require('./routes/heartbeats')({
   requireJwt,

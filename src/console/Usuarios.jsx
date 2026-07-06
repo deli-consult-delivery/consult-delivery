@@ -403,8 +403,85 @@ function ScreenPermsModal({ member, tenantDbId, onClose }) {
 
 // ─── Tela principal ──────────────────────────────────────────
 
+// ─── Onboarding self-service: agência cria loja (tenant_type='store') filha ───
+// Só aparece quando o tenant atual é uma agência (fetch de tenant_type abaixo).
+// Backend: POST /tenants/create-store (cria + semeia RBAC) seguido do convite
+// já existente (POST /users/invite) — reaproveita 100% do fluxo de convite.
+function CriarLojaCard({ tenantDbId, onCreated }) {
+  const [aberto, setAberto] = useState(false);
+  const [nome, setNome] = useState('');
+  const [email, setEmail] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [erro, setErro] = useState(null);
+
+  async function criar() {
+    setErro(null); setMsg(null);
+    if (nome.trim().length < 2) { setErro('Informe o nome da loja.'); return; }
+    if (!email.trim().includes('@')) { setErro('Informe um e-mail válido para o admin da loja.'); return; }
+    setSaving(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` };
+
+      const resCriar = await fetch(`${BRIDGE}/api/tenants/create-store`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ nome: nome.trim(), parent_tenant_id: tenantDbId }),
+      });
+      const jCriar = await resCriar.json().catch(() => ({}));
+      if (!resCriar.ok) throw new Error(jCriar.error || `falha ao criar loja (${resCriar.status})`);
+
+      const resConvite = await fetch(`${BRIDGE}/api/users/invite`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ email: email.trim(), role: 'admin', tenant_id: jCriar.tenant_id }),
+      });
+      const jConvite = await resConvite.json().catch(() => ({}));
+      const conviteMsg = resConvite.ok
+        ? `convite enviado para ${email.trim()}`
+        : `loja criada, mas o convite falhou: ${jConvite.error || resConvite.status} (reenvie pela tela "Usuários e equipe" da nova loja)`;
+
+      setMsg(`Loja "${nome.trim()}" criada (slug "${jCriar.slug}") — ${conviteMsg}.`);
+      setNome(''); setEmail(''); setAberto(false);
+      onCreated?.();
+    } catch (err) {
+      setErro(err?.message || 'falha ao criar loja');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="cv2-card" style={{ marginBottom: 20 }}>
+      {!aberto ? (
+        <button className="cv2-btn sec" onClick={() => { setAberto(true); setMsg(null); setErro(null); }}>
+          + Nova loja (self-service)
+        </button>
+      ) : (
+        <>
+          <div style={{ fontWeight: 700, marginBottom: 10 }}>Criar loja + convidar admin</div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, color: 'var(--tx2)' }}>
+              Nome da loja
+              <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Pizzaria do Zé" style={{ minWidth: 220 }} />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, color: 'var(--tx2)' }}>
+              E-mail do admin da loja
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="dono@loja.com" style={{ minWidth: 240 }} />
+            </label>
+            <button className="cv2-btn" onClick={criar} disabled={saving}>{saving ? 'Criando…' : 'Criar e convidar'}</button>
+            <button className="cv2-btn sec" onClick={() => setAberto(false)} disabled={saving}>Cancelar</button>
+          </div>
+        </>
+      )}
+      {msg && <div style={{ marginTop: 10, color: 'var(--green)', fontSize: 13 }}>✓ {msg}</div>}
+      {erro && <div style={{ marginTop: 10, color: 'var(--red)', fontSize: 13 }}>⚠ {erro}</div>}
+    </div>
+  );
+}
+
 export default function Usuarios({ tenantDbId, userId }) {
   const [members, setMembers] = useState([]);
+  const [tenantType, setTenantType] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeMenu, setActiveMenu] = useState(null);
   const [menuPos, setMenuPos] = useState(null);
@@ -425,6 +502,12 @@ export default function Usuarios({ tenantDbId, userId }) {
   }
 
   useEffect(() => { loadMembers(); }, [tenantDbId]);
+
+  useEffect(() => {
+    if (!tenantDbId) return;
+    supabase.from('tenants').select('tenant_type').eq('id', tenantDbId).single()
+      .then(({ data }) => setTenantType(data?.tenant_type ?? null));
+  }, [tenantDbId]);
 
   useEffect(() => {
     if (!activeMenu) return;
@@ -461,6 +544,8 @@ export default function Usuarios({ tenantDbId, userId }) {
           <Icon name="plus" size={14} /> Convidar colaborador
         </button>
       </div>
+
+      {tenantType === 'agency' && <CriarLojaCard tenantDbId={tenantDbId} onCreated={loadMembers} />}
 
       {/* Métricas rápidas */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginBottom: 28 }}>
