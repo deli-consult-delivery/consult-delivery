@@ -432,7 +432,9 @@ function VisaoGeral({ tenantNome, tenantDbId, onNav, allowedModules }) {
   const alertas = useAlertas(tenantDbId);
   const fmt = n => (n ?? 0).toLocaleString('pt-BR');
 
-  if (allowedModules) {
+  // allowlist sem 'radar' = tenant so-avaliacao (ex.: Karina) -> overview CSAT/NPS;
+  // com 'radar' (ex.: cd-demo) -> visao completa
+  if (allowedModules && !allowedModules.has('radar')) {
     return <VisaoGeralAvaliacao tenantNome={tenantNome} tenantDbId={tenantDbId} onNav={onNav} />;
   }
 

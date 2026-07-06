@@ -31,7 +31,7 @@ export const GRUPOS = [
   // com ponto). Agrupado por assunto — mesmos ids/module_key, só label/grupo mudou.
   { label: 'Avaliações', items: [
     { id: 'avaliacoes', ic: 'i-eye', label: 'Avaliações Recebidas' },
-    { id: 'resp-avaliacoes', ic: 'i-star', label: 'Respostas de Avaliações' },
+    { id: 'resp-avaliacoes', ic: 'i-star', label: 'Avaliações iFood' },
     { id: 'csat', ic: 'i-check', label: 'Satisfação do Atendimento (CSAT)' },
     { id: 'nps', ic: 'i-target', label: 'Lealdade da Marca (NPS)' },
     { id: 'controle-atendimentos', ic: 'i-chart', label: 'Controle de Atendimento' },
