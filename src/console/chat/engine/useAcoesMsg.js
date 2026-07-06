@@ -137,8 +137,6 @@ export function useAcoesMsg({ tenantDbId, instancia }) {
             destino.chatId,
             msg.txt,
             null,
-            instancia.evolution_url,
-            instancia.api_key,
           ).catch(() => { /* offline: já no banco/realtime do destino */ });
         }
       }

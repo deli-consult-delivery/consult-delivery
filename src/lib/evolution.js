@@ -1,292 +1,126 @@
 // src/lib/evolution.js
-// Cliente da Evolution API para WhatsApp
-// TASK-205 — Enviar mensagem WhatsApp pela plataforma
+// Cliente WhatsApp (Evolution API) — via Bridge. A key da Evolution nunca
+// chega ao navegador: o front autentica com o JWT da sessão e manda
+// instance_name (identificador público, já usado pelo picker de instâncias);
+// o Bridge resolve a credencial no servidor e chama a Evolution.
 
-const EVO_URL = import.meta.env.VITE_EVOLUTION_URL;
-const EVO_KEY = import.meta.env.VITE_EVOLUTION_KEY;
+import { supabase } from './supabase';
 
-const headers = {
-  'Content-Type': 'application/json',
-  apikey: EVO_KEY,
-};
+const BRIDGE = import.meta.env.VITE_BRIDGE_URL || 'https://bridge.consultdelivery.com.br';
 
-// Listar todas as instâncias
-export async function listInstances() {
-  const res = await fetch(`${EVO_URL}/instance/fetchInstances`, { headers });
-  return res.json();
-}
-
-// Status de conexão de uma instância
-export async function getInstanceStatus(instanceName, evolutionUrl, apiKey) {
-  const url = evolutionUrl || EVO_URL;
-  const key = apiKey || EVO_KEY;
-  const res = await fetch(`${url}/instance/connectionState/${instanceName}`, {
-    headers: { 'Content-Type': 'application/json', apikey: key },
-  });
-  return res.json();
-}
-
-// Enviar mensagem de texto (quoted opcional para respostas)
-export async function sendTextMessage(instanceName, to, text, quoted = null, evoUrl, evoKey) {
-  const url = evoUrl || EVO_URL;
-  const key = evoKey || EVO_KEY;
-  const body = { number: to, text };
-  if (quoted) body.quoted = quoted;
-  const res = await fetch(`${url}/message/sendText/${instanceName}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', apikey: key },
-    body: JSON.stringify(body),
+async function bridgeFetch(path, { method = 'GET', body } = {}) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token || '';
+  const res = await fetch(`${BRIDGE}${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
   });
   if (!res.ok) {
     const errText = await res.text().catch(() => res.statusText);
-    throw new Error(`Evolution sendText ${res.status}: ${errText}`);
+    throw new Error(`Evolution (bridge) ${res.status}: ${errText.slice(0, 300)}`);
   }
   return res.json();
+}
+
+// Enviar mensagem de texto (quoted opcional para respostas). Serve também
+// para grupo — Evolution aceita o JID do grupo no campo "number".
+export async function sendTextMessage(instanceName, to, text, quoted = null) {
+  return bridgeFetch('/api/evolution/send-text', {
+    method: 'POST', body: { instance_name: instanceName, to, text, quoted },
+  });
 }
 
 // Enviar mídia (imagem, vídeo, documento) — media pode ser URL ou base64 puro
 export async function sendMediaMessage(instanceName, to, media, mediaType, mimeType = '', caption = '', fileName = '') {
-  const number = to.split('@')[0];
-  const body = { number, mediatype: mediaType, media, caption };
-  if (mimeType)  body.mimetype  = mimeType;
-  if (fileName)  body.fileName  = fileName;
-  console.log('[EVO] sendMedia →', instanceName, to, mediaType, `${media.length} chars b64`, `caption: "${caption}"`);
-  const res = await fetch(`${EVO_URL}/message/sendMedia/${instanceName}`, {
+  return bridgeFetch('/api/evolution/send-media', {
     method: 'POST',
-    headers,
-    body: JSON.stringify(body),
+    body: { instance_name: instanceName, to, media, media_type: mediaType, mime_type: mimeType, caption, file_name: fileName },
   });
-  if (!res.ok) {
-    const errText = await res.text().catch(() => res.statusText);
-    console.error('[EVO] sendMedia FALHOU:', res.status, errText);
-    throw new Error(`Evolution sendMedia ${res.status}: ${errText}`);
-  }
-  const json = await res.json();
-  console.log('[EVO] sendMedia OK:', json?.key?.id, json?.status);
-  return json;
 }
 
-// Ler configuração atual do webhook (sem modificar)
-export async function getWebhookStatus(instanceName, evolutionUrl, apiKey) {
-  const url = evolutionUrl || EVO_URL;
-  const key = apiKey || EVO_KEY;
-  const res = await fetch(`${url}/webhook/find/${instanceName}`, {
-    headers: { 'Content-Type': 'application/json', apikey: key },
+// Enviar áudio como PTT (voice note)
+export async function sendAudioMessage(instanceName, to, audioBase64) {
+  return bridgeFetch('/api/evolution/send-audio', {
+    method: 'POST', body: { instance_name: instanceName, to, audio_base64: audioBase64 },
   });
-  if (!res.ok) throw new Error(`webhook/find ${res.status}`);
-  return res.json();
-}
-
-// Configurar webhook da instância para apontar para a Supabase Edge Function
-export async function setWebhook(instanceName, webhookUrl, evolutionUrl, apiKey) {
-  const url = evolutionUrl || EVO_URL;
-  const key = apiKey || EVO_KEY;
-  const res = await fetch(`${url}/webhook/set/${instanceName}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', apikey: key },
-    body: JSON.stringify({
-      webhook: {
-        enabled:           true,
-        url:               webhookUrl,
-        webhook_by_events: false,
-        events: [
-          'MESSAGES_UPSERT',
-          'MESSAGES_UPDATE',
-          'MESSAGES_DELETE',
-          'SEND_MESSAGE',
-          'CONNECTION_UPDATE',
-          'CONTACTS_UPSERT',
-          'CONTACTS_UPDATE',
-          'GROUPS_UPSERT',
-          'GROUP_UPDATE',
-          'GROUP_PARTICIPANTS_UPDATE',
-          'CHATS_UPDATE',
-        ],
-      },
-    }),
-  });
-  return res.json();
-}
-
-// Buscar QR Code para conectar instância
-export async function getQRCode(instanceName, evolutionUrl, apiKey) {
-  const url = evolutionUrl || EVO_URL;
-  const key = apiKey || EVO_KEY;
-  const res = await fetch(`${url}/instance/connect/${instanceName}`, {
-    headers: { 'Content-Type': 'application/json', apikey: key },
-  });
-  return res.json();
-}
-
-// Buscar mensagens de um chat
-export async function fetchMessages(instanceName, remoteJid, limit = 50) {
-  const res = await fetch(`${EVO_URL}/chat/findMessages/${instanceName}`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ where: { key: { remoteJid } }, limit }),
-  });
-  return res.json();
 }
 
 // Buscar contatos
 export async function fetchContacts(instanceName) {
-  const res = await fetch(`${EVO_URL}/chat/findContacts/${instanceName}`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({}),
-  });
-  return res.json();
+  return bridgeFetch(`/api/evolution/contacts?instance_name=${encodeURIComponent(instanceName)}`);
 }
 
 // Buscar grupos
 export async function fetchGroups(instanceName, getParticipants = false) {
-  const res = await fetch(
-    `${EVO_URL}/group/fetchAllGroups/${instanceName}?getParticipants=${getParticipants}`,
-    { headers },
-  );
-  return res.json();
+  return bridgeFetch(`/api/evolution/groups?instance_name=${encodeURIComponent(instanceName)}&get_participants=${getParticipants}`);
 }
 
 /* ─── Grupos WhatsApp ─────────────────────────────────── */
 
 // Criar grupo (participants = array de JIDs: "5511999990001@s.whatsapp.net")
 export async function createWAGroup(instanceName, subject, participants, description = '') {
-  const body = { subject, participants };
-  if (description) body.description = description;
-  const res = await fetch(`${EVO_URL}/group/create/${instanceName}`, {
-    method: 'POST', headers,
-    body: JSON.stringify(body),
+  return bridgeFetch('/api/evolution/groups/create', {
+    method: 'POST', body: { instance_name: instanceName, subject, participants, description },
   });
-  if (!res.ok) {
-    const errText = await res.text().catch(() => res.statusText);
-    throw new Error(`Evolution API ${res.status}: ${errText}`);
-  }
-  return res.json();
 }
 
 // Atualizar nome do grupo
 export async function updateWAGroupSubject(instanceName, groupJid, subject) {
-  const res = await fetch(`${EVO_URL}/group/updateGroupSubject/${instanceName}`, {
-    method: 'PUT', headers,
-    body: JSON.stringify({ groupJid, subject }),
+  return bridgeFetch('/api/evolution/groups/subject', {
+    method: 'PUT', body: { instance_name: instanceName, group_jid: groupJid, subject },
   });
-  return res.json();
 }
 
 // Adicionar participantes
 export async function addWAGroupParticipants(instanceName, groupJid, participants) {
-  const res = await fetch(`${EVO_URL}/group/addParticipant/${instanceName}`, {
-    method: 'PUT', headers,
-    body: JSON.stringify({ groupJid, participants }),
+  return bridgeFetch('/api/evolution/groups/participants', {
+    method: 'PUT', body: { instance_name: instanceName, group_jid: groupJid, participants },
   });
-  return res.json();
 }
 
 // Remover participante
 export async function removeWAGroupParticipant(instanceName, groupJid, participants) {
-  const res = await fetch(`${EVO_URL}/group/removeParticipant/${instanceName}`, {
-    method: 'DELETE', headers,
-    body: JSON.stringify({ groupJid, participants }),
+  return bridgeFetch('/api/evolution/groups/participants', {
+    method: 'DELETE', body: { instance_name: instanceName, group_jid: groupJid, participants },
   });
-  return res.json();
-}
-
-// Info detalhada de um grupo
-export async function fetchWAGroupInfo(instanceName, groupJid) {
-  const res = await fetch(
-    `${EVO_URL}/group/findGroupInfos/${instanceName}?groupJid=${encodeURIComponent(groupJid)}`,
-    { headers },
-  );
-  return res.json();
 }
 
 // Participantes de um grupo
 export async function fetchWAGroupParticipants(instanceName, groupJid) {
-  const res = await fetch(
-    `${EVO_URL}/group/participants/${instanceName}?groupJid=${encodeURIComponent(groupJid)}`,
-    { headers },
-  );
-  return res.json();
+  return bridgeFetch(`/api/evolution/groups/participants?instance_name=${encodeURIComponent(instanceName)}&group_jid=${encodeURIComponent(groupJid)}`);
 }
 
 // Sair / deletar grupo (admin deixa o grupo)
 export async function leaveWAGroup(instanceName, groupJid) {
-  const res = await fetch(`${EVO_URL}/group/leaveGroup/${instanceName}`, {
-    method: 'DELETE', headers,
-    body: JSON.stringify({ groupJid }),
+  return bridgeFetch('/api/evolution/groups/leave', {
+    method: 'DELETE', body: { instance_name: instanceName, group_jid: groupJid },
   });
-  return res.json();
 }
 
 // Enviar mensagem de texto para grupo
 export async function sendGroupTextMessage(instanceName, groupJid, text) {
-  const res = await fetch(`${EVO_URL}/message/sendText/${instanceName}`, {
-    method: 'POST', headers,
-    body: JSON.stringify({ number: groupJid, text }),
-  });
-  return res.json();
-}
-
-// Enviar áudio como PTT (voice note) via sendWhatsAppAudio
-export async function sendAudioMessage(instanceName, to, audioBase64) {
-  // sendWhatsAppAudio espera só os dígitos do número, sem sufixo @s.whatsapp.net
-  const number  = to.split('@')[0];
-  const payload = { number, audio: audioBase64, encoding: true };
-  console.log('[EVO] sendWhatsAppAudio →', instanceName, number, `${audioBase64.length} chars base64`);
-  const res = await fetch(`${EVO_URL}/message/sendWhatsAppAudio/${instanceName}`, {
-    method: 'POST', headers,
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    const errText = await res.text().catch(() => res.statusText);
-    console.error('[EVO] sendWhatsAppAudio falhou:', res.status, errText);
-    throw new Error(`Evolution API ${res.status}: ${errText}`);
-  }
-  return res.json();
+  return sendTextMessage(instanceName, groupJid, text);
 }
 
 // Buscar perfil de contato (foto, nome)
 export async function fetchProfile(instanceName, phoneNumber) {
-  const res = await fetch(`${EVO_URL}/chat/fetchProfile/${instanceName}`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ number: phoneNumber }),
-  });
-  return res.json();
+  return bridgeFetch(`/api/evolution/profile?instance_name=${encodeURIComponent(instanceName)}&phone=${encodeURIComponent(phoneNumber)}`);
 }
 
 // Apagar mensagem no WhatsApp (revoke — apaga para todos)
 export async function deleteWhatsAppMessage(instanceName, remoteJid, whatsappMsgId, fromMe = true) {
-  const res = await fetch(`${EVO_URL}/message/delete/${instanceName}`, {
-    method: 'DELETE',
-    headers,
-    body: JSON.stringify({ id: whatsappMsgId, remoteJid, fromMe }),
+  return bridgeFetch('/api/evolution/message', {
+    method: 'DELETE', body: { instance_name: instanceName, remote_jid: remoteJid, whatsapp_msg_id: whatsappMsgId, from_me: fromMe },
   });
-  return res.json();
 }
 
 // Reagir a uma mensagem (emoji). reaction = '' remove a reação.
 export async function sendReaction(instanceName, remoteJid, whatsappMsgId, reaction, fromMe = false) {
-  const res = await fetch(`${EVO_URL}/message/sendReaction/${instanceName}`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ key: { remoteJid, fromMe, id: whatsappMsgId }, reaction }),
+  return bridgeFetch('/api/evolution/reaction', {
+    method: 'POST', body: { instance_name: instanceName, remote_jid: remoteJid, whatsapp_msg_id: whatsappMsgId, reaction, from_me: fromMe },
   });
-  if (!res.ok) {
-    const errText = await res.text().catch(() => res.statusText);
-    throw new Error(`Evolution sendReaction ${res.status}: ${errText}`);
-  }
-  return res.json();
-}
-
-// Marcar mensagens como lidas
-export async function markAsRead(instanceName, remoteJid, msgIds) {
-  const res = await fetch(`${EVO_URL}/chat/markMessageAsRead/${instanceName}`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      read_messages: msgIds.map(id => ({ remoteJid, fromMe: false, id })),
-    }),
-  });
-  return res.json();
 }

@@ -1451,6 +1451,13 @@ app.use('/api', require('./routes/avaliacoes-consultor')({
   assertTenantMember,
 }));
 
+// ── Evolution API — proxy autenticado (chat ao vivo + admin de grupos) ──────
+// A key da Evolution nunca chega ao front; front manda instance_name (público).
+app.use('/api', require('./routes/evolution-actions')({
+  requireJwt,
+  sbFetch,
+}));
+
 // ── G03 — Contratos Digitais ─────────────────────────────────────────────────
 app.use('/api', require('./routes/contratos')({
   requireJwt,
