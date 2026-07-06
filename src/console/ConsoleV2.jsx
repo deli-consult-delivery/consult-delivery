@@ -66,8 +66,6 @@ import ControleAtendimentos from './ControleAtendimentos.jsx';
 // telas reusadas do console clássico (funcionais — visual convertido nas ondas 2-3)
 import TarefasClientesScreen from '../screens/TarefasClientesScreen.jsx';
 import ChatAoVivoV2 from './chat/ChatAoVivoV2.jsx';
-// ponytail: temporário — Chat ao Vivo legado p/ o Wandson comparar; remover quando concluir.
-import ChatScreen from '../screens/ChatScreen.jsx';
 import AgentBuilderScreen from '../screens/AgentBuilderScreen.jsx';
 import DeliHub from './DeliHub.jsx';
 import './console.css';
@@ -170,10 +168,6 @@ function GlobalSearch({ tenantDbId, onNavigate, allowedModules, isAdmin }) {
     </div>
   );
 }
-
-// telas reusadas do clássico (dark) — renderizadas em área cheia até converter
-// ponytail: temporário — 'chat-legado' aqui só p/ o Wandson comparar o Chat antigo; remover depois
-const LEGADO = new Set(['chat-legado']);
 
 const OK_STATUSES = ['ok', 'completed', 'success'];
 const fmtBRL = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -734,7 +728,6 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
   const temaStyle = brand?.cor ? { '--red': brand.cor, '--red-dark': brand.cor, '--red-soft': brand.cor + '1a' } : undefined;
   const ehChat = tela === 'chat';
   const ehEspacos = tela === 'espacos';
-  const ehLegado = LEGADO.has(tela);
   const nav = setTela;
 
   function render() {
@@ -810,8 +803,6 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
       case 'automacoes': return <Automacoes tenantDbId={tenantDbId} userId={userId} onNavigate={nav} />;
       case 'relatorios': return <Relatorios tenantDbId={tenantDbId} userId={userId} />;
       case 'onboarding': return <Onboarding tenantDbId={tenantDbId} userId={userId} />;
-      // ponytail: temporário — Chat ao Vivo legado p/ comparação; sem onToggleMenu (a .cv2-tb da tela legada já tem hambúrguer)
-      case 'chat-legado': return <ChatScreen tenant={tenantSlug} tenantDbId={tenantDbId} userId={userId} onNavigate={navWithParams} deepLinkConvId={deepLinkConvId} embedded />;
       default: return <div className="cv2-card">Tela não encontrada.</div>;
     }
   }
@@ -870,7 +861,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
               </button>
               <span className="crumb">Console › <b>{LABELS[tela] || tela}</b></span>
               <GlobalSearch tenantDbId={tenantDbId} onNavigate={navWithParams} allowedModules={allowedModules} isAdmin={['owner', 'admin'].includes(sel?.role || tenantInfo?.role)} />
-              {(!allowedModules || allowedModules.has('creditos-ia')) && (
+              {(!allowedModules || allowedModules.has('custos')) && (
                 <span className="cv2-pill" title="Custo de IA no mês corrente (agent_runs.cost_usd) · ver tela Custos">
                   <Ico name="i-zap" size={13} /> Custo IA <b>{creditosTxt}</b>
                 </span>
@@ -891,8 +882,8 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
               </span>
               <UserMenu user={currentUser} />
             </div>
-            {ehEspacos || ehLegado ? (
-              // telas full-height (Espaços, Chat legado): pai bounded p/ o filho height:100% funcionar
+            {ehEspacos ? (
+              // telas full-height (Espaços): pai bounded p/ o filho height:100% funcionar
               <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>{render()}</div>
             ) : (
               <div className="cv2-ct">{render()}</div>
