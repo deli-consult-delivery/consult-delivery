@@ -17,10 +17,6 @@ import { useLojaPorRemoteJid } from '../hooks/useLojaPorRemoteJid.js';
 import { getMuted, isMuted, toggleMute } from '../lib/mutedConvs.js';
 import TarefasClientesScreen from './TarefasClientesScreen.jsx';
 
-const HAS_EVO = !!(
-  import.meta.env.VITE_EVOLUTION_URL && import.meta.env.VITE_EVOLUTION_KEY
-);
-
 // ─── CHAT META (fallback visual quando não há dados reais) ──────
 const CHAT_META_DEFAULT = {
   protocol: '#00000', dept: 'Atendimento', deptColor: '#B70C00',
@@ -1974,7 +1970,6 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
   const persistingRef          = useRef(new Set());
   const aiModeRef              = useRef('humano');
   const selectedInstanceRef    = useRef(null);
-  const selectedInstanceObjRef = useRef(null);
   const iaPendingRef           = useRef(new Set());
   const hibridoPendingRef      = useRef(new Set());
   const transcribedRef         = useRef(new Set()); // IDs já enviados para transcrição (evita duplo-envio INSERT+UPDATE)
@@ -2038,8 +2033,7 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
   useEffect(() => { aiModeRef.current = aiMode; }, [aiMode]);
   useEffect(() => {
     selectedInstanceRef.current = selectedInstance;
-    selectedInstanceObjRef.current = instances.find(i => i.instance_name === selectedInstance) || null;
-  }, [selectedInstance, instances]);
+  }, [selectedInstance]);
 
   // ── Status de atendimento ─────────────────────────────────
   const { status: convStatus, loading: statusLoading, refresh: refreshStatus, changeStatus, finish } = useConversationStatus(activeId, tenantDbId, currentUser?.id);
@@ -2162,7 +2156,7 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
 
   // Fetch foto/nome WhatsApp
   useEffect(() => {
-    if (!HAS_EVO || !selectedInstance || !activeId) return;
+    if (!selectedInstance || !activeId) return;
     const conv = convsRef.current.find(c => c.id === activeId);
     if (!conv?.whatsapp_chat_id) return;
     if (conv.type !== 'whatsapp' && conv.type !== 'group') return;
@@ -2200,7 +2194,7 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
 
   // Background profile picture loader — runs once per instance selection
   useEffect(() => {
-    if (!HAS_EVO || !selectedInstance) return;
+    if (!selectedInstance) return;
     let cancelled = false;
 
     (async () => {
@@ -2541,7 +2535,7 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
   // ── FUNÇÕES DE CARREGAMENTO ────────────────────────────────
   async function loadInstances() {
     try {
-      const { data } = await supabase.from('evolution_instances').select('id, instance_name, status, phone, profile_name, evolution_url, api_key').order('created_at');
+      const { data } = await supabase.from('evolution_instances').select('id, instance_name, status, phone, profile_name').order('created_at');
       if (data?.length) {
         setInstances(data);
         const connected = data.find(i => i.status === 'connected') || data[0];
@@ -3021,7 +3015,7 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
     setMessages(m => ({ ...m, [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text, time, _ts: now.toISOString(), agentName, replyTo: currentReplyTo }] }));
     setDraft(''); setReplyTo(null); voiceFinalRef.current = '';
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
-    if (HAS_EVO && selectedInstance && active.whatsapp_chat_id) {
+    if (selectedInstance && active.whatsapp_chat_id) {
       setSending(true);
       const textToSend = agentName ? `*${agentName}:*\n${text}` : text;
       const waQuoted = currentReplyTo?.waMsgId ? { key: { id: currentReplyTo.waMsgId, remoteJid: active.whatsapp_chat_id, fromMe: currentReplyTo.from === 'out' }, message: currentReplyTo.mediaType ? {} : { conversation: currentReplyTo.text || '' } } : null;
@@ -3030,8 +3024,7 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
         // encontre a linha e não insira duplicata quando o evento fromMe chegar.
         const { error: insertErr } = await supabase.from('messages').insert({ tenant_id: active.tenant_id || null, conversation_id: active.id, direction: 'outbound', content: text, sender_name: agentName || null, created_at: now.toISOString(), ...(currentReplyTo ? { quoted_content: currentReplyTo } : {}) });
         if (insertErr) console.error('Falha ao salvar mensagem no banco:', insertErr);
-        const instObj = instances.find(i => i.instance_name === selectedInstance);
-        await sendTextMessage(selectedInstance, active.whatsapp_chat_id, textToSend, waQuoted, instObj?.evolution_url, instObj?.api_key);
+        await sendTextMessage(selectedInstance, active.whatsapp_chat_id, textToSend, waQuoted);
         // Equipe enviou → conversa vai para "Em aberto" (atendimento_aberto)
         // Inclui 'finalizado': se time está respondendo, conv não está mais finalizada
         const canUpdateStatus = !['falha', 'archived'].includes(convStatus);
@@ -3467,8 +3460,7 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
       } else if (msg.text) {
         const forwardedText = `↪️ ${msg.text}`;
         await Promise.all(validTargets.map(async (target) => {
-          const instFwd = instances.find(i => i.instance_name === selectedInstance);
-          const r = await sendTextMessage(selectedInstance, target.whatsapp_chat_id, forwardedText, null, instFwd?.evolution_url, instFwd?.api_key);
+          const r = await sendTextMessage(selectedInstance, target.whatsapp_chat_id, forwardedText, null);
           await persistForwarded(target, forwardedText, null, null, r?.key?.id ?? null);
         }));
       }
@@ -3502,7 +3494,7 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
   };
 
   const sendAudioBlob = async (blob) => {
-    if (!active || !HAS_EVO || !selectedInstance || !active.whatsapp_chat_id) return;
+    if (!active || !selectedInstance || !active.whatsapp_chat_id) return;
     // URL local para o player funcionar imediatamente enquanto o upload acontece
     const localUrl = URL.createObjectURL(blob);
     const tmpId = 'tmp-' + Date.now(); // gerado fora do callback para evitar inconsistência e permitir transcrição
@@ -3537,7 +3529,7 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
     const label = isImage ? `🖼️ ${file.name}` : isVideo ? `🎬 ${file.name}` : isAudio ? `🎤 ${file.name}` : `📎 ${file.name}`;
     const previewUrl = isImage ? URL.createObjectURL(file) : null;
     setMessages(m => ({ ...m, [active.id]: [...(m[active.id] || []), { id: 'tmp-' + Date.now(), from: 'out', text: label, time, _ts: now.toISOString(), mediaType, mediaUrl: previewUrl }] }));
-    if (!HAS_EVO || !selectedInstance || !active.whatsapp_chat_id || !isWA) return;
+    if (!selectedInstance || !active.whatsapp_chat_id || !isWA) return;
     const reader = new FileReader();
     reader.onloadend = async () => {
       const base64 = reader.result.split(',')[1];
@@ -3624,7 +3616,7 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
     const { file: f, previewUrl } = pasteImage;
     setPasteImage(null);
     setPasteCaption('');
-    if (!HAS_EVO || !selectedInstance || !active?.whatsapp_chat_id || !(active.type === 'whatsapp' || active.type === 'group')) return;
+    if (!selectedInstance || !active?.whatsapp_chat_id || !(active.type === 'whatsapp' || active.type === 'group')) return;
     const reader = new FileReader();
     reader.onloadend = async () => {
       const base64 = reader.result.split(',')[1];
@@ -3747,8 +3739,7 @@ export default function ChatScreen({ tenant, tenantDbId, userId, onNavigate, dee
       });
       const data = await r.json();
       if (data.ok && data.text && selectedInstanceRef.current) {
-        const instAi = selectedInstanceObjRef.current;
-        await sendTextMessage(selectedInstanceRef.current, chatId, data.text, null, instAi?.evolution_url, instAi?.api_key);
+        await sendTextMessage(selectedInstanceRef.current, chatId, data.text, null);
       }
     } catch { /* silent */ } finally {
       iaPendingRef.current.delete(convId);

@@ -31,13 +31,20 @@ const NEXUS_TRIGGER_IDS = { pesquisa: 3, regua: 2, midia: 1 };
 // In-memory job store para polling de status (request_id → estado)
 const nexusJobs = new Map();
 
+// Limite maior para rotas que trafegam mídia em base64 (foto/áudio do chat ao
+// vivo) — precisa ser montado ANTES do parser global (2mb) para as rotas
+// específicas, senão o global já rejeita o payload antes de chegar aqui.
+const evoMediaJson = express.json({ limit: '25mb', verify: (req, _res, buf) => { req.rawBody = buf; } });
+app.use('/api/evolution/send-media', evoMediaJson);
+app.use('/api/evolution/send-audio', evoMediaJson);
+
 app.use(express.json({ limit: '2mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
 
 // ── CORS ─────────────────────────────────────────────────────────────────────
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Headers', 'Content-Type, x-bridge-secret, Authorization, x-internal-token, x-nexus-signature');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
@@ -1446,6 +1453,14 @@ app.use('/api', require('./routes/avaliacoes')({
 
 // ── Avaliações — envio WhatsApp genérico p/ painel "Resp. Avaliações" ────────
 app.use('/api', require('./routes/avaliacoes-consultor')({
+  requireJwt,
+  sbFetch,
+  assertTenantMember,
+}));
+
+// ── Evolution API — proxy autenticado (chat ao vivo + admin de grupos) ──────
+// A key da Evolution nunca chega ao front; front manda instance_name (público).
+app.use('/api', require('./routes/evolution-actions')({
   requireJwt,
   sbFetch,
   assertTenantMember,

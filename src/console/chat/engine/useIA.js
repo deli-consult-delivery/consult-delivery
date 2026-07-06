@@ -176,8 +176,6 @@ export function useIA({ instancia, userId } = {}) {
           chatId,
           data.text,
           null,
-          inst.evolution_url,
-          inst.api_key,
         ).catch(() => { /* Evolution offline: nada a fazer, sem reenvio automático */ });
       }
     } catch {

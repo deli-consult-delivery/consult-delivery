@@ -192,7 +192,7 @@ export default function ChatAoVivoV2({ tenant, tenantDbId, userId, onNavigate, d
     let vivo = true;
     supabase
       .from('evolution_instances')
-      .select('instance_name, status, evolution_url, api_key')
+      .select('instance_name, status')
       .eq('tenant_id', tenantDbId)
       .order('created_at')
       .then(({ data }) => {
@@ -281,8 +281,6 @@ export default function ChatAoVivoV2({ tenant, tenantDbId, userId, onNavigate, d
         conv.chatId,
         texto,
         evoQ,
-        instance.evolution_url,
-        instance.api_key,
       ).catch(() => { /* Evolution offline: msg já está no banco/realtime */ });
     }
   }, [conv, tenantDbId, instance, replyTo, enviarNoCanal]);

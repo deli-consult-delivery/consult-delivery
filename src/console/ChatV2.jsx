@@ -182,7 +182,7 @@ export default function ChatV2({ tenantDbId, userId, onFull }) {
   }, [tenantDbId]);
 
   useEffect(() => {
-    supabase.from('evolution_instances').select('instance_name, status, evolution_url, api_key').order('created_at')
+    supabase.from('evolution_instances').select('instance_name, status').order('created_at')
       .then(({ data }) => { const arr = data || []; setInstance(arr.find(i => /conn|open/i.test(i.status || '')) || arr[0] || null); });
   }, []);
 
@@ -273,7 +273,7 @@ export default function ChatV2({ tenantDbId, userId, onFull }) {
         const evoQuoted = quoting && quoting.waId
           ? { key: { id: quoting.waId, fromMe: quoting.out, remoteJid: active.chatId }, message: { conversation: quoting.txt || '' } }
           : null;
-        await sendTextMessage(instance.instance_name, active.chatId, text, evoQuoted, instance.evolution_url, instance.api_key);
+        await sendTextMessage(instance.instance_name, active.chatId, text, evoQuoted);
       }
     } catch (err) {
       console.error('ChatV2 envio:', err);
