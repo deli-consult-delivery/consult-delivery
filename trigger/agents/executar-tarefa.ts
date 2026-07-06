@@ -132,7 +132,7 @@ export const agentExecutarTarefa = task({
         tenant_id:       input.tenant_id,
         task_id:         input.task_id,
         conversation_id: convId,
-        triggered_by:    ctx.run.id,
+        triggered_by:    input.triggered_by,
       });
       logger.info("agent-executar-tarefa: agent-responder-conclusao disparado", { task_id: input.task_id });
     } else {
