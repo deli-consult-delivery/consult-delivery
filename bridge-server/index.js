@@ -1541,13 +1541,6 @@ app.use('/api', require('./routes/wizard-publico')({
   supabaseInsert,
 }));
 
-// ── Inadimplentes (CORA V1 — cora_cobrancas) ─────────────────────────────────
-app.use('/api', require('./routes/inadimplentes')({
-  requireJwt,
-  SUPABASE_URL,
-  SUPABASE_SERVICE_KEY,
-}));
-
 // ── Notificações internas — painel ───────────────────────────────────────────
 app.use('/api', require('./routes/notifications')({
   requireJwt,
