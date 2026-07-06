@@ -23,6 +23,40 @@ Resultado:
 
 P1 (schema): puxado `information_schema.columns` das 13 tabelas do bloco (agent_runs, internal_notifications, tenants, tenant_agents, defesa_metricas_mensal, defesa_casos, defesa_assinaturas, radar_fontes, atendimento_avaliacoes, nps_avaliacoes, lojas, whatsapp_groups, defesa_aprovadores) — todas existem, colunas conferidas contra os `.select()` encontrados (abaixo).
 
+### Output bruto — `information_schema.columns` (colunas críticas)
+
+```sql
+select table_name, column_name, data_type from information_schema.columns
+where table_schema='public' and table_name in
+('agent_runs','internal_notifications','tenants','tenant_agents','defesa_metricas_mensal','defesa_casos','defesa_assinaturas','radar_fontes','atendimento_avaliacoes','nps_avaliacoes','lojas','whatsapp_groups','defesa_aprovadores')
+and column_name in ('nota','telefone_jid','whatsapp_group_jid','status','aprovado_por','aprovado_em','ativo','nome')
+order by table_name, column_name;
+```
+Resultado:
+```json
+[
+  {"table_name":"agent_runs","column_name":"status","data_type":"text"},
+  {"table_name":"atendimento_avaliacoes","column_name":"nota","data_type":"smallint"},
+  {"table_name":"atendimento_avaliacoes","column_name":"status","data_type":"text"},
+  {"table_name":"defesa_aprovadores","column_name":"ativo","data_type":"boolean"},
+  {"table_name":"defesa_aprovadores","column_name":"nome","data_type":"text"},
+  {"table_name":"defesa_aprovadores","column_name":"telefone_jid","data_type":"text"},
+  {"table_name":"defesa_assinaturas","column_name":"status","data_type":"text"},
+  {"table_name":"defesa_casos","column_name":"aprovado_em","data_type":"timestamp with time zone"},
+  {"table_name":"defesa_casos","column_name":"aprovado_por","data_type":"uuid"},
+  {"table_name":"defesa_casos","column_name":"status","data_type":"text"},
+  {"table_name":"lojas","column_name":"nome","data_type":"text"},
+  {"table_name":"lojas","column_name":"status","data_type":"text"},
+  {"table_name":"lojas","column_name":"whatsapp_group_jid","data_type":"text"},
+  {"table_name":"nps_avaliacoes","column_name":"nota","data_type":"smallint"},
+  {"table_name":"nps_avaliacoes","column_name":"status","data_type":"text"},
+  {"table_name":"radar_fontes","column_name":"status","data_type":"text"},
+  {"table_name":"tenants","column_name":"status","data_type":"text"},
+  {"table_name":"whatsapp_groups","column_name":"ativo","data_type":"boolean"}
+]
+```
+`nota` (smallint, em `atendimento_avaliacoes` e `nps_avaliacoes`), `telefone_jid` (text, `defesa_aprovadores`) e `whatsapp_group_jid` (text, `lojas`) confirmadas — as 3 colunas críticas citadas no roteiro existem com o tipo esperado.
+
 ## `visao` — Visão Geral
 
 - **Dado real:** `atendimento_avaliacoes` count=1075, `agent_runs` count=106 para Karina — tenant tem dado real, base para comparar KPIs. **PASSA** (SQL confirma dado > 0; comparação visual exata do KPI = PRECISA-BROWSER).
@@ -57,10 +91,12 @@ P1 (schema): puxado `information_schema.columns` das 13 tabelas do bloco (agent_
 
 | Tela | PASSA | FALHA corrigida | PRECISA-BROWSER |
 |---|---|---|---|
-| visao | 1 (dado real+schema) | 0 | ação/vazio/erro |
+| visao* | 1 (dado real+schema) | 0 | ação/vazio/erro |
 | csat | 3 (dado real, P1, P6/P10) | 0 | vazio/erro/comparação visual exata |
 | nps | 1 (P1 schema) | 0 | **suspeita de bug (avg=0.00)** + vazio/erro |
 | defesa | 1 (P1 schema) | 0 | vazio (fila real está vazia hoje), paywall |
 | ativar | 1 (P1 schema) | 0 | cadastro de aprovador (ação de escrita) |
+
+\* `visao`: P1 cobriu só existência das tabelas via `information_schema.columns` — o grep dos `.select()` do componente inline (`ConsoleV2.jsx:437`) não foi feito nesta leva (orçamento). Diferente de `csat`/`nps`, onde o P1 foi confirmado linha a linha contra o componente.
 
 Nenhuma FALHA de P1 (coluna inexistente) encontrada nas tabelas verificadas — nenhum fix de código necessário nesta leva. Nenhum SQL de escrita executado.
