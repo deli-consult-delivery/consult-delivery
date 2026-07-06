@@ -26,9 +26,9 @@ async function sbUpdateNote(id, notes) {
   if (error) throw new Error(error.message);
 }
 
-// ─── Arquivada = prazo vencido E não publicada ───────────────────────────────
+// ─── Arquivada = publicada OU prazo vencido ──────────────────────────────────
 function isArchivedFn(r, today) {
-  return r.status !== 'published' && !!r.deadline && r.deadline < today;
+  return r.status === 'published' || (!!r.deadline && r.deadline < today);
 }
 
 function fmtDate(iso) {
@@ -1140,7 +1140,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
         <div className="cv2-kpi">
           <div className="l">Arquivadas</div>
           <div className="v">{archivedReviews.length}</div>
-          <div className="d mut">prazo vencido (não pub.)</div>
+          <div className="d mut">publicadas ou prazo vencido</div>
         </div>
       </div>
 
@@ -1152,7 +1152,6 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
             <option value="pending">Aguardando envio</option>
             <option value="sent_to_client">Enviado ao cliente</option>
             <option value="approved">Aprovado / Com alteração</option>
-            <option value="published">Publicado</option>
           </select>
         </div>
         <div>
@@ -1173,7 +1172,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
       )}
       {!loading && filtered.length === 0 && activeReviews.length === 0 && (
         <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>
-          {reviews.length === 0 ? 'Nenhuma avaliação cadastrada ainda.' : 'Nenhuma avaliação ativa — todas foram arquivadas.'}
+          {reviews.length === 0 ? 'Nenhuma avaliação cadastrada ainda.' : 'Nenhuma avaliação ativa no momento.'}
         </div>
       )}
       {!loading && filtered.length === 0 && activeReviews.length > 0 && (
@@ -1204,7 +1203,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
             <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--tx2)' }}>
               📦 Arquivadas ({archivedReviews.length})
             </span>
-            <span style={{ fontSize: 12, color: 'var(--tx2)' }}>prazo vencido (não publicadas)</span>
+            <span style={{ fontSize: 12, color: 'var(--tx2)' }}>publicadas ou com prazo vencido</span>
             <button
               className="cv2-btn sec"
               style={{ fontSize: 12, marginLeft: 'auto' }}
