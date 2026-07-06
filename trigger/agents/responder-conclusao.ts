@@ -5,7 +5,7 @@ import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 import { revisar } from "./revisor";
 
-const InputSchema = z.object({
+export const InputSchema = z.object({
   tenant_id:       z.string().uuid(),
   task_id:         z.string().uuid(),
   conversation_id: z.string().uuid(),
