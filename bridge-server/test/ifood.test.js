@@ -216,6 +216,68 @@ function restoreFetch() {
     clearCreds();
   });
 
+  // ── getSummaryReviews — merchant sem reviews (404 "Summary not found") ──────
+  await check('getSummaryReviews: 404 do iFood → sucesso com null, cacheado (sem 2ª chamada)', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-404-summary', expiresIn: 21600 });
+      }
+      if (url.includes('/review/v2.0/merchants/merchant-vazio/summary')) {
+        return jsonResponse(404, { errorType: 'Not Found', errorMessage: 'Summary not found' });
+      }
+      return jsonResponse(404, {});
+    });
+    const ifood = freshIfood();
+
+    const s1 = await ifood.getSummaryReviews('merchant-vazio');
+    assert.strictEqual(s1, null, '404 "Summary not found" deve virar sucesso com null, não lançar');
+    const s2 = await ifood.getSummaryReviews('merchant-vazio');
+    assert.strictEqual(s2, null);
+
+    const summaryCalls = calls.filter((c) => c.url.includes('/summary'));
+    assert.strictEqual(summaryCalls.length, 1, 'o null também deveria ser cacheado (sem 2ª chamada à API)');
+    restoreFetch();
+    clearCreds();
+  });
+
+  // ── getSummaryReviews — outros 4xx/5xx continuam propagando erro normalmente ─
+  await check('getSummaryReviews: 403 (não é o caso "sem reviews") continua lançando IfoodApiError', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-403-summary', expiresIn: 21600 });
+      }
+      return jsonResponse(403, { message: 'sem acesso a este merchant' });
+    });
+    const ifood = freshIfood();
+    await assert.rejects(() => ifood.getSummaryReviews('merchant-proibido'), (err) => err.status === 403);
+    restoreFetch();
+    clearCreds();
+  });
+
+  // ── getSummaryReviews — 404 "genérico" (merchantId errado etc.) NÃO vira null ─
+  await check('getSummaryReviews: 404 sem "Summary not found" no corpo continua propagando erro', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-404-generico', expiresIn: 21600 });
+      }
+      return jsonResponse(404, { errorType: 'Not Found', errorMessage: 'Merchant not found' });
+    });
+    const ifood = freshIfood();
+    await assert.rejects(
+      () => ifood.getSummaryReviews('merchant-inexistente'),
+      (err) => err.status === 404,
+      '404 com mensagem diferente de "Summary not found" não deveria virar sucesso silencioso'
+    );
+    restoreFetch();
+    clearCreds();
+  });
+
   // ── listarVendas — período default (7 dias) quando dataInicio/dataFim faltam ──
   await check('listarVendas: sem período → default de 7 dias (beginSalesDate/endSalesDate)', async () => {
     setCreds();

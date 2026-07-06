@@ -442,7 +442,10 @@ function CardNotasIfood({ tenantDbId }) {
       {status === 'erro' && (
         <div style={{ fontSize: 13, color: 'var(--red)' }}>Erro ao carregar: {erro}</div>
       )}
-      {status === 'ok' && (
+      {status === 'ok' && summary == null && (
+        <div style={{ fontSize: 13, color: 'var(--tx2)' }}>Sem avaliações ainda.</div>
+      )}
+      {status === 'ok' && summary != null && (
         <>
           <div style={{ fontSize: 32, fontWeight: 700, color: 'var(--ink)', lineHeight: 1.2 }}>
             {score != null ? `${Number(score).toFixed(1)} ⭐` : '—'}

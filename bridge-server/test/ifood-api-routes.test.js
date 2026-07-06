@@ -399,5 +399,25 @@ function sbFetchStub(routes) {
     passed++;
   }
 
+  // 19) summary: merchant sem reviews → client devolve null → rota 200 com summary:null
+  // (contrato: 404 "sem reviews" do iFood é condição de negócio, não erro — lib/ifood.js
+  // já converte pra null; a rota só precisa deixar passar sem tratamento especial)
+  {
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => p.startsWith('ifood_merchants?'), value: [{ merchant_id: 'merch-1' }] },
+    ]);
+    const ifood = { getSummaryReviews: async () => null };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/summary/loja-1');
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.body.ok, true);
+    assert.strictEqual(r.body.data.summary, null);
+    server.close();
+    passed++;
+  }
+
   process.stdout.write(`\nifood-api-routes: todos os ${passed} cenários passaram.\n`);
 })();
