@@ -183,6 +183,14 @@ async function ifoodFetch(path, { method = 'GET', query, body, headers: extraHea
     Authorization: `Bearer ${token}`,
     ...extraHeaders,
   };
+  // Achado §9 de docs/integracoes/ifood/financas-endpoints.md (PR #789): durante
+  // a janela de homologação do módulo Financial, as chamadas devem incluir
+  // x-request-homologation: true. Plugável via env — OFF por padrão (não afeta
+  // Merchant/Catalog/Review, que não documentam esse header), liga só na janela
+  // real da sessão de homologação (nunca hardcoded).
+  if (process.env.IFOOD_HOMOLOGATION_HEADER === 'true') {
+    headers['x-request-homologation'] = 'true';
+  }
   if (body !== undefined && body !== null) headers['Content-Type'] = 'application/json';
 
   let response;
@@ -373,67 +381,78 @@ async function listarVendas(merchantId, { dataInicio, dataFim } = {}, tenantId) 
 }
 
 // Repasses/liquidação (Settlement API) — valor líquido repassado à loja no
-// período. Mesmo default de janela (7 dias) e mesmo formato de período
-// (yyyy-MM-dd) que listarVendas, por analogia com o único endpoint financeiro
-// já confirmado live neste código — NÃO confirmado ainda contra uma chamada
-// real (doc pública não expõe os nomes exatos dos query params de request,
-// só o shape da resposta: beginDate/endDate/balance/merchantId/settlements[]
-// com closingItems[] tipados REPASSE/RENEGOCIADA). Ajustar os nomes de query
-// aqui se o 1º smoke live divergir (mesma ressalva já usada em listarReviews/
-// responderReview neste arquivo).
+// período. CONFIRMADO LIVE contra o sandbox (merchant 92a0ec17..., 2026-07-06):
+// beginPaymentDate/endPaymentDate → 200 (a doc também aceita a variante
+// beginCalculationDate/endCalculationDate — usamos payment por ser o eixo
+// "quando a loja recebe", mais alinhado ao caso de uso da tela). Mesmo default
+// de janela (7 dias) dos demais endpoints financeiros.
 async function listarRepasses(merchantId, { dataInicio, dataFim } = {}, tenantId) {
   const hoje = new Date();
   const seteDiasAtras = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const beginSettlementDate = dataInicio || isoDate(seteDiasAtras);
-  const endSettlementDate = dataFim || isoDate(hoje);
+  const beginPaymentDate = dataInicio || isoDate(seteDiasAtras);
+  const endPaymentDate = dataFim || isoDate(hoje);
   return withRetry(() =>
     ifoodFetch(
       `/financial/v3.0/merchants/${merchantId}/settlements`,
-      { query: { beginSettlementDate, endSettlementDate } },
+      { query: { beginPaymentDate, endPaymentDate } },
       tenantId
     )
   ).then(tolerant);
 }
 
 // Antecipações (Anticipation API) — repasses pagos adiantado (planos D+1/D+7
-// via iFood Pago). A doc pública documenta os filtros como mutuamente
-// exclusivos ("CalculationDate OU AnticipatedPaymentDate, nunca os dois") —
-// diferente do padrão begin/end de período usado em sales/settlements. Sem
-// nenhum dos dois, consulta sem filtro de data (loja pode não ter plano de
-// antecipação contratado — resposta vazia é um resultado válido, não erro).
-// NÃO confirmado ainda contra uma chamada real (path e nomes de query
-// inferidos da doc pública, que não detalha o request completo).
-async function listarAntecipacoes(merchantId, { calculationDate, anticipatedPaymentDate } = {}, tenantId) {
-  if (calculationDate && anticipatedPaymentDate) {
-    throw new IfoodApiError(
-      'listarAntecipacoes: informe calculationDate OU anticipatedPaymentDate, nunca os dois',
-      0,
-      null
-    );
-  }
-  const query = {};
-  if (calculationDate) query.calculationDate = calculationDate;
-  if (anticipatedPaymentDate) query.anticipatedPaymentDate = anticipatedPaymentDate;
+// via iFood Pago). CONFIRMADO LIVE (2026-07-06): o filtro é um INTERVALO
+// (begin/end), não uma data única como a doc pública sugeria — testamos
+// beginCalculationDate/endCalculationDate → 200 (beginPaymentDate/
+// endPaymentDate devolveu 400 "At least one date range must be provided",
+// então o par certo pro eixo "payment" tem outro nome ainda não confirmado;
+// calculation já resolve o caso de uso da tela). Mesmo formato de período
+// (yyyy-MM-dd, default 7 dias) dos demais endpoints financeiros — loja sem
+// plano de antecipação contratado devolve settlements:[] (resultado válido).
+async function listarAntecipacoes(merchantId, { dataInicio, dataFim } = {}, tenantId) {
+  const hoje = new Date();
+  const seteDiasAtras = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const beginCalculationDate = dataInicio || isoDate(seteDiasAtras);
+  const endCalculationDate = dataFim || isoDate(hoje);
   return withRetry(() =>
-    ifoodFetch(`/financial/v3.0/merchants/${merchantId}/anticipations`, { query }, tenantId)
+    ifoodFetch(
+      `/financial/v3.0/merchants/${merchantId}/anticipations`,
+      { query: { beginCalculationDate, endCalculationDate } },
+      tenantId
+    )
   ).then(tolerant);
 }
 
-// Ajustes/ocorrências (Reconciliation — endpoint `occurrences`) — lançamentos
-// financeiros manuais do iFood que impactam o repasse (débito/crédito por
-// ajuste de falha sistêmica, chargeback etc.), fora do fluxo normal de venda.
-// Mesmo padrão de período (yyyy-MM-dd, default 7 dias) dos demais endpoints
-// financeiros — NÃO confirmado ainda contra uma chamada real (nomes de query
-// inferidos por analogia; doc pública não detalha o request completo).
+// Ajustes/ocorrências — NÃO RESOLVIDO no smoke live de 2026-07-06. Testamos 3
+// candidatos contra o sandbox (merchant 92a0ec17...):
+//   - /occurrences            → 404 "no Route matched" (path inferido errado,
+//                                era a hipótese original antes deste smoke)
+//   - /financialEvents        → 404 "no Route matched" (nome do doc público
+//                                "Financial Events", em camelCase — também errado)
+//   - /financial-events       → 500 "Internal server error" (COM e SEM os
+//                                query params testados, COM e SEM o header
+//                                x-request-homologation — sempre o mesmo 500
+//                                genérico, nunca um 400 de validação como os
+//                                outros 2 endpoints financeiros davam quando
+//                                errávamos o param). Diferente de um 404 limpo,
+//                                sugere que ALGO bate nesse path no gateway,
+//                                mas quebra antes de validar query — pode ser
+//                                limitação do sandbox pra este merchant de
+//                                teste, falta de escopo na credencial, ou o
+//                                path ainda não é este. NÃO É UM 200 CONFIRMADO.
+// Mantivemos /financial-events (o único que não deu 404 limpo) até termos como
+// escalar pro suporte iFood (ticket no portal dev vetado nesta janela) ou até
+// alguém capturar a doc de homologação LOGADO (mesmo upgrade que #789 já
+// recomendou pro doc inteiro). Reescalar antes de expor isso na tela (worker 86).
 async function listarOcorrencias(merchantId, { dataInicio, dataFim } = {}, tenantId) {
   const hoje = new Date();
   const seteDiasAtras = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const beginDate = dataInicio || isoDate(seteDiasAtras);
-  const endDate = dataFim || isoDate(hoje);
+  const beginPaymentDate = dataInicio || isoDate(seteDiasAtras);
+  const endPaymentDate = dataFim || isoDate(hoje);
   return withRetry(() =>
     ifoodFetch(
-      `/financial/v3.0/merchants/${merchantId}/occurrences`,
-      { query: { beginDate, endDate } },
+      `/financial/v3.0/merchants/${merchantId}/financial-events`,
+      { query: { beginPaymentDate, endPaymentDate } },
       tenantId
     )
   ).then(tolerant);
