@@ -131,6 +131,7 @@ export interface AgentResult {
   output: unknown;
   tokens: number;
   modelId: string;
+  costUsd: number | null;
 }
 
 export interface RunLogParams {
@@ -140,6 +141,7 @@ export interface RunLogParams {
   input: unknown;
   output: unknown;
   status: "success" | "failed";
+  costUsd?: number | null;
 }
 
 export async function getPrompt(agentId: string, tenantId: string): Promise<string> {
@@ -172,6 +174,7 @@ export async function logRun(params: RunLogParams): Promise<void> {
     input: params.input,
     output: params.output,
     status: params.status,
+    costUsd: params.costUsd,
   });
 }
 
@@ -191,6 +194,7 @@ export async function executeAgent(
 
   const output = response.content;
   const tokens = (response.tokens_in ?? 0) + (response.tokens_out ?? 0);
+  const costUsd = response.cost_usd ?? null;
 
   await logRun({
     runId: ctx.runId,
@@ -199,7 +203,8 @@ export async function executeAgent(
     input: payload,
     output,
     status: "success",
+    costUsd,
   });
 
-  return { output, tokens, modelId: response.modelo };
+  return { output, tokens, modelId: response.modelo, costUsd };
 }

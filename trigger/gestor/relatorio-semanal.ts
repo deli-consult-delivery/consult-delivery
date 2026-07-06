@@ -116,6 +116,9 @@ export const gestorRelatorioSemanal = schedules.task({
     let lojasProcessadas = 0;
     let draftsCriados = 0;
     let puladas = 0;
+    // null até a 1ª loja com custo calculável — nunca soma 0 fake quando todas
+    // caem no Ollama (sem custo por token, ver llm-tools.ts).
+    let costUsd: number | null = null;
 
     for (const loja of lojas ?? []) {
       lojasProcessadas++;
@@ -171,7 +174,7 @@ export const gestorRelatorioSemanal = schedules.task({
 
       let texto: string;
       try {
-        const { message } = await chatWithTools({
+        const { message, cost_usd } = await chatWithTools({
           system:
             "Você é o GESTOR, consultor de operação iFood da Consult Delivery. Gera relatórios semanais curtos para " +
             "o grupo de WhatsApp da loja: tom consultivo, português brasileiro, direto ao ponto. Para cada métrica, " +
@@ -191,6 +194,7 @@ export const gestorRelatorioSemanal = schedules.task({
           maxTokens: 700,
         });
         texto = (message.content ?? "").trim();
+        if (cost_usd != null) costUsd = (costUsd ?? 0) + cost_usd;
       } catch (err) {
         logger.warn("gestor-relatorio-semanal: LLM falhou, pulando loja", {
           loja_id: loja.id,
@@ -252,6 +256,7 @@ export const gestorRelatorioSemanal = schedules.task({
       input: { janelas },
       output,
       durationMs: Date.now() - startedAt,
+      costUsd,
     });
 
     return output;
