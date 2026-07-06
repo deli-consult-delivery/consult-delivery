@@ -261,7 +261,7 @@ export default function LojaWorkspace({ tenantDbId, userId, go, lojaId }) {
       {tab === 5 && <TabTarefas lojaId={lojaId} tenantDbId={tenantDbId} />}
       {tab === 6 && <TabIaEspecialista lojaId={lojaId} userId={userId} />}
       {tab === 7 && <TabAnalises lojaId={lojaId} userId={userId} onGoToTarefas={(analiseId) => setTab(5)} />}
-      {tab === MERCHANT_TAB_INDEX && isFonteApi && <TabMerchantIfood lojaId={lojaId} tenantDbId={tenantDbId} />}
+      {tab === MERCHANT_TAB_INDEX && isFonteApi && <TabMerchantIfood key={lojaId} lojaId={lojaId} tenantDbId={tenantDbId} />}
 
       {showAtribuir && (
         <AtribuirConsultorModal
@@ -576,6 +576,18 @@ function TabMerchantIfood({ lojaId, tenantDbId }) {
     }
   }, [lojaId]);
 
+  // Refresh otimista pós-ação: NÃO usa carregarTudo() (liga `carregando`, o que
+  // substituiria a tela inteira — banner de aviso incluso — pelo loading de tela
+  // cheia). Silencioso de propósito: é best-effort (a listagem pode continuar
+  // stale por até ~1 min, ver PAUSA_COOLDOWN_MS) — o banner de aviso já cobre a
+  // demora, uma falha aqui não precisa virar erro visível.
+  const refrescarInterrupcoes = useCallback(async () => {
+    try {
+      const r = await bridgeFetchIfood(`/api/ifood-api/merchant-interruptions/${lojaId}`);
+      setInterrupcoes(Array.isArray(r.interrupcoes) ? r.interrupcoes : (r.interrupcoes?.interruptions ?? []));
+    } catch { /* best-effort — o banner de aviso já avisa sobre a demora */ }
+  }, [lojaId]);
+
   useEffect(() => { carregarTudo(); }, [carregarTudo]);
 
   // Polling do status — exigência literal do checklist: mínimo 30s, NUNCA menos.
@@ -601,7 +613,7 @@ function TabMerchantIfood({ lojaId, tenantDbId }) {
         },
       });
       setPausaForm({ inicio: '', fim: '', motivo: '' });
-      carregarTudo(); // refresh otimista — pode não refletir ainda, ver aviso abaixo
+      refrescarInterrupcoes(); // refresh otimista — pode não refletir ainda, ver aviso abaixo
       iniciarCooldown('Pausa enviada para aprovação (draft amarelo). Depois de aprovada, pode levar até ~1 min para aparecer na lista — evite repetir a ação.');
     } catch (e2) {
       setErro(erroIfoodParaMensagem(e2));
@@ -618,7 +630,7 @@ function TabMerchantIfood({ lojaId, tenantDbId }) {
         method: 'POST',
         body: { operacao: 'ifood.despausar_loja', parametros: { interruption_id: interruptionId } },
       });
-      carregarTudo(); // refresh otimista — pode não refletir ainda, ver aviso abaixo
+      refrescarInterrupcoes(); // refresh otimista — pode não refletir ainda, ver aviso abaixo
       iniciarCooldown('Remoção enviada para aprovação (draft amarelo). Depois de aprovada, pode levar até ~1 min para sumir da lista — evite repetir a ação.');
     } catch (e2) {
       setErro(erroIfoodParaMensagem(e2));
