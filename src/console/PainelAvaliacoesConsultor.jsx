@@ -886,7 +886,13 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
 
   const storeGroups = useMemo(() => {
     const sg = {};
-    lojas.forEach(l => { if (l.whatsapp_group_jid) sg[l.nome] = l.whatsapp_group_jid; });
+    lojas.forEach(l => {
+      if (l.whatsapp_group_jid) {
+        sg[l.nome] = l.whatsapp_group_jid;
+        // ifood_portal_nome é o nome que vem em reviews.store — indexar pelos dois
+        if (l.ifood_portal_nome) sg[l.ifood_portal_nome] = l.whatsapp_group_jid;
+      }
+    });
     // reviews só preenchem fallback — loja tem prioridade
     reviews.forEach(r => { if (r.store && r.whatsappGroup && !sg[r.store]) sg[r.store] = r.whatsappGroup; });
     return sg;
