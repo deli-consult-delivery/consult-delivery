@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import Icon from '../../components/Icon.jsx';
 import AtribuirConsultorModal from './AtribuirConsultorModal.jsx';
@@ -261,7 +261,7 @@ export default function LojaWorkspace({ tenantDbId, userId, go, lojaId }) {
       {tab === 5 && <TabTarefas lojaId={lojaId} tenantDbId={tenantDbId} />}
       {tab === 6 && <TabIaEspecialista lojaId={lojaId} userId={userId} />}
       {tab === 7 && <TabAnalises lojaId={lojaId} userId={userId} onGoToTarefas={(analiseId) => setTab(5)} />}
-      {tab === MERCHANT_TAB_INDEX && isFonteApi && <TabMerchantIfood lojaId={lojaId} tenantDbId={tenantDbId} />}
+      {tab === MERCHANT_TAB_INDEX && isFonteApi && <TabMerchantIfood key={lojaId} lojaId={lojaId} tenantDbId={tenantDbId} />}
 
       {showAtribuir && (
         <AtribuirConsultorModal
@@ -481,6 +481,11 @@ const DIA_LABEL = {
   FRIDAY: 'Sexta', SATURDAY: 'Sábado', SUNDAY: 'Domingo',
 };
 const MERCHANT_STATUS_POLL_MS = 30_000; // ponytail: mínimo exigido pelo checklist — não reduzir.
+// Interrupções aprovadas no iFood não aparecem/somem da listagem na hora — confirmado
+// ao vivo no sandbox (smoke rodada 3): GET /merchant-interruptions só reflete uma pausa
+// depois que o horário `start` chega, com atraso observado de até ~1 min. Cobrimos a
+// janela desabilitando a ação + avisando o usuário, em vez de fingir que já refletiu.
+const PAUSA_COOLDOWN_MS = 60_000;
 
 function erroIfoodParaMensagem(err) {
   const status = err?.status;
@@ -526,7 +531,21 @@ function TabMerchantIfood({ lojaId, tenantDbId }) {
   const [erro, setErro] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [agindo, setAgindo] = useState(false);
+  const [cooldown, setCooldown] = useState(false);
+  const [aviso, setAviso] = useState(null);
   const [pausaForm, setPausaForm] = useState({ inicio: '', fim: '', motivo: '' });
+
+  // Após aprovado, o iFood pode levar até ~1 min pra refletir a pausa/despausa na
+  // listagem (ver PAUSA_COOLDOWN_MS) — trava a ação nesse intervalo pra evitar que
+  // o usuário repita o clique achando que não funcionou.
+  const cooldownTimerRef = useRef(null);
+  useEffect(() => () => clearTimeout(cooldownTimerRef.current), []);
+  const iniciarCooldown = useCallback((mensagem) => {
+    setAviso(mensagem);
+    setCooldown(true);
+    clearTimeout(cooldownTimerRef.current);
+    cooldownTimerRef.current = setTimeout(() => { setCooldown(false); setAviso(null); }, PAUSA_COOLDOWN_MS);
+  }, []);
 
   const carregarStatus = useCallback(async () => {
     try {
@@ -557,6 +576,18 @@ function TabMerchantIfood({ lojaId, tenantDbId }) {
     }
   }, [lojaId]);
 
+  // Refresh otimista pós-ação: NÃO usa carregarTudo() (liga `carregando`, o que
+  // substituiria a tela inteira — banner de aviso incluso — pelo loading de tela
+  // cheia). Silencioso de propósito: é best-effort (a listagem pode continuar
+  // stale por até ~1 min, ver PAUSA_COOLDOWN_MS) — o banner de aviso já cobre a
+  // demora, uma falha aqui não precisa virar erro visível.
+  const refrescarInterrupcoes = useCallback(async () => {
+    try {
+      const r = await bridgeFetchIfood(`/api/ifood-api/merchant-interruptions/${lojaId}`);
+      setInterrupcoes(Array.isArray(r.interrupcoes) ? r.interrupcoes : (r.interrupcoes?.interruptions ?? []));
+    } catch { /* best-effort — o banner de aviso já avisa sobre a demora */ }
+  }, [lojaId]);
+
   useEffect(() => { carregarTudo(); }, [carregarTudo]);
 
   // Polling do status — exigência literal do checklist: mínimo 30s, NUNCA menos.
@@ -582,7 +613,8 @@ function TabMerchantIfood({ lojaId, tenantDbId }) {
         },
       });
       setPausaForm({ inicio: '', fim: '', motivo: '' });
-      alert('Pausa enviada para aprovação (draft amarelo).');
+      refrescarInterrupcoes(); // refresh otimista — pode não refletir ainda, ver aviso abaixo
+      iniciarCooldown('Pausa enviada para aprovação (draft amarelo). Depois de aprovada, pode levar até ~1 min para aparecer na lista — evite repetir a ação.');
     } catch (e2) {
       setErro(erroIfoodParaMensagem(e2));
     } finally {
@@ -598,7 +630,8 @@ function TabMerchantIfood({ lojaId, tenantDbId }) {
         method: 'POST',
         body: { operacao: 'ifood.despausar_loja', parametros: { interruption_id: interruptionId } },
       });
-      alert('Remoção de pausa enviada para aprovação (draft amarelo).');
+      refrescarInterrupcoes(); // refresh otimista — pode não refletir ainda, ver aviso abaixo
+      iniciarCooldown('Remoção enviada para aprovação (draft amarelo). Depois de aprovada, pode levar até ~1 min para sumir da lista — evite repetir a ação.');
     } catch (e2) {
       setErro(erroIfoodParaMensagem(e2));
     } finally {
@@ -617,6 +650,11 @@ function TabMerchantIfood({ lojaId, tenantDbId }) {
       {erro && (
         <div style={{ background: '#ef444420', border: '1px solid #ef444440', borderRadius: 10, padding: '10px 14px', marginBottom: 16, color: '#ef4444', fontSize: 13 }}>
           {erro}
+        </div>
+      )}
+      {aviso && (
+        <div style={{ background: '#f59e0b20', border: '1px solid #f59e0b40', borderRadius: 10, padding: '10px 14px', marginBottom: 16, color: '#f59e0b', fontSize: 13 }}>
+          ⏳ {aviso}
         </div>
       )}
 
@@ -648,8 +686,8 @@ function TabMerchantIfood({ lojaId, tenantDbId }) {
           <Field label="Motivo" width={200}>
             <input type="text" value={pausaForm.motivo} onChange={e => setPausaForm(p => ({ ...p, motivo: e.target.value }))} placeholder="Ex: sem entregador" style={{ ...mini, width: 200 }} />
           </Field>
-          <button type="submit" disabled={agindo}
-            style={{ background: '#B70C00', border: 'none', color: '#fff', padding: '7px 14px', borderRadius: 7, cursor: agindo ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, opacity: agindo ? 0.7 : 1, height: 34 }}>
+          <button type="submit" disabled={agindo || cooldown}
+            style={{ background: '#B70C00', border: 'none', color: '#fff', padding: '7px 14px', borderRadius: 7, cursor: (agindo || cooldown) ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, opacity: (agindo || cooldown) ? 0.7 : 1, height: 34 }}>
             {agindo ? '…' : 'Solicitar pausa'}
           </button>
         </form>
@@ -673,8 +711,8 @@ function TabMerchantIfood({ lojaId, tenantDbId }) {
                   {it.start ? new Date(it.start).toLocaleString('pt-BR') : '—'} → {it.end ? new Date(it.end).toLocaleString('pt-BR') : '—'}
                   {it.description && <span style={{ color: '#6b7280' }}> · {it.description}</span>}
                 </div>
-                <button onClick={() => removerPausa(it.id)} disabled={agindo || !it.id}
-                  style={{ background: '#2a2a2a', border: '1px solid #3a3a3a', color: '#9ca3af', padding: '5px 12px', borderRadius: 7, cursor: agindo ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600 }}>
+                <button onClick={() => removerPausa(it.id)} disabled={agindo || cooldown || !it.id}
+                  style={{ background: '#2a2a2a', border: '1px solid #3a3a3a', color: '#9ca3af', padding: '5px 12px', borderRadius: 7, cursor: (agindo || cooldown) ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 600 }}>
                   Remover
                 </button>
               </div>
