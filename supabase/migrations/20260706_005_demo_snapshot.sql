@@ -44,12 +44,15 @@ BEGIN
     RETURN; -- ja semeado
   END IF;
 
-  INSERT INTO public.lojas (id, tenant_id, nome, nicho, segmento, cidade, estado, status, fonte_dados) VALUES
-    (v_loja1, v_tenant, 'Pizzaria Bella Vista',  'pizza',      'pizzaria',     'São Paulo',       'SP', 'ativo', 'portal'),
-    (v_loja2, v_tenant, 'Hamburgueria do Zé',    'hamburguer', 'hamburgueria', 'Belo Horizonte',  'MG', 'ativo', 'portal'),
-    (v_loja3, v_tenant, 'Sushi Sakura Express',  'japonesa',   'japonesa',     'Curitiba',        'PR', 'ativo', 'portal'),
-    (v_loja4, v_tenant, 'Açaí da Praia',         'acai',       'acai',         'Florianópolis',   'SC', 'ativo', 'portal');
+  INSERT INTO public.lojas (id, tenant_id, nome, nicho, segmento, cidade, estado, status, fonte_dados, is_consultoria_ativa) VALUES
+    (v_loja1, v_tenant, 'Pizzaria Bella Vista',  'pizza',      'pizzaria',     'São Paulo',       'SP', 'ativo', 'portal', true),
+    (v_loja2, v_tenant, 'Hamburgueria do Zé',    'hamburguer', 'hamburgueria', 'Belo Horizonte',  'MG', 'ativo', 'portal', true),
+    (v_loja3, v_tenant, 'Sushi Sakura Express',  'japonesa',   'japonesa',     'Curitiba',        'PR', 'ativo', 'portal', true),
+    (v_loja4, v_tenant, 'Açaí da Praia',         'acai',       'acai',         'Florianópolis',   'SC', 'ativo', 'portal', true);
 
+  -- customers dispara o trigger trg_customers_create_loja (AFTER INSERT),
+  -- que cria 1 "loja" fantasma por customer (client_id=customer.id, nome=name)
+  -- -- limpo no fim do bloco (achado da revisao do PR #759).
   INSERT INTO public.customers (id, tenant_id, name, phone) VALUES
     (v_cust1, v_tenant, 'Fernanda Lima (fictício)',  '+5511999990001'),
     (v_cust2, v_tenant, 'Marcos Andrade (fictício)', '+5511999990002'),
@@ -82,4 +85,8 @@ BEGIN
     (v_tenant, v_loja2, 997.00,  CURRENT_DATE - 3,  'overdue',  'BOLETO', 'Marcos Andrade (fictício)', '+5511999990002', 'Mensalidade Performance — demo'),
     (v_tenant, v_loja3, 497.00,  CURRENT_DATE - 20, 'received', 'PIX',    'Juliana Rocha (fictício)',  '+5511999990003', 'Mensalidade Light — demo'),
     (v_tenant, NULL,    1497.00, CURRENT_DATE + 15, 'pending',  'PIX',    'Fernanda Lima (fictício)',  '+5511999990001', 'Mensalidade Growth — próximo ciclo (demo)');
+
+  -- remove as lojas-fantasma auto-criadas pelo trigger acima (client_id preenchido);
+  -- as 4 lojas fake de verdade tem client_id NULL, nao sao afetadas.
+  DELETE FROM public.lojas WHERE tenant_id = v_tenant AND client_id IS NOT NULL;
 END $$;

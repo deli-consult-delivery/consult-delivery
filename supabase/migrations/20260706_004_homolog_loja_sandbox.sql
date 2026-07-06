@@ -15,12 +15,20 @@
 -- e ON CONFLICT no ifood_merchants (existe UNIQUE(tenant_id, merchant_id) --
 -- indice "ifood_merchants_tenant_merchant" no baseline).
 --
--- Rollback:
+-- is_consultoria_ativa=true: sem essa flag a loja nao aparece no seletor das
+-- telas de avaliacoes (src/lib/api.js listLojasConsultoria/
+-- listLojasConfigAvaliacoes filtram .eq('is_consultoria_ativa', true);
+-- default da coluna e false) -- achado da revisao do PR #759.
+--
+-- Rollback (ordem: filhos antes da loja, dependendo do que ja rodou):
+--   DELETE FROM public.avaliacoes    WHERE loja_id IN (SELECT id FROM public.lojas WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'cd-homolog'));
+--   DELETE FROM public.defesa_casos  WHERE loja_id IN (SELECT id FROM public.lojas WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'cd-homolog'));
+--   DELETE FROM public.cobrancas     WHERE loja_id IN (SELECT id FROM public.lojas WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'cd-homolog'));
 --   DELETE FROM public.ifood_merchants WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'cd-homolog');
 --   DELETE FROM public.lojas WHERE tenant_id = (SELECT id FROM public.tenants WHERE slug = 'cd-homolog');
 
-INSERT INTO public.lojas (tenant_id, nome, fonte_dados, ifood_merchant_id, status)
-SELECT t.id, 'Teste - CONSULT DELIVERY LTDA', 'api', '92a0ec17-6951-4a9b-9c02-ee12963be5f1', 'ativo'
+INSERT INTO public.lojas (tenant_id, nome, fonte_dados, ifood_merchant_id, status, is_consultoria_ativa)
+SELECT t.id, 'Teste - CONSULT DELIVERY LTDA', 'api', '92a0ec17-6951-4a9b-9c02-ee12963be5f1', 'ativo', true
 FROM public.tenants t
 WHERE t.slug = 'cd-homolog'
   AND NOT EXISTS (

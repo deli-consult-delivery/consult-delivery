@@ -429,7 +429,7 @@ async function load() {
 
 // ── Single (backward compat) ─────────────────────────────────────────────────
 async function loadSingle(token) {
-  var res = await sb.from('reviews').select('*').eq('token',token).maybeSingle();
+  var res = await sb.rpc('get_review_by_token', { p_token: token }).maybeSingle();
   if (res.error||!res.data) { showError('Avaliação não encontrada ou link expirado.'); return; }
   var d = res.data;
   singleReviewId = d.id;
@@ -471,7 +471,7 @@ function setSingleBtns(d) { document.getElementById('btn-approve').disabled=d; d
 
 // ── Multi review ─────────────────────────────────────────────────────────────
 async function loadMulti(tokens) {
-  var res = await sb.from('reviews').select('*').in('token',tokens);
+  var res = await sb.rpc('get_reviews_by_tokens', { p_tokens: tokens });
   if (res.error||!res.data||!res.data.length) { showError('Avaliações não encontradas ou link expirado.'); return; }
   var DONE = ['approved','modified','published'];
   var pending = res.data.filter(function(r){ return !DONE.includes(r.status); });
