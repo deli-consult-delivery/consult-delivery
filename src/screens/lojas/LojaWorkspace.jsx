@@ -513,7 +513,7 @@ async function bridgeFetchIfood(path, { method = 'GET', body } = {}) {
     const err = new Error(msg);
     err.status = json?.status ?? res.status;
     err.code = json?.details?.code ?? null;
-    err.retryAfter = json?.retryAfter ?? null;
+    err.retryAfter = json?.retryAfterSeconds ?? null;
     throw err;
   }
   return json?.data ?? json;
