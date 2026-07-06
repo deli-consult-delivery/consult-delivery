@@ -463,6 +463,19 @@ function TabConsultores({ consultores, onAtribuir, onRemove }) {
 // do front — mesmo padrão de CardapioIfood.jsx). Horários só em leitura aqui;
 // edição fica para uma sessão futura (o bridge já expõe o PUT via draft).
 const STATUS_MERCHANT_COLOR = { OK: '#10b981', WARNING: '#f59e0b', CLOSED: '#6b7280', ERROR: '#ef4444' };
+// GET /merchants/{id}/status devolve um ARRAY (um estado por operation/salesChannel),
+// não um objeto único — agregamos pelo PIOR estado (ERROR > CLOSED > WARNING > OK),
+// senão o card fica preso em "Desconhecido" pra sempre (status?.state de um array é undefined).
+const STATUS_MERCHANT_SEVERIDADE = { ERROR: 3, CLOSED: 2, WARNING: 1, OK: 0 };
+function piorStatusMerchant(raw) {
+  const lista = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+  if (lista.length === 0) return null;
+  return lista.reduce((pior, atual) => {
+    const sAtual = STATUS_MERCHANT_SEVERIDADE[atual?.state] ?? -1;
+    const sPior = STATUS_MERCHANT_SEVERIDADE[pior?.state] ?? -1;
+    return sAtual > sPior ? atual : pior;
+  }, lista[0]);
+}
 const DIA_LABEL = {
   MONDAY: 'Segunda', TUESDAY: 'Terça', WEDNESDAY: 'Quarta', THURSDAY: 'Quinta',
   FRIDAY: 'Sexta', SATURDAY: 'Sábado', SUNDAY: 'Domingo',
@@ -471,6 +484,9 @@ const MERCHANT_STATUS_POLL_MS = 30_000; // ponytail: mínimo exigido pelo checkl
 
 function erroIfoodParaMensagem(err) {
   const status = err?.status;
+  // prioriza a mensagem de NEGÓCIO do iFood (err.message vem de details.message no
+  // bridgeFetchIfood) — só cai pro genérico "iFood API retornou 400: ..." quando o
+  // iFood não devolveu detalhe nenhum.
   if (status === 401) return 'Erro de autenticação com a API do iFood (token inválido/expirado).';
   if (status === 403) return 'Sem permissão para essa operação nesta loja no iFood.';
   if (status === 409) return `Conflito${err.code ? ` (${err.code})` : ''}: ${err.message}`;
@@ -491,7 +507,10 @@ async function bridgeFetchIfood(path, { method = 'GET', body } = {}) {
   });
   const json = await res.json().catch(() => null);
   if (!res.ok || json?.ok === false) {
-    const err = new Error(json?.error || `Bridge retornou ${res.status}`);
+    // prioriza a mensagem de negócio do iFood (details.message, ex. "start deve
+    // ser anterior a end") sobre o genérico "iFood API retornou 400: Bad Request".
+    const msg = json?.details?.message || json?.error || `Bridge retornou ${res.status}`;
+    const err = new Error(msg);
     err.status = json?.status ?? res.status;
     err.code = json?.details?.code ?? null;
     err.retryAfter = json?.retryAfter ?? null;
@@ -512,7 +531,7 @@ function TabMerchantIfood({ lojaId, tenantDbId }) {
   const carregarStatus = useCallback(async () => {
     try {
       const r = await bridgeFetchIfood(`/api/ifood-api/merchant-status/${lojaId}`);
-      setStatus(r.status);
+      setStatus(piorStatusMerchant(r.status));
       setErro(null);
     } catch (e) {
       setErro(erroIfoodParaMensagem(e));
@@ -527,7 +546,7 @@ function TabMerchantIfood({ lojaId, tenantDbId }) {
         bridgeFetchIfood(`/api/ifood-api/merchant-interruptions/${lojaId}`),
         bridgeFetchIfood(`/api/ifood-api/merchant-opening-hours/${lojaId}`),
       ]);
-      setStatus(statusRes.status);
+      setStatus(piorStatusMerchant(statusRes.status));
       setInterrupcoes(Array.isArray(interrRes.interrupcoes) ? interrRes.interrupcoes : (interrRes.interrupcoes?.interruptions ?? []));
       setHorarios(Array.isArray(horRes.horarios) ? horRes.horarios : (horRes.horarios?.shifts ?? []));
       setErro(null);
