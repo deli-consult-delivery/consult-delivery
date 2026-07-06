@@ -678,21 +678,27 @@ export async function getIfoodSummary(lojaId) {
   return json.data?.summary ?? null;
 }
 
-// Cardápio (Catalog API oficial) por loja — gated por fonte_dados==='api' +
-// membership no Bridge, mesmo padrão de getIfoodSummary. Rota nova (App 3
-// Catálogo, coordenada com o worker que cria routes/ifood-api.js do lado do
-// bridge) — pode ainda não existir (404): erro carrega `.status` pro chamador
-// decidir entre "erro real" e "ainda não disponível".
+// Cardápio (Catalog API oficial) por loja — GET /ifood-api/catalogo/:lojaId
+// (#799, mergeado), gated por fonte_dados==='api' + membership no Bridge,
+// mesmo padrão de getIfoodSummary. Distingue 404 "rota não existe" (corpo
+// não é o envelope JSON {ok:...} — Express default, ex: rota removida/nunca
+// deployada) de 404 "condição de negócio" (resolveLojaGated: loja não
+// encontrada / sem ifood_merchants vinculado — SEMPRE vem com {ok:false,...}
+// no corpo) via `err.rotaAusente`. Só o primeiro deve virar "indisponível";
+// o segundo é um erro de configuração real e deve aparecer como tal.
 export async function getCardapioApiLoja(lojaId) {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token || '';
-  const res = await fetch(`${BRIDGE}/api/ifood-api/cardapio/${lojaId}`, {
+  const res = await fetch(`${BRIDGE}/api/ifood-api/catalogo/${lojaId}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    const err = new Error(`getCardapioApiLoja HTTP ${res.status}: ${body.slice(0, 300)}`);
+    let json = null;
+    try { json = JSON.parse(body); } catch { /* corpo não-JSON (ex: "Cannot GET ...") */ }
+    const err = new Error(json?.error || `getCardapioApiLoja HTTP ${res.status}: ${body.slice(0, 300)}`);
     err.status = res.status;
+    err.rotaAusente = res.status === 404 && !json; // 404 sem envelope JSON = rota inexistente
     throw err;
   }
   const json = await res.json();

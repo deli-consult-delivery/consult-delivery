@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase.js';
 import { getCardapioApiLoja } from '../lib/api.js';
 
@@ -6,10 +6,9 @@ import { getCardapioApiLoja } from '../lib/api.js';
 // Console v2 — Cardápio iFood (consulta · read-only + pausar/reabrir gated)
 // Consome o Bridge (ponto único de contato com o iFood):
 //   GET  /api/ifood/cardapio?tenant_id=…      → { catalogos:[{ categorias:[{ nome, itens:[…] }] }] }
-//   GET  /api/ifood-api/cardapio/:lojaId       → { loja_id, merchant_id, cardapio:{ catalogos:[…] } }
-//                                                 (App 3 Catálogo — gated por fonte_dados==='api',
-//                                                 mesmo padrão de merchant-status/summary/reviews;
-//                                                 pode ainda não existir no bridge — ver `indisponivel`)
+//   GET  /api/ifood-api/catalogo/:lojaId        → { loja_id, merchant_id, cardapio:{ catalogos:[…] } }
+//                                                 (App 3 Catálogo, #799 — gated por fonte_dados==='api',
+//                                                 mesmo padrão de merchant-status/summary/reviews)
 //   POST /api/ifood/acao?tenant_id=…           → cria DRAFT amarelo (NÃO executa)
 // A credencial do iFood vive só no Bridge. O tenant_id é obrigatório p/ usuário
 // (gate de membership no Bridge, mesmo padrão do VendaERP/lojas).
@@ -108,6 +107,7 @@ export default function CardapioIfood({ tenantDbId }) {
   const [erro, setErro] = useState(null);
   const [indisponivel, setIndisponivel] = useState(false); // rota nova (worker do bridge) ainda não existe
   const [carregando, setCarregando] = useState(false);
+  const reqIdRef = useRef(0); // guarda contra resposta fora de ordem (loja A lenta chegando depois da loja B)
 
   // Descobre lojas do tenant já migradas pra API oficial — só decide se o
   // seletor aparece. Tenant sem nenhuma → lojasApi=[] pra sempre, lojaId
@@ -134,17 +134,20 @@ export default function CardapioIfood({ tenantDbId }) {
 
   const carregar = useCallback(async () => {
     if (!tenantDbId) return;
+    const meuReqId = ++reqIdRef.current; // captura ANTES do await — resposta obsoleta se isto mudar
     setCarregando(true); setErro(null); setIndisponivel(false);
     try {
       const cardapio = lojaId
         ? await getCardapioApiLoja(lojaId)
         : await bridgeFetch(`/api/ifood/cardapio?tenant_id=${encodeURIComponent(tenantDbId)}`);
+      if (meuReqId !== reqIdRef.current) return; // uma troca de loja mais recente já disparou outra chamada
       setCats(categoriasDe(cardapio));
     } catch (e) {
-      if (lojaId && e.status === 404) { setIndisponivel(true); setCats(null); }
+      if (meuReqId !== reqIdRef.current) return;
+      if (lojaId && e.rotaAusente) { setIndisponivel(true); setCats(null); }
       else { setErro(e.message); setCats(null); }
     } finally {
-      setCarregando(false);
+      if (meuReqId === reqIdRef.current) setCarregando(false);
     }
   }, [tenantDbId, lojaId]);
 
