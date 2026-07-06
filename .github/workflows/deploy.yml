@@ -35,8 +35,6 @@ jobs:
           VITE_EVOLUTION_URL: ${{ secrets.VITE_EVOLUTION_URL }}
           VITE_EVOLUTION_KEY: ${{ secrets.VITE_EVOLUTION_KEY }}
           VITE_BRIDGE_URL: ${{ secrets.VITE_BRIDGE_URL }}
-          VITE_ANALISTA_WEBHOOK_URL: https://bridge.consultdelivery.com.br/analise
-          VITE_BRIDGE_SECRET: ${{ secrets.VITE_BRIDGE_SECRET }}
           VITE_VAPID_PUBLIC_KEY: ${{ secrets.VITE_VAPID_PUBLIC_KEY }}
 
       - name: Deploy to GitHub Pages

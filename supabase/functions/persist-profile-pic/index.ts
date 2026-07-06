@@ -49,6 +49,24 @@ Deno.serve(async (req) => {
     return json({ error: 'instanceName, phone and conversationId are required' }, 400);
   }
 
+  // Tenant scoping: sem isto, qualquer usuário autenticado (de qualquer tenant)
+  // podia passar o conversationId de OUTRO tenant e sobrescrever push_photo_url
+  // daquela conversa — IDOR (achado da auditoria de Edge Functions, 2026-07-07).
+  const { data: conv, error: convErr } = await supabaseAdmin
+    .from('conversations')
+    .select('tenant_id')
+    .eq('id', conversationId)
+    .maybeSingle();
+  if (convErr || !conv?.tenant_id) return json({ error: 'Conversa não encontrada' }, 404);
+
+  const { data: membership } = await supabaseAdmin
+    .from('tenant_members')
+    .select('tenant_id')
+    .eq('tenant_id', conv.tenant_id)
+    .eq('user_id', caller.id)
+    .maybeSingle();
+  if (!membership) return json({ error: 'Forbidden' }, 403);
+
   try {
     // 1. Busca perfil da Evolution API via POST (v2 endpoint)
     const profileRes = await fetch(`${EVO_URL}/chat/fetchProfile/${instanceName}`, {
