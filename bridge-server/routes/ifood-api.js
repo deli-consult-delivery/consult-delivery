@@ -12,6 +12,11 @@
 
 const { compararReviews } = require('../lib/ifood-dupla-checagem');
 
+// reviewId do iFood = UUID (hex + hífens) — mesma regra anti path-traversal de routes/ifood.js.
+const REVIEW_ID_RE = /^[0-9A-Za-z-]+$/;
+const TEXTO_MIN = 10;
+const TEXTO_MAX = 300;
+
 module.exports = function ({ requireJwtOrInternal, ifood, sbFetch, assertTenantMember }) {
   const router = require('express').Router();
 
@@ -29,7 +34,14 @@ module.exports = function ({ requireJwtOrInternal, ifood, sbFetch, assertTenantM
         }
         const status = err && typeof err.status === 'number' && err.status >= 400 ? err.status : 502;
         console.error(`[ifood-api] ${req.path} erro ${err?.status ?? '?'}: ${err?.message}`);
-        res.status(status).json({ ok: false, status: err?.status ?? null, error: err?.message });
+        res.status(status).json({
+          ok: false,
+          status: err?.status ?? null,
+          error: err?.message,
+          retryAfterSeconds: status === 429 && typeof err?.retryAfterMs === 'number'
+            ? Math.ceil(err.retryAfterMs / 1000)
+            : null,
+        });
       }
     };
   }
@@ -78,16 +90,102 @@ module.exports = function ({ requireJwtOrInternal, ifood, sbFetch, assertTenantM
   }));
 
   // ── GET /ifood-api/reviews/:lojaId — reviews da API + dupla-checagem × `avaliacoes` ─
+  // Paginação opcional ?page=&size= (size máx. 50 — o iFood responde 400 acima disso;
+  // rejeitamos antes de gastar uma chamada à rede).
   router.get('/ifood-api/reviews/:lojaId', requireJwtOrInternal, handle(async (req, res) => {
     const ctx = await resolveLojaGated(req, res);
     if (!ctx) return;
-    const raw = await ifood.listarReviews(ctx.merchantId, ctx.loja.tenant_id);
+    const { page, size } = req.query;
+    if (size !== undefined && (!Number.isFinite(Number(size)) || Number(size) < 1 || Number(size) > 50)) {
+      res.status(400).json({
+        ok: false,
+        error: 'size deve ser um número entre 1 e 50',
+        code: 'PAGE_SIZE_INVALIDO',
+        message: 'O tamanho da página (size) deve ser no máximo 50.',
+      });
+      return;
+    }
+    const raw = await ifood.listarReviews(ctx.merchantId, { page, size }, ctx.loja.tenant_id);
     const apiReviews = Array.isArray(raw) ? raw : (raw?.reviews ?? raw?.items ?? []);
     const avaliacoesRows = await sbFetch(
       `avaliacoes?loja_id=eq.${encodeURIComponent(ctx.loja.id)}&select=id,nota,comentario,nome_cliente`
     );
     const diff = compararReviews(apiReviews, avaliacoesRows || []);
-    return { loja_id: ctx.loja.id, merchant_id: ctx.merchantId, reviews: apiReviews, diff };
+    return {
+      loja_id: ctx.loja.id,
+      merchant_id: ctx.merchantId,
+      reviews: apiReviews,
+      page: raw?.page ?? (page !== undefined ? Number(page) : null),
+      size: raw?.size ?? (size !== undefined ? Number(size) : null),
+      total: raw?.total ?? null,
+      pageCount: raw?.pageCount ?? null,
+      diff,
+    };
+  }));
+
+  // ── POST /ifood-api/reviews/:lojaId/:reviewId/draft — cria o DRAFT amarelo ──
+  // (NÃO chama a API de escrita — só valida e registra o pedido). A escrita real
+  // só ocorre em POST /ifood/aprovar/:draftId (routes/ifood.js), mesma porta
+  // única usada por pausar/reabrir item — dispatcher genérico por
+  // metadata.operacao (ifood.responder_review → lib.responderReview).
+  router.post('/ifood-api/reviews/:lojaId/:reviewId/draft', requireJwtOrInternal, handle(async (req, res) => {
+    const { reviewId } = req.params;
+    if (!REVIEW_ID_RE.test(reviewId)) {
+      res.status(400).json({ ok: false, error: 'reviewId em formato inválido', code: 'REVIEW_ID_INVALIDO', message: 'reviewId em formato inválido.' });
+      return;
+    }
+    const texto = typeof req.body?.texto === 'string' ? req.body.texto.trim() : '';
+    if (texto.length < TEXTO_MIN || texto.length > TEXTO_MAX) {
+      res.status(400).json({
+        ok: false,
+        error: `texto deve ter entre ${TEXTO_MIN} e ${TEXTO_MAX} caracteres`,
+        code: 'TEXTO_INVALIDO',
+        message: `A resposta precisa ter entre ${TEXTO_MIN} e ${TEXTO_MAX} caracteres (recebido: ${texto.length}).`,
+      });
+      return;
+    }
+
+    const ctx = await resolveLojaGated(req, res);
+    if (!ctx) return;
+
+    const draft = await sbFetch('agent_drafts', {
+      method: 'POST',
+      prefer: 'return=representation',
+      body: {
+        tenant_id: ctx.loja.tenant_id,
+        agent_name: 'BRENO',
+        channel: 'painel',
+        autonomy_level: 'amarelo', // valor EXATO — CHECK constraint
+        status: 'pending',
+        content: `Responder avaliação ${reviewId} no iFood`,
+        metadata: {
+          operacao: 'ifood.responder_review',
+          merchant_id: ctx.merchantId,
+          review_id: reviewId,
+          texto,
+          loja_id: ctx.loja.id,
+          tenant_id: ctx.loja.tenant_id,
+        },
+      },
+    });
+    const row = Array.isArray(draft) ? draft[0] : draft;
+    if (!row?.id) {
+      throw new ifood.IfoodApiError('falha ao criar draft (insert sem retorno)', 0, null);
+    }
+    sbFetch('internal_notifications', {
+      method: 'POST',
+      body: {
+        tenant_id: ctx.loja.tenant_id,
+        recipient_user_id: null,
+        kind: 'draft_pending',
+        title: `Resposta de avaliação iFood aguardando aprovação`,
+        body: `Agente BRENO propôs responder a avaliação ${reviewId}: "${texto}"`,
+        link: '/avaliacoes',
+      },
+      prefer: 'return=minimal',
+    }).catch((notifErr) => console.error('[ifood-api/reviews/draft] erro ao notificar draft:', notifErr.message));
+
+    return { draft_id: row.id, review_id: reviewId, texto };
   }));
 
   // ── GET /ifood-api/summary/:lojaId — resumo de notas (Review API /summary) ──

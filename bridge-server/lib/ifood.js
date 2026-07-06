@@ -120,6 +120,8 @@ async function getAccessToken(tenantId) {
 
 // ---------------------------------------------------------------------------
 // Retry — só em 429 (rate limit) e 5xx. 4xx (exceto 429) e status 0 = não retenta.
+// Em 429, respeita o header Retry-After do iFood (ifoodFetch anexa retryAfterMs
+// ao erro) no lugar do backoff fixo — cap de 30s por segurança.
 // ---------------------------------------------------------------------------
 function shouldRetry(status) {
   return status === 429 || status >= 500;
@@ -128,8 +130,10 @@ function shouldRetry(status) {
 async function withRetry(fn, maxAttempts = 3) {
   const delaysMs = [0, 1000, 2000];
   let lastError = null;
+  let nextDelayOverrideMs = null;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const delay = delaysMs[attempt] ?? 2000;
+    const delay = nextDelayOverrideMs ?? (delaysMs[attempt] ?? 2000);
+    nextDelayOverrideMs = null;
     if (delay > 0) await new Promise((r) => setTimeout(r, delay));
     try {
       return await fn();
@@ -139,6 +143,9 @@ async function withRetry(fn, maxAttempts = 3) {
       lastError = err;
       if (!shouldRetry(err.status)) throw err;
       if (attempt === maxAttempts - 1) throw err;
+      if (err.status === 429 && typeof err.retryAfterMs === 'number') {
+        nextDelayOverrideMs = Math.min(err.retryAfterMs, 30_000);
+      }
     }
   }
   throw lastError ?? new IfoodApiError('withRetry esgotou tentativas', 0, null);
@@ -182,11 +189,18 @@ async function ifoodFetch(path, { method = 'GET', query, body } = {}, tenantId) 
   }
 
   if (!response.ok) {
-    throw new IfoodApiError(
+    const err = new IfoodApiError(
       `iFood API retornou ${response.status}: ${response.statusText}`,
       response.status,
       parsed
     );
+    if (response.status === 429) {
+      // Retry-After em segundos (formato usado por rate limit; ignora formato HTTP-date).
+      const retryAfter = response.headers?.get ? response.headers.get('retry-after') : null;
+      const secs = retryAfter != null ? Number(retryAfter) : NaN;
+      if (Number.isFinite(secs) && secs >= 0) err.retryAfterMs = secs * 1000;
+    }
+    throw err;
   }
   return parsed;
 }
@@ -245,10 +259,17 @@ async function getStatusLoja(merchantId, tenantId) {
   ).then(tolerant);
 }
 
-// Avaliações — lista reviews da loja.
-async function listarReviews(merchantId, tenantId) {
+// Avaliações — lista reviews da loja. page/size opcionais (paginação da Review
+// API v2.0 — nomes de query NÃO confirmados contra chamada real ainda, sandbox
+// de reviews vazio no smoke de 05/07; ajustar aqui se o 1º retorno real usar
+// outro nome). size > 50 é responsabilidade do chamador rejeitar antes (o
+// iFood responde 400 nesse caso, conforme doc do portal).
+async function listarReviews(merchantId, { page, size } = {}, tenantId) {
+  const query = {};
+  if (page !== undefined && page !== null) query.page = page;
+  if (size !== undefined && size !== null) query.size = size;
   return withRetry(() =>
-    ifoodFetch(`/review/v2.0/merchants/${merchantId}/reviews`, {}, tenantId)
+    ifoodFetch(`/review/v2.0/merchants/${merchantId}/reviews`, { query }, tenantId)
   ).then(tolerant);
 }
 

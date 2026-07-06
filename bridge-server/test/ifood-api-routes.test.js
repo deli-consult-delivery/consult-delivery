@@ -36,6 +36,23 @@ function get(server, path) {
   });
 }
 
+function post(server, path, payload) {
+  return new Promise((resolve) => {
+    const { port } = server.address();
+    const body = JSON.stringify(payload || {});
+    const req = http.request(
+      { host: '127.0.0.1', port, path, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } },
+      (res) => {
+        let buf = '';
+        res.on('data', (c) => (buf += c));
+        res.on('end', () => resolve({ status: res.statusCode, body: JSON.parse(buf || '{}') }));
+      }
+    );
+    req.write(body);
+    req.end();
+  });
+}
+
 function sbFetchStub(routes) {
   // routes: array de { test: (path)=>bool, value }
   return async (path) => {
@@ -211,6 +228,98 @@ function sbFetchStub(routes) {
     const r = await get(server, '/api/ifood-api/summary/loja-2');
     assert.strictEqual(r.status, 409);
     assert.strictEqual(ifoodChamado, false);
+    server.close();
+    passed++;
+  }
+
+  // 10) reviews: ?size=51 → 400 com code/message, NUNCA chama o client iFood
+  {
+    let ifoodChamado = false;
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => p.startsWith('ifood_merchants?'), value: [{ merchant_id: 'merch-1' }] },
+    ]);
+    const ifood = { listarReviews: async () => { ifoodChamado = true; return []; } };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/reviews/loja-1?size=51');
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.body.code, 'PAGE_SIZE_INVALIDO');
+    assert.ok(r.body.message);
+    assert.strictEqual(ifoodChamado, false);
+    server.close();
+    passed++;
+  }
+
+  // 11) draft de resposta: texto < 10 chars → 400 TEXTO_INVALIDO, sem criar draft
+  {
+    let draftCriado = false;
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => { if (p === 'agent_drafts') draftCriado = true; return false; }, value: null },
+    ]);
+    const app = buildApp({ sbFetch, ifood: {} });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await post(server, '/api/ifood-api/reviews/loja-1/review-1/draft', { texto: 'curto' });
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.body.code, 'TEXTO_INVALIDO');
+    assert.strictEqual(draftCriado, false);
+    server.close();
+    passed++;
+  }
+
+  // 12) draft de resposta: reviewId malformado (underscore fora do padrão) → 400, antes de resolver a loja
+  {
+    const sbFetch = sbFetchStub([]); // não deveria nem chamar sbFetch
+    const app = buildApp({ sbFetch, ifood: {} });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await post(server, '/api/ifood-api/reviews/loja-1/review_1/draft', { texto: 'Obrigado pelo feedback, valorizamos muito!' });
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.body.code, 'REVIEW_ID_INVALIDO');
+    server.close();
+    passed++;
+  }
+
+  // 13) draft de resposta: texto válido (10–300) + loja em fonte_dados='api' → 200, cria draft pending
+  {
+    const inserts = [];
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => p.startsWith('ifood_merchants?'), value: [{ merchant_id: 'merch-1' }] },
+      {
+        test: (p) => { const m = p === 'agent_drafts'; if (m) inserts.push('draft'); return m; },
+        value: [{ id: 'draft-123' }],
+      },
+      { test: (p) => p === 'internal_notifications', value: null },
+    ]);
+    const app = buildApp({ sbFetch, ifood: {} });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await post(server, '/api/ifood-api/reviews/loja-1/review-1/draft', { texto: 'Obrigado pelo feedback, valorizamos muito!' });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.body.data.draft_id, 'draft-123');
+    assert.strictEqual(r.body.data.review_id, 'review-1');
+    assert.strictEqual(inserts.length, 1, 'deveria ter inserido exatamente 1 draft');
+    server.close();
+    passed++;
+  }
+
+  // 14) draft de resposta: loja em fonte_dados='portal' sem ?dryrun=1 → 409, NUNCA cria draft
+  {
+    let draftCriado = false;
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_PORTAL] },
+      { test: (p) => { if (p === 'agent_drafts') draftCriado = true; return false; }, value: null },
+    ]);
+    const app = buildApp({ sbFetch, ifood: {} });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await post(server, '/api/ifood-api/reviews/loja-2/review-1/draft', { texto: 'Obrigado pelo feedback, valorizamos muito!' });
+    assert.strictEqual(r.status, 409);
+    assert.strictEqual(draftCriado, false);
     server.close();
     passed++;
   }
