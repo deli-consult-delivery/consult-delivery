@@ -260,5 +260,78 @@ module.exports = function ({ requireJwtOrInternal, ifood, sbFetch, assertTenantM
     return { loja_id: ctx.loja.id, merchant_id: ctx.merchantId, summary };
   }));
 
+  // ── GET /ifood-api/repasses/:lojaId — Settlement API (liquidação/repasses) ──
+  // Filtro opcional ?dataInicio=&dataFim= (yyyy-MM-dd) — default 7 dias (mesmo
+  // comportamento de listarVendas). Ver ressalva de "não confirmado live" no
+  // cabeçalho de lib.listarRepasses.
+  router.get('/ifood-api/repasses/:lojaId', requireJwtOrInternal, handle(async (req, res) => {
+    const { dataInicio, dataFim } = req.query;
+    if (dataInvalida(dataInicio) || dataInvalida(dataFim)) {
+      res.status(400).json({
+        ok: false,
+        error: 'dataInicio/dataFim devem estar no formato yyyy-MM-dd',
+        code: 'DATA_INVALIDA',
+        message: 'Informe as datas do filtro no formato yyyy-MM-dd (ex.: 2026-07-01).',
+      });
+      return;
+    }
+    const ctx = await resolveLojaGated(req, res);
+    if (!ctx) return;
+    const repasses = await ifood.listarRepasses(ctx.merchantId, { dataInicio, dataFim }, ctx.loja.tenant_id);
+    return { loja_id: ctx.loja.id, merchant_id: ctx.merchantId, repasses };
+  }));
+
+  // ── GET /ifood-api/antecipacoes/:lojaId — Anticipation API (D+1/D+7) ────────
+  // Filtros MUTUAMENTE EXCLUSIVOS ?calculationDate= OU ?anticipatedPaymentDate=
+  // (yyyy-MM-dd) — mandar os dois é erro de uso (400), não erro do iFood.
+  router.get('/ifood-api/antecipacoes/:lojaId', requireJwtOrInternal, handle(async (req, res) => {
+    const { calculationDate, anticipatedPaymentDate } = req.query;
+    if (dataInvalida(calculationDate) || dataInvalida(anticipatedPaymentDate)) {
+      res.status(400).json({
+        ok: false,
+        error: 'calculationDate/anticipatedPaymentDate devem estar no formato yyyy-MM-dd',
+        code: 'DATA_INVALIDA',
+        message: 'Informe a data no formato yyyy-MM-dd (ex.: 2026-07-01).',
+      });
+      return;
+    }
+    if (calculationDate && anticipatedPaymentDate) {
+      res.status(400).json({
+        ok: false,
+        error: 'informe calculationDate OU anticipatedPaymentDate, nunca os dois',
+        code: 'FILTRO_ANTECIPACAO_CONFLITANTE',
+        message: 'Use apenas um dos filtros de data por vez (calculationDate ou anticipatedPaymentDate).',
+      });
+      return;
+    }
+    const ctx = await resolveLojaGated(req, res);
+    if (!ctx) return;
+    const antecipacoes = await ifood.listarAntecipacoes(
+      ctx.merchantId,
+      { calculationDate, anticipatedPaymentDate },
+      ctx.loja.tenant_id
+    );
+    return { loja_id: ctx.loja.id, merchant_id: ctx.merchantId, antecipacoes };
+  }));
+
+  // ── GET /ifood-api/ocorrencias/:lojaId — Reconciliation API (ajustes/chargebacks) ──
+  // Filtro opcional ?dataInicio=&dataFim= (yyyy-MM-dd) — default 7 dias.
+  router.get('/ifood-api/ocorrencias/:lojaId', requireJwtOrInternal, handle(async (req, res) => {
+    const { dataInicio, dataFim } = req.query;
+    if (dataInvalida(dataInicio) || dataInvalida(dataFim)) {
+      res.status(400).json({
+        ok: false,
+        error: 'dataInicio/dataFim devem estar no formato yyyy-MM-dd',
+        code: 'DATA_INVALIDA',
+        message: 'Informe as datas do filtro no formato yyyy-MM-dd (ex.: 2026-07-01).',
+      });
+      return;
+    }
+    const ctx = await resolveLojaGated(req, res);
+    if (!ctx) return;
+    const ocorrencias = await ifood.listarOcorrencias(ctx.merchantId, { dataInicio, dataFim }, ctx.loja.tenant_id);
+    return { loja_id: ctx.loja.id, merchant_id: ctx.merchantId, ocorrencias };
+  }));
+
   return router;
 };

@@ -371,6 +371,73 @@ async function listarVendas(merchantId, { dataInicio, dataFim } = {}, tenantId) 
   ).then(tolerant);
 }
 
+// Repasses/liquidação (Settlement API) — valor líquido repassado à loja no
+// período. Mesmo default de janela (7 dias) e mesmo formato de período
+// (yyyy-MM-dd) que listarVendas, por analogia com o único endpoint financeiro
+// já confirmado live neste código — NÃO confirmado ainda contra uma chamada
+// real (doc pública não expõe os nomes exatos dos query params de request,
+// só o shape da resposta: beginDate/endDate/balance/merchantId/settlements[]
+// com closingItems[] tipados REPASSE/RENEGOCIADA). Ajustar os nomes de query
+// aqui se o 1º smoke live divergir (mesma ressalva já usada em listarReviews/
+// responderReview neste arquivo).
+async function listarRepasses(merchantId, { dataInicio, dataFim } = {}, tenantId) {
+  const hoje = new Date();
+  const seteDiasAtras = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const beginSettlementDate = dataInicio || isoDate(seteDiasAtras);
+  const endSettlementDate = dataFim || isoDate(hoje);
+  return withRetry(() =>
+    ifoodFetch(
+      `/financial/v3.0/merchants/${merchantId}/settlements`,
+      { query: { beginSettlementDate, endSettlementDate } },
+      tenantId
+    )
+  ).then(tolerant);
+}
+
+// Antecipações (Anticipation API) — repasses pagos adiantado (planos D+1/D+7
+// via iFood Pago). A doc pública documenta os filtros como mutuamente
+// exclusivos ("CalculationDate OU AnticipatedPaymentDate, nunca os dois") —
+// diferente do padrão begin/end de período usado em sales/settlements. Sem
+// nenhum dos dois, consulta sem filtro de data (loja pode não ter plano de
+// antecipação contratado — resposta vazia é um resultado válido, não erro).
+// NÃO confirmado ainda contra uma chamada real (path e nomes de query
+// inferidos da doc pública, que não detalha o request completo).
+async function listarAntecipacoes(merchantId, { calculationDate, anticipatedPaymentDate } = {}, tenantId) {
+  if (calculationDate && anticipatedPaymentDate) {
+    throw new IfoodApiError(
+      'listarAntecipacoes: informe calculationDate OU anticipatedPaymentDate, nunca os dois',
+      0,
+      null
+    );
+  }
+  const query = {};
+  if (calculationDate) query.calculationDate = calculationDate;
+  if (anticipatedPaymentDate) query.anticipatedPaymentDate = anticipatedPaymentDate;
+  return withRetry(() =>
+    ifoodFetch(`/financial/v3.0/merchants/${merchantId}/anticipations`, { query }, tenantId)
+  ).then(tolerant);
+}
+
+// Ajustes/ocorrências (Reconciliation — endpoint `occurrences`) — lançamentos
+// financeiros manuais do iFood que impactam o repasse (débito/crédito por
+// ajuste de falha sistêmica, chargeback etc.), fora do fluxo normal de venda.
+// Mesmo padrão de período (yyyy-MM-dd, default 7 dias) dos demais endpoints
+// financeiros — NÃO confirmado ainda contra uma chamada real (nomes de query
+// inferidos por analogia; doc pública não detalha o request completo).
+async function listarOcorrencias(merchantId, { dataInicio, dataFim } = {}, tenantId) {
+  const hoje = new Date();
+  const seteDiasAtras = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const beginDate = dataInicio || isoDate(seteDiasAtras);
+  const endDate = dataFim || isoDate(hoje);
+  return withRetry(() =>
+    ifoodFetch(
+      `/financial/v3.0/merchants/${merchantId}/occurrences`,
+      { query: { beginDate, endDate } },
+      tenantId
+    )
+  ).then(tolerant);
+}
+
 // ---------------------------------------------------------------------------
 // Validação defensiva de IDs ANTES de interpolar na URL (anti path-traversal /
 // injeção de path). Mesma regra do routes/ifood.js: só hex/alfanum + hífens
@@ -717,6 +784,9 @@ module.exports = {
   getReviewDetalhe,
   getSummaryReviews,
   listarVendas,
+  listarRepasses,
+  listarAntecipacoes,
+  listarOcorrencias,
   // escrita (Catalog v2.0) — sem retry
   listarCategorias,
   criarCategoria,
