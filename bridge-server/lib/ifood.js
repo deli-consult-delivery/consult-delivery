@@ -259,15 +259,18 @@ async function getStatusLoja(merchantId, tenantId) {
   ).then(tolerant);
 }
 
-// Avaliações — lista reviews da loja. page/size opcionais (paginação da Review
-// API v2.0 — nomes de query NÃO confirmados contra chamada real ainda, sandbox
-// de reviews vazio no smoke de 05/07; ajustar aqui se o 1º retorno real usar
-// outro nome). size > 50 é responsabilidade do chamador rejeitar antes (o
+// Avaliações — lista reviews da loja. page/size opcionais (paginação 1-based
+// da Review API v2.0 — o checklist do portal documenta o request com
+// `pageSize`, não `size`; usamos `size` como nome interno do parâmetro (mesmo
+// contrato já exposto pro front/bridge) e só traduzimos pra `pageSize` na
+// query real enviada ao iFood. NÃO confirmado contra chamada real ainda
+// (sandbox de reviews vazio no smoke de 05/07) — ajustar aqui se o 1º retorno
+// live divergir. size > 50 é responsabilidade do chamador rejeitar antes (o
 // iFood responde 400 nesse caso, conforme doc do portal).
 async function listarReviews(merchantId, { page, size } = {}, tenantId) {
   const query = {};
   if (page !== undefined && page !== null) query.page = page;
-  if (size !== undefined && size !== null) query.size = size;
+  if (size !== undefined && size !== null) query.pageSize = size;
   return withRetry(() =>
     ifoodFetch(`/review/v2.0/merchants/${merchantId}/reviews`, { query }, tenantId)
   ).then(tolerant);

@@ -129,6 +129,19 @@ module.exports = function ({ requireJwtOrInternal, ifood, sbFetch, assertTenantM
   // única usada por pausar/reabrir item — dispatcher genérico por
   // metadata.operacao (ifood.responder_review → lib.responderReview).
   router.post('/ifood-api/reviews/:lojaId/:reviewId/draft', requireJwtOrInternal, handle(async (req, res) => {
+    // ?dryrun=1 NÃO vale aqui: ao contrário das rotas GET (só leem), esta rota cria
+    // um agent_drafts REAL e aprovável — "testar sem migrar" criaria um draft de
+    // verdade pra uma loja ainda em fonte_dados='portal'. resolveLojaGated aceita
+    // dryrun (é read-only-friendly); rejeitamos explicitamente antes de chamá-lo.
+    if (req.query.dryrun === '1') {
+      res.status(400).json({
+        ok: false,
+        error: 'dryrun não é suportado nesta rota de escrita',
+        code: 'DRYRUN_NAO_SUPORTADO',
+        message: 'Esta rota cria um draft real e aprovável — não há modo dryrun para escrita.',
+      });
+      return;
+    }
     const { reviewId } = req.params;
     if (!REVIEW_ID_RE.test(reviewId)) {
       res.status(400).json({ ok: false, error: 'reviewId em formato inválido', code: 'REVIEW_ID_INVALIDO', message: 'reviewId em formato inválido.' });

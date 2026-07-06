@@ -30,9 +30,12 @@ function mensagemErro(err) {
     const s = err?.retryAfterSeconds;
     return `Limite de requisições do iFood atingido — tente novamente${s ? ` em ${s}s` : ' em instantes'}.`;
   }
-  if (status === 409 || status === 422) return err?.message || 'Esta avaliação já foi respondida (ou está em um status que não permite resposta).';
-  if (status === 400) return err?.message || 'Dados inválidos.';
-  return err?.message || 'Erro ao comunicar com o iFood.';
+  // err.details?.message carrega a mensagem de negócio do iFood (ex.: "já respondida")
+  // quando o Bridge repassa o body de erro real — preferir sobre err.message genérico
+  // ("iFood API retornou 409: Conflict"), que só descreve o status HTTP.
+  if (status === 409 || status === 422) return err?.details?.message || err?.message || 'Esta avaliação já foi respondida (ou está em um status que não permite resposta).';
+  if (status === 400) return err?.details?.message || err?.message || 'Dados inválidos.';
+  return err?.details?.message || err?.message || 'Erro ao comunicar com o iFood.';
 }
 
 function ReviewCard({ review, lojaId, tenantId }) {
@@ -62,7 +65,13 @@ function ReviewCard({ review, lojaId, tenantId }) {
     try {
       await aprovarDraftIfood({ draftId, tenantId });
       setOk('Resposta publicada no iFood.');
-    } catch (e) { setErro(mensagemErro(e)); }
+    } catch (e) {
+      setErro(mensagemErro(e));
+      // o Bridge marca o draft como 'failed' quando a aprovação falha — reenviar o
+      // MESMO draftId bate no gate "não está pendente" (409) pra sempre. Volta pro
+      // estado de rascunho (mantendo o texto) pra criar um draft novo no próximo clique.
+      setDraftId(null);
+    }
     setBusy(false);
   }
 
@@ -123,7 +132,7 @@ function ReviewCard({ review, lojaId, tenantId }) {
 
 export default function AvaliacoesReviewApi({ loja, tenantDbId }) {
   const [reviews, setReviews] = useState(null);
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState(1); // paginação 1-based (checklist do portal: "pageSize > 50 → 400")
   const [meta, setMeta] = useState(null);
   const [erro, setErro] = useState(null);
 
@@ -163,8 +172,8 @@ export default function AvaliacoesReviewApi({ loja, tenantDbId }) {
 
       {reviews && reviews.length > 0 && (
         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-          <button className="cv2-btn sec" style={{ fontSize: 11.5 }} disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))}>← Anterior</button>
-          <button className="cv2-btn sec" style={{ fontSize: 11.5 }} disabled={meta?.pageCount != null && page + 1 >= meta.pageCount} onClick={() => setPage(p => p + 1)}>Próxima →</button>
+          <button className="cv2-btn sec" style={{ fontSize: 11.5 }} disabled={page === 1} onClick={() => setPage(p => Math.max(1, p - 1))}>← Anterior</button>
+          <button className="cv2-btn sec" style={{ fontSize: 11.5 }} disabled={meta?.pageCount != null && page >= meta.pageCount} onClick={() => setPage(p => p + 1)}>Próxima →</button>
         </div>
       )}
     </div>

@@ -324,5 +324,19 @@ function sbFetchStub(routes) {
     passed++;
   }
 
+  // 15) draft de resposta: ?dryrun=1 é rejeitado (400) mesmo para loja em fonte_dados='api' —
+  // ao contrário das rotas GET, esta rota tem efeito colateral real (cria draft aprovável)
+  {
+    const sbFetch = sbFetchStub([]); // não deveria nem consultar a loja
+    const app = buildApp({ sbFetch, ifood: {} });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await post(server, '/api/ifood-api/reviews/loja-2/review-1/draft?dryrun=1', { texto: 'Obrigado pelo feedback, valorizamos muito!' });
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.body.code, 'DRYRUN_NAO_SUPORTADO');
+    server.close();
+    passed++;
+  }
+
   process.stdout.write(`\nifood-api-routes: todos os ${passed} cenários passaram.\n`);
 })();

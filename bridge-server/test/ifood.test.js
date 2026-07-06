@@ -313,7 +313,7 @@ function restoreFetch() {
   });
 
   // ── listarReviews — paginação (?page=&size=) ────────────────────────────────
-  await check('listarReviews: page/size viram querystring; omitidos não aparecem na URL', async () => {
+  await check('listarReviews: page/size viram querystring (pageSize no request ao iFood); omitidos não aparecem na URL', async () => {
     setCreds();
     const calls = [];
     mockFetch(calls, (url) => {
@@ -327,7 +327,8 @@ function restoreFetch() {
     const reviewsCall = calls.find((c) => c.url.includes('/reviews'));
     const parsedUrl = new URL(reviewsCall.url);
     assert.strictEqual(parsedUrl.searchParams.get('page'), '2');
-    assert.strictEqual(parsedUrl.searchParams.get('size'), '10');
+    assert.strictEqual(parsedUrl.searchParams.get('pageSize'), '10');
+    assert.strictEqual(parsedUrl.searchParams.get('size'), null, 'o iFood usa pageSize, não size, no request');
 
     await ifood.listarReviews('merchant-1');
     const semParamsCall = calls.filter((c) => c.url.includes('/reviews')).at(-1);
