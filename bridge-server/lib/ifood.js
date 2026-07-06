@@ -252,6 +252,25 @@ async function listarReviews(merchantId, tenantId) {
   ).then(tolerant);
 }
 
+// Avaliações — resumo (contagem total/válida + nota média). Cache curto em
+// memória por merchantId: o "BI de notas" da Visão Geral pode pollar essa rota
+// com frequência — cache evita bater rate limit à toa (o resumo não muda a
+// cada segundo). ponytail: Map em memória do processo basta (1 instância do
+// Bridge); TTL curto o suficiente pra não mascarar uma review nova por muito tempo.
+const summaryCache = new Map(); // merchantId -> { data, expiresAt }
+const SUMMARY_CACHE_TTL_MS = 60 * 1000;
+
+async function getSummaryReviews(merchantId, tenantId) {
+  assertPathId(merchantId, 'merchantId');
+  const cached = summaryCache.get(merchantId);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+  const data = await withRetry(() =>
+    ifoodFetch(`/review/v2.0/merchants/${merchantId}/summary`, {}, tenantId)
+  ).then(tolerant);
+  summaryCache.set(merchantId, { data, expiresAt: Date.now() + SUMMARY_CACHE_TTL_MS });
+  return data;
+}
+
 // Vendas — financeiro, por período (dataInicio/dataFim → query, formato
 // yyyy-MM-dd). Confirmado live (2026-07-05, merchant de teste): sem período
 // o iFood responde 400 — beginSalesDate/endSalesDate são obrigatórios. Default
@@ -556,6 +575,7 @@ module.exports = {
   listarSellableItems,
   getStatusLoja,
   listarReviews,
+  getSummaryReviews,
   listarVendas,
   // escrita (Catalog v2.0) — sem retry
   listarCategorias,
