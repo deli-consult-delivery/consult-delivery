@@ -1,1 +1,1346 @@
-aW1wb3J0IHsgdXNlU3RhdGUsIHVzZUVmZmVjdCwgdXNlQ2FsbGJhY2ssIHVzZVJlZiwgdXNlTWVtbyB9IGZyb20gJ3JlYWN0JzsKaW1wb3J0IHsgc3VwYWJhc2UgfSBmcm9tICcuLi9zdXBhYmFzZUNsaWVudCc7CmltcG9ydCB7IE1hcCwgU3RhclJhdGluZywgU3RvcmUsIE1lc3NhZ2VTcXVhcmUsIEFsZXJ0Q2lyY2xlLCBDaGV2cm9uRG93biwgQ2hldnJvblVwLCBSZWZyZXNoQ3csIFNlbmQsIEV5ZSwgQ2hlY2ssIFggfSBmcm9tICdsdWNpZGUtcmVhY3QnOwppbXBvcnQgeyBmb3JtYXQsIHBhcnNlSVNPLCBzdWJEYXlzLCBpc1RvZGF5IH0gZnJvbSAnZGF0ZS1mbnMnOwppbXBvcnQgeyBwdEJSIH0gZnJvbSAnZGF0ZS1mbnMvbG9jYWxlJzsKCi8vIERlY2xhcmUgd2luZG93LnRvYXN0IGZvciBUeXBlU2NyaXB0L0pTRG9jCi8vIEB0cy1pZ25vcmUKCmNvbnN0IEFQSV9VUkwgPSBpbXBvcnQubWV0YS5lbnYuVklURV9BUElfVVJMIHx8ICdodHRwczovL2NvbnN1bHQtZGVsaXZlcnkub25yZW5kZXIuY29tJzsKCi8vIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQovLyBUeXBlcyAvIGludGVyZmFjZXMKLy8gLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCi8qKgogKiBAd ScedZWQgewogKiAgIGlkOiBudW1iZXIKICogICBsb2phX2lkOiBzdHJpbmcKICogICBsb2phX25vbWU6IHN0cmluZwogKiAgIGF2YWxpYWRvcjogc3RyaW5nCiAqICAgbm90YTogbnVtYmVyCiAqICAgY29tZW50YXJpbzogc3RyaW5nCiAqICAgZGF0YTogc3RyaW5nCiAqICAgcmVzcG9zdGE6IHN0cmluZyB8IG51bGwKICogICByZXNwb3N0YV9lbnZpYWRhOiBib29sZWFuCiAqICAgcmVzcG9zdGFfZW52aWFkYV9lbTogc3RyaW5nIHwgbnVsbAogKiAgIGNvbnN1bHRvcl9pZDogc3RyaW5nIHwgbnVsbAogKiB9Ci8KCi8vIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQovLyBIZWxwZXIgdXRpbHMKLy8gLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCmZ1bmN0aW9uIGZvcm1hdERhdGUoZGF0ZVN0cikgewogIHRyeSB7CiAgICByZXR1cm4gZm9ybWF0KHBhcnNlSVNPKGRhdGVTdHIpLCAiZCAnZGUnIE1NTU0geXl5eSIsIHsgbG9jYWxlOiBwdEJSIH0pOwogIH0gY2F0Y2ggewogICAgcmV0dXJuIGRhdGVTdHI7CiAgfQp9CgpmdW5jdGlvbiBmb3JtYXREYXRlVGltZShkYXRlU3RyKSB7CiAgdHJ5IHsKICAgIHJldHVybiBmb3JtYXQocGFyc2VJU08oZGF0ZVN0ciksICJkZC9NTS95eXl5ICdhcycgSEg6bW0iLCB7IGxvY2FsZTogcHRCUiB9KTsKICB9IGNhdGNoIHsKICAgIHJldHVybiBkYXRlU3RyOwogIH0KfQoKZnVuY3Rpb24gU3RhcnMoeyBjb3VudCB9KSB7CiAgcmV0dXJuICgKICAgIDxkaXYgY2xhc3NOYW1lPSJmbGV4IGdhcC0wLjUiPgogICAgICB7WzEsIDIsIDMsIDQsIDVdLm1hcCgoaSkgPT4gKAogICAgICAgIDxTdGFyUmF0aW5nCiAgICAgICAgICBrZXk9e2l9CiAgICAgICAgICBzaXplPXsxNn0KICAgICAgICAgIGNsYXNzTmFtZT17YGgteCA0IHctNCAke2kgPD0gY291bnQgPyAndGV4dC15ZWxsb3ctNDAwJyA6ICd0ZXh0LWdyYXktMjAwJ31gfQogICAgICAgICAgZmlsbD17aSA8PSBjb3VudCA/ICdjdXJyZW50Q29sb3InIDogJ25vbmUnfQogICAgICAgIC8+CiAgICAgICkpfQogICAgPC9kaXY+CiAgKTsKfQoKLy8gLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCi8vIE1haW4gY29tcG9uZW50Ci8vIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQpleHBvcnQgZGVmYXVsdCBmdW5jdGlvbiBQYWluZWxBdmFsaWFjb2VzQ29uc3VsdG9yKCkgewogIGNvbnN0IFtyZXZpZXdzLCBzZXRSZXZpZXdzXSA9IHVzZVN0YXRlKFtdKTsKICBjb25zdCBbbG9qYXMsIHNldExvamFzXSA9IHVzZVN0YXRlKFtdKTsKICBjb25zdCBbbG9hZGluZywgc2V0TG9hZGluZ10gPSB1c2VTdGF0ZSh0cnVlKTsKICBjb25zdCBbZXJyb3IsIHNldEVycm9yXSA9IHVzZVN0YXRlKG51bGwpOwogIGNvbnN0IFtzZWxlY3RlZExvamEsIHNldFNlbGVjdGVkTG9qYV0gPSB1c2VTdGF0ZSgnYWxsJyk7CiAgY29uc3QgW3BlcmlvZG8sIHNldFBlcmlvZG9dID0gdXNlU3RhdGUoJzcnKTsKICBjb25zdCBbZXhwYW5kZWRJZCwgc2V0RXhwYW5kZWRJZF0gPSB1c2VTdGF0ZShudWxsKTsKICBjb25zdCBbcmVzcG9zdGFzLCBzZXRSZXNwb3N0YXNdID0gdXNlU3RhdGUoe30pOwogIGNvbnN0IFtzZW5kaW5nLCBzZXRTZW5kaW5nXSA9IHVzZVN0YXRlKHt9KTsKICBjb25zdCBbc2VudElkcywgc2V0U2VudElkc10gPSB1c2VTdGF0ZShuZXcgU2V0KCkpOwogIGNvbnN0IFt2aWV3ZWRJZHMsIHNldFZpZXdlZElkc10gPSB1c2VTdGF0ZShuZXcgU2V0KCkpOwogIGNvbnN0IFtzaG93T25seVBlbmRlbnRlcywgc2V0U2hvd09ubHlQZW5kZW50ZXNdID0gdXNlU3RhdGUoZmFsc2UpOwogIGNvbnN0IFtzaG93T25seUxvd1N0YXJzLCBzZXRTaG93T25seUxvd1N0YXJzXSA9IHVzZVN0YXRlKGZhbHNlKTsKICBjb25zdCBbY29uc3VsdG9ySWQsIHNldENvbnN1bHRvcklkXSA9IHVzZVN0YXRlKG51bGwpOwoKICAvLyBMb2FkIGNvbnN1bHRvciBpZAogIHVzZUVmZmVjdCgoKSA9PiB7CiAgICBzdXBhYmFzZS5hdXRoLmdldFVzZXIoKS50aGVuKCh7IGRhdGEgfSkgPT4gewogICAgICBpZiAoZGF0YT8udXNlcj8uaWQpIHNldENvbnN1bHRvcklkKGRhdGEudXNlci5pZCk7CiAgICB9KTsKICB9LCBbXSk7CgogIC8vIEZldGNoIHJldmlld3MgKyBsb2phcwogIGNvbnN0IGZldGNoRGF0YSA9IHVzZUNhbGxiYWNrKGFzeW5jICgpID0+IHsKICAgIHNldExvYWRpbmcodHJ1ZSk7CiAgICBzZXRFcnJvcihudWxsKTsKICAgIHRyeSB7CiAgICAgIGNvbnN0IGN1dG9mZiA9IHN1YkRheXMobmV3IERhdGUoKSwgTnVtYmVyKHBlcmlvZG8pKS50b0lTT1N0cmluZygpOwogICAgICBsZXQgcXVlcnkgPSBzdXBhYmFzZQogICAgICAgIC5mcm9tKCdyZXZpZXdzJykKICAgICAgICAuc2VsZWN0KCcqJykKICAgICAgICAuZ3RlKCdkYXRhJywgY3V0b2ZmKQogICAgICAgIC5vcmRlcignZGF0YScsIHsgYXNjZW5kaW5nOiBmYWxzZSB9KTsKCiAgICAgIGlmIChzZWxlY3RlZExvamEgIT09ICdhbGwnKSB7CiAgICAgICAgcXVlcnkgPSBxdWVyeS5lcSgnbG9qYV9pZCcsIHNlbGVjdGVkTG9qYSk7CiAgICAgIH0KCiAgICAgIGNvbnN0IHsgZGF0YSwgZXJyb3I6IGZldGNoRXJyb3IgfSA9IGF3YWl0IHF1ZXJ5OwogICAgICBpZiAoZmV0Y2hFcnJvcikgdGhyb3cgZmV0Y2hFcnJvcjsKCiAgICAgIC8vIERlZHVwbGljYXRlIGxvamFzCiAgICAgIGNvbnN0IGxvamFNYXAgPSBuZXcgTWFwKCk7CiAgICAgIChkYXRhIHx8IFtdKS5mb3JFYWNoKChyKSA9PiB7CiAgICAgICAgaWYgKCFsb2phTWFwLmhhcyhyLmxvamFfaWQpKSB7CiAgICAgICAgICBsb2phTWFwLnNldChyLmxvamFfaWQsIHIubG9qYV9ub21lKTsKICAgICAgICB9CiAgICAgIH0pOwogICAgICBzZXRMb2phcyhBcnJheS5mcm9tKGxvamFNYXAsIChba2V5LCBuYW1lXSkgPT4gKHsgaWQ6IGtleSwgbm9tZTogbmFtZSB9KSkpOwogICAgICBzZXRSZXZpZXdzKGRhdGEgfHwgW10pOwogICAgfSBjYXRjaCAoZXJyKSB7CiAgICAgIHNldEVycm9yKGVyci5tZXNzYWdlIHx8ICdFcnJvIGFvIGNhcnJlZ2FyIGRhZG9zJyk7CiAgICB9IGZpbmFsbHkgewogICAgICBzZXRMb2FkaW5nKGZhbHNlKTsKICAgIH0KICB9LCBbc2VsZWN0ZWRMb2phLCBwZXJpb2RvXSk7CgogIHVzZUVmZmVjdCgoKSA9PiB7CiAgICBmZXRjaERhdGEoKTsKICB9LCBbZmV0Y2hEYXRhXSk7CgogIC8vIEZpbHRlcmVkIHJldmlld3MKICBjb25zdCBmaWx0ZXJlZFJldmlld3MgPSB1c2VNZW1vKCgpID0+IHsKICAgIGxldCByZXN1bHQgPSByZXZpZXdzOwogICAgaWYgKHNob3dPbmx5UGVuZGVudGVzKSB7CiAgICAgIHJlc3VsdCA9IHJlc3VsdC5maWx0ZXIoKHIpID0+ICFyLnJlc3Bvc3RhX2VudmlhZGEgJiYgci5jb21lbnRhcmlvKTsKICAgIH0KICAgIGlmIChzaG93T25seUxvd1N0YXJzKSB7CiAgICAgIHJlc3VsdCA9IHJlc3VsdC5maWx0ZXIoKHIpID0+IHIubm90YSA8PSAzKTsKICAgIH0KICAgIHJldHVybiByZXN1bHQ7CiAgfSwgW3Jldmlld3MsIHNob3dPbmx5UGVuZGVudGVzLCBzaG93T25seUxvd1N0YXJzXSk7CgogIC8vIFN0YXRzCiAgY29uc3Qgc3RhdHMgPSB1c2VNZW1vKCgpID0+IHsKICAgIGNvbnN0IHRvdGFsID0gcmV2aWV3cy5sZW5ndGg7CiAgICBjb25zdCBwZW5kZW50ZXMgPSByZXZpZXdzLmZpbHRlcigocikgPT4gIXIucmVzcG9zdGFfZW52aWFkYSAmJiByLmNvbWVudGFyaW8pLmxlbmd0aDsKICAgIGNvbnN0IHJlc3BvbmRpZGFzID0gcmV2aWV3cy5maWx0ZXIoKHIpID0+IHIucmVzcG9zdGFfZW52aWFkYSkubGVuZ3RoOwogICAgY29uc3QgbWVkaWFOb3RhID0gdG90YWwgPiAwCiAgICAgID8gcmV2aWV3cy5yZWR1Y2UoKGFjYywgcikgPT4gYWNjICsgci5ub3RhLCAwKSAvIHRvdGFsCiAgICAgIDogMDsKCiAgICAvLyBMb2phcyBjb20gemVybyByZXZpZXdzIEhPSkUKICAgIGNvbnN0IHRvZGF5SVNPID0gbmV3IERhdGUoKS50b0lTT1N0cmluZygpLnNsaWNlKDAsIDEwKTsgLy8gIjIwMjYtMDctMDYiCiAgICBjb25zdCBsb2phc0NvbVJldmlld3NIb2plID0gbmV3IFNldCgKICAgICAgcmV2aWV3cy5maWx0ZXIoKHIpID0+IHIuZGF0YSAmJiByLmRhdGEuc2xpY2UoMCwgMTApID09PSB0b2RheUlTTykubWFwKChyKSA9PiByLmxvamFfaWQpCiAgICApOwogICAgY29uc3QgbG9qYXNaZXJvUmV2aWV3cyA9IGxvamFzLmZpbHRlcigobCkgPT4gIWxvamFzQ29tUmV2aWV3c0hvamUuaGFzKGwuaWQpKTsKCiAgICByZXR1cm4geyB0b3RhbCwgcGVuZGVudGVzLCByZXNwb25kaWRhcywgbWVkaWFOb3RhLCBsb2phc1plcm9SZXZpZXdzIH07CiAgfSwgW3Jldmlld3MsIGxvamFzXSk7CgogIC8vIEdlbmVyYXRlIEFJIHJlc3BvbnNlCiAgY29uc3QgZ2VuZXJhdGVSZXNwb3N0YSA9IHVzZUNhbGxiYWNrKGFzeW5jIChyZXZpZXcpID0+IHsKICAgIHRyeSB7CiAgICAgIGNvbnN0IHJlcyA9IGF3YWl0IGZldGNoKGAke0FQSV9VUkx9L2FwaS9nZXJhci1yZXNwb3N0YWAsIHsKICAgICAgICBtZXRob2Q6ICdQT1NUJywKICAgICAgICBoZWFkZXJzOiB7ICdDb250ZW50LVR5cGUnOiAnYXBwbGljYXRpb24vanNvbicgfSwKICAgICAgICBib2R5OiBKU09OLnN0cmluZ2lmeSh7CiAgICAgICAgICBsb2phX25vbWU6IHJldmlldy5sb2phX25vbWUsCiAgICAgICAgICBhdmFsaWFkb3I6IHJldmlldy5hdmFsaWFkb3IsCiAgICAgICAgICBub3RhOiByZXZpZXcubm90YSwKICAgICAgICAgIGNvbWVudGFyaW86IHJldmlldy5jb21lbnRhcmlvLAogICAgICAgIH0pLAogICAgICB9KTsKICAgICAgaWYgKCFyZXMub2spIHRocm93IG5ldyBFcnJvcignRXJybyBuYSBBUEknKTsKICAgICAgY29uc3QganNvbiA9IGF3YWl0IHJlcy5qc29uKCk7CiAgICAgIHNldFJlc3Bvc3RhcygocykgpT4gKHsgLi4ucywgW3Jldmlldy5pZF06IGpzb24ucmVzcG9zdGEgfSkpOwogICAgfSBjYXRjaCAoZXJyKSB7CiAgICAgIGlmICh3aW5kb3cudG9hc3QpIHdpbmRvdy50b2FzdC5lcnJvcignRXJybyBhbyBnZXJhciByZXNwb3N0YScpOwogICAgfQogIH0sIFtdKTsKCiAgLy8gU2VuZCByZXNwb25zZQogIGNvbnN0IGhhbmRsZVNlbmQgPSB1c2VDYWxsYmFjayhhc3luYyAocmV2aWV3KSA9PiB7CiAgICBjb25zdCB0ZXh0ID0gcmVzcG9zdGFzW3Jldmlldy5pZF07CiAgICBpZiAoIXRleHQ/LnRyaW0oKSkgewogICAgICBpZiAod2luZG93LnRvYXN0KSB3aW5kb3cudG9hc3Qud2FybmluZygnRXNjcmV2YSB1bWEgcmVzcG9zdGEgYW50ZXMgZGUgZW52aWFyJyk7CiAgICAgIHJldHVybjsKICAgIH0KICAgIHNldFNlbmRpbmcoKHMpID0+ICh7IC4uLnMsIFtyZXZpZXcuaWRdOiB0cnVlIH0pKTsKICAgIHRyeSB7CiAgICAgIGNvbnN0IHJlcyA9IGF3YWl0IGZldGNoKGAke0FQSV9VUkx9L2FwaS9lbnZpYXItcmVzcG9zdGFgLCB7CiAgICAgICAgbWV0aG9kOiAnUE9TVCcsCiAgICAgICAgaGVhZGVyczogeyAnQ29udGVudC1UeXBlJzogJ2FwcGxpY2F0aW9uL2pzb24nIH0sCiAgICAgICAgYm9keTogSlNPTi5zdHJpbmdpZnkoewogICAgICAgICAgcmV2aWV3X2lkOiByZXZpZXcuaWQsCiAgICAgICAgICByZXNwb3N0YTogdGV4dCwKICAgICAgICAgIGNvbnN1bHRvcl9pZDogY29uc3VsdG9ySWQsCiAgICAgICAgfSksCiAgICAgIH0pOwogICAgICBpZiAoIXJlcy5vaykgdGhyb3cgbmV3IEVycm9yKCdFcnJvIG5hIEFQSScpOwogICAgICBzZXRTZW50SWRzKChzKSA9PiBuZXcgU2V0KFsuLi5zLCByZXZpZXcuaWRdKSk7CiAgICAgIGlmICh3aW5kb3cudG9hc3QpIHdpbmRvdy50b2FzdC5zdWNjZXNzKCdSZXNwb3N0YSBlbnZpYWRhIScpOwogICAgICAvLyBVcGRhdGUgbG9jYWwgc3RhdGUKICAgICAgc2V0UmV2aWV3cygocHJldikgPT4KICAgICAgICBwcmV2Lm1hcCgocikgPT4KICAgICAgICAgIHIuaWQgPT09IHJldmlldy5pZAogICAgICAgICAgICA/IHsgLi4uciwgcmVzcG9zdGFfZW52aWFkYTogdHJ1ZSwgcmVzcG9zdGE6IHRleHQgfQogICAgICAgICAgICA6IHIKICAgICAgICApCiAgICAgICk7CiAgICB9IGNhdGNoIChlcnIpIHsKICAgICAgaWYgKHdpbmRvdy50b2FzdCkgd2luZG93LnRvYXN0LmVycm9yKCdFcnJvIGFvIGVudmlhciByZXNwb3N0YScpOwogICAgfSBmaW5hbGx5IHsKICAgICAgc2V0U2VuZGluZygocykgPT4geyBjb25zdCBuID0geyAuLi5zIH07IGRlbGV0ZSBuW3Jldmlldy5pZF07IHJldHVybiBuOyB9KTsKICAgIH0KICB9LCBbcmVzcG9zdGFzLCBjb25zdWx0b3JJZF0pOwoKICBjb25zdCBoYW5kbGVWaWV3ID0gdXNlQ2FsbGJhY2soKGlkKSA9PiB7CiAgICBzZXRWaWV3ZWRJZHMoKHMpID0+IG5ldyBTZXQoWy4uLnMsIGlkXSkpOwogICAgc2V0RXhwYW5kZWRJZCgoY3VycikgPT4gKGN1cnIgPT09IGlkID8gbnVsbCA6IGlkKSk7CiAgfSwgW10pOwoKICBpZiAobG9hZGluZykgewogICAgcmV0dXJuICgKICAgICAgPGRpdiBjbGFzc05hbWU9ImZsZXggaXRlbXMtY2VudGVyIGp1c3RpZnktY2VudGVyIHAtMTIiPgogICAgICAgIDxkaXYgY2xhc3NOYW1lPSJhbmltYXRlLXNwaW4gcm91bmRlZC1mdWxsIGgtMTIgdy0xMiBib3JkZXItNCBib3JkZXItb3JhbmdlLTUwMCBib3JkZXItdC10cmFuc3BhcmVudCIgLz4KICAgICAgPC9kaXY+CiAgICApOwogIH0KCiAgaWYgKGVycm9yKSB7CiAgICByZXR1cm4gKAogICAgICA8ZGl2IGNsYXNzTmFtZT0icC02IHRleHQtcmVkLTUwMCBmbGV4IGl0ZW1zLWNlbnRlciBnYXAtMiI+CiAgICAgICAgPEFsZXJ0Q2lyY2xlIHNpemU9ezIwfSAvPiB7ZXJyb3J9CiAgICAgIDwvZGl2PgogICAgKTsKICB9CgogIHJldHVybiAoCiAgICA8ZGl2IGNsYXNzTmFtZT0icC02IG1heC13LTZ4bCBteC1hdXRvIj4KICAgICAge3svKiBIZWFkZXIgKi99fQogICAgICA8ZGl2IGNsYXNzTmFtZT0iZmxleCBpdGVtcy1jZW50ZXIganVzdGlmeS1iZXR3ZWVuIG1iLTYiPgogICAgICAgIDxoMSBjbGFzc05hbWU9InRleHQtMnhsIGZvbnQtYm9sZCB0ZXh0LWdyYXktODAwIGZsZXggaXRlbXMtY2VudGVyIGdhcC0yIj4KICAgICAgICAgIDxNZXNzYWdlU3F1YXJlIHNpemU9ezI4fSBjbGFzc05hbWU9InRleHQtb3JhbmdlLTUwMCIgLz4KICAgICAgICAgIEF2YWxpYcOnw7VlcyBpRm9vZAogICAgICAgIDwvaDE+CiAgICAgICAgPGJ1dHRvbgogICAgICAgICAgb25DbGljaz17ZmV0Y2hEYXRhfQogICAgICAgICAgY2xhc3NOYW1lPSJmbGV4IGl0ZW1zLWNlbnRlciBnYXAtMiB0ZXh0LXNtIHB4LTMgcHktMS41IHJvdW5kZWQtbGcgYmctb3JhbmdlLTUwIHRleHQtb3JhbmdlLTcwMCBob3Zlcjpb…cmFuZ2UtMTAwIHRyYW5zaXRpb24iCiAgICAgICAgPgogICAgICAgICAgPFJlZnJlc2hDdyBzaXplPXsxNn0gLz4gQXR1YWxpemFyCiAgICAgICAgPC9idXR0b24+CiAgICAgIDwvZGl2PgoKICAgICAge3svKiBTdGF0cyBjYXJkcyAqL319CiAgICAgIDxkaXYgY2xhc3NOYW1lPSJncmlkIGdyaWQtY29scy0yIG1kOmdyaWQtY29scy00IGdhcC00IG1iLTYiPgogICAgICAgIDxkaXYgY2xhc3NOYW1lPSJiZy13aGl0ZSByb3VuZGVkLXhsIHNoYWRvdy1zbSBwLTQgYm9yZGVyIGJvcmRlci1ncmF5LTEwMCI+CiAgICAgICAgICA8cCBjbGFzc05hbWU9InRleHQteHMgdGV4dC1ncmF5LTUwMCB1cHBlcmNhc2UgdHJhY2tpbmctd2lkZSI+VG90YWw8L3A+CiAgICAgICAgICA8cCBjbGFzc05hbWU9InRleHQtM3hsIGZvbnQtYm9sZCB0ZXh0LWdyYXktODAwIj57c3RhdHMudG90YWx9PC9wPgogICAgICAgIDwvZGl2PgogICAgICAgIDxkaXYgY2xhc3NOYW1lPSJiZy13aGl0ZSByb3VuZGVkLXhsIHNoYWRvdy1zbSBwLTQgYm9yZGVyIGJvcmRlci1ncmF5LTEwMCI+CiAgICAgICAgICA8cCBjbGFzc05hbWU9InRleHQteHMgdGV4dC1ncmF5LTUwMCB1cHBlcmNhc2UgdHJhY2tpbmctd2lkZSI+UGVuZGVudGVzPC9wPgogICAgICAgICAgPHAgY2xhc3NOYW1lPSJ0ZXh0LTN4bCBmb250LWJvbGQgdGV4dC1vcmFuZ2UtNTAwIj57c3RhdHMucGVuZGVudGVzfTwvcD4KICAgICAgICA8L2Rpdj4KICAgICAgICA8ZGl2IGNsYXNzTmFtZT0iYmctd2hpdGUgcm91bmRlZC14bCBzaGFkb3ctc20gcC00IGJvcmRlciBib3JkZXItZ3JheS0xMDAiPgogICAgICAgICAgPHAgY2xhc3NOYW1lPSJ0ZXh0LXhzIHRleHQtZ3JheS01MDAgdXBwZXJjYXNlIHRyYWNraW5nLXdpZGUiPlJlc3BvbmRpZGFzPC9wPgogICAgICAgICAgPHAgY2xhc3NOYW1lPSJ0ZXh0LTN4bCBmb250LWJvbGQgdGV4dC1ncmVlbi02MDAiPntzdGF0cy5yZXNwb25kaWRhc308L3A+CiAgICAgICAgPC9kaXY+CiAgICAgICAgPGRpdiBjbGFzc05hbWU9ImJnLXdoaXRlIHJvdW5kZWQteGwgc2hhZG93LXNtIHAtNCBib3JkZXIgYm9yZGVyLWdyYXktMTAwIj4KICAgICAgICAgIDxwIGNsYXNzTmFtZT0idGV4dC14cyB0ZXh0LWdyYXktNTAwIHVwcGVyY2FzZSB0cmFja2luZy13aWRlIj5Nw6lkaWE8L3A+CiAgICAgICAgICA8cCBjbGFzc05hbWU9InRleHQtM3hsIGZvbnQtYm9sZCB0ZXh0LXllbGxvdy01MDAiPntzdGF0cy5tZWRpYU5vdGEudG9GaXhlZCgxKX3ihKI8L3A+CiAgICAgICAgPC9kaXY+CiAgICAgIDwvZGl2PgoKICAgICAge3svKiBMb2phcyBzZW0gcmV2aWV3cyBob2plICovfX0KICAgICAge3N0YXRzLmxvamFzWmVyb1Jldmlld3MubGVuZ3RoID4gMCAmJiAoCiAgICAgICAgPGRpdiBjbGFzc05hbWU9ImJnLXllbGxvdy01MCBib3JkZXIgYm9yZGVyLXllbGxvdy0yMDAgcm91bmRlZC14bCBwLTQgbWItNiI+CiAgICAgICAgICA8cCBjbGFzc05hbWU9InRleHQtc20gZm9udC1tZWRpdW0gdGV4dC15ZWxsb3ctODAwIG1iLTIiPgogICAgICAgICAgICA8QWxlcnRDaXJjbGUgc2l6ZT17MTZ9IGNsYXNzTmFtZT0iaW5saW5lIG1yLTEiIC8+CiAgICAgICAgICAgIExvamFzIHNlbSBhdmFsaWHDp8O1ZXMgaG9qZToKICAgICAgICAgIDwvcD4KICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPSJmbGV4IGZsZXgtd3JhcCBnYXAtMiI+CiAgICAgICAgICAgIHtzdGF0cy5sb2phc1plcm9SZXZpZXdzLm1hcCgobCkgPT4gKAogICAgICAgICAgICAgIDxzcGFuIGtleT17bC5pZH0gY2xhc3NOYW1lPSJiZy15ZWxsb3ctMTAwIHRleHQteWVsbG93LTgwMCB0ZXh0LXhzIHB4LTIgcHktMSByb3VuZGVkLWZ1bGwiPgogICAgICAgICAgICAgICAge2wubm9tZX0KICAgICAgICAgICAgICA8L3NwYW4+CiAgICAgICAgICAgICkpfQogICAgICAgICAgPC9kaXY+CiAgICAgICAgPC9kaXY+CiAgICAgICl9CgogICAgICB7ey8qIEZpbHRlcnMgKi99fQogICAgICA8ZGl2IGNsYXNzTmFtZT0iYmctd2hpdGUgcm91bmRlZC14bCBzaGFkb3ctc20gcC00IG1iLTYgYm9yZGVyIGJvcmRlci1ncmF5LTEwMCI+CiAgICAgICAgPGRpdiBjbGFzc05hbWU9ImZsZXggZmxleC13cmFwIGdhcC0zIGl0ZW1zLWNlbnRlciI+CiAgICAgICAgICB7Lyogc3RvcmUgc2VsZWN0ICovfQogICAgICAgICAgPGRpdiBjbGFzc05hbWU9ImZsZXggaXRlbXMtY2VudGVyIGdhcC0yIj4KICAgICAgICAgICAgPFN0b3JlIHNpemU9ezE2fSBjbGFzc05hbWU9InRleHQtZ3JheS00MDAiIC8+CiAgICAgICAgICAgIDxzZWxlY3QKICAgICAgICAgICAgICB2YWx1ZT17c2VsZWN0ZWRMb2phfQogICAgICAgICAgICAgIG9uQ2hhbmdlPXsoZSkgPT4gc2V0U2VsZWN0ZWRMb2phKGUudGFyZ2V0LnZhbHVlKX0KICAgICAgICAgICAgICBjbGFzc05hbWU9InRleHQtc20gYm9yZGVyIGJvcmRlci1ncmF5LTIwMCByb3VuZGVkLWxnIHB4LTMgcHktMSBmb2N1czpvdXRsaW5lLW5vbmUgZm9jdXM6cmluZy0yIGZvY3VzOnJpbmctb3JhbmdlLTMwMCIKICAgICAgICAgICAgPgogICAgICAgICAgICAgIDxvcHRpb24gdmFsdWU9ImFsbCI+VG9kYXMgYXMgbG9qYXM8L29wdGlvbj4KICAgICAgICAgICAgICB7bG9qYXMubWFwKChsKSA9PiAoCiAgICAgICAgICAgICAgICA8b3B0aW9uIGtleT17bC5pZH0gdmFsdWU9e2wuaWR9PgogICAgICAgICAgICAgICAgICB7bC5ub21lfQogICAgICAgICAgICAgICAgPC9vcHRpb24+CiAgICAgICAgICAgICAgKSl9CiAgICAgICAgICAgIDwvc2VsZWN0PgogICAgICAgICAgPC9kaXY+CgogICAgICAgICAge3svKiBwZXJpb2QgKi99fQogICAgICAgICAgPHNlbGVjdAogICAgICAgICAgICB2YWx1ZT17cGVyaW9kb30KICAgICAgICAgICAgb25DaGFuZ2U9eyhlfSA9PiBzZXRQZXJpb2RvKGUudGFyZ2V0LnZhbHVlKX0KICAgICAgICAgICAgY2xhc3NOYW1lPSJ0ZXh0LXNtIGJvcmRlciBib3JkZXItZ3JheS0yMDAgcm91bmRlZC1sZyBweC0zIHB5LTEgZm9jdXM6b3V0bGluZS1ub25lIGZvY3VzOnJpbmctMiBmb2N1czpyaW5nLW9yYW5nZS0zMDAiCiAgICAgICAgICA+CiAgICAgICAgICAgIDxvcHRpb24gdmFsdWU9IjEiPkhvamU8L29wdGlvbj4KICAgICAgICAgICAgPG9wdGlvbiB2YWx1ZT0iNyI+w5psdGltb3MgNyBkaWFzPC9vcHRpb24+CiAgICAgICAgICAgIDxvcHRpb24gdmFsdWU9IjMwIj7Dmmx0aW1vcyAzMCBkaWFzPC9vcHRpb24+CiAgICAgICAgICAgIDxvcHRpb24gdmFsdWU9IjkwIj7Dmmx0aW1vcyA5MCBkaWFzPC9vcHRpb24+CiAgICAgICAgICA8L3NlbGVjdD4KCiAgICAgICAgICB7LyogdG9nZ2xlcyAqL30KICAgICAgICAgIDxidXR0b24KICAgICAgICAgICAgb25DbGljaz17KCkgPT4gc2V0U2hvd09ubHlQZW5kZW50ZXMoKHYpID0+ICF2KX0KICAgICAgICAgICAgY2xhc3NOYW1lPXtgdGV4dC1zbSBweC0zIHB5LTEgcm91bmRlZC1sZyBib3JkZXIgdHJhbnNpdGlvbiAke3Nob3dPbmx5UGVuZGVudGVzID8gJ2JnLW9yYW5nZS01MDAgdGV4dC13aGl0ZSBib3JkZXItb3JhbmdlLTUwMCcgOiAnYm9yZGVyLWdyYXktMjAwIHRleHQtZ3JheS02MDAgaG92ZXI6YmctZ3JheS01MCd9YH0KICAgICAgICAgID4KICAgICAgICAgICAgUGVuZGVudGVzCiAgICAgICAgICA8L2J1dHRvbj4KICAgICAgICAgIDxidXR0b24KICAgICAgICAgICAgb25DbGljaz17KCkgPT4gc2V0U2hvd09ubHlMb3dTdGFycygodikgPT4gIXYpfQogICAgICAgICAgICBjbGFzc05hbWU9e2B0ZXh0LXNtIHB4LTMgcHktMSByb3VuZGVkLWxnIGJvcmRlciB0cmFuc2l0aW9uICR7c2hvd09ubHlMb3dTdGFycyA/ICdiZy1yZWQtNTAwIHRleHQtd2hpdGUgYm9yZGVyLXJlZC01MDAnIDogJ2JvcmRlci1ncmF5LTIwMCB0ZXh0LWdyYXktNjAwIGhvdmVyOmJnLWdyYXktNTAnfWB9CiAgICAgICAgICA+CiAgICAgICAgICAgIEJhaXhhcyBub3RhcwogICAgICAgICAgPC9idXR0b24+CiAgICAgICAgPC9kaXY+CiAgICAgIDwvZGl2PgoKICAgICAge3svKiBSZXZpZXdzIGxpc3QgKi99fQogICAgICA8ZGl2IGNsYXNzTmFtZT0ic3BhY2UteS0zIj4KICAgICAgICB7ZmlsdGVyZWRSZXZpZXdzLmxlbmd0aCA9PT0gMCA/ICgKICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPSJ0ZXh0LWNlbnRlciBweS0xMiB0ZXh0LWdyYXktNDAwIj4KICAgICAgICAgICAgPE1hcCBzaXplPXs0OH0gY2xhc3NOYW1lPSJteC1hdXRvIG1iLTMgb3BhY2l0eS0zMCIgLz4KICAgICAgICAgICAgPHAgY2xhc3NOYW1lPSJ0ZXh0LWxnIj5OZW5odW1hIGF2YWxpYcOnw6NvIGVuY29udHJhZGE8L3A+CiAgICAgICAgICA8L2Rpdj4KICAgICAgICApIDogKAogICAgICAgICAgZmlsdGVyZWRSZXZpZXdzLm1hcCgocmV2aWV3KSA9PiB7CiAgICAgICAgICAgIGNvbnN0IGlzRXhwYW5kZWQgPSBleHBhbmRlZElkID09PSByZXZpZXcuaWQ7CiAgICAgICAgICAgIGNvbnN0IGlzU2VudCA9IHNlbnRJZHMuaGFzKHJldmlldy5pZCkgfHwgcmV2aWV3LnJlc3Bvc3RhX2VudmlhZGE7CiAgICAgICAgICAgIGNvbnN0IGlzVmlld2VkID0gdmlld2VkSWRzLmhhcyhyZXZpZXcuaWQpOwogICAgICAgICAgICBjb25zdCBoYXNSZXNwb3N0YSA9ICEhcmVzcG9zdGFzW3Jldmlldy5pZF07CgogICAgICAgICAgICByZXR1cm4gKAogICAgICAgICAgICAgIDxkaXYKICAgICAgICAgICAgICAgIGtleT17cmV2aWV3LmlkfQogICAgICAgICAgICAgICAgY2xhc3NOYW1lPXtgYmctd2hpdGUgcm91bmRlZC14bCBzaGFkb3ctc20gYm9yZGVyIHRyYW5zaXRpb24gJHsKICAgICAgICAgICAgICAgICAgaXNTZW50ID8gJ2JvcmRlci1ncmVlbi0yMDAnIDogcmV2aWV3Lm5vdGEgPD0gMiA/ICdib3JkZXItcmVkLTIwMCcgOiAnYm9yZGVyLWdyYXktMTAwJwogICAgICAgICAgICAgICAgfWB9CiAgICAgICAgICAgICAgPgogICAgICAgICAgICAgICAgPGRpdgogICAgICAgICAgICAgICAgICBjbGFzc05hbWU9ImZsZXggaXRlbXMtc3RhcnQganVzdGlmeS1iZXR3ZWVuIHAtNCBjdXJzb3ItcG9pbnRlciBob3Zlcjpg…LTUwIHJvdW5kZWQtdC14bCIKICAgICAgICAgICAgICAgICAgb25DbGljaz17KCkgPT4gaGFuZGxlVmlldyhyZXZpZXcuaWQpfQogICAgICAgICAgICAgICAgPgogICAgICAgICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT0iZmxleC0xIG1pbi13LTAiPgogICAgICAgICAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPSJmbGV4IGl0ZW1zLWNlbnRlciBnYXAtMiBtYi0xIj4KICAgICAgICAgICAgICAgICAgICAgIDxTdGFycyBjb3VudD17cmV2aWV3Lm5vdGF9IC8+CiAgICAgICAgICAgICAgICAgICAgICA8c3BhbiBjbGFzc05hbWU9InRleHQteHMgdGV4dC1ncmF5LTQwMCI+e2Zvcm1hdERhdGUocmV2aWV3LmRhdGEpfTwvc3Bhbj4KICAgICAgICAgICAgICAgICAgICAgIHtpc1NlbnQgJiYgKAogICAgICAgICAgICAgICAgICAgICAgICA8c3BhbiBjbGFzc05hbWU9ImZsZXggaXRlbXMtY2VudGVyIGdhcC0wLjUgdGV4dC14cyB0ZXh0LWdyZWVuLTYwMCI+CiAgICAgICAgICAgICAgICAgICAgICAgICAgPENoZWNrIHNpemU9ezEyfSAvPiByZXNwb25kaWRhCiAgICAgICAgICAgICAgICAgICAgICAgIDwvc3Bhbj4KICAgICAgICAgICAgICAgICAgICAgICl9CiAgICAgICAgICAgICAgICAgICAgPC9kaXY+CiAgICAgICAgICAgICAgICAgICAgPHAgY2xhc3NOYW1lPSJ0ZXh0LXNtIGZvbnQtbWVkaXVtIHRleHQtZ3JheS04MDAiPntudWxsaWZ5KHJldmlldy5hdmFsaWFkb3IpIHx8ICdDbGllbnRlIGFuw7NuaW1vJ308L3A+CiAgICAgICAgICAgICAgICAgICAgPHAgY2xhc3NOYW1lPSJ0ZXh0LXhzIHRleHQtZ3JheS00MDAgbWItMSI+e3Jldmlldy5sb2phX25vbWV9PC9wPgogICAgICAgICAgICAgICAgICAgIDxwIGNsYXNzTmFtZT0idGV4dC1zbSB0ZXh0LWdyYXktNjAwIGxpbmUtY2xhbXAtMiI+e3Jldmlldy5jb21lbnRhcmlvfTwvcD4KICAgICAgICAgICAgICAgICAgPC9kaXY+CiAgICAgICAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPSJmbGV4IGl0ZW1zLWNlbnRlciBnYXAtMiBtbC0yIj4KICAgICAgICAgICAgICAgICAgICB7IWlzVmlld2VkICYmICFpc1NlbnQgJiYgcmV2aWV3LmNvbWVudGFyaW8gJiYgKAogICAgICAgICAgICAgICAgICAgICAgPHNwYW4gY2xhc3NOYW1lPSJoLTIgdy0yIHJvdW5kZWQtZnVsbCBiZy1vcmFuZ2UtNDAwIiAvPgogICAgICAgICAgICAgICAgICAgICl9CiAgICAgICAgICAgICAgICAgICAgPGJ1dHRvbiBjbGFzc05hbWU9InAtMSByb3VuZGVkLWxnIGhvdmVyOmJnLWdyYXktMTAwIj4KICAgICAgICAgICAgICAgICAgICAgIHtpc0V4cGFuZGVkID8gPENoZXZyb25VcCBzaXplPXsxNn0gLz4gOiA8Q2hldnJvbkRvd24gc2l6ZT17MTZ9IC8+fQogICAgICAgICAgICAgICAgICAgIDwvYnV0dG9uPgogICAgICAgICAgICAgICAgICA8L2Rpdj4KICAgICAgICAgICAgICAgIDwvZGl2PgoKICAgICAgICAgICAgICAgIHtpc0V4cGFuZGVkICYmICgKICAgICAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9InB4LTQgcGItNCI+CiAgICAgICAgICAgICAgICAgICAgey8qIEZ1bGwgY29tbWVudCAqL30KICAgICAgICAgICAgICAgICAgICB7cmV2aWV3LmNvbWVudGFyaW8gJiYgKAogICAgICAgICAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9ImJnLWdyYXktNTAgcm91bmRlZC1sZyBwLTMgbWItMyI+CiAgICAgICAgICAgICAgICAgICAgICAgIDxwIGNsYXNzTmFtZT0idGV4dC1zbSB0ZXh0LWdyYXktNzAwIj57cmV2aWV3LmNvbWVudGFyaW99PC9wPgogICAgICAgICAgICAgICAgICAgICAgPC9kaXY+CiAgICAgICAgICAgICAgICAgICAgKX0KCiAgICAgICAgICAgICAgICAgICAgey8qIEFscmVhZHkgc2VudCByZXNwb25zZSAqL30KICAgICAgICAgICAgICAgICAgICB7aXNTZW50ICYmIHJldmlldy5yZXNwb3N0YSAmJiAoCiAgICAgICAgICAgICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT0iYmctZ3JlZW4tNTAgcm91bmRlZC1sZyBwLTMgbWItMyBib3JkZXIgYm9yZGVyLWdyZWVuLTEwMCI+CiAgICAgICAgICAgICAgICAgICAgICAgIDxwIGNsYXNzTmFtZT0idGV4dC14cyB0ZXh0LWdyZWVuLTYwMCBmb250LW1lZGl1bSBtYi0xIj5SZXNwb3N0YSBlbnZpYWRhOjwvcD4KICAgICAgICAgICAgICAgICAgICAgICAgPHAgY2xhc3NOYW1lPSJ0ZXh0LXNtIHRleHQtZ3JheS03MDAiPgogICAgICAgICAgICAgICAgICAgICAgICAgIHtyZXZpZXcucmVzcG9zdGF9CiAgICAgICAgICAgICAgICAgICAgICAgIDwvcD4KICAgICAgICAgICAgICAgICAgICAgICAge3Jldmlldy5yZXNwb3N0YV9lbnZpYWRhX2VtICYmICgKICAgICAgICAgICAgICAgICAgICAgICAgICA8cCBjbGFzc05hbWU9InRleHQteHMgdGV4dC1ncmF5LTQwMCBtdC0xIj4KICAgICAgICAgICAgICAgICAgICAgICAgICAgIEVudmlhZGEgZW0ge2Zvcm1hdERhdGVUaW1lKHJldmlldy5yZXNwb3N0YV9lbnZpYWRhX2VtKX0KICAgICAgICAgICAgICAgICAgICAgICAgICA8L3A+CiAgICAgICAgICAgICAgICAgICAgICAgICl9CiAgICAgICAgICAgICAgICAgICAgICA8L2Rpdj4KICAgICAgICAgICAgICAgICAgICApfQoKICAgICAgICAgICAgICAgICAgICB7LyogcmVzcG9uc2UgZWRpdG9yICovfQogICAgICAgICAgICAgICAgICAgIHshaXNTZW50ICYmIHJldmlldy5jb21lbnRhcmlvICYmICgKICAgICAgICAgICAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPSJzcGFjZS15LTIiPgogICAgICAgICAgICAgICAgICAgICAgICA8dGV4dGFyZWEKICAgICAgICAgICAgICAgICAgICAgICAgICByb3dzPXs0fQogICAgICAgICAgICAgICAgICAgICAgICAgIGNsYXNzTmFtZT0idy1mdWxsIHRleHQtc20gYm9yZGVyIGJvcmRlci1ncmF5LTIwMCByb3VuZGVkLWxnIHAtMyBmb2N1czpvdXRsaW5lLW5vbmUgZm9jdXM6cmluZy0yIGZvY3VzOnJpbmctb3JhbmdlLTMwMCByZXNpemUteSIKICAgICAgICAgICAgICAgICAgICAgICAgICBwbGFjZWhvbGRlcj0iRXNjcmV2YSBhIHJlc3Bvc3RhIHBhcmEgbyBjbGllbnRlLi4uIgogICAgICAgICAgICAgICAgICAgICAgICAgIHZhbHVlPXtyZXNwb3N0YXNbcmV2aWV3LmlkXSB8fCAnJ30KICAgICAgICAgICAgICAgICAgICAgICAgICBvbkNoYW5nZT17KGUpID0+IHNldFJlc3Bvc3RhcygocykgpT4gKHsgLi4ucywgW3Jldmlldy5pZF06IGUudGFyZ2V0LnZhbHVlIH0pKX0KICAgICAgICAgICAgICAgICAgICAgICAgLz4KICAgICAgICAgICAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9ImZsZXggZ2FwLTIiPgogICAgICAgICAgICAgICAgICAgICAgICAgIDxidXR0b24KICAgICAgICAgICAgICAgICAgICAgICAgICAgIG9uQ2xpY2s9eygpID0+IGdlbmVyYXRlUmVzcG9zdGEocmV2aWV3KX0KICAgICAgICAgICAgICAgICAgICAgICAgICAgIGNsYXNzTmFtZT0iZmxleCBpdGVtcy1jZW50ZXIgZ2FwLTEuNSB0ZXh0LXNtIHB4LTMgcHktMSByb3VuZGVkLWxnIGJvcmRlciBib3JkZXItb3JhbmdlLTMwMCB0ZXh0LW9yYW5nZS02MDAgaG92ZXI6Ymctb3JhbmdlLTUwIHRyYW5zaXRpb24iCiAgICAgICAgICAgICAgICAgICAgICAgICAgPgogICAgICAgICAgICAgICAgICAgICAgICAgICAgPE1lc3NhZ2VTcXVhcmUgc2l6ZT17MTR9IC8+IEdlcmFyIGNvbSBJQQogICAgICAgICAgICAgICAgICAgICAgICAgIDwvYnV0dG9uPgogICAgICAgICAgICAgICAgICAgICAgICAgIDxidXR0b24KICAgICAgICAgICAgICAgICAgICAgICAgICAgIG9uQ2xpY2s9eygpID0+IGhhbmRsZVNlbmQocmV2aWV3KX0KICAgICAgICAgICAgICAgICAgICAgICAgICAgIGRpc2FibGVkPXtzZW5kaW5nW3Jldmlldy5pZF0gfHwgIWhhc1Jlc3Bvc3RhfQogICAgICAgICAgICAgICAgICAgICAgICAgICAgY2xhc3NOYW1lPSJmbGV4IGl0ZW1zLWNlbnRlciBnYXAtMS41IHRleHQtc20gcHgtMyBweS0xIHJvdW5kZWQtbGcgYmctb3JhbmdlLTUwMCB0ZXh0LXdoaXRlIGhvdmVyOmJnLW9yYW5nZS02MDAgZGlzYWJsZWQ6b3BhY2l0eS01MCBkaXNhYmxlZDpjdXJzb3Itbm90LWFsbG93ZWQgdHJhbnNpdGlvbiIKICAgICAgICAgICAgICAgICAgICAgICAgICA+CiAgICAgICAgICAgICAgICAgICAgICAgICAgICB7c2VuZGluZ1tyZXZpZXcuaWRdID8gKAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICA8c3BhbiBjbGFzc05hbWU9ImFuaW1hdGUtc3BpbiBpbmxpbmUtYmxvY2sgaC00IHctNCBib3JkZXItMiBib3JkZXItd2hpdGUgYm9yZGVyLXQtdHJhbnNwYXJlbnQgcm91bmRlZC1mdWxsIiAvPgogICAgICAgICAgICAgICAgICAgICAgICAgICAgKSA6ICgKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgPD4KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICA8U2VuZCBzaXplPXsxNH0gLz4gRW52aWFyCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIDwvPgogICAgICAgICAgICAgICAgICAgICAgICAgICAgKX0KICAgICAgICAgICAgICAgICAgICAgICAgICA8L2J1dHRvbj4KICAgICAgICAgICAgICAgICAgICAgICAgPC9kaXY+CiAgICAgICAgICAgICAgICAgICAgICA8L2Rpdj4KICAgICAgICAgICAgICAgICAgICApfQogICAgICAgICAgICAgICAgICA8L2Rpdj4KICAgICAgICAgICAgICAgICl9CiAgICAgICAgICAgICAgPC9kaXY+CiAgICAgICAgICAgICk7CiAgICAgICAgICB9KQogICAgICAgICl9CiAgICAgIDwvZGl2PgogICAgPC9kaXY+CiAgKTsKfQo=
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { supabase } from '../lib/supabase';
+import { listLojasConsultoria, enviarWhatsAppAvaliacao, listEvoGroups, updateLojaWaGroup } from '../lib/api';
+
+const CLIENT_PAGE = 'https://app.consultdelivery.com.br/aprovacao-avaliacao.html';
+
+async function sbSelect() {
+  const { data, error } = await supabase
+    .from('reviews')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(300);
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+async function sbUpdate(match, body) {
+  let q = supabase.from('reviews').update(body);
+  Object.entries(match).forEach(([k, v]) => { q = q.eq(k, v); });
+  const { error } = await q;
+  if (error) throw new Error(error.message);
+}
+
+async function sbUpdateNote(id, notes) {
+  const { error } = await supabase.from('reviews').update({ notes }).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+// ─── Arquivada = enviada ao cliente, publicada ou prazo vencido ──────────────
+function isArchivedFn(r, today) {
+  return r.status === 'published'
+    || (!!r.deadline && r.deadline < today);
+}
+
+function fmtDate(iso) {
+  if (!iso) return null;
+  const parts = iso.split('-');
+  if (parts.length !== 3) return iso;
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
+
+function fmtDateTime(iso) {
+  if (!iso) return null;
+  try {
+    return new Date(iso).toLocaleString('pt-BR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch { return iso; }
+}
+
+function mapRow(r) {
+  return {
+    id: r.id, store: r.store, orderId: r.order_id, rating: r.rating,
+    clientName: r.client_name, clientComment: r.client_comment,
+    suggestedResponse: r.suggested_response, finalResponse: r.final_response,
+    status: r.status, deadline: r.deadline,
+    reviewDate: r.review_date || null,
+    createdAt: r.created_at ? r.created_at.slice(0, 10) : null,
+    token: r.token,
+    sentAt: r.sent_at || null,
+    approvedAt: r.approved_at,
+    publishedAt: r.published_at,
+    whatsappGroup: r.whatsapp_group || null,
+    notes: r.notes || '',
+  };
+}
+
+const STATUS_CFG = {
+  pending:        { label: 'Aguardando envio',       cls: 'warn' },
+  sent_to_client: { label: 'Enviado ao cliente',     cls: 'warn' },
+  approved:       { label: 'Aprovado',               cls: 'ok'   },
+  modified:       { label: 'Aprovado c/ alteração',  cls: 'ok'   },
+  published:      { label: 'Publicado no iFood',     cls: 'mut'  },
+};
+
+const inp = {
+  width: '100%', fontFamily: 'inherit', fontSize: 13, padding: '6px 9px',
+  border: '1px solid var(--line)', borderRadius: 4, background: '#fff', color: 'var(--ink)',
+};
+
+function Stars({ rating }) {
+  const cols = { 1: '#ef4444', 2: '#f97316', 3: '#eab308', 4: '#84cc16', 5: '#22c55e' };
+  return (
+    <span>
+      {[1,2,3,4,5].map(i => (
+        <span key={i} style={{ color: i <= rating ? (cols[rating] || '#888') : '#ccc', fontSize: 13 }}>★</span>
+      ))}
+    </span>
+  );
+}
+
+function StatusPill({ count, label, bg, color, border }) {
+  if (!count) return null;
+  return (
+    <span style={{
+      fontSize: 11, padding: '2px 8px', borderRadius: 10, fontWeight: 600,
+      background: bg, color, border: `1px solid ${border}`, whiteSpace: 'nowrap',
+    }}>
+      {count} {label}{count > 1 ? 's' : ''}
+    </span>
+  );
+}
+
+function StatusTimeline({ review }) {
+  const isSent      = ['sent_to_client', 'approved', 'modified', 'published'].includes(review.status);
+  const isApproved  = ['approved', 'modified', 'published'].includes(review.status);
+  const isPublished = review.status === 'published';
+  const steps = [
+    { label: 'Enviado ao cliente',   done: isSent,      ts: review.sentAt,      color: '#2563eb', bg: '#eff6ff', border: '#93c5fd' },
+    { label: review.status === 'modified' ? 'Aprovado c/ alteração' : 'Aprovado pelo cliente',
+                                     done: isApproved,  ts: review.approvedAt,  color: '#16a34a', bg: '#f0fdf4', border: '#86efac' },
+    { label: 'Publicado no iFood',   done: isPublished, ts: review.publishedAt, color: '#7c3aed', bg: '#faf5ff', border: '#c4b5fd' },
+  ];
+  return (
+    <div style={{ display: 'flex', alignItems: 'stretch', gap: 4, marginBottom: 10 }}>
+      {steps.map((step, i) => (
+        <div key={i} style={{ flex: 1, display: 'flex', alignItems: 'stretch', gap: 4 }}>
+          <div style={{
+            flex: 1, padding: '6px 9px', borderRadius: 6,
+            background: step.done ? step.bg : 'var(--bg2,#f5f4f2)',
+            border: `1px solid ${step.done ? step.border : 'var(--line)'}`,
+            opacity: step.done ? 1 : 0.45,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: step.done ? step.color : 'var(--tx2)', lineHeight: 1 }}>
+                {step.done ? '✓' : '○'}
+              </span>
+              <span style={{ fontSize: 10.5, fontWeight: 600, color: step.done ? 'var(--ink)' : 'var(--tx2)', lineHeight: 1.3 }}>
+                {step.label}
+              </span>
+            </div>
+            <div style={{ fontSize: 10, color: step.done ? step.color : 'var(--tx2)', marginTop: 3, paddingLeft: 16 }}>
+              {step.done && step.ts ? fmtDateTime(step.ts) : step.done ? '—' : 'Pendente'}
+            </div>
+          </div>
+          {i < steps.length - 1 && (
+            <div style={{ width: 1, background: 'var(--line)', flexShrink: 0, alignSelf: 'stretch', margin: '4px 0' }} />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function buildWaMsgStore(reviews) {
+  // Mensagem de parabéns — envia o texto direto, sem template de avaliação
+  if (reviews.length === 1 && reviews[0].orderId === 'PARABENS') {
+    return reviews[0].suggestedResponse || '';
+  }
+  const storeName = reviews[0]?.store || '';
+  const tokens = reviews.map(r => r.token).filter(Boolean).join(',');
+  const link = `${CLIENT_PAGE}?tokens=${tokens}`;
+  let msg = `📋 *Avaliações para aprovação — ${storeName}*\n\n`;
+  reviews.forEach((rev, i) => {
+    const stars = '⭐'.repeat(rev.rating || 0);
+    msg += `*${i + 1}. ${stars} — Pedido ${rev.orderId}*\n`;
+    if (rev.clientComment) msg += `_"${rev.clientComment}"_\n`;
+    const resp = rev.suggestedResponse || rev.finalResponse || '';
+    if (resp) msg += `💬 ${resp}\n`;
+    msg += '\n';
+  });
+  msg += `🔗 *Link para aprovar ou editar todas:*\n${link}\n\n`;
+  msg += `_(Sem retorno até as 9h do dia seguinte, publicamos as respostas no iFood.)_`;
+  return msg;
+}
+
+function buildWaMsg(review, resp) {
+  const stars = '⭐'.repeat(review.rating || 0);
+  const link = `${CLIENT_PAGE}?token=${review.token}`;
+  return `📋 *Avaliação para aprovação — ${review.store}*\n\n${stars} — Pedido ${review.orderId}\n\n*Comentário do cliente:*\n_"${review.clientComment}"_\n\n*Sugestão de resposta:*\n${resp}\n\n🔗 *Link para aprovar ou editar:*\n${link}\n\n_(Sem retorno até as 9h do dia seguinte, publicamos essa resposta no iFood.)_`;
+}
+
+function copiar(t) { try { navigator.clipboard?.writeText(t || ''); } catch {} }
+
+// ─── Feature 4: análise local de avaliações publicadas ───────────────────────
+
+function normStr(s) {
+  return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+const OP_KEYWORDS  = ['frio','gelado','errado','faltou','faltando','demorou','demora','atraso','atrasado',
+                       'diferente','ruim','pessimo','horrivel','mal','incompleto','estragado','vencido',
+                       'embalagem','pouco','pequeno','molhado','quebrado','sem sal','salgado demais','queimado'];
+const FID_KEYWORDS = ['otimo','excelente','adorei','amei','perfeito','voltarei','recomendo','maravilhoso',
+                       'delicioso','parabens','nota 10','muito bom','adoramos','sempre peco','favorit',
+                       'melhor','top','sensacional','incrivel','gostamos','amamos','amou'];
+
+function hasKw(text, kws) { const t = normStr(text); return kws.some(k => t.includes(k)); }
+
+function analisarReviews(storeName, publishedReviews) {
+  if (!publishedReviews.length) return [];
+  const demandas = [];
+  const short = storeName.split(' - ')[0];
+
+  const opRevs  = publishedReviews.filter(r => r.rating <= 3 || hasKw(r.clientComment, OP_KEYWORDS));
+  const fidRevs = publishedReviews.filter(r => r.rating >= 4 && (r.rating === 5 || hasKw(r.clientComment, FID_KEYWORDS)));
+  const avgRating = publishedReviews.reduce((s, r) => s + (r.rating || 0), 0) / publishedReviews.length;
+
+  if (opRevs.length > 0) {
+    const bullets = opRevs.slice(0, 5).map(r => {
+      const comment = (r.clientComment || '').slice(0, 100);
+      return `• ⭐${r.rating} (Ped. ${r.orderId}): "${comment}${(r.clientComment?.length || 0) > 100 ? '…' : ''}"`;
+    }).join('\n');
+
+    demandas.push({
+      titulo: `[${short}] Melhorias operacionais — ${opRevs.length} reclamação${opRevs.length !== 1 ? 'ões' : ''} identificada${opRevs.length !== 1 ? 's' : ''}`,
+      descricao: `Avaliações publicadas com pontos de melhoria:\n\n${bullets}\n\nAção: Apresentar para a equipe da loja, identificar causa raiz de cada ponto e criar plano de correção com prazo.`,
+      prioridade: opRevs.some(r => r.rating <= 2) ? 'high' : 'med',
+      tipo: 'operacional',
+    });
+  }
+
+  if (fidRevs.length > 0) {
+    const bullets = fidRevs.slice(0, 5).map(r => {
+      const comment = (r.clientComment || '').slice(0, 80);
+      const name = r.clientName || 'Cliente';
+      return `• ⭐${r.rating} — ${name}: "${comment}${(r.clientComment?.length || 0) > 80 ? '…' : ''}"`;
+    }).join('\n');
+
+    demandas.push({
+      titulo: `[${short}] Fidelização — ${fidRevs.length} cliente${fidRevs.length !== 1 ? 's' : ''} satisfeito${fidRevs.length !== 1 ? 's' : ''} a cultivar`,
+      descricao: `Clientes com alta satisfação identificados nas avaliações publicadas:\n\n${bullets}\n\nAção sugerida: Criar ação de retorno (cupom, programa de pontos ou oferta exclusiva) para reconquistar estes clientes frequentes.`,
+      prioridade: 'low',
+      tipo: 'fidelizacao',
+    });
+  }
+
+  if (demandas.length === 0) {
+    demandas.push({
+      titulo: `[${short}] Revisão das avaliações publicadas — ${publishedReviews.length} resp.`,
+      descricao: `Média de ${avgRating.toFixed(1)} ⭐ em ${publishedReviews.length} avaliação${publishedReviews.length !== 1 ? 'ões' : ''} publicada${publishedReviews.length !== 1 ? 's' : ''}. Revisar com o cliente os principais temas desta rodada e oportunidades de melhoria.`,
+      prioridade: avgRating < 3.5 ? 'med' : 'low',
+      tipo: 'operacional',
+    });
+  }
+
+  return demandas;
+}
+
+async function ensureAvaliacoesEspacos(tenantId, storeName) {
+  const { data: lojas, error: eLojas } = await supabase
+    .from('lojas')
+    .select('id, client_id')
+    .eq('tenant_id', tenantId)
+    .eq('is_contato', false)
+    .ilike('nome', storeName)
+    .limit(1);
+  if (eLojas) throw new Error('Erro ao buscar loja: ' + eLojas.message);
+  if (!lojas?.length) throw new Error(`Loja não encontrada no Espaços para "${storeName}"`);
+  const { client_id: clientId } = lojas[0];
+  if (!clientId) throw new Error(`A loja "${storeName}" não tem cliente vinculado no Espaços`);
+
+  const { data: folders } = await supabase
+    .from('espacos_folders')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .eq('customer_id', clientId)
+    .order('position', { ascending: true })
+    .limit(1);
+
+  let folderId;
+  if (folders?.length) {
+    folderId = folders[0].id;
+  } else {
+    const { data: newFolder, error: eFolder } = await supabase
+      .from('espacos_folders')
+      .insert({ tenant_id: tenantId, customer_id: clientId, name: storeName.split(' - ')[0], color: '#B70C00', position: 99 })
+      .select('id').single();
+    if (eFolder) throw new Error('Erro ao criar pasta no Espaços: ' + eFolder.message);
+    folderId = newFolder.id;
+  }
+
+  const LIST_NAME = 'Avaliações iFood';
+  const { data: lists } = await supabase
+    .from('espacos_lists')
+    .select('id')
+    .eq('folder_id', folderId)
+    .eq('name', LIST_NAME)
+    .limit(1);
+
+  let listId;
+  if (lists?.length) {
+    listId = lists[0].id;
+  } else {
+    const { data: newList, error: eList } = await supabase
+      .from('espacos_lists')
+      .insert({ tenant_id: tenantId, folder_id: folderId, name: LIST_NAME, color: '#B70C00', position: 99 })
+      .select('id').single();
+    if (eList) throw new Error('Erro ao criar lista no Espaços: ' + eList.message);
+    listId = newList.id;
+    await supabase.from('espacos_columns').insert([
+      { tenant_id: tenantId, list_id: listId, name: 'A Fazer',    color: '#6B7280', position: 0, is_done: false },
+      { tenant_id: tenantId, list_id: listId, name: 'Fazendo',    color: '#3B82F6', position: 1, is_done: false },
+      { tenant_id: tenantId, list_id: listId, name: 'Aguardando', color: '#F59E0B', position: 2, is_done: false },
+      { tenant_id: tenantId, list_id: listId, name: 'Concluído',  color: '#10B981', position: 3, is_done: true  },
+    ]);
+  }
+
+  const { data: columns } = await supabase
+    .from('espacos_columns')
+    .select('id')
+    .eq('list_id', listId)
+    .eq('is_done', false)
+    .order('position', { ascending: true })
+    .limit(1);
+
+  const toDoColumnId = columns?.[0]?.id;
+  if (!toDoColumnId) throw new Error('Coluna "A Fazer" não encontrada na lista');
+
+  return { listId, toDoColumnId };
+}
+
+function AvisoGruposFaltando({ lojasSemGrupo }) {
+  if (!lojasSemGrupo.length) return null;
+  return (
+    <div className="cv2-card" style={{ borderLeft: '3px solid var(--red)', marginBottom: 10 }}>
+      <span style={{ fontSize: 13, color: 'var(--ink)' }}>
+        ⚠ Sem grupo WhatsApp cadastrado: <strong>{lojasSemGrupo.join(', ')}</strong>.
+        Cadastre em <code>lojas.whatsapp_group_jid</code> antes de enviar avaliações destas lojas.
+      </span>
+    </div>
+  );
+}
+
+function AlertBanner({ overdueReviews, todayReviews, onGoToStore, onDismiss, onDismissId }) {
+  if (overdueReviews.length === 0 && todayReviews.length === 0) return null;
+  return (
+    <div style={{ marginBottom: 12 }}>
+      {overdueReviews.length > 0 && (
+        <div style={{
+          background: '#fef2f2', border: '1px solid #fca5a5', borderLeft: '4px solid #ef4444',
+          borderRadius: 8, padding: '10px 14px', marginBottom: 8,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <span style={{ fontWeight: 700, fontSize: 13, color: '#991b1b' }}>
+              🔴 {overdueReviews.length} avaliação{overdueReviews.length !== 1 ? 'ões' : ''} com prazo vencido
+            </span>
+            <button onClick={onDismiss} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#991b1b', fontSize: 18, lineHeight: 1 }}>✕</button>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {overdueReviews.map(r => (
+              <span key={r.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                <button onClick={() => onGoToStore(r.store)} style={{
+                  background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '6px 0 0 6px',
+                  padding: '3px 8px', fontSize: 11.5, cursor: 'pointer', color: '#7f1d1d', fontFamily: 'inherit',
+                }}>
+                  {r.store.split(' - ')[0]} · Pedido {r.orderId} · venceu {fmtDate(r.deadline)}
+                </button>
+                <button onClick={() => onDismissId && onDismissId(r.id)} style={{
+                  background: '#fca5a5', border: '1px solid #fca5a5', borderRadius: '0 6px 6px 0',
+                  borderLeft: 'none', padding: '3px 7px', fontSize: 12, cursor: 'pointer',
+                  color: '#7f1d1d', fontFamily: 'inherit', lineHeight: 1,
+                }} title="Arquivar este alerta">✕</button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      {todayReviews.length > 0 && (
+        <div style={{
+          background: '#fffbeb', border: '1px solid #fcd34d', borderLeft: '4px solid #f59e0b',
+          borderRadius: 8, padding: '10px 14px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <span style={{ fontWeight: 700, fontSize: 13, color: '#92400e' }}>
+              🟡 {todayReviews.length} avaliação{todayReviews.length !== 1 ? 'ões' : ''} vence{todayReviews.length === 1 ? '' : 'm'} hoje
+            </span>
+            {overdueReviews.length === 0 && (
+              <button onClick={onDismiss} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#92400e', fontSize: 18, lineHeight: 1 }}>✕</button>
+            )}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {todayReviews.map(r => (
+              <span key={r.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                <button onClick={() => onGoToStore(r.store)} style={{
+                  background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '6px 0 0 6px',
+                  padding: '3px 8px', fontSize: 11.5, cursor: 'pointer', color: '#78350f', fontFamily: 'inherit',
+                }}>
+                  {r.store.split(' - ')[0]} · Pedido {r.orderId} · vence hoje
+                </button>
+                <button onClick={() => onDismissId && onDismissId(r.id)} style={{
+                  background: '#fcd34d', border: '1px solid #fcd34d', borderRadius: '0 6px 6px 0',
+                  borderLeft: 'none', padding: '3px 7px', fontSize: 12, cursor: 'pointer',
+                  color: '#78350f', fontFamily: 'inherit', lineHeight: 1,
+                }} title="Arquivar este alerta">✕</button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DemandaModal({ storeName, demandas, onConfirm, onClose, loading }) {
+  const PRIO_COLOR = { high: '#ef4444', med: '#f59e0b', low: '#22c55e' };
+  const PRIO_LABEL = { high: 'Alta prioridade', med: 'Média prioridade', low: 'Baixa prioridade' };
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+    }}>
+      <div style={{
+        background: '#fff', borderRadius: 12, padding: 24, maxWidth: 580, width: '100%',
+        maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+      }}>
+        <h3 style={{ margin: '0 0 4px', fontSize: 16 }}>
+          🤖 Demandas geradas — {storeName.split(' - ')[0]}
+        </h3>
+        <p style={{ margin: '0 0 16px', fontSize: 12, color: 'var(--tx2)', lineHeight: 1.5 }}>
+          Essas tarefas serão criadas na lista <strong>Avaliações iFood</strong> do Espaços desta loja.
+          Revise e confirme para criar.
+        </p>
+
+        {demandas.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--tx2)', fontSize: 13 }}>
+            Nenhuma demanda identificada para esta loja.
+          </div>
+        ) : demandas.map((d, i) => (
+          <div key={i} style={{
+            border: '1px solid var(--line)', borderLeft: `4px solid ${PRIO_COLOR[d.prioridade] || '#888'}`,
+            borderRadius: 8, padding: 12, marginBottom: 10,
+          }}>
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6, color: 'var(--ink)' }}>{d.titulo}</div>
+            <pre style={{
+              fontSize: 12, color: 'var(--tx2)', whiteSpace: 'pre-wrap', lineHeight: 1.6,
+              margin: '0 0 8px', fontFamily: 'inherit',
+            }}>{d.descricao}</pre>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{
+                fontSize: 11, padding: '2px 8px', borderRadius: 10, fontWeight: 600,
+                background: d.tipo === 'operacional' ? '#fee2e2' : '#dcfce7',
+                color: d.tipo === 'operacional' ? '#991b1b' : '#15803d',
+                border: `1px solid ${d.tipo === 'operacional' ? '#fca5a5' : '#86efac'}`,
+              }}>
+                {d.tipo === 'operacional' ? '🔧 Operacional' : '🎯 Fidelização'}
+              </span>
+              <span style={{
+                fontSize: 11, padding: '2px 8px', borderRadius: 10, fontWeight: 600,
+                background: '#f3f4f6', color: '#374151', border: '1px solid #d1d5db',
+              }}>
+                {PRIO_LABEL[d.prioridade] || d.prioridade}
+              </span>
+            </div>
+          </div>
+        ))}
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
+          <button className="cv2-btn sec" onClick={onClose} disabled={loading}>Cancelar</button>
+          {demandas.length > 0 && (
+            <button className="cv2-btn" onClick={onConfirm} disabled={loading}>
+              {loading
+                ? 'Criando tarefas…'
+                : `Criar ${demandas.length} tarefa${demandas.length !== 1 ? 's' : ''} no Espaços`}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSendSingle, onSaveNote }) {
+  const [draft, setDraft]           = useState(review.finalResponse || review.suggestedResponse || '');
+  const [notes, setNotes]           = useState(review.notes || '');
+  const [notesSaved, setNotesSaved] = useState(false);
+  const [copied, setCopied]         = useState(false);
+
+  const st         = STATUS_CFG[review.status] || { label: review.status, cls: 'mut' };
+  const isApproved = review.status === 'approved' || review.status === 'modified';
+  const isDone     = review.status === 'published';
+  const finalText  = review.finalResponse || review.suggestedResponse || draft;
+  const over       = draft.length > 300;
+  const notesChanged = notes !== (review.notes || '');
+
+  const effectiveGroup = review.whatsappGroup || resolvedGroup || null;
+  const singleLink = `${CLIENT_PAGE}?token=${review.token}`;
+
+  function handleCopyLink() { copiar(singleLink); setCopied(true); setTimeout(() => setCopied(false), 2000); }
+
+  async function handleSaveNoteLocal() {
+    await onSaveNote(review.id, notes);
+    setNotesSaved(true);
+    setTimeout(() => setNotesSaved(false), 3000);
+  }
+
+  return (
+    <div className="cv2-card" style={{ marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+        <span className={`cv2-bdg ${st.cls}`} style={{ fontSize: 11 }}>{st.label}</span>
+        <Stars rating={review.rating} />
+        <span style={{ fontSize: 12, color: 'var(--tx2)' }}>{review.orderId === 'PARABENS' ? '🎉 Sem avaliações negativas' : `Pedido ${review.orderId}`}</span>
+        {review.deadline && <span className="cv2-bdg warn" style={{ fontSize: 11 }}>⏳ {fmtDate(review.deadline)}</span>}
+        {review.reviewDate && (
+          <span style={{ fontSize: 11, color: 'var(--tx2)', marginLeft: 'auto' }}>📅 {fmtDate(review.reviewDate)}</span>
+        )}
+      </div>
+
+      {review.status !== 'pending' && <StatusTimeline review={review} />}
+
+      {effectiveGroup ? (
+        <div style={{ fontSize: 11, color: 'var(--tx2)', marginBottom: 6 }}>
+          📲 Grupo: <span style={{ fontFamily: 'monospace' }}>{effectiveGroup}</span>
+        </div>
+      ) : (
+        <div style={{ fontSize: 11, color: 'var(--red)', marginBottom: 6 }}>
+          ⚠ Grupo WA não configurado — configure acima antes de enviar.
+        </div>
+      )}
+
+      {review.clientName && (
+        <div style={{ fontSize: 12, color: 'var(--tx2)', marginBottom: 6 }}>
+          Cliente: <strong style={{ color: 'var(--ink)' }}>{review.clientName}</strong>
+        </div>
+      )}
+
+      {review.orderId !== 'PARABENS' && (
+        <div style={{
+          fontSize: 13, color: 'var(--ink)', lineHeight: 1.6, marginBottom: 10,
+          background: 'var(--bg2,#f5f4f2)', borderRadius: 6, padding: '8px 10px',
+          borderLeft: '3px solid var(--line)',
+        }}>
+          <span style={{ fontSize: 11, color: 'var(--tx2)', display: 'block', marginBottom: 2 }}>COMENTÁRIO DO CLIENTE</span>
+          "{review.clientComment}"
+        </div>
+      )}
+
+      {isDone ? (
+        <div style={{
+          fontSize: 13, lineHeight: 1.6, background: 'var(--green-soft,#f0fdf4)',
+          borderRadius: 6, padding: '8px 10px', borderLeft: '3px solid var(--green,#22c55e)',
+        }}>
+          <span style={{ fontSize: 11, color: 'var(--tx2)', display: 'block', marginBottom: 2 }}>RESPOSTA PUBLICADA</span>
+          {finalText}
+        </div>
+      ) : isApproved ? (
+        <>
+          <div style={{
+            fontSize: 13, lineHeight: 1.6, background: 'var(--green-soft,#f0fdf4)',
+            borderRadius: 6, padding: '8px 10px', borderLeft: '3px solid var(--green,#22c55e)', marginBottom: 8,
+          }}>
+            <div style={{ fontSize: 11, color: 'var(--tx2)', marginBottom: 6 }}>
+              RESPOSTA APROVADA{review.status === 'modified' ? ' COM ALTERAÇÃO' : ''}
+            </div>
+            {finalText}
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <button className="cv2-btn" style={{ fontSize: 11.5 }} disabled={busy} onClick={() => onPublish(review.id, finalText)}>
+              {busy ? '…' : 'Marcar como publicado'}
+            </button>
+            <button className="cv2-btn sec" style={{ fontSize: 11.5 }} onClick={() => copiar(finalText)}>Copiar resposta</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div style={{
+            background: review.status === 'sent_to_client' ? '#fffbeb' : 'var(--bg2,#f5f4f2)',
+            borderRadius: 6, padding: '10px 12px', marginBottom: 4,
+            borderLeft: `3px solid ${review.status === 'sent_to_client' ? '#f59e0b' : 'var(--line)'}`,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <span style={{ fontSize: 11, color: 'var(--tx2)' }}>{review.orderId === 'PARABENS' ? 'MENSAGEM PARA CLIENTE' : 'SUGESTÃO DE RESPOSTA'}</span>
+              <span style={{ fontSize: 11, fontFamily: 'monospace', color: over ? 'var(--red)' : 'var(--tx2)' }}>
+                {draft.length}/300{over ? ' ⚠' : ''}
+              </span>
+            </div>
+            <textarea
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              rows={3}
+              style={{ ...inp, borderColor: over ? 'var(--red)' : 'var(--line)', resize: 'vertical', background: 'transparent' }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+            {review.status === 'sent_to_client' && (
+              <button
+                className="cv2-btn" style={{ fontSize: 11.5 }}
+                disabled={busy || !draft.trim()}
+                onClick={() => onPublish(review.id, draft)}
+              >
+                {busy ? '…' : 'Publicar manualmente'}
+              </button>
+            )}
+            {review.status === 'sent_to_client' && (
+              <button
+                className="cv2-btn sec" style={{ fontSize: 11.5 }}
+                disabled={busy || over || !draft.trim() || !effectiveGroup}
+                onClick={() => onSendSingle(review.id, draft)}
+              >
+                {busy ? '…' : 'Reenviar esta individualmente'}
+              </button>
+            )}
+            <button className="cv2-btn sec" style={{ fontSize: 11.5 }} onClick={handleCopyLink}>
+              {copied ? '✓ Copiado!' : 'Copiar link'}
+            </button>
+            <button className="cv2-btn sec" style={{ fontSize: 11.5 }} onClick={() => copiar(draft)}>Copiar resposta</button>
+            {draft !== (review.finalResponse || review.suggestedResponse || '') && (
+              <button className="cv2-btn sec" style={{ fontSize: 11.5 }} disabled={busy} onClick={() => onSaveDraft(review.id, draft)}>
+                Salvar rascunho
+              </button>
+            )}
+          </div>
+          {review.status === 'sent_to_client' && (
+            <div style={{ fontSize: 11, color: 'var(--tx2)', marginTop: 6 }}>
+              ⏰ Aguardando aprovação — sem retorno até 9h do dia seguinte, publicar a sugestão original.
+            </div>
+          )}
+        </>
+      )}
+
+      <div style={{
+        marginTop: 10, background: '#fefce8', border: '1px solid #fde68a',
+        borderRadius: 6, padding: '8px 10px',
+      }}>
+        <span style={{ fontSize: 11, color: '#92400e', fontWeight: 700, display: 'block', marginBottom: 4 }}>
+          📝 OBSERVAÇÕES INTERNAS
+        </span>
+        <textarea
+          value={notes}
+          onChange={e => { setNotes(e.target.value); setNotesSaved(false); }}
+          rows={2}
+          placeholder="Registre o que aconteceu (ex: perdemos o prazo, cliente pediu alteração, aguardando retorno...)"
+          style={{ ...inp, resize: 'vertical', background: 'transparent', borderColor: '#fde68a' }}
+        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+          {notesChanged && (
+            <button className="cv2-btn sec" style={{ fontSize: 11 }} disabled={busy} onClick={handleSaveNoteLocal}>
+              Salvar observação
+            </button>
+          )}
+          {notesSaved && !notesChanged && (
+            <span style={{ fontSize: 11, color: '#16a34a' }}>✓ Observação salva</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ParabensIncentivoCard({ loja, resolvedGroup, busy, onSend }) {
+  const lojaDisplay = loja.ifood_portal_nome || loja.nome;
+  const defaultMsg = `🎉 Parabéns! Nenhuma avaliação negativa foi detectada hoje no iFood para a loja *${lojaDisplay}*!\n\nIsso é sinal de que a operação está no caminho certo 👏\n\n💡 *Aproveite e incentive mais avaliações 5⭐:*\n\n📝 *Bilhete na embalagem* — coloque um recadinho no pedido pedindo a avaliação\n🍬 *Doce ou balinha* — ofereça um brindezinho com a mensagem "nos avalie e apareça no topo!"\n👥 *Treine a equipe* — peça para agradecer e solicitar feedback em todo pedido\n🎯 *Crie um incentivo* — "avalie seu pedido e ganhe desconto na próxima!" funciona muito bem\n📲 *QR Code* — deixe um adesivo na embalagem com link direto para a avaliação\n\nCada nova avaliação aumenta sua visibilidade no iFood e gera mais pedidos! 🚀`;
+
+  const [msg, setMsg] = useState(defaultMsg);
+
+  return (
+    <div style={{
+      border: '1px solid #86efac', borderRadius: 8, marginBottom: 10,
+      background: '#f0fdf4', overflow: 'hidden', padding: '12px 14px',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontWeight: 700, fontSize: 14, color: '#15803d' }}>🎉 {lojaDisplay}</span>
+        <span style={{
+          fontSize: 12, color: '#15803d', background: '#dcfce7',
+          padding: '2px 8px', borderRadius: 10, border: '1px solid #86efac',
+        }}>Sem avaliações hoje</span>
+        {!resolvedGroup && (
+          <span style={{ fontSize: 11, color: 'var(--red)' }}>⚠ sem grupo WA</span>
+        )}
+      </div>
+      <div style={{ marginBottom: 8 }}>
+        <span style={{ fontSize: 11, color: '#15803d', fontWeight: 700, display: 'block', marginBottom: 4 }}>
+          MENSAGEM PARA O CLIENTE (editável)
+        </span>
+        <textarea
+          value={msg}
+          onChange={e => setMsg(e.target.value)}
+          rows={12}
+          style={{
+            width: '100%', fontFamily: 'inherit', fontSize: 12, padding: '8px 10px',
+            border: '1px solid #86efac', borderRadius: 4, background: '#fff',
+            color: 'var(--ink)', resize: 'vertical', boxSizing: 'border-box',
+          }}
+        />
+      </div>
+      <button
+        className="cv2-btn"
+        style={{ fontSize: 11.5, background: '#16a34a', borderColor: '#16a34a' }}
+        disabled={busy || !resolvedGroup || !msg.trim()}
+        title={!resolvedGroup ? 'Configure o grupo WA desta loja primeiro' : ''}
+        onClick={() => onSend(loja, msg)}
+      >
+        {busy ? '…' : '📲 Enviar parabéns ao cliente'}
+      </button>
+    </div>
+  );
+}
+
+function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, storeGroups, onSendStore, onPublish, onSaveDraft, onSendSingle, onSaveNote, onGerarDemandas, idPrefix = 'store' }) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  const toSend         = reviews.filter(r => r.status === 'pending');
+  const sentCount      = reviews.filter(r => r.status === 'sent_to_client').length;
+  const approvedCount  = reviews.filter(r => r.status === 'approved' || r.status === 'modified').length;
+  const publishedRevs  = reviews.filter(r => r.status === 'published');
+  const publishedCount = publishedRevs.length;
+
+  const resolvedGroup = storeGroups[storeName] || reviews.find(r => r.whatsappGroup)?.whatsappGroup || null;
+
+  const today       = new Date().toISOString().slice(0, 10);
+  const tomorrow    = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const minDeadline = reviews.reduce((m, r) => r.deadline && (!m || r.deadline < m) ? r.deadline : m, null);
+  const isOverdue   = minDeadline && minDeadline < today;
+  const isUrgent    = !isOverdue && minDeadline && minDeadline <= tomorrow;
+  const isBusy      = busyStore === storeName;
+
+  return (
+    <div id={`${idPrefix}-${storeName.replace(/[\s'&]/g, '-')}`} style={{
+      border: `1px solid ${isOverdue ? '#fca5a5' : 'var(--line)'}`,
+      borderRadius: 8, marginBottom: 10, background: '#fff', overflow: 'hidden',
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px',
+        background: open ? 'var(--bg2,#f5f4f2)' : '#fff',
+        borderBottom: open ? '1px solid var(--line)' : 'none',
+        flexWrap: 'wrap',
+      }}>
+        <div
+          onClick={() => setOpen(v => !v)}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, cursor: 'pointer', userSelect: 'none', minWidth: 200, flexWrap: 'wrap' }}
+        >
+          <span style={{ fontSize: 15, color: 'var(--tx2)', lineHeight: 1 }}>{open ? '▾' : '▸'}</span>
+          <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--ink)' }}>{storeName}</span>
+          {isOverdue && (
+            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, fontWeight: 600, background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', whiteSpace: 'nowrap' }}>
+              🔴 venceu {fmtDate(minDeadline)}
+            </span>
+          )}
+          {isUrgent && (
+            <span className="cv2-bdg warn" style={{ fontSize: 11 }}>⏳ urgente {fmtDate(minDeadline)}</span>
+          )}
+          <StatusPill count={toSend.length}    label="aguardando"  bg="#fef3c7" color="#92400e" border="#fcd34d" />
+          <StatusPill count={sentCount}         label="enviada"     bg="#dbeafe" color="#1e40af" border="#93c5fd" />
+          <StatusPill count={approvedCount}     label="aprovada"    bg="#dcfce7" color="#15803d" border="#86efac" />
+          <StatusPill count={publishedCount}    label="publicada"   bg="#f3f4f6" color="#4b5563" border="#d1d5db" />
+          <span style={{ fontSize: 12, color: 'var(--tx2)', whiteSpace: 'nowrap' }}>
+            {reviews.length} avaliação{reviews.length !== 1 ? 'ões' : ''}
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          {toSend.length > 0 && (
+            <button
+              className="cv2-btn" style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}
+              disabled={isBusy || !resolvedGroup}
+              title={!resolvedGroup ? 'Configure o grupo WA desta loja em "Grupos WhatsApp por loja"' : ''}
+              onClick={e => { e.stopPropagation(); onSendStore(storeName, toSend); }}
+            >
+              {isBusy ? '…' : (toSend.length === 1 && toSend[0].orderId === 'PARABENS')
+                ? 'Enviar mensagem ao cliente 🎉'
+                : `Enviar ${toSend.length} avaliação${toSend.length > 1 ? 'ões' : ''} ao cliente`}
+            </button>
+          )}
+          {publishedCount > 0 && onGerarDemandas && (
+            <button
+              className="cv2-btn sec"
+              style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}
+              onClick={e => { e.stopPropagation(); onGerarDemandas(storeName, publishedRevs); }}
+            >
+              🤖 Gerar demandas
+            </button>
+          )}
+          {!resolvedGroup && toSend.length > 0 && (
+            <span style={{ fontSize: 11, color: 'var(--red)', whiteSpace: 'nowrap' }}>⚠ sem grupo WA</span>
+          )}
+        </div>
+      </div>
+
+      {open && (
+        <div style={{ padding: '10px 14px' }}>
+          {reviews.map(rev => (
+            <CardReview
+              key={`${rev.id}-${rev.status}-${rev.whatsappGroup}`}
+              review={rev}
+              resolvedGroup={resolvedGroup}
+              busy={busyId === rev.id}
+              onPublish={onPublish}
+              onSaveDraft={onSaveDraft}
+              onSendSingle={onSendSingle}
+              onSaveNote={onSaveNote}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ConfigGrupos({ lojas, groups, groupsLoading, groupsError, onSave }) {
+  const [open, setOpen]     = useState(false);
+  const [local, setLocal]   = useState({});
+  const [saving, setSaving] = useState(false);
+
+  function handleToggle() {
+    if (!open) {
+      const init = {};
+      lojas.forEach(l => { init[l.id] = l.whatsapp_group_jid || ''; });
+      setLocal(init);
+    }
+    setOpen(v => !v);
+  }
+
+  function handleChange(lojaId, value) { setLocal(l => ({ ...l, [lojaId]: value })); }
+
+  async function salvar() {
+    setSaving(true);
+    await onSave(local);
+    setSaving(false);
+    setOpen(false);
+  }
+
+  return (
+    <div className="cv2-card" style={{ marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+        onClick={handleToggle}
+      >
+        <span style={{ fontWeight: 700, fontSize: 13 }}>📲 Grupos WhatsApp por loja</span>
+        <span style={{ fontSize: 12, color: 'var(--tx2)' }}>
+          {open ? '▾ Fechar' : '▸ Configurar grupos'}
+        </span>
+      </div>
+      {open && (
+        <div style={{ marginTop: 12 }}>
+          {groupsLoading && (
+            <div style={{ fontSize: 12, color: 'var(--tx2)', marginBottom: 8 }}>
+              Carregando grupos da Evolution API…
+            </div>
+          )}
+          {groupsError && (
+            <div style={{ fontSize: 12, color: 'var(--red)', marginBottom: 8 }}>
+              Não foi possível carregar grupos automaticamente: {groupsError}.<br />
+              <span style={{ color: 'var(--tx2)' }}>Insira o JID manualmente abaixo.</span>
+            </div>
+          )}
+          {lojas.map(loja => (
+            <div key={loja.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, fontWeight: 600, minWidth: 200, color: 'var(--ink)' }}>
+                {loja.nome}
+              </span>
+              {groups.length > 0 ? (
+                <select
+                  value={local[loja.id] || ''}
+                  onChange={e => handleChange(loja.id, e.target.value)}
+                  style={{ fontFamily: 'inherit', fontSize: 13, padding: '6px 9px', border: '1px solid var(--line)', borderRadius: 4, background: '#fff', color: 'var(--ink)', flex: 1, minWidth: 200 }}
+                >
+                  <option value="">— sem grupo —</option>
+                  {groups.map(g => (
+                    <option key={g.id} value={g.id}>{g.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  placeholder="JID do grupo (ex: 120363175577392322@g.us)"
+                  value={local[loja.id] || ''}
+                  onChange={e => handleChange(loja.id, e.target.value)}
+                  style={{ fontFamily: 'inherit', fontSize: 13, padding: '6px 9px', border: '1px solid var(--line)', borderRadius: 4, background: '#fff', color: 'var(--ink)', flex: 1, minWidth: 200 }}
+                />
+              )}
+            </div>
+          ))}
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <button className="cv2-btn" disabled={saving || lojas.length === 0} onClick={salvar}>
+              {saving ? 'Salvando…' : 'Salvar grupos'}
+            </button>
+            <button className="cv2-btn sec" onClick={() => setOpen(false)}>Cancelar</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
+  const [reviews, setReviews]       = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState(null);
+  const [notice, setNotice]         = useState(null);
+  const [busyId, setBusyId]         = useState(null);
+  const [busyStore, setBusyStore]   = useState(null);
+  const [groups, setGroups]               = useState([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [groupsError, setGroupsError]     = useState(null);
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterStore, setFilterStore]   = useState('all');
+  const [showArchived, setShowArchived] = useState(false);
+
+  const [demandaModal, setDemandaModal] = useState(null);
+  const [demandaLoading, setDemandaLoading] = useState(false);
+
+  const todayISO    = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const DISMISS_KEY = `cd_alert_dismissed_${todayISO}`;
+  const [alertDismissed, setAlertDismissed] = useState(() => {
+    try { return localStorage.getItem(DISMISS_KEY) === '1'; } catch { return false; }
+  });
+
+  const DISMISS_IDS_KEY = `cd_alert_dismissed_ids_${todayISO}`;
+  const [dismissedAlertIds, setDismissedAlertIds] = useState(() => {
+    try {
+      const stored = localStorage.getItem(`cd_alert_dismissed_ids_${todayISO}`);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch { return new Set(); }
+  });
+
+  const [lojas, setLojas]           = useState([]);
+  const [lojasLoading, setLojasLoading] = useState(true);
+  const [lojasError, setLojasError]     = useState(null);
+
+  const pollerRef = useRef(null);
+
+  const load = useCallback(async () => {
+    try {
+      const rows = await sbSelect();
+      setReviews(rows.map(mapRow));
+      setError(null);
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    if (!tenantDbId) { setLojasLoading(false); return; }
+    listLojasConsultoria(tenantDbId)
+      .then(rows => { setLojas(rows); setLojasError(null); })
+      .catch(e => setLojasError(e.message))
+      .finally(() => setLojasLoading(false));
+  }, [tenantDbId]);
+
+  useEffect(() => {
+    if (!tenantDbId) return;
+    setGroupsLoading(true);
+    listEvoGroups(tenantDbId)
+      .then(data => { setGroups(data); setGroupsError(null); })
+      .catch(e => setGroupsError(e.message))
+      .finally(() => setGroupsLoading(false));
+  }, [tenantDbId]);
+
+  useEffect(() => {
+    load();
+    pollerRef.current = setInterval(load, 30_000);
+    return () => clearInterval(pollerRef.current);
+  }, [load]);
+
+  const storeGroups = useMemo(() => {
+    const sg = {};
+    lojas.forEach(l => {
+      if (l.whatsapp_group_jid) {
+        sg[l.nome] = l.whatsapp_group_jid;
+        // ifood_portal_nome é o nome que vem em reviews.store — indexar pelos dois
+        if (l.ifood_portal_nome) sg[l.ifood_portal_nome] = l.whatsapp_group_jid;
+      }
+    });
+    // reviews só preenchem fallback — loja tem prioridade
+    reviews.forEach(r => { if (r.store && r.whatsappGroup && !sg[r.store]) sg[r.store] = r.whatsappGroup; });
+    return sg;
+  }, [lojas, reviews]);
+
+  const activeReviews   = reviews.filter(r => !isArchivedFn(r, todayISO));
+  const archivedReviews = reviews.filter(r =>  isArchivedFn(r, todayISO));
+
+  const { overdueReviews, todayReviews } = useMemo(() => {
+    const nonPub = reviews.filter(r => r.status !== 'published');
+    return {
+      overdueReviews: nonPub.filter(r => r.deadline && r.deadline < todayISO),
+      todayReviews:   nonPub.filter(r => r.deadline === todayISO),
+    };
+  }, [reviews, todayISO]);
+
+  function handleDismissAlert() {
+    setAlertDismissed(true);
+    try { localStorage.setItem(DISMISS_KEY, '1'); } catch {}
+  }
+
+  function handleDismissAlertId(id) {
+    setDismissedAlertIds(prev => {
+      const next = new Set(prev);
+      next.add(id);
+      try { localStorage.setItem(DISMISS_IDS_KEY, JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }
+
+  function handleGoToStore(storeName) {
+    const hasActive   = activeReviews.some(r => r.store === storeName);
+    const hasArchived = archivedReviews.some(r => r.store === storeName);
+    if (hasArchived && !hasActive) setShowArchived(true);
+    setFilterStore(storeName);
+    setFilterStatus('all');
+    const prefix = hasActive ? 'store' : 'archived';
+    setTimeout(() => {
+      const el = document.getElementById(`${prefix}-${storeName.replace(/[\s'&]/g, '-')}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 120);
+  }
+
+  function handleGerarDemandas(storeName, publishedRevs) {
+    const demandas = analisarReviews(storeName, publishedRevs);
+    setDemandaModal({ storeName, demandas, publishedRevs });
+  }
+
+  async function handleConfirmarDemandas() {
+    if (!demandaModal) return;
+    if (!tenantDbId) {
+      setError('ID do tenant não disponível — não foi possível criar as tarefas.');
+      setDemandaModal(null);
+      return;
+    }
+    setDemandaLoading(true);
+    try {
+      const { listId, toDoColumnId } = await ensureAvaliacoesEspacos(tenantDbId, demandaModal.storeName);
+      const rows = demandaModal.demandas.map((d, i) => ({
+        tenant_id:   tenantDbId,
+        list_id:     listId,
+        column_id:   toDoColumnId,
+        title:       d.titulo,
+        description: d.descricao,
+        priority:    d.prioridade,
+        position:    i,
+      }));
+      const { error: eInsert } = await supabase.from('client_tasks').insert(rows);
+      if (eInsert) throw new Error(eInsert.message);
+      flash(`${demandaModal.demandas.length} tarefa${demandaModal.demandas.length !== 1 ? 's' : ''} criada${demandaModal.demandas.length !== 1 ? 's' : ''} no Espaços ✓`);
+      setDemandaModal(null);
+    } catch (e) {
+      setError('Erro ao criar tarefas no Espaços: ' + e.message);
+    }
+    setDemandaLoading(false);
+  }
+
+  async function handleSaveGroups(mapping) {
+    try {
+      await Promise.all(
+        Object.entries(mapping).map(([lojaId, groupJid]) => updateLojaWaGroup(lojaId, groupJid))
+      );
+      if (tenantDbId) {
+        const rows = await listLojasConsultoria(tenantDbId);
+        setLojas(rows);
+      }
+      flash('Grupos salvos ✓');
+    } catch (e) {
+      setError('Erro ao salvar grupos: ' + e.message);
+    }
+  }
+
+  async function handleSendStore(storeName, pendingReviews) {
+    if (!pendingReviews.length) return;
+    // Busca grupo: 1) lojas (por nome exato), 2) qualquer review já enviada desta loja
+    const groupId = storeGroups[storeName]
+      || reviews.find(r => r.store === storeName && r.whatsappGroup)?.whatsappGroup;
+    if (!groupId) { setError(`Loja "${storeName}" sem grupo WhatsApp cadastrado.`); return; }
+    setBusyStore(storeName); setError(null);
+    try {
+      const msg = buildWaMsgStore(pendingReviews);
+      await enviarWhatsAppAvaliacao({ tenantId: tenantDbId, chatId: groupId, texto: msg });
+      const now = new Date().toISOString();
+      const isParabens = pendingReviews.length === 1 && pendingReviews[0].orderId === 'PARABENS';
+      await Promise.all(pendingReviews.map(rev =>
+        sbUpdate({ id: rev.id }, {
+          status: isParabens ? 'published' : 'sent_to_client',
+          sent_at: now,
+          whatsapp_group: groupId,
+          ...(isParabens ? { published_at: now } : {}),
+        })
+      ));
+      flash(isParabens ? `Mensagem enviada para "${storeName}" ✓` : `Avaliações de "${storeName}" enviadas ao cliente ✓`);
+      await load();
+    } catch (e) { setError('Erro ao enviar: ' + e.message); }
+    setBusyStore(null);
+  }
+
+  async function handleSendSingle(id, draft) {
+    const rev = reviews.find(r => r.id === id);
+    if (!rev) return;
+    const groupId = storeGroups[rev.store]
+      || reviews.find(r => r.store === rev.store && r.whatsappGroup)?.whatsappGroup;
+    if (!groupId) { setError(`Loja "${rev.store}" sem grupo WhatsApp cadastrado.`); return; }
+    setBusyId(id); setError(null);
+    try {
+      const msg = buildWaMsg(rev, draft);
+      await enviarWhatsAppAvaliacao({ tenantId: tenantDbId, chatId: groupId, texto: msg });
+      await sbUpdate({ id }, { status: 'sent_to_client', suggested_response: draft, sent_at: new Date().toISOString(), whatsapp_group: groupId });
+      flash('Reenvio individual feito ✓');
+      await load();
+    } catch (e) { setError('Erro ao reenviar: ' + e.message); }
+    setBusyId(null);
+  }
+
+  async function handlePublish(id, finalText) {
+    setBusyId(id); setError(null);
+    try {
+      await sbUpdate({ id }, { status: 'published', final_response: finalText, published_at: new Date().toISOString() });
+      flash('Marcado como publicado ✓');
+      await load();
+    } catch (e) { setError('Erro: ' + e.message); }
+    setBusyId(null);
+  }
+
+  async function handleSaveDraft(id, draft) {
+    setBusyId(id); setError(null);
+    try {
+      await sbUpdate({ id }, { suggested_response: draft });
+      flash('Rascunho salvo ✓');
+      await load();
+    } catch (e) { setError('Erro: ' + e.message); }
+    setBusyId(null);
+  }
+
+  async function handleSaveNote(id, notes) {
+    setBusyId(id);
+    try {
+      await sbUpdateNote(id, notes);
+      setReviews(prev => prev.map(r => r.id === id ? { ...r, notes } : r));
+    } catch (e) { setError('Erro ao salvar observação: ' + e.message); }
+    setBusyId(null);
+  }
+
+  function flash(msg) { setNotice(msg); setTimeout(() => setNotice(null), 4000); }
+
+  const filtered = activeReviews.filter(r => {
+    if (filterStatus !== 'all') {
+      if (filterStatus === 'approved') {
+        if (r.status !== 'approved' && r.status !== 'modified') return false;
+      } else if (r.status !== filterStatus) return false;
+    }
+    if (filterStore !== 'all' && r.store !== filterStore) return false;
+    return true;
+  });
+
+  const byStore = {};
+  filtered.forEach(r => { if (!byStore[r.store]) byStore[r.store] = []; byStore[r.store].push(r); });
+
+  const archivedByStore = {};
+  archivedReviews.forEach(r => { if (!archivedByStore[r.store]) archivedByStore[r.store] = []; archivedByStore[r.store].push(r); });
+
+  const sortedStores = Object.keys(byStore).sort((a, b) => {
+    const aMin = byStore[a].reduce((m, r) => r.deadline && (!m || r.deadline < m) ? r.deadline : m, null);
+    const bMin = byStore[b].reduce((m, r) => r.deadline && (!m || r.deadline < m) ? r.deadline : m, null);
+    if (!aMin && !bMin) return a.localeCompare(b, 'pt-BR');
+    if (!aMin) return 1; if (!bMin) return -1;
+    return aMin.localeCompare(bMin);
+  });
+
+  const sortedArchivedStores = Object.keys(archivedByStore).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+  const kpi = {
+    pending:  activeReviews.filter(r => r.status === 'pending').length,
+    sent:     activeReviews.filter(r => r.status === 'sent_to_client').length,
+    approved: activeReviews.filter(r => r.status === 'approved' || r.status === 'modified').length,
+  };
+
+  const lojasSemGrupo = [...new Set(reviews.map(r => r.store).filter(Boolean))].filter(s => !storeGroups[s]);
+
+  const lojasZeroReviews = useMemo(() => {
+    const storesWithReviews = new Set(reviews.map(r => r.store).filter(Boolean));
+    return lojas.filter(l => {
+      const ifoodNome = l.ifood_portal_nome || l.nome;
+      return !storesWithReviews.has(ifoodNome) && !storesWithReviews.has(l.nome) && l.ifood_portal_nome;
+    });
+  }, [lojas, reviews]);
+
+  async function handleSendParabensIncentivo(loja, msg) {
+    const groupId = storeGroups[loja.nome] || storeGroups[loja.ifood_portal_nome];
+    if (!groupId) { setError(`Loja "${loja.nome}" sem grupo WhatsApp cadastrado.`); return; }
+    setBusyStore(loja.nome); setError(null);
+    try {
+      await enviarWhatsAppAvaliacao({ tenantId: tenantDbId, chatId: groupId, texto: msg });
+      flash(`Mensagem de parabéns enviada para "${loja.ifood_portal_nome || loja.nome}" ✓`);
+    } catch (e) { setError('Erro ao enviar: ' + e.message); }
+    setBusyStore(null);
+  }
+
+  return (
+    <div>
+      <h1>Respostas de Avaliações <span className="cv2-mock">iFood · Consultor</span></h1>
+      <div className="cv2-rule" />
+      <div className="cv2-sub">
+        Gerencie sugestões de resposta, envie prévia ao cliente e marque como publicado.
+        {error  && <span style={{ color: 'var(--red)'   }}> · {error}</span>}
+        {notice && <span style={{ color: 'var(--green)' }}> · {notice}</span>}
+      </div>
+
+      {demandaModal && (
+        <DemandaModal
+          storeName={demandaModal.storeName}
+          demandas={demandaModal.demandas}
+          loading={demandaLoading}
+          onConfirm={handleConfirmarDemandas}
+          onClose={() => setDemandaModal(null)}
+        />
+      )}
+
+      {!alertDismissed && (
+        <AlertBanner
+          overdueReviews={overdueReviews.filter(r => !dismissedAlertIds.has(r.id))}
+          todayReviews={todayReviews.filter(r => !dismissedAlertIds.has(r.id))}
+          onGoToStore={handleGoToStore}
+          onDismiss={handleDismissAlert}
+          onDismissId={handleDismissAlertId}
+        />
+      )}
+
+      <AvisoGruposFaltando lojasSemGrupo={lojasSemGrupo} />
+      <ConfigGrupos
+        lojas={lojas}
+        groups={groups}
+        groupsLoading={groupsLoading}
+        groupsError={groupsError}
+        onSave={handleSaveGroups}
+      />
+      {lojasLoading && <div className="cv2-sub">Carregando lojas…</div>}
+      {lojasError && <div className="cv2-sub" style={{ color: 'var(--red)' }}>Erro ao carregar lojas: {lojasError}</div>}
+
+      <div className="cv2-kpis">
+        <div className="cv2-kpi">
+          <div className="l">Aguardando envio</div>
+          <div className="v">{kpi.pending}</div>
+          <div className={`d${kpi.pending > 0 ? ' neg' : ' mut'}`}>{kpi.pending > 0 ? 'pendentes' : 'ok'}</div>
+        </div>
+        <div className="cv2-kpi">
+          <div className="l">Enviado ao cliente</div>
+          <div className="v">{kpi.sent}</div>
+          <div className="d mut">aguardando aprovação</div>
+        </div>
+        <div className="cv2-kpi">
+          <div className="l">Para publicar</div>
+          <div className="v">{kpi.approved}</div>
+          <div className={`d${kpi.approved > 0 ? ' neg' : ' mut'}`}>{kpi.approved > 0 ? 'prontas' : 'nenhuma'}</div>
+        </div>
+        <div className="cv2-kpi">
+          <div className="l">Arquivadas</div>
+          <div className="v">{archivedReviews.length}</div>
+          <div className="d mut">publicadas ou vencidas</div>
+        </div>
+      </div>
+
+      <div className="cv2-card" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--tx2)', fontWeight: 700, display: 'block', marginBottom: 3 }}>Status</label>
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...inp, width: 'auto' }}>
+            <option value="all">Todos</option>
+            <option value="pending">Aguardando envio</option>
+            <option value="sent_to_client">Enviado ao cliente</option>
+            <option value="approved">Aprovado / Com alteração</option>
+          </select>
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--tx2)', fontWeight: 700, display: 'block', marginBottom: 3 }}>Loja</label>
+          <select value={filterStore} onChange={e => setFilterStore(e.target.value)} style={{ ...inp, width: 'auto' }}>
+            <option value="all">Todas as lojas</option>
+            {lojas.map(l => <option key={l.id} value={l.nome}>{l.nome}</option>)}
+          </select>
+        </div>
+        <button className="cv2-btn sec" style={{ fontSize: 12 }} onClick={load} disabled={loading}>
+          {loading ? 'Atualizando…' : '↺ Atualizar'}
+        </button>
+        <span style={{ fontSize: 11, color: 'var(--tx2)' }}>Auto-atualiza a cada 30s</span>
+      </div>
+
+      {loading && reviews.length === 0 && (
+        <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>Carregando avaliações…</div>
+      )}
+      {!loading && filtered.length === 0 && activeReviews.length === 0 && (
+        <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>
+          {reviews.length === 0 ? 'Nenhuma avaliação cadastrada ainda.' : 'Nenhuma avaliação ativa — todas foram arquivadas.'}
+        </div>
+      )}
+      {!loading && filtered.length === 0 && activeReviews.length > 0 && (
+        <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>Nenhuma avaliação com esse filtro.</div>
+      )}
+
+      {sortedStores.map((store, idx) => (
+        <StoreAccordion
+          key={store}
+          storeName={store}
+          reviews={byStore[store]}
+          defaultOpen={idx === 0}
+          busyId={busyId}
+          busyStore={busyStore}
+          storeGroups={storeGroups}
+          onSendStore={handleSendStore}
+          onPublish={handlePublish}
+          onSaveDraft={handleSaveDraft}
+          onSendSingle={handleSendSingle}
+          onSaveNote={handleSaveNote}
+          onGerarDemandas={handleGerarDemandas}
+        />
+      ))}
+
+      {lojasZeroReviews.length > 0 && (
+        <div style={{ marginTop: 20, borderTop: '2px solid #86efac', paddingTop: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#15803d' }}>
+              🎉 Lojas sem avaliações hoje ({lojasZeroReviews.length})
+            </span>
+            <span style={{ fontSize: 12, color: '#15803d' }}>nenhuma avaliação coletada — envie parabéns e incentivo</span>
+          </div>
+          {lojasZeroReviews.map(loja => (
+            <ParabensIncentivoCard
+              key={loja.id}
+              loja={loja}
+              resolvedGroup={storeGroups[loja.nome] || storeGroups[loja.ifood_portal_nome] || null}
+              busy={busyStore === loja.nome}
+              onSend={handleSendParabensIncentivo}
+            />
+          ))}
+        </div>
+      )}
+
+      {archivedReviews.length > 0 && (
+        <div style={{ marginTop: 20, borderTop: '2px solid var(--line)', paddingTop: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--tx2)' }}>
+              📦 Arquivadas ({archivedReviews.length})
+            </span>
+            <span style={{ fontSize: 12, color: 'var(--tx2)' }}>publicadas ou com prazo vencido</span>
+            <button
+              className="cv2-btn sec"
+              style={{ fontSize: 12, marginLeft: 'auto' }}
+              onClick={() => setShowArchived(v => !v)}
+            >
+              {showArchived ? 'Ocultar' : 'Mostrar'}
+            </button>
+          </div>
+          {showArchived && sortedArchivedStores.map((store, idx) => (
+            <StoreAccordion
+              key={`archived-${store}`}
+              storeName={store}
+              reviews={archivedByStore[store]}
+              defaultOpen={idx === 0}
+              busyId={busyId}
+              busyStore={busyStore}
+              storeGroups={storeGroups}
+              onSendStore={handleSendStore}
+              onPublish={handlePublish}
+              onSaveDraft={handleSaveDraft}
+              onSendSingle={handleSendSingle}
+              onSaveNote={handleSaveNote}
+              onGerarDemandas={handleGerarDemandas}
+              idPrefix="archived"
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
