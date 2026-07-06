@@ -11,7 +11,7 @@
 async function resolveInstance(instanceName, sbFetch) {
   if (!instanceName) return null;
   const rows = await sbFetch(
-    `evolution_instances?instance_name=eq.${encodeURIComponent(instanceName)}&select=evolution_url,api_key,instance_name&limit=1`
+    `evolution_instances?instance_name=eq.${encodeURIComponent(instanceName)}&select=evolution_url,api_key,instance_name,tenant_id&limit=1`
   );
   const inst = Array.isArray(rows) ? rows[0] : null;
   return (inst?.evolution_url && inst?.api_key && inst?.instance_name) ? inst : null;

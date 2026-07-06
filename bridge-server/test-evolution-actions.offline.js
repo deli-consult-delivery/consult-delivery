@@ -10,7 +10,7 @@ const assert  = require('assert');
 const http    = require('http');
 const express = require('express');
 
-const FAKE_INSTANCE = { evolution_url: 'https://fake-evo.test', api_key: 'fake-key', instance_name: 'inst-1' };
+const FAKE_INSTANCE = { evolution_url: 'https://fake-evo.test', api_key: 'fake-key', instance_name: 'inst-1', tenant_id: 'tenant-a' };
 
 async function sbFetchMock(path) {
   assert(path.includes('evolution_instances'), 'sbFetch deveria consultar evolution_instances');
@@ -19,6 +19,15 @@ async function sbFetchMock(path) {
 }
 
 async function requireJwtMock(req, res, next) { req.user = { id: 'test-user' }; next(); }
+
+// mock de assertTenantMember: permite só se tenant_id === 'tenant-a' (o "tenant
+// do usuário de teste"), simulando membership real; nega qualquer outro
+// (é o que fecha o IDOR: instance_name de outro tenant não passa mais).
+async function assertTenantMemberMock(req, res, tenant_id) {
+  if (tenant_id === 'tenant-a') return true;
+  res.status(403).json({ error: 'Acesso negado: usuário não é membro deste tenant' });
+  return false;
+}
 
 // mocka o fetch global usado pelo proxy para "chamar a Evolution" — chamadas
 // ao servidor de teste local (http://127.0.0.1) passam direto (originalFetch);
@@ -35,7 +44,7 @@ async function main() {
   const buildRouter = require('./routes/evolution-actions');
   const app = express();
   app.use(express.json());
-  app.use('/api', buildRouter({ requireJwt: requireJwtMock, sbFetch: sbFetchMock }));
+  app.use('/api', buildRouter({ requireJwt: requireJwtMock, sbFetch: sbFetchMock, assertTenantMember: assertTenantMemberMock }));
 
   const server = app.listen(0);
   const { port } = server.address();
@@ -85,7 +94,7 @@ async function main() {
       const buildRouter2 = require('./routes/evolution-actions');
       const app2 = express();
       app2.use(express.json());
-      app2.use('/api', buildRouter2({ requireJwt: requireJwtMock, sbFetch: async () => [] }));
+      app2.use('/api', buildRouter2({ requireJwt: requireJwtMock, sbFetch: async () => [], assertTenantMember: assertTenantMemberMock }));
       const server2 = app2.listen(0);
       const { port: port2 } = server2.address();
       const res = await fetch(`http://127.0.0.1:${port2}/api/evolution/send-text`, {
@@ -98,6 +107,37 @@ async function main() {
     assert.strictEqual(r.status, 404);
     assert.strictEqual(evoCalled, false, 'não deveria ter chamado a Evolution para instância inexistente');
     console.log('✓ instância inexistente → 404, Evolution nunca chamada');
+  }
+
+  // 5. IDOR — instance_name de OUTRO tenant → 403, Evolution nunca chamada
+  // (fecha o achado MEDIUM: sem isto, qualquer autenticado com o instance_name
+  // alheio conseguia enviar mensagem como aquele tenant)
+  {
+    let evoCalled = false;
+    global.fetch = async (url, opts) => {
+      if (String(url).startsWith('http://127.0.0.1')) return originalFetch(url, opts);
+      evoCalled = true;
+      throw new Error('não deveria chamar a Evolution');
+    };
+    const OUTRA_INSTANCIA = { ...FAKE_INSTANCE, instance_name: 'inst-b', tenant_id: 'tenant-b' };
+    const buildRouter3 = require('./routes/evolution-actions');
+    const app3 = express();
+    app3.use(express.json());
+    app3.use('/api', buildRouter3({
+      requireJwt: requireJwtMock,
+      sbFetch: async () => [OUTRA_INSTANCIA],
+      assertTenantMember: assertTenantMemberMock,
+    }));
+    const server3 = app3.listen(0);
+    const { port: port3 } = server3.address();
+    const r = await fetch(`http://127.0.0.1:${port3}/api/evolution/send-text`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instance_name: 'inst-b', to: '55119', text: 'oi' }),
+    });
+    server3.close();
+    assert.strictEqual(r.status, 403);
+    assert.strictEqual(evoCalled, false, 'não deveria ter chamado a Evolution para instância de outro tenant');
+    console.log('✓ instance_name de outro tenant → 403 (IDOR fechado), Evolution nunca chamada');
   }
 
   server.close();

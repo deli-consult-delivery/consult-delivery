@@ -16,7 +16,7 @@
 
 const express = require('express');
 
-module.exports = ({ requireJwt, sbFetch }) => {
+module.exports = ({ requireJwt, sbFetch, assertTenantMember }) => {
   const router = express.Router();
   const { resolveInstance } = require('../lib/evolution-instance');
 
@@ -25,6 +25,10 @@ module.exports = ({ requireJwt, sbFetch }) => {
     try {
       const inst = await resolveInstance(instanceName, sbFetch);
       if (!inst) return res.status(404).json({ error: 'instância Evolution não encontrada' });
+      // IDOR: sem isto, qualquer usuário autenticado com o instance_name de
+      // outro tenant conseguiria enviar/gerenciar mensagens como esse tenant.
+      if (!inst.tenant_id) return res.status(403).json({ error: 'instância sem tenant associado' });
+      if (!await assertTenantMember(req, res, inst.tenant_id)) return;
 
       const r = await fetch(`${inst.evolution_url}${evoPath(inst.instance_name)}`, {
         method,
