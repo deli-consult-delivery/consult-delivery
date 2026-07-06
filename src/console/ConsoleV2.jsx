@@ -58,7 +58,6 @@ import { GRUPOS } from './moduleCatalog.js';
 // telas cv2 — onda 4 (últimas migrações de legado)
 import CRM from './CRM.jsx';
 import Lojas from './Lojas.jsx';
-import Inadimplentes from './Inadimplentes.jsx';
 import AtendimentoAvaliacoes from './AtendimentoAvaliacoes.jsx';
 import NpsResultados from './NpsResultados.jsx';
 import AvaliacaoConfig from './AvaliacaoConfig.jsx';
@@ -816,7 +815,6 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
       case 'recontratacao': return <Recontratacao tenantDbId={tenantDbId} userId={userId} />;
       case 'sofia': return <Sofia tenantDbId={tenantDbId} userId={userId} />;
       case 'disparos': return <Disparos tenantDbId={tenantDbId} userId={userId} />;
-      case 'cobranca': return <Inadimplentes tenantDbId={tenantDbId} />;
       case 'cora': return <Cora tenantDbId={tenantDbId} userId={userId} />;
       case 'campanhas': return <Campanhas tenantDbId={tenantDbId} userId={userId} />;
       case 'grupos': return <Grupos tenantDbId={tenantDbId} userId={userId} />;
