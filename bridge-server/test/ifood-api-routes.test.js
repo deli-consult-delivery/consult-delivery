@@ -563,5 +563,95 @@ function sbFetchStub(routes) {
     passed++;
   }
 
+  // 27) GET repasses: sucesso simples
+  {
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => p.startsWith('ifood_merchants?'), value: [{ merchant_id: 'merch-1' }] },
+    ]);
+    const ifood = { listarRepasses: async () => ({ settlements: [{ id: 'set-1' }] }) };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/repasses/loja-1');
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.body.data.repasses.settlements[0].id, 'set-1');
+    server.close();
+    passed++;
+  }
+
+  // 28) GET repasses: dataInicio inválido → 400 DATA_INVALIDA, client nunca chamado
+  {
+    let ifoodChamado = false;
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => p.startsWith('ifood_merchants?'), value: [{ merchant_id: 'merch-1' }] },
+    ]);
+    const ifood = { listarRepasses: async () => { ifoodChamado = true; return {}; } };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/repasses/loja-1?dataInicio=01-07-2026');
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.body.code, 'DATA_INVALIDA');
+    assert.strictEqual(ifoodChamado, false);
+    server.close();
+    passed++;
+  }
+
+  // 29) GET antecipacoes: sucesso sem filtro
+  {
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => p.startsWith('ifood_merchants?'), value: [{ merchant_id: 'merch-1' }] },
+    ]);
+    const ifood = { listarAntecipacoes: async () => ({ anticipations: [] }) };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/antecipacoes/loja-1');
+    assert.strictEqual(r.status, 200);
+    assert.deepStrictEqual(r.body.data.antecipacoes, { anticipations: [] });
+    server.close();
+    passed++;
+  }
+
+  // 30) GET antecipacoes: calculationDate + anticipatedPaymentDate juntos →
+  //     400 FILTRO_ANTECIPACAO_CONFLITANTE, client nunca chamado
+  {
+    let ifoodChamado = false;
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => p.startsWith('ifood_merchants?'), value: [{ merchant_id: 'merch-1' }] },
+    ]);
+    const ifood = { listarAntecipacoes: async () => { ifoodChamado = true; return {}; } };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/antecipacoes/loja-1?calculationDate=2026-07-01&anticipatedPaymentDate=2026-07-02');
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.body.code, 'FILTRO_ANTECIPACAO_CONFLITANTE');
+    assert.strictEqual(ifoodChamado, false);
+    server.close();
+    passed++;
+  }
+
+  // 31) GET ocorrencias: sucesso simples (ajustes/chargebacks)
+  {
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => p.startsWith('ifood_merchants?'), value: [{ merchant_id: 'merch-1' }] },
+    ]);
+    const ifood = { listarOcorrencias: async () => ({ occurrences: [{ type: 'AJUSTE_FALHA_SISTEMICA' }] }) };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/ocorrencias/loja-1');
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.body.data.ocorrencias.occurrences[0].type, 'AJUSTE_FALHA_SISTEMICA');
+    server.close();
+    passed++;
+  }
+
   process.stdout.write(`\nifood-api-routes: todos os ${passed} cenários passaram.\n`);
 })();

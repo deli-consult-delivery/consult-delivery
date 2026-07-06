@@ -443,6 +443,111 @@ function restoreFetch() {
     clearCreds();
   });
 
+  // ── listarRepasses — Settlement API: path e período (default 7 dias) ───────
+  await check('listarRepasses: sem período → default de 7 dias (beginSettlementDate/endSettlementDate)', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-repasses', expiresIn: 21600 });
+      }
+      return jsonResponse(200, { settlements: [] });
+    });
+    const ifood = freshIfood();
+    const res = await ifood.listarRepasses('merchant-1');
+    assert.deepStrictEqual(res, { settlements: [] });
+
+    const call = calls.find((c) => c.url.includes('/financial/v3.0/merchants/merchant-1/settlements'));
+    assert.ok(call, 'deveria ter chamado o endpoint de settlements');
+    const parsedUrl = new URL(call.url);
+    const begin = parsedUrl.searchParams.get('beginSettlementDate');
+    const end = parsedUrl.searchParams.get('endSettlementDate');
+    assert.match(begin, /^\d{4}-\d{2}-\d{2}$/);
+    assert.match(end, /^\d{4}-\d{2}-\d{2}$/);
+    const diffDias = (new Date(end) - new Date(begin)) / (24 * 60 * 60 * 1000);
+    assert.strictEqual(diffDias, 7, 'default deve cobrir uma janela de 7 dias');
+    restoreFetch();
+    clearCreds();
+  });
+
+  await check('listarRepasses: dataInicio/dataFim explícitos → usados sem alteração', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-repasses-2', expiresIn: 21600 });
+      }
+      return jsonResponse(200, { settlements: [{ id: 'set-1' }] });
+    });
+    const ifood = freshIfood();
+    const res = await ifood.listarRepasses('merchant-1', { dataInicio: '2026-06-01', dataFim: '2026-06-15' });
+    assert.deepStrictEqual(res, { settlements: [{ id: 'set-1' }] });
+    const call = calls.find((c) => c.url.includes('/settlements'));
+    const parsedUrl = new URL(call.url);
+    assert.strictEqual(parsedUrl.searchParams.get('beginSettlementDate'), '2026-06-01');
+    assert.strictEqual(parsedUrl.searchParams.get('endSettlementDate'), '2026-06-15');
+    restoreFetch();
+    clearCreds();
+  });
+
+  // ── listarAntecipacoes — Anticipation API: filtros mutuamente exclusivos ────
+  await check('listarAntecipacoes: sem filtro → chama sem calculationDate/anticipatedPaymentDate na query', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-antecip', expiresIn: 21600 });
+      }
+      return jsonResponse(200, { anticipations: [] });
+    });
+    const ifood = freshIfood();
+    const res = await ifood.listarAntecipacoes('merchant-1');
+    assert.deepStrictEqual(res, { anticipations: [] });
+    const call = calls.find((c) => c.url.includes('/financial/v3.0/merchants/merchant-1/anticipations'));
+    assert.ok(call, 'deveria ter chamado o endpoint de anticipations');
+    const parsedUrl = new URL(call.url);
+    assert.strictEqual(parsedUrl.searchParams.get('calculationDate'), null);
+    assert.strictEqual(parsedUrl.searchParams.get('anticipatedPaymentDate'), null);
+    restoreFetch();
+    clearCreds();
+  });
+
+  await check('listarAntecipacoes: calculationDate E anticipatedPaymentDate juntos → IfoodApiError status 0, zero fetch', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, () => jsonResponse(200, {}));
+    const ifood = freshIfood();
+    await assert.rejects(
+      () => ifood.listarAntecipacoes('merchant-1', { calculationDate: '2026-06-01', anticipatedPaymentDate: '2026-06-02' }),
+      (err) => err.name === 'IfoodApiError' && err.status === 0
+    );
+    assert.strictEqual(calls.length, 0, 'não deveria ter feito nenhuma chamada de rede');
+    restoreFetch();
+    clearCreds();
+  });
+
+  // ── listarOcorrencias — Reconciliation (occurrences): path e período ───────
+  await check('listarOcorrencias: path correto e período default de 7 dias', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-ocorr', expiresIn: 21600 });
+      }
+      return jsonResponse(200, { occurrences: [] });
+    });
+    const ifood = freshIfood();
+    const res = await ifood.listarOcorrencias('merchant-1');
+    assert.deepStrictEqual(res, { occurrences: [] });
+    const call = calls.find((c) => c.url.includes('/financial/v3.0/merchants/merchant-1/occurrences'));
+    assert.ok(call, 'deveria ter chamado o endpoint de occurrences');
+    const parsedUrl = new URL(call.url);
+    assert.match(parsedUrl.searchParams.get('beginDate'), /^\d{4}-\d{2}-\d{2}$/);
+    assert.match(parsedUrl.searchParams.get('endDate'), /^\d{4}-\d{2}-\d{2}$/);
+    restoreFetch();
+    clearCreds();
+  });
+
   // ── responderReview — POST correto, body {text}, sem retry ──────────────────
   await check('responderReview: monta POST correto com body {text}', async () => {
     setCreds();
