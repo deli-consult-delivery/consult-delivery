@@ -1,4 +1,4 @@
--- 20260706_010_fix_user_agent_access_tenant_scope.sql
+-- 20260706_019_fix_user_agent_access_tenant_scope.sql
 -- Fecha brecha de isolamento em `user_agent_access` (QA C2 parte B, achado
 -- de isolamento #2). Read-only proof antes deste fix:
 --
@@ -42,6 +42,7 @@ DROP POLICY IF EXISTS user_agent_access_manage_admin ON public.user_agent_access
 
 CREATE POLICY user_agent_access_manage_admin ON public.user_agent_access
 FOR ALL
+TO authenticated
 USING (
   EXISTS (
     SELECT 1 FROM public.tenant_members adm
