@@ -114,13 +114,20 @@ export default function CardapioIfood({ tenantDbId }) {
   // nunca sai de '', fluxo cai 100% no caminho tenant-wide de antes (zero
   // regressão pros demais tenants).
   useEffect(() => {
+    // Reseta ANTES do fetch (não só depois) — sem isso, trocar de tenant com
+    // uma loja de API já selecionada mantém o lojaId do tenant ANTERIOR até a
+    // resposta chegar, e getCardapioApiLoja(lojaId) chamaria uma loja de outro
+    // tenant (achado de revisão: usuário multi-tenant, ConsoleV2 não desmonta
+    // este componente ao trocar de tenant no seletor de topo).
+    setLojasApi([]);
+    setLojaId('');
     if (!tenantDbId) return;
     let alive = true;
     supabase.from('lojas').select('id, nome').eq('tenant_id', tenantDbId).eq('fonte_dados', 'api')
       .then(({ data }) => {
         if (!alive) return;
         setLojasApi(data || []);
-        setLojaId(prev => prev || data?.[0]?.id || '');
+        setLojaId(data?.[0]?.id || '');
       });
     return () => { alive = false; };
   }, [tenantDbId]);
