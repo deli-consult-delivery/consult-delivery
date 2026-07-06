@@ -1,0 +1,294 @@
+// bridge-server/test/ifood.test.js — testes UNITÁRIOS de lib/ifood.js (auth, cache,
+// retry, paths). Mocka global.fetch: ZERO chamadas de rede reais em qualquer cenário.
+// Reseta o module cache entre cenários pra isolar tokenCache/tokenInFlight (estado
+// de módulo) — cada check() roda com um require('../lib/ifood') fresco.
+//
+// Rodar:  node bridge-server/test/ifood.test.js
+'use strict';
+
+const assert = require('node:assert');
+
+let failures = 0;
+let passes = 0;
+
+async function check(label, fn) {
+  try {
+    await fn();
+    passes++;
+    process.stdout.write(`  ok  ${label}\n`);
+  } catch (e) {
+    failures++;
+    process.stdout.write(`  FAIL ${label}: ${e.message}\n`);
+  }
+}
+
+const IFOOD_MODULE_PATH = require.resolve('../lib/ifood');
+function freshIfood() {
+  delete require.cache[IFOOD_MODULE_PATH];
+  return require('../lib/ifood');
+}
+
+function jsonResponse(status, body) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: `status-${status}`,
+    text: async () => JSON.stringify(body),
+  };
+}
+
+function setCreds() {
+  process.env.IFOOD_CLIENT_ID = 'client-teste';
+  process.env.IFOOD_CLIENT_SECRET = 'secret-teste';
+  process.env.IFOOD_BASE_URL = 'https://sandbox.ifood.test';
+}
+function clearCreds() {
+  delete process.env.IFOOD_CLIENT_ID;
+  delete process.env.IFOOD_CLIENT_SECRET;
+  delete process.env.IFOOD_BASE_URL;
+}
+
+const ORIGINAL_FETCH = global.fetch;
+function mockFetch(calls, impl) {
+  global.fetch = async (url, opts) => {
+    calls.push({ url, opts });
+    return impl(url, opts, calls);
+  };
+}
+function restoreFetch() {
+  global.fetch = ORIGINAL_FETCH;
+}
+
+(async () => {
+  // ── Config / credencial ausente ────────────────────────────────────────────
+  await check('getAccessToken sem credenciais → IfoodApiError status 0, zero fetch', async () => {
+    clearCreds();
+    const calls = [];
+    mockFetch(calls, () => { throw new Error('não deveria chamar fetch sem credencial'); });
+    const ifood = freshIfood();
+    await assert.rejects(
+      () => ifood.getAccessToken(),
+      (err) => err.name === 'IfoodApiError' && err.status === 0
+    );
+    assert.strictEqual(calls.length, 0);
+    restoreFetch();
+  });
+
+  // ── Token: grant client_credentials + headers + cache ──────────────────────
+  await check('getAccessToken: grant client_credentials, headers e cache reusado', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, () => jsonResponse(200, { accessToken: 'tok-abc', expiresIn: 21600, type: 'bearer' }));
+    const ifood = freshIfood();
+
+    const token1 = await ifood.getAccessToken();
+    assert.strictEqual(token1, 'tok-abc');
+    assert.strictEqual(calls.length, 1);
+    assert.strictEqual(calls[0].url, 'https://sandbox.ifood.test/authentication/v1.0/oauth/token');
+    assert.strictEqual(calls[0].opts.method, 'POST');
+    assert.strictEqual(calls[0].opts.headers['Content-Type'], 'application/x-www-form-urlencoded');
+    const bodyParams = new URLSearchParams(calls[0].opts.body);
+    assert.strictEqual(bodyParams.get('grantType'), 'client_credentials');
+    assert.strictEqual(bodyParams.get('clientId'), 'client-teste');
+    assert.strictEqual(bodyParams.get('clientSecret'), 'secret-teste');
+
+    const token2 = await ifood.getAccessToken();
+    assert.strictEqual(token2, 'tok-abc');
+    assert.strictEqual(calls.length, 1, 'segunda chamada deveria reusar o cache, sem novo fetch');
+    restoreFetch();
+    clearCreds();
+  });
+
+  // ── Token: renovação dentro da margem de 5min (RENEW_SKEW_MS) ──────────────
+  await check('getAccessToken: expiresIn menor que a margem de 5min → renova a cada chamada', async () => {
+    setCreds();
+    const calls = [];
+    let n = 0;
+    mockFetch(calls, () => {
+      n++;
+      return jsonResponse(200, { accessToken: `tok-${n}`, expiresIn: 60 }); // 60s < skew de 5min
+    });
+    const ifood = freshIfood();
+    const t1 = await ifood.getAccessToken();
+    const t2 = await ifood.getAccessToken();
+    assert.strictEqual(t1, 'tok-1');
+    assert.strictEqual(t2, 'tok-2');
+    assert.strictEqual(calls.length, 2, 'cada chamada deveria pedir token novo (dentro da margem de renovação)');
+    restoreFetch();
+    clearCreds();
+  });
+
+  // ── Retry: 429 → retenta e sucede ───────────────────────────────────────────
+  await check('withRetry: 429 seguido de 200 → retenta e sucede (GET)', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-retry', expiresIn: 21600 });
+      }
+      const merchantCalls = calls.filter((c) => c.url.includes('/merchant/v1.0/merchants')).length;
+      if (merchantCalls === 1) return jsonResponse(429, { message: 'rate limited' });
+      return jsonResponse(200, [{ id: 'm1', name: 'Loja Teste' }]);
+    });
+    const ifood = freshIfood();
+    const merchants = await ifood.listarMerchants();
+    assert.deepStrictEqual(merchants, [{ id: 'm1', name: 'Loja Teste' }]);
+    const merchantCalls = calls.filter((c) => c.url.includes('/merchant/v1.0/merchants'));
+    assert.strictEqual(merchantCalls.length, 2, 'deveria ter retentado 1x após o 429');
+    restoreFetch();
+    clearCreds();
+  });
+
+  // ── Retry: 404 não é retentável (só 429/5xx) ────────────────────────────────
+  await check('withRetry: 404 não retenta (só 429/5xx)', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-404', expiresIn: 21600 });
+      }
+      return jsonResponse(404, { message: 'not found' });
+    });
+    const ifood = freshIfood();
+    await assert.rejects(() => ifood.getStatusLoja('merchant-abc-123'), (err) => err.status === 404);
+    const statusCalls = calls.filter((c) => c.url.includes('/status'));
+    assert.strictEqual(statusCalls.length, 1, '404 não é retentável — só 1 tentativa');
+    restoreFetch();
+    clearCreds();
+  });
+
+  // ── Paths — Merchant / Review (GET) ─────────────────────────────────────────
+  await check('getStatusLoja / listarReviews: path e Authorization corretos', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-paths', expiresIn: 21600 });
+      }
+      if (url.includes('/merchant/v1.0/merchants/merchant-1/status')) {
+        return jsonResponse(200, { available: true });
+      }
+      if (url.includes('/review/v2.0/merchants/merchant-1/reviews')) {
+        return jsonResponse(200, [{ id: 'rev-1' }]);
+      }
+      return jsonResponse(404, {});
+    });
+    const ifood = freshIfood();
+
+    const status = await ifood.getStatusLoja('merchant-1');
+    assert.deepStrictEqual(status, { available: true });
+    const reviews = await ifood.listarReviews('merchant-1');
+    assert.deepStrictEqual(reviews, [{ id: 'rev-1' }]);
+
+    const statusCall = calls.find((c) => c.url.includes('/status'));
+    const reviewsCall = calls.find((c) => c.url.includes('/reviews') && !c.url.includes('/answers'));
+    assert.strictEqual(statusCall.opts.headers.Authorization, 'Bearer tok-paths');
+    assert.strictEqual(reviewsCall.opts.headers.Authorization, 'Bearer tok-paths');
+    restoreFetch();
+    clearCreds();
+  });
+
+  // ── listarVendas — período default (7 dias) quando dataInicio/dataFim faltam ──
+  await check('listarVendas: sem período → default de 7 dias (beginSalesDate/endSalesDate)', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-vendas', expiresIn: 21600 });
+      }
+      return jsonResponse(200, { sales: [] });
+    });
+    const ifood = freshIfood();
+    const res = await ifood.listarVendas('merchant-1');
+    assert.deepStrictEqual(res, { sales: [] });
+
+    const salesCall = calls.find((c) => c.url.includes('/financial/v3.0/merchants/merchant-1/sales'));
+    assert.ok(salesCall, 'deveria ter chamado o endpoint de sales');
+    const parsedUrl = new URL(salesCall.url);
+    const begin = parsedUrl.searchParams.get('beginSalesDate');
+    const end = parsedUrl.searchParams.get('endSalesDate');
+    assert.match(begin, /^\d{4}-\d{2}-\d{2}$/, 'beginSalesDate deve estar em yyyy-MM-dd');
+    assert.match(end, /^\d{4}-\d{2}-\d{2}$/, 'endSalesDate deve estar em yyyy-MM-dd');
+    const diffDias = (new Date(end) - new Date(begin)) / (24 * 60 * 60 * 1000);
+    assert.strictEqual(diffDias, 7, 'default deve cobrir uma janela de 7 dias');
+    restoreFetch();
+    clearCreds();
+  });
+
+  await check('listarVendas: dataInicio/dataFim explícitos → usados sem alteração', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-vendas-2', expiresIn: 21600 });
+      }
+      return jsonResponse(200, { sales: [{ id: 'sale-1' }] });
+    });
+    const ifood = freshIfood();
+    const res = await ifood.listarVendas('merchant-1', { dataInicio: '2026-06-01', dataFim: '2026-06-15' });
+    assert.deepStrictEqual(res, { sales: [{ id: 'sale-1' }] });
+
+    const salesCall = calls.find((c) => c.url.includes('/sales'));
+    const parsedUrl = new URL(salesCall.url);
+    assert.strictEqual(parsedUrl.searchParams.get('beginSalesDate'), '2026-06-01');
+    assert.strictEqual(parsedUrl.searchParams.get('endSalesDate'), '2026-06-15');
+    restoreFetch();
+    clearCreds();
+  });
+
+  // ── responderReview — POST correto, body {text}, sem retry ──────────────────
+  await check('responderReview: monta POST correto com body {text}', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-review', expiresIn: 21600 });
+      }
+      return jsonResponse(200, { id: 'rev-1', text: 'Obrigado!' });
+    });
+    const ifood = freshIfood();
+    const res = await ifood.responderReview('merchant-1', 'review-1', 'Obrigado pelo feedback!');
+    assert.deepStrictEqual(res, { id: 'rev-1', text: 'Obrigado!' });
+
+    const reviewCall = calls.find((c) => c.url.includes('/reviews/review-1/answers'));
+    assert.ok(reviewCall, 'deveria ter chamado o endpoint de resposta');
+    assert.strictEqual(reviewCall.url, 'https://sandbox.ifood.test/review/v2.0/merchants/merchant-1/reviews/review-1/answers');
+    assert.strictEqual(reviewCall.opts.method, 'POST');
+    assert.strictEqual(reviewCall.opts.headers.Authorization, 'Bearer tok-review');
+    assert.strictEqual(JSON.parse(reviewCall.opts.body).text, 'Obrigado pelo feedback!');
+    restoreFetch();
+    clearCreds();
+  });
+
+  await check('responderReview: texto vazio → IfoodApiError status 0, zero chamada ao endpoint', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, () => jsonResponse(200, { accessToken: 'tok-x', expiresIn: 21600 }));
+    const ifood = freshIfood();
+    await assert.rejects(() => ifood.responderReview('merchant-1', 'review-1', '   '), (err) => err.status === 0);
+    assert.strictEqual(calls.filter((c) => c.url.includes('/answers')).length, 0);
+    restoreFetch();
+    clearCreds();
+  });
+
+  await check('responderReview: merchantId/reviewId inválido → rejeita antes de tocar a rede', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, () => { throw new Error('não deveria chamar fetch com id inválido'); });
+    const ifood = freshIfood();
+    await assert.rejects(
+      () => ifood.responderReview('../etc/passwd', 'review-1', 'texto'),
+      (err) => err.status === 0
+    );
+    assert.strictEqual(calls.length, 0);
+    restoreFetch();
+    clearCreds();
+  });
+
+  restoreFetch();
+  if (failures > 0) {
+    process.stdout.write(`\n${failures} falha(s) de ${passes + failures}.\n`);
+    process.exit(1);
+  }
+  process.stdout.write(`\nifood: todas as ${passes} asserções passaram (zero chamadas de rede reais).\n`);
+})();

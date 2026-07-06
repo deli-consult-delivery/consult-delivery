@@ -5,6 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 import { notify } from "../_shared/notify";
+import { calcularCustoUsd } from "../_shared/pricing";
 
 // =====================================================
 // SCHEMAS
@@ -154,6 +155,7 @@ export const veraDetectarAnomalia = task({
 
       // Instanciação dentro do run() — anti-padrão #4 evitado
       const anthropic = new Anthropic();
+      let costUsd = 0;
 
       for (const kpi of KPI_PATHS) {
         const valoresBaseline = historicoBaseline
@@ -250,6 +252,8 @@ Retorne APENAS JSON: {"explicacao": "sua explicação aqui"}`,
             }],
           });
 
+          costUsd += calcularCustoUsd("claude-haiku-4-5-20251001", resp.usage) ?? 0;
+
           const rawExp = resp.content
             .filter((b) => b.type === "text")
             .map((b) => (b as Anthropic.TextBlock).text)
@@ -323,6 +327,7 @@ Retorne APENAS JSON: {"explicacao": "sua explicação aqui"}`,
         triggeredBy: input.triggered_by,
         input,
         output,
+        costUsd,
         status:      "success",
       });
 

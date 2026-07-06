@@ -117,7 +117,7 @@ export default function CardapioIfood({ tenantDbId }) {
 
   return (
     <div>
-      <h1>Cardápio iFood</h1>
+      <h1>iFood: Cardápio</h1>
       <div className="cv2-rule" />
       <div className="cv2-sub">
         Itens do cardápio do iFood por categoria, ao vivo via Bridge. Pausar/Reabrir cria um draft que aguarda sua aprovação.

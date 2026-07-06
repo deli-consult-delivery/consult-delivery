@@ -16,6 +16,16 @@ const express = require('express');
 const { z }   = require('zod');
 const { getBrandByTenant, getAvaliacaoConfig } = require('../lib/branding');
 const { sendEvolutionText, renderTemplate }    = require('../lib/evolution-send');
+const { pushNotifyTenant }                     = require('../lib/push-notify');
+
+// Formata "5594984367456" → "+55 (94) 98436-7456". Se não bater no padrão BR, retorna cru.
+function formatTelefoneBR(raw) {
+  const d = String(raw).replace(/\D/g, '');
+  const semDDI = d.startsWith('55') && d.length >= 12 ? d.slice(2) : d;
+  if (semDDI.length === 11) return `+55 (${semDDI.slice(0, 2)}) ${semDDI.slice(2, 7)}-${semDDI.slice(7)}`;
+  if (semDDI.length === 10) return `+55 (${semDDI.slice(0, 2)}) ${semDDI.slice(2, 6)}-${semDDI.slice(6)}`;
+  return raw;
+}
 
 // ── Rate limiter in-memory ────────────────────────────────────────────────────
 const rateLimitNps = new Map();
@@ -58,7 +68,7 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
 
   async function getNpsByToken(token) {
     const rows = await sbFetch(
-      `nps_avaliacoes?public_token=eq.${encodeURIComponent(token)}&select=id,tenant_id,status,nota,public_token_expires_at&limit=1`
+      `nps_avaliacoes?public_token=eq.${encodeURIComponent(token)}&select=id,tenant_id,status,nota,public_token_expires_at,contact_identifier,contact_phone,external_ref&limit=1`
     );
     return rows?.[0] ?? null;
   }
@@ -172,9 +182,14 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
 
       // F2: Alerta de detrator em background (não bloqueia resposta ao cliente)
       if (nota <= 6) {
-        const npsId     = nps.id;
-        const tenantId  = nps.tenant_id;
-        const notaFinal = nota;
+        const npsId           = nps.id;
+        const tenantId        = nps.tenant_id;
+        const notaFinal       = nota;
+        const comentarioFinal = comentario ?? null;
+        const respondedAtTs   = patchBody.responded_at;
+        const npsExternalRef  = nps.external_ref  ?? null;
+        const npsContactId    = nps.contact_identifier ?? null;
+        const npsContactPhone = nps.contact_phone ?? null;
 
         setImmediate(async () => {
           try {
@@ -183,7 +198,7 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
                 `avaliacao_config?tenant_id=eq.${encodeURIComponent(tenantId)}&select=detrator_notificar,detrator_wpp_jid,detrator_msg_template,nps_threshold_detrator&limit=1`
               ),
               sbFetch(
-                `nps_avaliacoes?id=eq.${encodeURIComponent(npsId)}&select=atendente_nome,duracao_minutos,contact_nome&limit=1`
+                `nps_avaliacoes?id=eq.${encodeURIComponent(npsId)}&select=atendente_nome,duracao_minutos,contact_nome,ticket_code&limit=1`
               ),
             ]);
 
@@ -198,17 +213,51 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
               return;
             }
 
-            const av            = Array.isArray(detailRows) ? (detailRows[0] ?? {}) : {};
-            const duracaoTexto  = av.duracao_minutos != null ? `${av.duracao_minutos} min` : 'não registrada';
-            const template      = cfg.detrator_msg_template ||
-              '⚠️ *Detrator detectado!*\n\nCliente: {contact_nome}\nAtendente: {atendente_nome}\nDuração: {duracao}\nNota NPS: *{nota}*\n\nAbra o caso e trate em até 48h.';
+            const av           = Array.isArray(detailRows) ? (detailRows[0] ?? {}) : {};
+            const duracaoTexto = av.duracao_minutos != null ? `${av.duracao_minutos} min` : 'não registrada';
+
+            const dataHora = new Date(respondedAtTs).toLocaleString('pt-BR', {
+              timeZone: 'America/Sao_Paulo',
+              day: '2-digit', month: '2-digit', year: 'numeric',
+              hour: '2-digit', minute: '2-digit',
+            });
+
+            const APP_BASE = process.env.APP_BASE_URL || 'https://app.consultdelivery.com.br';
+            const linkPlataforma = `${APP_BASE}/#nps`;
+
+            const contatoCliente = npsContactPhone
+              ? formatTelefoneBR(npsContactPhone)
+              : npsContactId
+                ? npsContactId.replace(/@s\.whatsapp\.net$/i, '')
+                : 'não informado';
+
+            // Nº do ticket do atendimento no Datacrazy (busca por código no painel).
+            const ticketTexto = av.ticket_code ? `#${av.ticket_code}` : 'não informado';
+
+            // Testado ao vivo (2026-07-01): o CRM Datacrazy (crm2.datacrazy.io/multiservice)
+            // não suporta deep-link para uma conversa específica via URL (query params
+            // tipo conversationId/search não filtram a lista). messaging.g1.datacrazy.io
+            // é host de API (retorna JSON 404 em rota de navegador), nunca deveria estar
+            // aqui. Link aponta para a lista de finalizadas — o atendente busca pelo nome.
+            const buscaTicket = av.ticket_code ? ` (busque pelo ticket ${ticketTexto})` : '';
+            const datacrazyLine = npsExternalRef
+              ? `\n🔗 Ver no Datacrazy (Chat ao vivo → Finalizadas): https://crm2.datacrazy.io/multiservice?status=finished${buscaTicket}`
+              : '';
+
+            const template = cfg.detrator_msg_template ||
+              '⚠️ *Detrator NPS detectado!*\n\nCliente: {contact_nome}\nAtendimento (ticket): {ticket}\nContato: {contato_cliente}\nAtendente: {atendente_nome}\nDuração: {duracao}\nNota NPS: *{nota}*/10\nData/Hora: {data_hora}\nComentário: {comentario}\n\n🔗 Ver na plataforma: {link_plataforma}\n\nAbra o caso e trate em até 48h.';
 
             const texto = renderTemplate(template, {
-              contact_nome:   av.contact_nome   || 'desconhecido',
-              atendente_nome: av.atendente_nome || 'não identificado',
-              duracao:        duracaoTexto,
-              nota:           String(notaFinal),
-            });
+              contact_nome:    av.contact_nome        || 'desconhecido',
+              contato_cliente: contatoCliente,
+              ticket:          ticketTexto,
+              atendente_nome:  av.atendente_nome      || 'não identificado',
+              duracao:         duracaoTexto,
+              nota:            String(notaFinal),
+              data_hora:       dataHora,
+              comentario:      comentarioFinal        || '—',
+              link_plataforma: linkPlataforma,
+            }) + datacrazyLine;
 
             // Tenants que só usam DataCrazy não têm Evolution própria —
             // usa a instância da Consult Delivery como fallback para o alerta interno.
@@ -236,7 +285,7 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
                   recipient_user_id: null,
                   kind:              'system',
                   title:             `Detrator NPS — nota ${notaFinal}`,
-                  body:              `${av.contact_nome || 'Cliente'} deu nota ${notaFinal}. Atendente: ${av.atendente_nome || 'não identificado'}. Trate em até 48h.`,
+                  body:              `${av.contact_nome || 'Cliente'} deu nota ${notaFinal}. Atendente: ${av.atendente_nome || 'não identificado'}. Ticket ${ticketTexto}. Trate em até 48h.`,
                   link:              '/controle-atendimentos',
                 },
                 prefer: 'return=minimal',
@@ -244,6 +293,14 @@ module.exports = function buildPublicoNpsRouter({ sbFetch }) {
             } catch (notifErr) {
               console.error('[publico/nps] erro ao criar notificação de detrator:', notifErr.message);
             }
+
+            await pushNotifyTenant({
+              sbFetch,
+              tenantId,
+              title: `Detrator NPS — nota ${notaFinal}`,
+              body:  `${av.contact_nome || 'Cliente'} deu nota ${notaFinal}. Atendente: ${av.atendente_nome || 'não identificado'}.`,
+              route: 'controle-atendimentos',
+            });
           } catch (alertErr) {
             console.error('[publico/nps] erro no alerta de detrator:', alertErr.message);
           }

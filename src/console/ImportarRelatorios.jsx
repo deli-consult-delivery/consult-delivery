@@ -29,7 +29,7 @@ export default function ImportarRelatorios({ tenantDbId, userId }) {
   const carregar = useCallback(async () => {
     if (!tenantDbId) return;
     const [{ data: ls }, { data: fs, error: e1 }, { data: ms }] = await Promise.all([
-      supabase.from('lojas').select('id, nome').eq('tenant_id', tenantDbId).order('nome'),
+      supabase.from('lojas').select('id, nome').eq('tenant_id', tenantDbId).eq('is_contato', false).order('nome'),
       supabase.from('radar_fontes').select('id, tipo_relatorio, origem, arquivo_nome, status, erro_detalhe, periodo_inicio, periodo_fim, created_at').eq('tenant_id', tenantDbId).order('created_at', { ascending: false }).limit(30),
       supabase.from('radar_metricas').select('metrica, valor, valor_texto, periodo_inicio, periodo_fim, created_at').eq('tenant_id', tenantDbId).order('created_at', { ascending: false }).limit(20),
     ]);

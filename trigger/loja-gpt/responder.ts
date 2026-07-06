@@ -6,6 +6,7 @@ import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 import { buildLojaContexto, type LojaContexto } from "../_shared/loja-contexto";
 import { searchKnowledgeBase } from "../_shared/knowledge-base";
+import { calcularCustoUsd } from "../_shared/pricing";
 
 // ---------------------------------------------------------------------------
 // Schemas Zod — OBRIGATÓRIO
@@ -36,15 +37,7 @@ const OutputSchema = z.object({
 type Input = z.infer<typeof InputSchema>;
 type Output = z.infer<typeof OutputSchema>;
 
-// ---------------------------------------------------------------------------
-// Preço claude-sonnet-4-6 (USD por token — valores públicos, não credenciais)
-// ---------------------------------------------------------------------------
-const PRECO_INPUT_POR_TOKEN = 3.0 / 1_000_000;
-const PRECO_OUTPUT_POR_TOKEN = 15.0 / 1_000_000;
-
-function calcularCusto(tokensInput: number, tokensOutput: number): number {
-  return tokensInput * PRECO_INPUT_POR_TOKEN + tokensOutput * PRECO_OUTPUT_POR_TOKEN;
-}
+const MODEL = "claude-sonnet-4-6";
 
 // ---------------------------------------------------------------------------
 // System prompt builder
@@ -212,7 +205,7 @@ export const lojaGptResponder = task({
       });
 
       const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+        model: MODEL,
         max_tokens: 2000,
         system: systemPrompt,
         messages: [
@@ -235,7 +228,7 @@ export const lojaGptResponder = task({
 
       const tokens_input = response.usage.input_tokens;
       const tokens_output = response.usage.output_tokens;
-      const custo_usd = calcularCusto(tokens_input, tokens_output);
+      const custo_usd = calcularCustoUsd(MODEL, response.usage) ?? 0;
       const duracao_ms = Date.now() - start;
 
       logger.info("loja-gpt-responder: resposta recebida", {

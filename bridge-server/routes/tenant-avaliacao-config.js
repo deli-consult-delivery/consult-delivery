@@ -26,6 +26,8 @@ const AvaliacaoConfigPatchSchema = z.object({
   nps_subtitulo:      z.string().max(300).nullable().optional(),
   nps_agradecimento:  z.string().max(300).nullable().optional(),
   nps_mensagem_template: z.string().max(1000).nullable().optional(),
+  detrator_notificar: z.boolean().optional(),
+  detrator_wpp_jid:   z.string().max(50).nullable().optional(),
 });
 
 const BrandingPatchSchema = z.object({
@@ -93,6 +95,7 @@ module.exports = function buildTenantAvaliacaoConfigRouter({ requireJwt, sbFetch
         `avaliacao_config?tenant_id=eq.${encodeURIComponent(tenant_id)}` +
         `&select=csat_auto_envio,csat_mensagem_template,csat_titulo,csat_subtitulo,csat_agradecimento` +
         `,nps_auto_envio,nps_mensagem_template,nps_cooldown_dias,nps_titulo,nps_subtitulo,nps_agradecimento` +
+        `,detrator_notificar,detrator_wpp_jid` +
         `&limit=1`
       );
       return res.json(rows?.[0] ?? null);

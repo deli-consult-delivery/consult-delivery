@@ -10,7 +10,7 @@ export default function LojasList({ go }) {
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase.from('lojas').select('*').order('created_at',{ ascending:false });
+      const { data } = await supabase.from('lojas').select('*').eq('is_contato', false).order('created_at',{ ascending:false });
       setLojas(data||[]); setLoading(false);
     }
     load();

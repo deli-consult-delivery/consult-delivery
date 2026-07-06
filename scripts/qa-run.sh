@@ -66,6 +66,16 @@ else
   ok "Sem logs de dados sensíveis"
 fi
 
+# ── TEST 5: Deploy verificado (opcional, via EXPECT_BUNDLE) ──
+if [[ -n "${EXPECT_BUNDLE:-}" ]]; then
+  echo "→ Verificando deploy real (EXPECT_BUNDLE=$EXPECT_BUNDLE)..."
+  if bash "$(dirname "${BASH_SOURCE[0]}")/verify-deploy.sh" --expect "$EXPECT_BUNDLE"; then
+    ok "Deploy confirmado em produção: $EXPECT_BUNDLE"
+  else
+    fail "Deploy NÃO confirmado — bundle esperado não chegou a produção"
+  fi
+fi
+
 # ── Resultado ─────────────────────────────────────
 echo ""
 echo "── Resultados ──────────────────────────────"

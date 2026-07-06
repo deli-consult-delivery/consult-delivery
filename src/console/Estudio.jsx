@@ -55,7 +55,7 @@ export default function Estudio({ tenantDbId, userId }) {
   const carregar = useCallback(async () => {
     if (!tenantDbId) return;
     const [{ data: ls, error: e1 }, { data: cs, error: e2 }, { data: ds }] = await Promise.all([
-      supabase.from('lojas').select('id, nome').eq('tenant_id', tenantDbId).eq('is_active', true).order('nome').limit(50),
+      supabase.from('lojas').select('id, nome').eq('tenant_id', tenantDbId).eq('is_active', true).eq('is_contato', false).order('nome').limit(50),
       supabase.from('estudio_criacoes').select('id, loja_id, tipo, formato, brief, tom, status, texto_gerado, imagem_url, custo_usd, erro_msg, created_at').eq('tenant_id', tenantDbId).order('created_at', { ascending: false }).limit(24),
       supabase.from('agent_drafts').select('metadata').eq('tenant_id', tenantDbId).eq('agent_name', 'estudio').limit(100),
     ]);

@@ -1,6 +1,8 @@
 # MÉTODO DE TRABALHO — Console v2 (regra do Wandson, 2026-06-08)
 
 > **Ler antes de mexer em qualquer tela do Console v2.** Regra dada pelo Wandson e que vale para todas as sessões.
+>
+> `console.css` (claro) é o design system oficial — decisão travada 04/07/2026, ver seção "DESIGN SYSTEM" no `CLAUDE.md`.
 
 ## 1. Protótipo primeiro, sempre
 A fonte da verdade do visual é o protótipo em **`docs/prototipo/console-v2.html`** (e o design em claude.ai/design · ui_kits/console). **Antes de construir/alterar uma tela na plataforma:**

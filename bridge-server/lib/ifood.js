@@ -252,12 +252,23 @@ async function listarReviews(merchantId, tenantId) {
   ).then(tolerant);
 }
 
-// Vendas — financeiro, por período (dataInicio/dataFim → query).
+// Vendas — financeiro, por período (dataInicio/dataFim → query, formato
+// yyyy-MM-dd). Confirmado live (2026-07-05, merchant de teste): sem período
+// o iFood responde 400 — beginSalesDate/endSalesDate são obrigatórios. Default
+// sensato quando o chamador não informa: últimos 7 dias (hoje inclusive).
+function isoDate(d) {
+  return d.toISOString().slice(0, 10);
+}
+
 async function listarVendas(merchantId, { dataInicio, dataFim } = {}, tenantId) {
+  const hoje = new Date();
+  const seteDiasAtras = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const beginSalesDate = dataInicio || isoDate(seteDiasAtras);
+  const endSalesDate = dataFim || isoDate(hoje);
   return withRetry(() =>
     ifoodFetch(
       `/financial/v3.0/merchants/${merchantId}/sales`,
-      { query: { beginSalesDate: dataInicio, endSalesDate: dataFim } },
+      { query: { beginSalesDate, endSalesDate } },
       tenantId
     )
   ).then(tolerant);
@@ -369,6 +380,27 @@ async function deletarCategoria(merchantId, categoryId, tenantId) {
   return ifoodFetch(
     `/catalog/v2.0/merchants/${merchantId}/categories/${categoryId}`,
     { method: 'DELETE' },
+    tenantId
+  ).then(tolerant);
+}
+
+// Responde uma avaliação (review) — mensagem PÚBLICA ao cliente do lojista.
+// Path confirmado no 00-api-reference.md (POST /review/v2.0/merchants/{merchantId}/reviews/{reviewId}/answers).
+// Corpo `{ text }` segue o schema documentado da API iFood — ainda NÃO confirmado
+// contra uma chamada real (doc capturada do portal não detalha o schema de resposta);
+// ajustar aqui se o 1º smoke live devolver 4xx de validação.
+// SEM retry: POST não é idempotente (reenvio duplicaria a resposta pública ao cliente).
+// Escrita gated: NUNCA chamar direto de um agente — sempre via draft (amarelo) +
+// aprovação humana, mesmo padrão de pausarItem/reabrirItem (routes/ifood.js).
+async function responderReview(merchantId, reviewId, texto, tenantId) {
+  assertPathId(merchantId, 'merchantId');
+  assertPathId(reviewId, 'reviewId');
+  if (typeof texto !== 'string' || texto.trim() === '') {
+    throw new IfoodApiError('responderReview: texto é obrigatório', 0, null);
+  }
+  return ifoodFetch(
+    `/review/v2.0/merchants/${merchantId}/reviews/${reviewId}/answers`,
+    { method: 'POST', body: { text: texto } },
     tenantId
   ).then(tolerant);
 }
@@ -533,4 +565,5 @@ module.exports = {
   pausarItem,
   reabrirItem,
   deletarCategoria,
+  responderReview,
 };

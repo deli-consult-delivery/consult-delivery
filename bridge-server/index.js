@@ -1033,7 +1033,9 @@ app.post('/agents/recontratacao/:customer_id/enviar', requireJwtOrInternal, asyn
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// GET /whatsapp/groups — Lista grupos WhatsApp via Evolution API
+// GET /whatsapp/groups — Lista grupos WhatsApp. Fonte primária: Supabase
+// (whatsapp_groups do tenant — QA P3: Evolution é lenta/instável). Fallback:
+// Evolution API ao vivo só se a tabela vier vazia para o tenant.
 // ════════════════════════════════════════════════════════════════════════════
 app.get('/whatsapp/groups', requireJwt, async (req, res) => {
   const { tenant_id } = req.query;
@@ -1041,6 +1043,34 @@ app.get('/whatsapp/groups', requireJwt, async (req, res) => {
   if (!SUPABASE_SERVICE_KEY)
     return res.status(503).json({ error: 'SUPABASE_SERVICE_KEY não configurado' });
 
+  try {
+    // hierárquico: tenant pedido + filhos diretos (ex.: agência + stores)
+    const tr = await fetch(
+      `${SUPABASE_URL}/rest/v1/tenants?or=(id.eq.${encodeURIComponent(tenant_id)},parent_tenant_id.eq.${encodeURIComponent(tenant_id)})&select=id`,
+      { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }
+    );
+    if (!tr.ok) throw new Error(`supabase tenants select ${tr.status}: ${await tr.text()}`);
+    const tenantRows = await tr.json();
+    const tenantIds = Array.isArray(tenantRows) && tenantRows.length > 0
+      ? tenantRows.map(t => t.id)
+      : [tenant_id];
+
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/whatsapp_groups?tenant_id=in.(${tenantIds.map(encodeURIComponent).join(',')})&ativo=eq.true&select=evolution_jid,group_name`,
+      { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` } }
+    );
+    if (!r.ok) throw new Error(`supabase whatsapp_groups select ${r.status}: ${await r.text()}`);
+    const rows = await r.json();
+    if (Array.isArray(rows) && rows.length > 0) {
+      const groups = rows.map(g => ({ jid: g.evolution_jid, name: g.group_name }));
+      console.log(`[whatsapp/groups] ${groups.length} grupo(s) do Supabase (tenant=${tenant_id}, +filhos)`);
+      return res.json({ groups });
+    }
+  } catch (err) {
+    return res.status(500).json({ error: 'erro ao buscar grupos', detail: err.message });
+  }
+
+  // Supabase vazio para o tenant → fallback Evolution ao vivo
   let inst;
   try {
     inst = await supabaseSelect('evolution_instances', { tenant_id });
@@ -1077,7 +1107,22 @@ app.get('/whatsapp/groups', requireJwt, async (req, res) => {
       name:        g.subject || g.id,
       picture_url: g.pictureUrl ?? null,
     }));
-    console.log(`[whatsapp/groups] ${groups.length} grupo(s) retornados`);
+
+    // upsert best-effort no Supabase p/ próxima leitura já vir do banco
+    if (groups.length > 0) {
+      fetch(`${SUPABASE_URL}/rest/v1/whatsapp_groups?on_conflict=tenant_id,evolution_jid`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPABASE_SERVICE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify(groups.map(g => ({ tenant_id, evolution_jid: g.jid, group_name: g.name }))),
+      }).catch(err => console.warn('[whatsapp/groups] upsert Supabase falhou:', err.message));
+    }
+
+    console.log(`[whatsapp/groups] ${groups.length} grupo(s) retornados (Evolution, fallback)`);
     res.json({ groups });
   } catch (err) {
     console.error('[whatsapp/groups] erro:', err.message);
@@ -1111,7 +1156,10 @@ async function sbFetch(path, { method = 'GET', body, prefer, headers: xh = {} } 
     const txt = await r.text();
     throw new Error(`Supabase ${r.status} [${method} ${path}]: ${txt}`);
   }
-  return r.json();
+  // Prefer: return=minimal (ou DELETE) volta 204 sem corpo — r.json() quebraria com
+  // "Unexpected end of JSON input".
+  const txt = await r.text();
+  return txt ? JSON.parse(txt) : null;
 }
 
 // Helper: verifica se req.user é membro do tenant_id solicitado
@@ -1236,6 +1284,7 @@ app.patch('/api/lojas/:id', requireJwt, async (req, res) => {
     'nicho','ifood_merchant_id','ifood_url','tipo','whatsapp','logo_url','observacoes',
     'tags','client_id','data_inicio_consultoria','data_fim_consultoria',
     'super_restaurante','data_super_restaurante','plataforma','metadata',
+    'whatsapp_group_jid',
   ]);
   const updates = Object.fromEntries(
     Object.entries(req.body).filter(([k]) => EDITABLE.has(k))
@@ -1393,6 +1442,13 @@ app.use('/api', require('./routes/avaliacoes')({
   requireJwt,
   sbFetch,
   assertLojaAccess,
+}));
+
+// ── Avaliações — envio WhatsApp genérico p/ painel "Resp. Avaliações" ────────
+app.use('/api', require('./routes/avaliacoes-consultor')({
+  requireJwt,
+  sbFetch,
+  assertTenantMember,
 }));
 
 // ── G03 — Contratos Digitais ─────────────────────────────────────────────────
@@ -1632,6 +1688,16 @@ app.use('/api', require('./routes/ifood')({
   supabaseInsert,
 }));
 
+// iFood API oficial — rotas gated por `lojas.fonte_dados` (Frente A fase 2,
+// migração gradual loja a loja). Flag off por padrão: zero mudança de
+// comportamento até o Wandson trocar loja a loja (ver ?dryrun=1 p/ testar).
+app.use('/api', require('./routes/ifood-api')({
+  requireJwtOrInternal,
+  ifood: require('./lib/ifood'),
+  sbFetch,
+  assertTenantMember,
+}));
+
 // Whisper — transcrição de áudio/vídeo recebidos no chat
 app.use('/api/whisper', requireJwt, require('./routes/whisper'));
 
@@ -1643,6 +1709,11 @@ app.use('/api/scraping', requireJwt, require('./routes/scraping'));
 
 // Images — geração de imagens via FLUX.1-schnell (HuggingFace free)
 app.use('/api/images', requireJwt, require('./routes/images'));
+
+// Portal Worker — executa runners do ifood-portal-worker (docker run --network
+// container:ifood-browser) para o agente GESTOR. Só x-internal-token (Trigger.dev),
+// nunca exposto a JWT de usuário — é execução real de browser automation.
+app.use('/api/portal-worker', requireInternalToken, require('./routes/portal-worker')());
 
 // Asaas — saldo da conta (cache 5 min). Console via JWT, Hermes via x-internal-token (asaas-mcp).
 // ⚠️ Montado ANTES dos mounts com `requireJwt` blanket abaixo (cora/breno): como aquele
@@ -1662,6 +1733,10 @@ app.use('/api', requireJwt, require('./routes/breno-aprovacao')({ sbFetch, supab
 
 // Cora — gestão manual: isenção e baixa manual de pagamento PIX
 app.use('/api', requireJwt, require('./routes/cora-gestao')({ sbFetch, supabaseInsert }));
+
+// Gestor (Consultor de iFood) — aprovação/execução de drafts: whatsapp (Evolution API) ou
+// portal_ifood (runners preencher+enviar via /api/portal-worker/run)
+app.use('/api', requireJwt, require('./routes/gestor-aprovacao')({ sbFetch, supabaseInsert }));
 
 // Monitor de Sessões — lista spawn-queue e stream SSE de logs (cd-spawn)
 app.use('/api', require('./routes/monitor')({ requireJwt }));

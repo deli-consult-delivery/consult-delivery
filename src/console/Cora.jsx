@@ -823,7 +823,7 @@ function DraftCard({ draft, tenantDbId, onDone }) {
 
   return (
     <div className="cv2-card" style={{ padding: 16, marginBottom: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+      <div className="draft-row" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 700, fontSize: 14 }}>{meta.customer_name || '—'}</span>
@@ -851,7 +851,7 @@ function DraftCard({ draft, tenantDbId, onDone }) {
             <div style={{ fontSize: 11, color: 'var(--g-500)', marginTop: 6 }}>💡 {meta.dica_envio}</div>
           )}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 130 }}>
+        <div className="draft-btns" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <button className="cv2-btn" disabled={loading} onClick={() => call('aprovar')} style={{ fontSize: 12, background: '#16a34a', color: '#fff', borderColor: '#16a34a' }}>
             {loading ? '…' : '✓ Aprovar e Enviar'}
           </button>
@@ -1371,7 +1371,7 @@ export default function Cora({ tenantDbId, userId }) {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ padding: 32, maxWidth: 1400, margin: '0 auto' }}>
+    <div style={{ maxWidth: 1400, margin: '0 auto' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -1582,7 +1582,7 @@ export default function Cora({ tenantDbId, userId }) {
           )}
 
           {/* Chart + Aging side by side */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
+          <div className="cv2-charts-grid" style={{ display: 'grid', gap: 16, marginBottom: 24 }}>
             {/* Bar chart */}
             <div className="cv2-card" style={{ padding: 20 }}>
               <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--g-700)', marginBottom: 16 }}>Recebido por mês (últimos 6 meses)</div>
@@ -1670,7 +1670,7 @@ export default function Cora({ tenantDbId, userId }) {
                   const isPagando = !!pagandoMap[cob.id];
                   return (
                     <div key={cob.id} style={{ borderBottom: '1px solid var(--g-100)' }}>
-                      <div style={{ padding: '12px 20px', display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr) auto auto auto auto', alignItems: 'center', gap: 12 }}>
+                      <div className="cv2-regua-row" style={{ padding: '12px 20px', display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr) auto auto auto auto', alignItems: 'center', gap: 12 }}>
                         <div style={{ width: 34, height: 34, borderRadius: '50%', background: cob.status === 'overdue' ? '#B70C00' : '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#fff', fontSize: 12, flexShrink: 0 }}>
                           {(cob.customer_name || '??').slice(0, 2).toUpperCase()}
                         </div>

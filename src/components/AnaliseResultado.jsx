@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import SugestaoModal from './SugestaoModal.jsx';
 import AgenteFeedbackModal from './AgenteFeedbackModal.jsx';
 import { createTasksFromAnalise } from '../lib/api.js';
 
@@ -267,7 +266,6 @@ export default function AnaliseResultado({ resultado_json, mensagem_whatsapp, on
 
   const [selecionados, setSelecionados]   = useState(new Set());
   const [showEnvio, setShowEnvio]         = useState(false);
-  const [showSugestao, setShowSugestao]   = useState(false);
   const [exportando, setExportando]       = useState(false);
   const [exportToast, setExportToast]     = useState(null);
 
@@ -410,10 +408,6 @@ export default function AnaliseResultado({ resultado_json, mensagem_whatsapp, on
             {exportando ? 'Exportando...' : '📋 Exportar críticos para Kanban'}
           </button>
         )}
-        <button type="button" className="btn-secondary" onClick={() => setShowSugestao(true)}
-          style={{ fontSize: 13, color: 'var(--g-500)', marginLeft: 'auto' }}>
-          💡 Sugerir melhoria
-        </button>
       </div>
 
       {exportToast && (
@@ -451,10 +445,6 @@ export default function AnaliseResultado({ resultado_json, mensagem_whatsapp, on
 
       {showEnvio && (
         <EnvioModal pontosSelecionados={pontosSelecionadosObj} onClose={() => setShowEnvio(false)} />
-      )}
-
-      {showSugestao && (
-        <SugestaoModal tenantDbId={tenantDbId} tela="analise-ifood" onClose={() => setShowSugestao(false)} />
       )}
 
     </div>

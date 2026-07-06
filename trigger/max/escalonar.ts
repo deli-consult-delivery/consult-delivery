@@ -3,6 +3,7 @@ import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
+import { calcularCustoUsd } from "../_shared/pricing";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -85,6 +86,8 @@ Responda em português brasileiro.`;
         },
       ],
     });
+
+    const costUsd = calcularCustoUsd("claude-haiku-4-5-20251001", response.usage);
 
     const rawText = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
@@ -170,6 +173,7 @@ Responda em português brasileiro.`;
       tenantId: input.tenant_id,
       triggeredBy: input.triggered_by ?? input.user_id,
       durationMs: Date.now() - startedAt,
+      costUsd,
     });
 
     return output;

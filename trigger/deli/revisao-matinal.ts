@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 import { notify } from "../_shared/notify";
+import { calcularCustoUsd } from "../_shared/pricing";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,7 @@ export const deliRevisaoMatinal = task({
   run: async (payload: Input, { ctx }): Promise<Output> => {
     const input = InputSchema.parse(payload);
     const sb    = getSupabase();
+    let costUsd: number | null = null;
 
     logger.info("deli-revisao-matinal iniciado", { tenant_id: input.tenant_id });
 
@@ -204,6 +206,8 @@ ${anomaliasTexto}`;
         .join("")
         .trim();
 
+      costUsd = calcularCustoUsd("claude-haiku-4-5-20251001", response.usage);
+
       logger.info("deli-revisao-matinal: resumo gerado, parseando alertas e ações", {
         tenant_id: input.tenant_id,
       });
@@ -280,6 +284,7 @@ ${anomaliasTexto}`;
         triggeredBy: input.triggered_by,
         input,
         output,
+        costUsd,
         status:      "success",
       });
 
@@ -301,6 +306,7 @@ ${anomaliasTexto}`;
         triggeredBy: input.triggered_by,
         input,
         output:      { error: errorMessage },
+        costUsd:     costUsd ?? undefined,
         status:      "failed",
       });
 

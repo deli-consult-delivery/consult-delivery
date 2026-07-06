@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import { getSupabase } from "../_shared/supabase";
 import { getAnthropic } from "../_shared/claude";
 import { notify } from "../_shared/notify";
+import { calcularCustoUsd } from "../_shared/pricing";
 
 // =====================================================
 // RADAR — processa fontes (relatórios iFood) — PR12a
@@ -343,11 +344,12 @@ function detectarEExtrair(wb: XLSX.WorkBook): { tipo: string; periodo: { ini: st
   return { tipo: "desconhecido", periodo, metricas: [], resumo: { abas } };
 }
 
-async function extrairDePrint(buf: ArrayBuffer, mime: string): Promise<{ metricas: Metrica[]; custoUsd: number }> {
+async function extrairDePrint(buf: ArrayBuffer, mime: string): Promise<{ metricas: Metrica[]; custoUsd: number | null }> {
   const client = getAnthropic();
   const b64 = Buffer.from(buf).toString("base64");
+  const MODEL = "claude-sonnet-4-6";
   const resp = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: MODEL,
     max_tokens: 2048,
     system: 'Voce extrai METRICAS de prints de relatorios do portal iFood. Responda APENAS JSON: {"metricas":[{"metrica":"nome_snake_case","valor":numero ou null,"valor_texto":"se nao numerico"}]}. Extraia todos os numeros visíveis com nomes descritivos.',
     messages: [{ role: "user", content: [
@@ -357,7 +359,7 @@ async function extrairDePrint(buf: ArrayBuffer, mime: string): Promise<{ metrica
   });
   const texto = resp.content.filter(b => b.type === "text").map(b => (b as any).text).join("");
   const json = JSON.parse(texto.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim());
-  const custoUsd = (resp.usage.input_tokens / 1e6) * 3 + (resp.usage.output_tokens / 1e6) * 15;
+  const custoUsd = calcularCustoUsd(MODEL, resp.usage);
   return { metricas: json.metricas ?? [], custoUsd };
 }
 
@@ -458,6 +460,12 @@ export const radarProcessarFontes = schedules.task({
       } catch (err) {
         erros++;
         await sb.from("radar_fontes").update({ status: "erro", erro_detalhe: (err as Error).message.slice(0, 500) }).eq("id", f.id);
+        await notify({
+          tenantId: f.tenant_id, kind: "agent_failed", agent: "radar",
+          title: `Falha ao processar fonte: ${f.arquivo_nome ?? f.arquivo_path ?? f.id}`,
+          body: (err as Error).message.slice(0, 500),
+          metadata: { fonte_id: f.id },
+        });
         logger.error("fonte com erro", { id: f.id, erro: (err as Error).message });
       }
     }

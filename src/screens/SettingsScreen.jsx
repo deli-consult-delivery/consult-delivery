@@ -125,24 +125,26 @@ const WorkspaceSettings = () => (
 const ROLE_LABEL = { owner: 'Dono', admin: 'Admin', consultor: 'Consultor', operador: 'Operador', dev: 'Dev' };
 const ROLE_BADGE = { owner: 'badge-red', admin: 'badge-red', dev: 'badge-purple', consultor: 'badge-gray', operador: 'badge-gray' };
 
+// moduleKey = id equivalente em tenant_modules (ver src/console/moduleCatalog.js).
+// Usado para esconder telas não habilitadas para o tenant (Console → Clientes → "Telas").
 const ALL_SCREENS = [
-  { id: 'dashboard',        label: 'Dashboard',       group: 'Início' },
-  { id: 'deli',             label: 'DELI',            group: 'Início',      defaultRoles: ['admin','deli_owner'] },
-  { id: 'chat',             label: 'Chat Ao Vivo',    group: 'Operação',    defaultRoles: ['admin','atendimento','marketing'] },
-  { id: 'lojas',            label: 'Lojas',           group: 'Operação' },
-  { id: 'crm',              label: 'Clientes',        group: 'Operação',    defaultRoles: ['admin','marketing'] },
-  { id: 'contratos',        label: 'Contratos',       group: 'Operação',    defaultRoles: ['admin'] },
-  { id: 'recontratacao',    label: 'Re-contratação',  group: 'Operação',    defaultRoles: ['admin'] },
-  { id: 'tarefas',          label: 'Todas Tarefas',   group: 'Operação',    defaultRoles: ['admin'] },
-  { id: 'tarefas-clientes', label: 'Espaços',         group: 'Operação',    defaultRoles: ['admin','marketing'] },
-  { id: 'onboarding',       label: 'Onboarding',      group: 'Operação',    defaultRoles: ['admin','atendimento','marketing'] },
-  { id: 'agents',           label: 'Painel Agentes',  group: 'Agentes IA',  defaultRoles: ['admin'] },
-  { id: 'campanhas',        label: 'Campanhas',       group: 'Marketing',   defaultRoles: ['admin','marketing'] },
-  { id: 'drafts-pendentes', label: 'Disparos',        group: 'Marketing',   defaultRoles: ['admin','marketing'] },
-  { id: 'reports',          label: 'Relatórios',      group: 'Dados',       defaultRoles: ['admin','marketing'] },
-  { id: 'notificacoes',     label: 'Notificações',    group: 'Sistema' },
-  { id: 'grupos',           label: 'Grupos WhatsApp', group: 'Admin',       defaultRoles: ['admin','atendimento'] },
-  { id: 'settings',         label: 'Configurações',   group: 'Admin',       defaultRoles: ['admin'] },
+  { id: 'dashboard',        label: 'Dashboard',       group: 'Início',      moduleKey: 'visao' },
+  { id: 'deli',             label: 'DELI',            group: 'Início',      defaultRoles: ['admin','deli_owner'], moduleKey: 'deli' },
+  { id: 'chat',             label: 'Chat Ao Vivo',    group: 'Operação',    defaultRoles: ['admin','atendimento','marketing'], moduleKey: 'chat' },
+  { id: 'lojas',            label: 'Lojas',           group: 'Operação',    moduleKey: 'lojas' },
+  { id: 'crm',              label: 'Clientes',        group: 'Operação',    defaultRoles: ['admin','marketing'], moduleKey: 'crm' },
+  { id: 'contratos',        label: 'Contratos',       group: 'Operação',    defaultRoles: ['admin'], moduleKey: 'contratos' },
+  { id: 'recontratacao',    label: 'Re-contratação',  group: 'Operação',    defaultRoles: ['admin'], moduleKey: 'recontratacao' },
+  { id: 'tarefas',          label: 'Todas Tarefas',   group: 'Operação',    defaultRoles: ['admin'], moduleKey: 'tarefas' },
+  { id: 'tarefas-clientes', label: 'Espaços',         group: 'Operação',    defaultRoles: ['admin','marketing'], moduleKey: 'espacos' },
+  { id: 'onboarding',       label: 'Onboarding',      group: 'Operação',    defaultRoles: ['admin','atendimento','marketing'], moduleKey: 'onboarding' },
+  { id: 'agents',           label: 'Painel Agentes',  group: 'Agentes IA',  defaultRoles: ['admin'], moduleKey: 'hub' },
+  { id: 'campanhas',        label: 'Campanhas',       group: 'Marketing',   defaultRoles: ['admin','marketing'], moduleKey: 'campanhas' },
+  { id: 'drafts-pendentes', label: 'Disparos',        group: 'Marketing',   defaultRoles: ['admin','marketing'], moduleKey: 'disparos' },
+  { id: 'reports',          label: 'Relatórios',      group: 'Dados',       defaultRoles: ['admin','marketing'], moduleKey: 'relatorios' },
+  { id: 'notificacoes',     label: 'Notificações',    group: 'Sistema',     moduleKey: 'notificacoes' },
+  { id: 'grupos',           label: 'WhatsApp: Grupos', group: 'Admin',       defaultRoles: ['admin','atendimento'], moduleKey: 'grupos' },
+  { id: 'settings',         label: 'Configurações',   group: 'Admin',       defaultRoles: ['admin'], moduleKey: 'configsys' },
 ];
 
 function relativeTime(ts) {
@@ -326,6 +328,7 @@ function ScreenPermissionsModal({ member, tenantDbId, onClose }) {
   const [perms, setPerms] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(null);
+  const [allowedModules, setAllowedModules] = useState(null); // null = sem allowlist → tudo liberado
 
   useEffect(() => {
     supabase.rpc('get_user_screen_permissions', {
@@ -336,6 +339,10 @@ function ScreenPermissionsModal({ member, tenantDbId, onClose }) {
       (data || []).forEach(row => { map[row.screen_id] = row.allowed; });
       setPerms(map);
       setLoading(false);
+    });
+    supabase.from('tenant_modules').select('module_key, enabled').eq('tenant_id', tenantDbId).then(({ data }) => {
+      if (!data || data.length === 0) { setAllowedModules(null); return; }
+      setAllowedModules(new Set(data.filter(r => r.enabled).map(r => r.module_key)));
     });
   }, [member.user_id, tenantDbId]);
 
@@ -353,7 +360,8 @@ function ScreenPermissionsModal({ member, tenantDbId, onClose }) {
     setSaving(null);
   }
 
-  const groups = ALL_SCREENS.reduce((acc, s) => {
+  const visibleScreens = ALL_SCREENS.filter(s => !allowedModules || !s.moduleKey || allowedModules.has(s.moduleKey));
+  const groups = visibleScreens.reduce((acc, s) => {
     (acc[s.group] = acc[s.group] || []).push(s);
     return acc;
   }, {});

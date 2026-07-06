@@ -14,11 +14,33 @@ import { supabase } from './supabase';
 export async function listTenants() {
   const { data, error } = await supabase
     .from('tenants')
-    .select('id, slug, name, emoji, color, status, plan')
+    .select('id, slug, name, emoji, color, status, plan, parent_tenant_id')
     .order('name')
     .limit(50);
   if (error) throw error;
   return data ?? [];
+}
+
+export async function listTenantsWithRole(userId) {
+  const [tenants, memberRes] = await Promise.all([
+    listTenants(),
+    userId
+      ? supabase.from('tenant_members').select('tenant_id, role').eq('user_id', userId)
+      : Promise.resolve({ data: [] }),
+  ]);
+  const roleByTenant = new Map((memberRes.data || []).map(m => [m.tenant_id, m.role]));
+  const byId = new Map(tenants.map(t => [t.id, t]));
+  const resolveRole = (t) => {
+    const seen = new Set();
+    let cur = t;
+    while (cur && !seen.has(cur.id)) {
+      seen.add(cur.id);
+      if (roleByTenant.has(cur.id)) return roleByTenant.get(cur.id);
+      cur = cur.parent_tenant_id ? byId.get(cur.parent_tenant_id) : null;
+    }
+    return undefined;
+  };
+  return tenants.map(t => ({ ...t, role: resolveRole(t) }));
 }
 
 export async function getTenantBySlug(slug) {
@@ -154,13 +176,7 @@ export async function listInadimplenciaTranscript(inadimplenciaId) {
   return data ?? [];
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Módulo Análise iFood — SCHEMA-05
-// ─────────────────────────────────────────────────────────────────────────────
-
 export async function createAnalise(payload) {
-  // payload: { tenant_id, cliente_id, drive_link, periodo, criado_por }
-  // Returns: { id, job_id, status }
   const { data, error } = await supabase
     .from('analises')
     .insert({ ...payload, status: 'pending' })
@@ -195,8 +211,6 @@ export async function listAnalises(tenantId) {
 }
 
 export async function listClientes(tenantId) {
-  // ESPAÇOS: lista só clientes de lojas em consultoria ativa (is_consultoria_ativa=true).
-  // Reativar uma loja faz o cliente voltar automaticamente, sem mexer no código.
   const { data: lojasAtivas, error: eLojas } = await supabase
     .from('lojas')
     .select('client_id')
@@ -221,9 +235,6 @@ export async function updateCustomer(id, updates) {
   if (error) throw error;
 }
 
-// subscribeToAnalise is NOT async — it returns an unsubscribe cleanup function synchronously.
-// REPLICA IDENTITY FULL on the analises table ensures payload.new contains the full row,
-// not just the primary key. Call the returned function in useEffect's cleanup.
 export function subscribeToAnalise(jobId, callback) {
   const channel = supabase
     .channel(`analise-${jobId}`)
@@ -235,10 +246,6 @@ export function subscribeToAnalise(jobId, callback) {
     .subscribe();
   return () => supabase.removeChannel(channel);
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Tarefas do Cliente — geradas pelo analista-ifood por análise
-// ─────────────────────────────────────────────────────────────────────────────
 
 export async function createTarefasAnalise(analise_id, cliente_id, top5) {
   const tarefas = top5.map(item => ({
@@ -280,10 +287,6 @@ export async function updateStatusTarefa(tarefa_id, status) {
   return data;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Treinamento do agente — correções aprendidas
-// ─────────────────────────────────────────────────────────────────────────────
-
 export async function createCorrecao({ tenant_id, bloco, instrucao }) {
   const { data: { user } } = await supabase.auth.getUser();
   const { data, error } = await supabase
@@ -314,10 +317,6 @@ export async function desativarCorrecao(id) {
   if (error) throw error;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tasks (Kanban) — CRUD completo
-// ─────────────────────────────────────────────────────────────────────────────
-
 export async function createTask(payload) {
   const { data, error } = await supabase
     .from('tasks')
@@ -344,9 +343,6 @@ export async function deleteTask(taskId) {
   if (error) throw error;
 }
 
-// ─── Client Tasks (Tarefas Clientes) ──────────────────────────────────────
-
-// Tarefas de uma lista (modelo ClickUp). Aceita listId; mantém customerId/tenantId opcionais.
 export async function listClientTasks(tenantId, listId) {
   let q = supabase
     .from('client_tasks')
@@ -372,7 +368,6 @@ export async function updateClientTask(id, updates) {
   if (error) throw error;
 }
 
-// Mover tarefa entre colunas (drag-and-drop). columnId = nova coluna, position = índice de drop.
 export async function moveClientTask(id, columnId, position) {
   const { error } = await supabase
     .from('client_tasks').update({ column_id: columnId, position, updated_at: new Date().toISOString() }).eq('id', id);
@@ -384,9 +379,6 @@ export async function deleteClientTask(id) {
   if (error) throw error;
 }
 
-// ─── ESPAÇOS — hierarquia Pasta → Lista → Coluna (estilo ClickUp) ──────────
-
-// Colunas default semeadas ao criar uma lista nova.
 const DEFAULT_COLUMNS = [
   { name: 'A Fazer',    color: '#6B7280', position: 0, is_done: false },
   { name: 'Fazendo',    color: '#3B82F6', position: 1, is_done: false },
@@ -394,7 +386,6 @@ const DEFAULT_COLUMNS = [
   { name: 'Concluído',  color: '#10B981', position: 3, is_done: true  },
 ];
 
-// Workspaces ──────────────────────────────────────────────────────────────
 export async function listWorkspaces(tenantId) {
   const { data, error } = await supabase
     .from('espacos_workspaces')
@@ -434,7 +425,6 @@ export async function listActiveMembers(tenantId) {
   }));
 }
 
-// Pastas ──────────────────────────────────────────────────────────────────
 export async function listFolders(tenantId, customerId, workspaceId) {
   let q = supabase
     .from('espacos_folders')
@@ -467,7 +457,6 @@ export async function deleteFolder(id) {
   if (error) throw error;
 }
 
-// Listas ──────────────────────────────────────────────────────────────────
 export async function listLists(folderId) {
   const { data, error } = await supabase
     .from('espacos_lists')
@@ -478,7 +467,6 @@ export async function listLists(folderId) {
   return data ?? [];
 }
 
-// Cria lista + semeia colunas default. Retorna { list, columns }.
 export async function createList({ tenantId, folderId, name, color = '#6B7280', position = 0 }) {
   const { data: list, error } = await supabase
     .from('espacos_lists')
@@ -504,7 +492,6 @@ export async function deleteList(id) {
   if (error) throw error;
 }
 
-// Colunas ───────────────────────────────────────────────────────────────────
 export async function listColumns(listId) {
   const { data, error } = await supabase
     .from('espacos_columns')
@@ -534,7 +521,6 @@ export async function deleteColumn(id) {
   if (error) throw error;
 }
 
-// Reordena colunas: recebe [{id, position}, ...] e aplica em paralelo.
 export async function reorderColumns(updates) {
   const results = await Promise.all(
     updates.map(({ id, position }) =>
@@ -565,10 +551,6 @@ export async function createTasksFromAnalise({ tenantId, analiseId, clienteId, p
   return data ?? [];
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Sugestões para o desenvolvedor
-// ─────────────────────────────────────────────────────────────────────────────
-
 export async function createSugestao({ tenant_id, texto, tela }) {
   const { data: { user } } = await supabase.auth.getUser();
   const { data, error } = await supabase
@@ -579,10 +561,6 @@ export async function createSugestao({ tenant_id, texto, tela }) {
   if (error) throw error;
   return data;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Agent Drafts — sistema de proposta-aprovação (Etapa 11)
-// ─────────────────────────────────────────────────────────────────────────────
 
 export async function listAgentDrafts(tenantId, filters = {}) {
   let q = supabase
@@ -635,8 +613,6 @@ export async function updateDraftContent(draftId, newContent, editsSummary) {
   if (error) throw error;
 }
 
-// Debounce: coalesce burst de drafts (ex.: asaas-sync gera N cobranças CORA de uma vez)
-// em 1 reload por janela. Ambos os callers fazem `() => loadDrafts()` e ignoram o payload.
 const DEBOUNCE_DRAFTS_MS = 2000;
 
 export function subscribeToDrafts(tenantId, callback) {
@@ -658,22 +634,32 @@ export function subscribeToDrafts(tenantId, callback) {
   };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Avaliações iFood — config por loja + avaliações geradas (Console v2)
-// Leituras/atualizações diretas via RLS (espelha o padrão de agent_drafts).
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Lojas em consultoria ativa — alimenta o seletor de loja da aba Avaliações.
-// (memória: filtrar por is_consultoria_ativa, nunca status='ativo'.)
 export async function listLojasConsultoria(tenantId) {
   const { data, error } = await supabase
     .from('lojas')
-    .select('id, nome, super_restaurante')
+    .select('id, nome, super_restaurante, whatsapp_group_jid')
     .eq('tenant_id', tenantId)
     .eq('is_consultoria_ativa', true)
     .order('nome');
   if (error) throw error;
   return data ?? [];
+}
+
+const BRIDGE = import.meta.env.VITE_BRIDGE_URL || 'https://bridge.consultdelivery.com.br';
+
+export async function enviarWhatsAppAvaliacao({ tenantId, chatId, texto }) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token || '';
+  const res = await fetch(`${BRIDGE}/api/avaliacoes/enviar-whatsapp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ tenant_id: tenantId, chat_id: chatId, texto }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`enviarWhatsAppAvaliacao HTTP ${res.status}: ${body.slice(0, 300)}`);
+  }
+  return res.json();
 }
 
 export async function getAvaliacoesConfig(lojaId) {
@@ -686,7 +672,6 @@ export async function getAvaliacoesConfig(lojaId) {
   return data;
 }
 
-// Upsert por loja_id (constraint UNIQUE garante 1 config por loja).
 export async function saveAvaliacoesConfig({ tenantId, lojaId, logistica_tipo, tom }) {
   const { data, error } = await supabase
     .from('avaliacoes_loja_config')
@@ -706,9 +691,6 @@ export async function saveAvaliacoesConfig({ tenantId, lojaId, logistica_tipo, t
   return data;
 }
 
-// Lojas em consultoria + a logística já configurada de cada uma — alimenta o
-// painel de gestão em massa (definir logística por loja + marcar/remover
-// consultoria ativa). 2 queries simples + merge por loja_id (sem embed/RLS join).
 export async function listLojasConfigAvaliacoes(tenantId) {
   const [lojasRes, cfgRes] = await Promise.all([
     supabase
@@ -732,10 +714,6 @@ export async function listLojasConfigAvaliacoes(tenantId) {
   }));
 }
 
-// Atualiza SÓ a logística da loja (não toca o tom já salvo). Upsert por loja_id:
-// no UPDATE o supabase só seta as colunas presentes no objeto → tom preservado.
-// Retorna a linha de config completa (mesmo shape de getAvaliacoesConfig) para
-// que o chamador possa adotá-la quando a loja ainda não tinha config em memória.
 export async function setLojaLogistica({ tenantId, lojaId, logistica_tipo }) {
   const { data, error } = await supabase
     .from('avaliacoes_loja_config')
@@ -749,8 +727,6 @@ export async function setLojaLogistica({ tenantId, lojaId, logistica_tipo }) {
   return data;
 }
 
-// Marca/desmarca a consultoria ativa de uma loja (reversível). O Wandson usa
-// isto p/ podar a lista — loja sem consultoria sai dos filtros que usam o flag.
 export async function setLojaConsultoriaAtiva(lojaId, ativa) {
   const { data, error } = await supabase
     .from('lojas')
@@ -760,6 +736,31 @@ export async function setLojaConsultoriaAtiva(lojaId, ativa) {
     .single();
   if (error) throw error;
   return data;
+}
+
+export async function listEvoGroups() {
+  const EVO_URL  = import.meta.env.VITE_EVOLUTION_URL;
+  const EVO_KEY  = import.meta.env.VITE_EVOLUTION_KEY;
+  const EVO_INST = import.meta.env.VITE_EVOLUTION_INST || 'consult-delivery';
+  if (!EVO_URL || !EVO_KEY) {
+    throw new Error('Evolution API não configurada (VITE_EVOLUTION_URL / VITE_EVOLUTION_KEY ausentes)');
+  }
+  const r = await fetch(`${EVO_URL}/group/fetchAllGroups/${EVO_INST}?getParticipants=false`, {
+    headers: { apikey: EVO_KEY },
+  });
+  if (!r.ok) throw new Error(`fetchAllGroups HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  const data = await r.json();
+  return (Array.isArray(data) ? data : [])
+    .map(g => ({ id: g.id, name: g.subject || g.id }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+}
+
+export async function updateLojaWaGroup(lojaId, groupJid) {
+  const { error } = await supabase
+    .from('lojas')
+    .update({ whatsapp_group_jid: groupJid || null })
+    .eq('id', lojaId);
+  if (error) throw error;
 }
 
 export async function listAvaliacoes(tenantId, lojaId) {
@@ -790,10 +791,6 @@ export async function updateAvaliacaoStatus(id, updates) {
   return data;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Audit Log — histórico de ações dos agentes (Etapa 15)
-// ─────────────────────────────────────────────────────────────────────────────
-
 export async function listAuditLog(tenantId, filters = {}) {
   let q = supabase
     .from('audit_log')
@@ -809,18 +806,6 @@ export async function listAuditLog(tenantId, filters = {}) {
   return data ?? [];
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Webhook self-healing — Evolution API
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Verifica se o webhook de uma instância aponta para a Supabase Edge Function
- * com enabled=true. Se não estiver correto, corrige automaticamente e loga em audit_log.
- *
- * @param {string} instanceName
- * @param {{ evolutionUrl?: string, apiKey?: string, tenantId?: string }} opts
- * @returns {Promise<{ status: 'ok'|'corrected'|'failed', url?: string, reason?: string }>}
- */
 export async function ensureWebhookConfig(instanceName, opts = {}) {
   const SUPA_URL  = import.meta.env.VITE_SUPABASE_URL;
   const EVO_URL   = opts.evolutionUrl || import.meta.env.VITE_EVOLUTION_URL;
@@ -844,7 +829,6 @@ export async function ensureWebhookConfig(instanceName, opts = {}) {
       return { status: 'ok', url: current.url };
     }
 
-    // Webhook está incorreto — corrigir
     const setRes = await fetch(`${EVO_URL}/webhook/set/${instanceName}`, {
       method:  'POST',
       headers: evoHeaders,
@@ -884,11 +868,7 @@ export async function ensureWebhookConfig(instanceName, opts = {}) {
   }
 }
 
-// ── Notificações internas ─────────────────────────────────────────────────────
-
 export async function listNotifications(tenantId, userId, { onlyUnread = false, limit = 50 } = {}) {
-  // Retorna notificações do usuário: diretas + broadcasts do tenant
-  // RLS garante o filtro — query simples com order
   let q = supabase
     .from('internal_notifications')
     .select('id, kind, agent, title, body, link, read_at, created_at, recipient_user_id')
@@ -952,12 +932,6 @@ export function subscribeToNotifications(tenantId, userId, onInsert, suffix = ''
     .subscribe();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Dashboard iFood — Ações recomendadas (rascunhos de tarefa gerados pelo
-// diagnóstico semanal). RLS por loja_id → lojas.tenant_id; só tarefas criadas
-// pela IA (criado_por_ia=true). Aprovar/rejeitar move o status (Fase 6).
-// ─────────────────────────────────────────────────────────────────────────────
-
 export async function listTarefasIA(lojaId) {
   if (!lojaId) return [];
   const { data, error } = await supabase
@@ -971,13 +945,6 @@ export async function listTarefasIA(lojaId) {
 }
 
 export async function aprovarTarefa(id, lojaId) {
-  // .eq('status','rascunho'): só transiciona o que ainda é rascunho (UI stale não
-  // regride tarefa já avançada). .select() + checagem de linhas: RLS bloqueando
-  // devolve sucesso com 0 linhas — sem isso a falha seria silenciosa. updated_at
-  // fica a cargo do trigger tarefas_loja_updated_at.
-  // .eq('loja_id', lojaId) + .eq('criado_por_ia', true): defense-in-depth — a RLS
-  // já barra cross-tenant, mas escopar à loja em tela impede que um id de outra
-  // loja do mesmo tenant (ou UI stale) transicione a tarefa errada.
   const { data, error } = await supabase
     .from('tarefas_loja')
     .update({ status: 'aprovada', aprovada_em: new Date().toISOString() })

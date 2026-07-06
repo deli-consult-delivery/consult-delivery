@@ -18,7 +18,7 @@ export default function AgenteAnalise({ tenantDbId, userId, agente, titulo, desc
   const carregar = useCallback(async () => {
     if (!tenantDbId) return;
     const [{ data: ls }, { data: rs, error }] = await Promise.all([
-      supabase.from('lojas').select('id, nome').eq('tenant_id', tenantDbId).order('nome'),
+      supabase.from('lojas').select('id, nome').eq('tenant_id', tenantDbId).eq('is_contato', false).order('nome'),
       supabase.from('agente_analises').select('id, loja_id, status, resultado, erro_detalhe, created_at').eq('tenant_id', tenantDbId).eq('agente', agente).order('created_at', { ascending: false }).limit(15),
     ]);
     if (error) { setErro(error.message); return; }

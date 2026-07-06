@@ -3,6 +3,7 @@ import { z } from "zod";
 import { runClaudeWithWebSearch } from "../_shared/claude";
 import { logAgentRun } from "../_shared/audit";
 import { notifyDeli } from "../_shared/notify-deli";
+import { calcularCustoUsd } from "../_shared/pricing";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -90,12 +91,14 @@ Use web_search para buscar:
 
 Retorne tendências acionáveis e específicas, não genéricas.`;
 
+    let costUsd = 0;
     const resultado = await runClaudeWithWebSearch({
       systemPrompt,
       userPrompt,
       outputSchema: OutputSchema,
       maxRetries: 1,
       useWebSearch: true,
+      onUsage: (usage) => { costUsd += calcularCustoUsd("claude-sonnet-4-6", usage) ?? 0; },
     });
 
     await logAgentRun({
@@ -106,6 +109,7 @@ Retorne tendências acionáveis e específicas, não genéricas.`;
       tenantId: input.tenant_id,
       triggeredBy: input.triggered_by,
       durationMs: Date.now() - startedAt,
+      costUsd,
     });
 
     const locLabel = resultado.cidade ?? "Brasil";

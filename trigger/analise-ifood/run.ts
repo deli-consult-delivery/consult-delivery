@@ -3,6 +3,7 @@ import { z } from "zod";
 import { runClaudeWithWebSearch } from "../_shared/claude";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
+import { calcularCustoUsd } from "../_shared/pricing";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -159,6 +160,7 @@ Retorne SOMENTE o JSON abaixo, sem texto adicional:
       : `Cliente: ${input.cliente_nome}. Tipo de análise: ${periodoLabel}.\nLink Google Drive: ${input.drive_link}\n\nUse web_search para buscar informações públicas sobre esta loja no iFood e gere a análise em JSON.`;
 
     // 4. Chamar Claude (com web_search quando não há dados do Drive)
+    let costUsd = 0;
     let resultado_json: z.infer<typeof AnaliseOutputSchema>;
     try {
       resultado_json = await runClaudeWithWebSearch({
@@ -167,6 +169,7 @@ Retorne SOMENTE o JSON abaixo, sem texto adicional:
         outputSchema: AnaliseOutputSchema,
         maxRetries: 1,
         useWebSearch: !driveData,
+        onUsage: (usage) => { costUsd += calcularCustoUsd("claude-sonnet-4-6", usage) ?? 0; },
       });
     } catch (err) {
       // Fallback: salvar erro na análise
@@ -206,6 +209,7 @@ Retorne SOMENTE o JSON abaixo, sem texto adicional:
       tenantId: input.tenant_id,
       triggeredBy: input.triggered_by,
       durationMs: Date.now() - startedAt,
+      costUsd,
     });
 
     return output;

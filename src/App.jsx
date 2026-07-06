@@ -5,9 +5,8 @@ import { useTweaks } from './components/TweaksPanel.jsx';
 import LoginScreen from './screens/LoginScreen.jsx';
 import ResetPasswordScreen from './screens/ResetPasswordScreen.jsx';
 import ConsoleV2 from './console/ConsoleV2.jsx';
-import { TENANTS } from './data.js';
 import { supabase } from './lib/supabase.js';
-import { listTenants, countUnreadNotifications, subscribeToNotifications } from './lib/api.js';
+import { listTenantsWithRole, countUnreadNotifications, subscribeToNotifications } from './lib/api.js';
 import { registerPushSubscription } from './lib/pushNotifications.js';
 
 const TWEAK_DEFAULTS = {
@@ -32,7 +31,7 @@ export default function App() {
   const [tenantLoading, setTenantLoading] = useState(false);
   const [tenantLoadAttempted, setTenantLoadAttempted] = useState(false);
   const [tenantLoadError, setTenantLoadError] = useState(false);
-  const [tenants, setTenants] = useState(TENANTS);
+  const [tenants, setTenants] = useState([]);
   const [_deepLinkConvId] = useState(() => new URLSearchParams(window.location.search).get('chat'));
   const [_confirmedAcao]  = useState(() => new URLSearchParams(window.location.search).get('breno_confirmado'));
   // Console clássico aposentado (D1): rota só serve a deep-links/notif internos; v2 é o único shell.
@@ -83,65 +82,38 @@ export default function App() {
     };
 
     for (let attempt = 0; attempt < MAX_TENANT_RETRIES; attempt++) {
-      let memberErr = null;
-
-      // 1) Caminho principal: tenant_members do usuário logado.
+      // Lista via RLS hierárquica (agência vê seus stores) + role (direto ou
+      // herdado do parent_tenant_id — Rota B etapa 4c, ver lib/api.js).
       // Sem userId numa session presente é anomalia (não zero-tenant): trata como erro
       // para entrar em retry/"reconectando" em vez de mentir "Nenhum workspace".
-      if (!userId) {
-        memberErr = new Error('session sem userId');
-      } else {
-        const { data: memberData, error } = await supabase
-          .from('tenant_members')
-          .select('tenant_id, role, tenants(id, name, slug, emoji, color)')
-          .eq('user_id', userId)
-          .maybeSingle();
-        memberErr = error;
-
-        if (!memberErr && memberData?.tenant_id) {
-          const t = memberData.tenants;
-          setTenants([{
-            id: t.slug,
-            dbId: t.id,
-            name: t.name,
-            emoji: t.emoji || '🏪',
-            color: t.color || '#B70C00',
-            role: memberData.role,
-          }]);
-          setTenant(preferSlug || t.slug);
-          setTenantDbId(t.id);
-          finish();
-          return;
+      let loadErr = userId ? null : new Error('session sem userId');
+      if (userId) {
+        try {
+          const real = await listTenantsWithRole(userId);
+          if (real?.length) {
+            const mapped = real.map(t => ({
+              id: t.slug,
+              dbId: t.id,
+              name: t.name,
+              emoji: t.emoji || '🏪',
+              color: t.color || '#B70C00',
+              role: t.role,
+            }));
+            setTenants(mapped);
+            const slugToUse = preferSlug || mapped[0].id;
+            setTenant(slugToUse);
+            const selected = mapped.find(t => t.id === slugToUse);
+            setTenantDbId(selected?.dbId ?? mapped[0].dbId);
+            finish();
+            return;
+          }
+        } catch (e) {
+          loadErr = e;
         }
-      }
-
-      // 2) Fallback: listTenants via api.js (lança em erro → fallbackErr).
-      let fallbackErr = null;
-      try {
-        const real = await listTenants();
-        if (real?.length) {
-          const mapped = real.map(t => ({
-            id: t.slug,
-            dbId: t.id,
-            name: t.name,
-            emoji: t.emoji || '🏪',
-            color: t.color || '#B70C00',
-          }));
-          setTenants(mapped);
-          const slugToUse = preferSlug || mapped[0].id;
-          setTenant(slugToUse);
-          const selected = mapped.find(t => t.id === slugToUse);
-          setTenantDbId(selected?.dbId ?? mapped[0].dbId);
-          finish();
-          return;
-        }
-      } catch (e) {
-        fallbackErr = e;
       }
 
       // Distingue erro real (vale retry) de resposta limpa e vazia (zero-tenant).
-      const hadError = !!memberErr || !!fallbackErr;
-      if (!hadError) {
+      if (!loadErr) {
         // Banco respondeu e o usuário realmente não tem tenant.
         clearTimeout(safetyTimer);
         if (!isCurrent()) return;
@@ -151,8 +123,7 @@ export default function App() {
         return;
       }
 
-      if (memberErr) console.warn(`[reloadTenants] tentativa ${attempt + 1} falhou (tenant_members):`, memberErr.message);
-      if (fallbackErr) console.warn(`[reloadTenants] tentativa ${attempt + 1} falhou (listTenants):`, fallbackErr.message);
+      console.warn(`[reloadTenants] tentativa ${attempt + 1} falhou:`, loadErr.message);
 
       // Backoff exponencial antes da próxima tentativa: 1s, 2s, 4s.
       if (attempt < MAX_TENANT_RETRIES - 1) {

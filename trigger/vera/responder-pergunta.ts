@@ -3,6 +3,7 @@ import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
+import { calcularCustoUsd } from "../_shared/pricing";
 
 // =====================================================
 // SCHEMAS
@@ -121,6 +122,8 @@ Retorne APENAS JSON:
         messages:   [{ role: "user", content: sqlUserPrompt }],
       });
 
+      const sqlCostUsd = calcularCustoUsd("claude-haiku-4-5-20251001", sqlResponse.usage);
+
       const sqlRawText = sqlResponse.content
         .filter((b) => b.type === "text")
         .map((b) => (b as Anthropic.TextBlock).text)
@@ -220,6 +223,8 @@ Retorne APENAS JSON:
         messages:   [{ role: "user", content: interpretacaoUserPrompt }],
       });
 
+      const interpCostUsd = calcularCustoUsd("claude-haiku-4-5-20251001", interpResponse.usage);
+
       const interpRawText = interpResponse.content
         .filter((b) => b.type === "text")
         .map((b) => (b as Anthropic.TextBlock).text)
@@ -250,6 +255,8 @@ Retorne APENAS JSON:
         dados,
       });
 
+      const costUsd = (sqlCostUsd ?? 0) + (interpCostUsd ?? 0);
+
       // OBRIGATÓRIO: audit log (sucesso)
       await logAgentRun({
         runId:       ctx.run.id,
@@ -258,6 +265,7 @@ Retorne APENAS JSON:
         triggeredBy: input.triggered_by,
         input,
         output: { ok: true, resposta: resposta.slice(0, 200) },
+        costUsd,
         status:      "success",
       });
 

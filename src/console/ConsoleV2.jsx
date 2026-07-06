@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase.js';
+import { listTenantsWithRole } from '../lib/api.js';
 import { CvSprite, Ico } from './CvIcons.jsx';
 // telas cv2 (visual claro)
 import AtivarLoja from './AtivarLoja.jsx';
 import Clientes from './Clientes.jsx';
 import Estudio from './Estudio.jsx';
-import CustosIA from './CustosIA.jsx';
+import CustosIA, { buscarTodosRuns } from './CustosIA.jsx';
 import PainelAgentes from './PainelAgentes.jsx';
 import Execucoes from './Execucoes.jsx';
 import AprovacoesUnificadas from './AprovacoesUnificadas.jsx';
@@ -40,6 +41,8 @@ import Lara from './Lara.jsx';
 import Contratos from './Contratos.jsx';
 import Automacoes from './Automacoes.jsx';
 import Deli from './Deli.jsx';
+import Gestor from './Gestor.jsx';
+import GestorDashboard from './GestorDashboard.jsx';
 import MiaAudit from './MiaAudit.jsx';
 import MonitorSessoes from './MonitorSessoes.jsx';
 import PipelineScreen from './PipelineScreen.jsx';
@@ -50,6 +53,8 @@ import Metas from './Metas.jsx';
 import Memorias from './Memorias.jsx';
 import Conhecimento from './Conhecimento.jsx';
 import Configuracoes from './Configuracoes.jsx';
+import Usuarios from './Usuarios.jsx';
+import { GRUPOS } from './moduleCatalog.js';
 // telas cv2 — onda 4 (últimas migrações de legado)
 import CRM from './CRM.jsx';
 import Lojas from './Lojas.jsx';
@@ -76,89 +81,6 @@ import './console.css';
 // — não alcançava paridade. Decisão 2026-06-09 (prioridade #1 Wandson · produção).
 // ============================================================
 
-const GRUPOS = [
-  { label: 'Início', items: [
-    { id: 'visao', ic: 'i-grid', label: 'Visão Geral' },
-    { id: 'deli', ic: 'i-bot', label: 'DELI' },
-  ]},
-  { label: 'Operação', items: [
-    { id: 'crm', ic: 'i-users', label: 'Clientes' },
-    { id: 'lojas', ic: 'i-store', label: 'Lojas' },
-    { id: 'chat',             ic: 'i-chat',  label: 'Chat ao Vivo' },
-    // ponytail: temporário — remover quando o Wandson terminar de comparar legado x cv2
-    { id: 'chat-legado',      ic: 'i-clock', label: 'Chat ao Vivo (legado)' },
-    { id: 'respostas-rapidas', ic: 'i-reply', label: 'Respostas Rápidas' },
-    { id: 'mia', ic: 'i-eye', label: 'Conversas · MIA' },
-    { id: 'aprovacoes', ic: 'i-check', label: 'Aprovações' },
-    { id: 'recontratacao', ic: 'i-reply', label: 'Re-contratação' },
-    { id: 'sofia', ic: 'i-bot', label: 'SOFIA' },
-    { id: 'disparos', ic: 'i-reply', label: 'Disparos' },
-    { id: 'cora', ic: 'i-cash', label: 'Cobrança' },
-    { id: 'defesa', ic: 'i-shield', label: 'Defesa Comercial' },
-    { id: 'radar', ic: 'i-radio', label: 'Dashboard iFood' },
-    { id: 'cardapio-ifood', ic: 'i-menu', label: 'Cardápio iFood' },
-    { id: 'avaliacoes', ic: 'i-eye', label: 'Avaliações' },
-    { id: 'resp-avaliacoes', ic: 'i-star', label: 'Resp. Avaliações' },
-    { id: 'csat', ic: 'i-check', label: 'CSAT — Atendimento' },
-    { id: 'nps', ic: 'i-target', label: 'NPS — Marca' },
-    { id: 'controle-atendimentos', ic: 'i-chart', label: 'Controle Atend.' },
-    { id: 'avaliacao-config', ic: 'i-gear', label: 'Configurar Avaliação' },
-    { id: 'espacos', ic: 'i-layers', label: 'Espaços' },
-    { id: 'ativar', ic: 'i-plug', label: 'Ativar loja' },
-    { id: 'campanhas', ic: 'i-flag', label: 'Campanhas' },
-    { id: 'grupos', ic: 'i-users', label: 'Grupos WhatsApp' },
-    { id: 'contratos', ic: 'i-doc', label: 'Contratos' },
-  ]},
-  { label: 'Agentes IA', items: [
-    { id: 'hub', ic: 'i-bot', label: 'Painel Agentes' },
-    { id: 'catalogo', ic: 'i-box', label: 'Catálogo' },
-    { id: 'estudio', ic: 'i-palette', label: 'Estúdio de Conteúdo' },
-    { id: 'lara-editorial', ic: 'i-palette', label: 'LARA Editorial' },
-    { id: 'lara', ic: 'i-bot', label: 'LARA' },
-    { id: 'tarefas-globais', ic: 'i-list', label: 'Tarefas Globais' },
-    { id: 'automacoes', ic: 'i-zap', label: 'Automações' },
-    { id: 'habilidades', ic: 'i-zap', label: 'Habilidades' },
-    { id: 'analise', ic: 'i-chart', label: 'Análise de Loja' },
-    { id: 'cardapio', ic: 'i-menu', label: 'Cardápio' },
-    { id: 'multicanal', ic: 'i-layers', label: 'Multicanal' },
-    { id: 'construtor', ic: 'i-bot', label: 'Construtor de Agentes' },
-    { id: 'oracle', ic: 'i-bot', label: 'Oracle (criar agente)' },
-    { id: 'inbox', ic: 'i-reply', label: 'Inbox dos Agentes' },
-    { id: 'tarefas', ic: 'i-list', label: 'Tarefas agendadas' },
-    { id: 'gatilhos', ic: 'i-zap', label: 'Gatilhos' },
-    { id: 'heartbeats', ic: 'i-radio', label: 'Heartbeats' },
-    { id: 'atividade', ic: 'i-list', label: 'Atividade' },
-    { id: 'metas', ic: 'i-target', label: 'Metas' },
-    { id: 'topicos', ic: 'i-flag', label: 'Tópicos' },
-    { id: 'modelos', ic: 'i-doc', label: 'Modelos' },
-    { id: 'config', ic: 'i-gear', label: 'Config de Agentes' },
-  ]},
-  { label: 'Dados', items: [
-    { id: 'arquivos', ic: 'i-folder', label: 'Arquivos' },
-    { id: 'links', ic: 'i-link', label: 'Links compartilhados' },
-    { id: 'memoria', ic: 'i-brain', label: 'Memória dos agentes' },
-    { id: 'conhecimento', ic: 'i-book', label: 'Conhecimento (RAG)' },
-    { id: 'custos', ic: 'i-dollar', label: 'Custos de IA' },
-    { id: 'importar', ic: 'i-save', label: 'Importar relatórios' },
-    { id: 'relatorios', ic: 'i-chart', label: 'Relatórios' },
-  ]},
-  { label: 'Sistema', items: [
-    { id: 'configsys', ic: 'i-gear', label: 'Configurações' },
-    { id: 'clientesplat', ic: 'i-users', label: 'Clientes (plataforma)' },
-    { id: 'marca', ic: 'i-droplet', label: 'Marca' },
-    { id: 'provedores', ic: 'i-cpu', label: 'Provedores de IA' },
-    { id: 'integracoes', ic: 'i-plug', label: 'Integrações' },
-    { id: 'vendaerp', ic: 'i-box', label: 'VendaERP' },
-    { id: 'sistemas', ic: 'i-box', label: 'Sistemas externos' },
-    { id: 'onboarding', ic: 'i-grid', label: 'Onboarding' },
-    { id: 'acesso', ic: 'i-key', label: 'Acesso por usuário' },
-    { id: 'auditoria', ic: 'i-scroll', label: 'Auditoria' },
-    { id: 'notificacoes', ic: 'i-bell', label: 'Notificações' },
-    { id: 'monitor', ic: 'i-radio', label: 'Monitor de Agentes' },
-    { id: 'pipeline', ic: 'i-zap', label: 'Pipeline ao Vivo' },
-  ]},
-];
-
 const LABELS = {};
 GRUPOS.forEach(g => g.items.forEach(it => { LABELS[it.id] = it.label; }));
 
@@ -184,7 +106,7 @@ function ItemBusca({ ic, principal, sec, onClick }) {
   );
 }
 
-function GlobalSearch({ tenantDbId, onNavigate }) {
+function GlobalSearch({ tenantDbId, onNavigate, allowedModules, isAdmin }) {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
   const [ent, setEnt] = useState({ lojas: [], convs: [] });
@@ -204,7 +126,7 @@ function GlobalSearch({ tenantDbId, onNavigate }) {
     const t = setTimeout(async () => {
       const like = `%${safe}%`;
       const [lj, cv] = await Promise.all([
-        supabase.from('lojas').select('id, nome, cidade').eq('tenant_id', tenantDbId).ilike('nome', like).limit(6),
+        supabase.from('lojas').select('id, nome, cidade').eq('tenant_id', tenantDbId).eq('is_contato', false).ilike('nome', like).limit(6),
         supabase.from('conversations').select('id, contact_name, push_name, group_name, whatsapp_chat_id, is_group')
           .eq('tenant_id', tenantDbId)
           .or(`contact_name.ilike.${like},push_name.ilike.${like},group_name.ilike.${like}`).limit(6),
@@ -216,7 +138,9 @@ function GlobalSearch({ tenantDbId, onNavigate }) {
   }, [q, tenantDbId]);
 
   const termo = norm(q);
-  const navHits = termo.length < 1 ? [] : NAV_ITEMS.filter(it => norm(it.label).includes(termo)).slice(0, 7);
+  const navAllowed = (allowedModules ? NAV_ITEMS.filter(it => allowedModules.has(it.id)) : NAV_ITEMS)
+    .filter(it => !it.adminOnly || isAdmin);
+  const navHits = termo.length < 1 ? [] : navAllowed.filter(it => norm(it.label).includes(termo)).slice(0, 7);
   const temAlgo = navHits.length || ent.lojas.length || ent.convs.length;
 
   function go(tela, params) { onNavigate(tela, params); setOpen(false); setQ(''); }
@@ -252,9 +176,7 @@ function GlobalSearch({ tenantDbId, onNavigate }) {
 const LEGADO = new Set(['chat-legado']);
 
 const OK_STATUSES = ['ok', 'completed', 'success'];
-const CREDITOS_MES = 10000; // freemium: 10k créditos/mês, 1 por execução de IA
 const fmtBRL = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const fmtK = n => (n >= 1000 ? (n / 1000).toFixed(1).replace('.', ',') + 'k' : String(n));
 
 // lista de tenants do usuário + seleção (seletor de tenant da topbar)
 function useTenants(userId, fallback) {
@@ -270,42 +192,42 @@ function useTenants(userId, fallback) {
     if (!userId) return;
     let alive = true;
     (async () => {
-      const { data } = await supabase.from('tenant_members').select('tenants(id, name, slug)').eq('user_id', userId);
-      if (!alive || !Array.isArray(data)) return;
-      const mapped = data.filter(d => d.tenants).map(d => ({ dbId: d.tenants.id, slug: d.tenants.slug, nome: d.tenants.name }));
-      const uniq = [...new Map(mapped.map(m => [m.dbId, m])).values()];
-      if (uniq.length) {
-        setList(uniq);
-        // Prioridade: tenant salvo (se ainda for membro) → seleção atual → primeiro.
-        setSelRaw(prev => {
-          const salvo = savedId && uniq.find(u => u.dbId === savedId);
-          if (salvo) return salvo;
-          return (prev && uniq.find(u => u.dbId === prev.dbId)) || uniq[0];
-        });
-      }
+      // Rota B etapa 4c: lista via RLS hierárquica (agência vê seus stores), não
+      // mais só linhas diretas de tenant_members — sobrevive à remoção da cópia A1.
+      const real = await listTenantsWithRole(userId).catch(() => []);
+      if (!alive || !real.length) return;
+      const uniq = real.map(t => ({ dbId: t.id, slug: t.slug, nome: t.name, role: t.role }));
+      setList(uniq);
+      // Prioridade: tenant salvo (se ainda for membro) → seleção atual → primeiro.
+      setSelRaw(prev => {
+        const salvo = savedId && uniq.find(u => u.dbId === savedId);
+        if (salvo) return salvo;
+        return (prev && uniq.find(u => u.dbId === prev.dbId)) || uniq[0];
+      });
     })();
     return () => { alive = false; };
   }, [userId]);
   return [list, sel, setSel];
 }
 
-// créditos (execuções do mês) + notificações não-lidas
+// custo de IA do mês corrente (mesma fonte da tela Custos) + notificações não-lidas
 function useTopbar(tenantDbId, userId) {
-  const [s, setS] = useState({ runs: null, notif: 0 });
+  const [s, setS] = useState({ custoMes: null, notif: 0 });
   useEffect(() => {
     if (!tenantDbId) return;
     let alive = true;
     (async () => {
       try {
         const ini = new Date(); ini.setUTCDate(1); ini.setUTCHours(0, 0, 0, 0);
-        const [{ count: runs }, notifRes] = await Promise.all([
-          supabase.from('agent_runs').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantDbId).gte('created_at', ini.toISOString()),
+        const [runsMes, notifRes] = await Promise.all([
+          buscarTodosRuns(tenantDbId, ini.toISOString()),
           userId
             ? supabase.from('internal_notifications').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantDbId).is('read_at', null).or(`recipient_user_id.eq.${userId},recipient_user_id.is.null`)
             : Promise.resolve({ count: 0 }),
         ]);
-        if (alive) setS({ runs: runs ?? 0, notif: notifRes?.count ?? 0 });
-      } catch { if (alive) setS({ runs: 0, notif: 0 }); }
+        const custoMes = runsMes.reduce((s2, r) => s2 + (Number(r.cost_usd) || 0), 0);
+        if (alive) setS({ custoMes, notif: notifRes?.count ?? 0 });
+      } catch { if (alive) setS({ custoMes: 0, notif: 0 }); }
     })();
     return () => { alive = false; };
   }, [tenantDbId, userId]);
@@ -392,6 +314,50 @@ function useAlertas(tenantDbId) {
   return al;
 }
 
+function useCurrentUser() {
+  const [user, setUser] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    supabase.auth.getUser().then(({ data }) => { if (alive) setUser(data?.user ?? null); });
+    return () => { alive = false; };
+  }, []);
+  return user;
+}
+
+function UserMenu({ user }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+  const nome = user?.user_metadata?.full_name || user?.email || 'Usuário';
+  const inicial = (nome.match(/[A-Za-zÀ-ú]+/g) || ['U']).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <span className="cv2-avatar" style={{ cursor: 'pointer' }} title={nome} onClick={() => setOpen(o => !o)}>{inicial}</span>
+      {open && (
+        <div style={{ position: 'absolute', right: 0, top: 40, background: '#fff', border: '1px solid var(--line)', borderRadius: 6, boxShadow: '0 4px 16px rgba(0,0,0,.14)', minWidth: 210, zIndex: 50, padding: 6 }}>
+          <div style={{ padding: '8px 10px 2px', fontSize: 12.5, fontWeight: 700, color: 'var(--ink)' }}>{nome}</div>
+          {user?.email && user.email !== nome && <div style={{ padding: '0 10px 8px', fontSize: 11.5, color: 'var(--tx2)' }}>{user.email}</div>}
+          <div style={{ borderTop: '1px solid var(--line)', margin: '2px 0' }} />
+          <div
+            role="button" tabIndex={0}
+            style={{ padding: '9px 10px', fontSize: 13, fontWeight: 600, color: 'var(--red)', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+            onMouseDown={e => e.preventDefault()}
+            onClick={() => supabase.auth.signOut()}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
+            Sair
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Kpi({ l, v, d, neg, mut }) {
   return (
     <div className="cv2-kpi">
@@ -410,12 +376,13 @@ function useKpisAvaliacao(tenantDbId) {
     (async () => {
       const desde = new Date(Date.now() - 30 * 86400000).toISOString();
       const [csatRes, npsRes] = await Promise.all([
-        supabase.from('atendimento_avaliacoes').select('nota, status').eq('tenant_id', tenantDbId).gte('created_at', desde),
+        // ponytail: mesma fonte da verdade da tela CSAT — Atendimento (status='respondida', sem janela de data)
+        supabase.from('atendimento_avaliacoes').select('nota, status').eq('tenant_id', tenantDbId),
         supabase.from('nps_avaliacoes').select('nota').eq('tenant_id', tenantDbId).gte('created_at', desde),
       ]);
       if (!alive) return;
       const csatRows = csatRes.data ?? [];
-      const csatResp = csatRows.filter(r => r.nota != null);
+      const csatResp = csatRows.filter(r => r.status === 'respondida' && r.nota != null);
       const csatPct = csatResp.length
         ? Math.round((csatResp.filter(r => r.nota >= 4).length / csatResp.length) * 100)
         : null;
@@ -441,11 +408,11 @@ function VisaoGeralAvaliacao({ tenantNome, tenantDbId, onNav }) {
       <div className="cv2-rule" />
       <div className="cv2-sub">{tenantNome}</div>
       <div className="cv2-kpis">
-        <Kpi l="CSAT — Atendimento" v={av ? (av.csatPct != null ? `${av.csatPct}%` : '—') : '…'} d={av ? `${av.csatTotal} avaliações respondidas` : 'carregando'} />
-        <Kpi l="NPS — Marca" v={av ? (av.npsScore != null ? String(av.npsScore) : '—') : '…'} d={av ? `${av.npsTotal} respondidas (30d)` : 'carregando'} />
+        <Kpi l="Satisfação do Atendimento (CSAT)" v={av ? (av.csatPct != null ? `${av.csatPct}%` : '—') : '…'} d={av ? `${av.csatTotal} avaliações respondidas` : 'carregando'} />
+        <Kpi l="Lealdade da Marca (NPS)" v={av ? (av.npsScore != null ? String(av.npsScore) : '—') : '…'} d={av ? `${av.npsTotal} respondidas (30d)` : 'carregando'} />
       </div>
       <div className="cv2-card">
-        <h3>Avaliação de Atendimento (CSAT)</h3>
+        <h3>Satisfação do Atendimento (CSAT)</h3>
         <div style={{ fontSize: 13, color: 'var(--tx2)', lineHeight: 1.8 }}>
           Monitore a satisfação do cliente após cada atendimento. Meta recomendada: ≥ 80%.
         </div>
@@ -454,7 +421,7 @@ function VisaoGeralAvaliacao({ tenantNome, tenantDbId, onNav }) {
         </div>
       </div>
       <div className="cv2-card">
-        <h3>NPS — Lealdade de Marca</h3>
+        <h3>Lealdade da Marca (NPS)</h3>
         <div style={{ fontSize: 13, color: 'var(--tx2)', lineHeight: 1.8 }}>
           Acompanhe o Net Promoter Score da sua marca. Score acima de 50 é considerado excelente.
         </div>
@@ -527,7 +494,7 @@ function PaywallDefesa() {
           A Defesa Comercial vigia os cancelamentos e avaliações da sua loja 24h por dia, prepara a contestação com a melhor chance de vitória e espera o seu OK — pelo painel ou respondendo "@defesa ok" no WhatsApp. O painel mostra, mês a mês, quanto dinheiro foi defendido.
         </div>
         <div style={{ margin: '14px 0 6px', fontSize: 22, fontWeight: 800 }}>R$ 147<span style={{ fontSize: 13, fontWeight: 600, color: 'var(--tx2)' }}> /loja/mês · sem taxa de ativação</span></div>
-        <div style={{ fontSize: 12.5, color: 'var(--tx2)', marginBottom: 14 }}>O Dashboard iFood continua disponível no menu ao lado — ele mostra quanto está vazando.</div>
+        <div style={{ fontSize: 12.5, color: 'var(--tx2)', marginBottom: 14 }}>O painel iFood: Dashboard continua disponível no menu ao lado — ele mostra quanto está vazando.</div>
         <button className="cv2-btn" onClick={() => { window.location.href = 'mailto:wandson@consultdelivery.com.br?subject=Quero ativar a Defesa Comercial'; }}>Quero ativar a Defesa</button>
         <div style={{ fontSize: 11.5, color: 'var(--tx2)', marginTop: 10 }}>Assinatura automática em breve — por enquanto a ativação é feita pela equipe Consult Delivery em até 1 dia útil.</div>
       </div>
@@ -695,8 +662,9 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
   const tenantSlug = sel?.slug || tenantInfo?.id;
   const [brand, recarregarBrand] = useBranding(tenantDbId);
   const tenantNome = brand?.nome || sel?.nome || tenantInfo?.name || 'Workspace';
-  const { runs, notif } = useTopbar(tenantDbId, userId);
-  const creditosTxt = runs == null ? '…' : fmtK(Math.max(0, CREDITOS_MES - runs));
+  const { custoMes, notif } = useTopbar(tenantDbId, userId);
+  const currentUser = useCurrentUser();
+  const creditosTxt = custoMes == null ? '…' : `US$ ${custoMes.toFixed(2)}`;
 
   useEffect(() => {
     if (!tenantDbId) return;
@@ -773,7 +741,9 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
     switch (tela) {
       case 'visao': return <VisaoGeral tenantNome={tenantNome} tenantDbId={tenantDbId} onNav={nav} allowedModules={allowedModules} />;
       case 'deli': return <Deli tenantDbId={tenantDbId} userId={userId} />;
-      case 'crm': return <CRM tenantSlug={tenantSlug} tenantDbId={tenantDbId} onNavigate={nav} />;
+      case 'gestor': return <Gestor tenantDbId={tenantDbId} userId={userId} />;
+      case 'gestor-dashboard': return <GestorDashboard tenantDbId={tenantDbId} userId={userId} onNavigate={nav} />;
+      case 'crm': return <CRM tenantSlug={tenantSlug} tenantDbId={tenantDbId} tenantNome={tenantNome} onNavigate={nav} />;
       case 'lojas': return <Lojas tenantDbId={tenantDbId} userId={userId} />;
       case 'mia': return <MiaAudit tenantDbId={tenantDbId} userId={userId} />;
       case 'aprovacoes': return <AprovacoesUnificadas tenantDbId={tenantDbId} userId={userId} />;
@@ -821,6 +791,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
       case 'conhecimento': return <Conhecimento tenantDbId={tenantDbId} userId={userId} />;
       case 'custos': return <CustosIA tenantDbId={tenantDbId} />;
       case 'importar': return <ImportarRelatorios tenantDbId={tenantDbId} userId={userId} />;
+      case 'usuarios': return <Usuarios tenantDbId={tenantDbId} userId={userId} />;
       case 'configsys': return <Configuracoes tenantDbId={tenantDbId} userId={userId} onTenantChange={() => {}} />;
       case 'clientesplat': return <Clientes userId={userId} />;
       case 'marca': return <Marca tenantDbId={tenantDbId} onChanged={recarregarBrand} />;
@@ -845,8 +816,6 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
     }
   }
 
-  const inicial = (tenantNome || 'CD').replace(/[^A-Za-zÀ-ú]/g, '').slice(0, 2).toUpperCase() || 'CD';
-
   return (
     <div className={`cv2${sidebarCollapsed ? ' cv2-sb-collapsed' : ''}`} style={temaStyle}>
       <CvSprite />
@@ -863,7 +832,10 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
         </div>
         {GRUPOS.map((g, i) => {
           // allowlist: esconde itens não liberados e grupos que ficarem vazios.
-          const items = allowedModules ? g.items.filter(it => allowedModules.has(it.id)) : g.items;
+          // adminOnly: visível apenas para owner/admin do tenant.
+          const isAdmin = ['owner', 'admin'].includes(sel?.role || tenantInfo?.role);
+          const items = (allowedModules ? g.items.filter(it => allowedModules.has(it.id)) : g.items)
+            .filter(it => !it.adminOnly || isAdmin);
           if (items.length === 0) return null;
           return (
             <div key={i}>
@@ -897,10 +869,10 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M3 6h18M3 12h18M3 18h18" /></svg>
               </button>
               <span className="crumb">Console › <b>{LABELS[tela] || tela}</b></span>
-              <GlobalSearch tenantDbId={tenantDbId} onNavigate={navWithParams} />
+              <GlobalSearch tenantDbId={tenantDbId} onNavigate={navWithParams} allowedModules={allowedModules} isAdmin={['owner', 'admin'].includes(sel?.role || tenantInfo?.role)} />
               {(!allowedModules || allowedModules.has('creditos-ia')) && (
-                <span className="cv2-pill" title={`Plano freemium · ${CREDITOS_MES.toLocaleString('pt-BR')} créditos/mês · 1 por execução de IA · ${runs ?? 0} usados`}>
-                  <Ico name="i-zap" size={13} /> Créditos IA <b>{creditosTxt}</b>
+                <span className="cv2-pill" title="Custo de IA no mês corrente (agent_runs.cost_usd) · ver tela Custos">
+                  <Ico name="i-zap" size={13} /> Custo IA <b>{creditosTxt}</b>
                 </span>
               )}
               {tenantsList.length > 1 ? (
@@ -917,7 +889,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
                 onKeyDown={e => { if (e.key === 'Enter') setTela('notificacoes'); }}>
                 <Ico name="i-bell" size={13} /><b style={notif > 0 ? { color: 'var(--red)' } : { color: 'var(--tx2)' }}>{notif}</b>
               </span>
-              <span className="cv2-avatar">{inicial}</span>
+              <UserMenu user={currentUser} />
             </div>
             {ehEspacos || ehLegado ? (
               // telas full-height (Espaços, Chat legado): pai bounded p/ o filho height:100% funcionar

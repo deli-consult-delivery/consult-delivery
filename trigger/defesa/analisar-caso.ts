@@ -6,6 +6,7 @@ import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 import { notify } from "../_shared/notify";
 import { notifyDeli } from "../_shared/notify-deli";
+import { calcularCustoUsd } from "../_shared/pricing";
 
 // =====================================================
 // AGENTE DEFESA — F1 (D6 aprovada 2026-06-07)
@@ -98,9 +99,10 @@ export const defesaAnalisarCaso = task({
     ].filter(Boolean).join("\n");
 
     // Chamada direta ao SDK para capturar usage (custo real no logAgentRun)
+    const MODEL = "claude-sonnet-4-6";
     const client = getAnthropic();
     const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
+      model: MODEL,
       max_tokens: 4096,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: userPrompt }],
@@ -113,10 +115,7 @@ export const defesaAnalisarCaso = task({
     const cleaned = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
     const analise = AnaliseClaudeSchema.parse(JSON.parse(cleaned));
 
-    // Custo aproximado claude-sonnet-4-6: $3/Mtok in, $15/Mtok out
-    const costUsd =
-      (response.usage.input_tokens / 1_000_000) * 3 +
-      (response.usage.output_tokens / 1_000_000) * 15;
+    const costUsd = calcularCustoUsd(MODEL, response.usage);
 
     // Grava o caso aguardando aprovação humana (service role)
     const { data: caso, error } = await getSupabase()

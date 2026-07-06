@@ -3,6 +3,7 @@ import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
+import { calcularCustoUsd } from "../_shared/pricing";
 
 const InputSchema = z.object({
   tenant_id: z.string().uuid(),
@@ -88,6 +89,8 @@ Retorne APENAS JSON:
       .map((b) => (b as Anthropic.TextBlock).text)
       .join("");
 
+    const costUsd = calcularCustoUsd("claude-haiku-4-5-20251001", response.usage);
+
     let parsed: { prioridade: string; resumo: string; proximos_passos: string[] };
     try {
       const m = rawText.match(/\{[\s\S]*\}/);
@@ -156,6 +159,7 @@ Retorne APENAS JSON:
       tenantId: input.tenant_id,
       triggeredBy: input.triggered_by,
       durationMs: Date.now() - start,
+      costUsd,
     });
 
     return OutputSchema.parse({

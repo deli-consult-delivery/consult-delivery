@@ -3,6 +3,7 @@ import { getAnthropic } from "../_shared/claude";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
 import { notify } from "../_shared/notify";
+import { calcularCustoUsd } from "../_shared/pricing";
 
 // =====================================================
 // ESTÚDIO — GERAR (E2)
@@ -124,9 +125,10 @@ export const estudioGerar = schedules.task({
         }
 
         // 1) texto + prompt de imagem
+        const TEXT_MODEL = "claude-sonnet-4-6";
         const anthropic = getAnthropic();
         const resp = await anthropic.messages.create({
-          model: "claude-sonnet-4-6",
+          model: TEXT_MODEL,
           max_tokens: 4096,
           system: SYSTEM_PROMPT,
           messages: [{
@@ -136,9 +138,7 @@ export const estudioGerar = schedules.task({
         });
         const textoResp = resp.content.filter(b => b.type === "text").map(b => (b as { text: string }).text).join("\n");
         const { texto, prompt_imagem } = extrairJson(textoResp);
-        let custoUsd =
-          (resp.usage.input_tokens / 1_000_000) * 3 +
-          (resp.usage.output_tokens / 1_000_000) * 15;
+        let custoUsd = calcularCustoUsd(TEXT_MODEL, resp.usage) ?? 0;
 
         // 2) imagem (apenas formatos visuais)
         let imagemUrl: string | null = null;

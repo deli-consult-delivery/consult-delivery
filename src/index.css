@@ -3,6 +3,14 @@
    Light mode • SaaS-first • ClickUp-inspired
    ═══════════════════════════════════════════════════════════ */
 
+/* LoginScreen: painel de marca + formulário lado a lado quebra em telas
+   estreitas (texto grande cortado/sobreposto). Empilha em 1 coluna e
+   esconde o painel decorativo abaixo de 720px — o formulário é o que importa. */
+@media (max-width: 720px) {
+  .login-grid { grid-template-columns: 1fr !important; height: auto !important; min-height: 100vh; }
+  .login-brand-panel { display: none !important; }
+}
+
 :root {
   /* Brand */
   --red:        #B70C00;
@@ -1181,6 +1189,9 @@ input, textarea { font-family: inherit; }
   body { font-size: 14px !important; }
 }
 
+/* ── CoraScreen default padding (desktop) ────────────────── */
+.cora-screen { padding: 32px; }
+
 /* ═══════════════════════════════════════════════════════════
    MOBILE RESPONSIVE — Screen-specific (max-width: 767px)
    ═══════════════════════════════════════════════════════════ */
@@ -1210,6 +1221,9 @@ input, textarea { font-family: inherit; }
 
   /* ── CoraScreen KPI ───────────────────────── */
   .cora-kpi-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+
+  /* ── CoraScreen padding ───────────────────── */
+  .cora-screen { padding: 16px !important; }
 
   /* ── CRM ──────────────────────────────────── */
   .crm-stat-strip { grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; }

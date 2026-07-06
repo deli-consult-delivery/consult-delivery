@@ -3,6 +3,7 @@ import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
+import { calcularCustoUsd } from "../_shared/pricing";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -97,6 +98,7 @@ export const deliSupervisionar = task({
   run: async (payload: Input, { ctx }): Promise<Output> => {
     const input = InputSchema.parse(payload);
     const sb = getSupabase();
+    let costUsdTotal = 0;
 
     logger.info("deli-supervisionar iniciado", { tenant_id: input.tenant_id });
 
@@ -201,6 +203,8 @@ export const deliSupervisionar = task({
           tool_choice: { type: "auto" },
         });
 
+        costUsdTotal += calcularCustoUsd("claude-sonnet-4-6", response.usage) ?? 0;
+
         if (response.stop_reason === "tool_use") {
           const toolBlock = response.content.find(
             (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
@@ -298,6 +302,7 @@ export const deliSupervisionar = task({
         triggeredBy: input.triggered_by,
         input,
         output,
+        costUsd: costUsdTotal || undefined,
         status: "success",
       });
 
@@ -317,6 +322,7 @@ export const deliSupervisionar = task({
         triggeredBy: input.triggered_by,
         input,
         output: { error: errorMessage },
+        costUsd: costUsdTotal || undefined,
         status: "failed",
       });
 

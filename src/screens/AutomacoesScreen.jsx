@@ -5,8 +5,6 @@ import AgentBuilderScreen from './AgentBuilderScreen.jsx';
 import MemoriesScreen from './MemoriesScreen.jsx';
 import AgentRunsScreen from './AgentRunsScreen.jsx';
 import KnowledgeBaseScreen from './KnowledgeBaseScreen.jsx';
-import AgentInboxScreen from './AgentInboxScreen.jsx';
-import ApprovalsScreen from './ApprovalsScreen.jsx';
 
 const TABS = [
   { id: 'heartbeats',   label: 'Heartbeats',          component: HeartbeatsScreen },
@@ -15,8 +13,6 @@ const TABS = [
   { id: 'memorias',     label: 'Memórias',             component: MemoriesScreen },
   { id: 'runs',         label: 'Execuções',            component: AgentRunsScreen },
   { id: 'conhecimento', label: 'Base de Conhecimento', component: KnowledgeBaseScreen },
-  { id: 'inbox',        label: 'Inbox dos Agentes',    component: AgentInboxScreen },
-  { id: 'aprovacoes',   label: 'Aprovações',           component: ApprovalsScreen },
 ];
 
 export default function AutomacoesScreen({ tenantDbId, onNavigate }) {

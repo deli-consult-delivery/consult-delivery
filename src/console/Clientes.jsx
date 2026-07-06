@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
+import { GRUPOS } from './moduleCatalog.js';
 
 // ============================================================
 // Console v2 — PR9/C1 + PR10: Clientes da plataforma (admin)
@@ -17,7 +18,90 @@ function slugify(s) {
   return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
 }
 
+// ─── Modal: Telas/Módulos visíveis do tenant (tenant_modules) ───
+// Semântica: tenant sem linhas = vê tudo; com linhas = allowlist (só enabled=true).
+// Salvar grava o estado explícito de TODOS os módulos do catálogo de uma vez.
+function TelasModal({ tenant, onClose, onSaved }) {
+  const [estado, setEstado] = useState(null); // { module_key: bool }
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [erro, setErro] = useState(null);
+
+  useEffect(() => {
+    supabase.rpc('admin_get_tenant_modules', { p_tenant_id: tenant.id }).then(({ data, error }) => {
+      if (error) { setErro(error.message); setLoading(false); return; }
+      const rows = data ?? [];
+      const temAllowlist = rows.length > 0;
+      const byKey = {};
+      rows.forEach(r => { byKey[r.module_key] = r.enabled; });
+      const map = {};
+      GRUPOS.forEach(g => g.items.forEach(it => {
+        // sem allowlist: tudo visível. com allowlist: ausente = oculto.
+        map[it.id] = it.id in byKey ? byKey[it.id] : !temAllowlist;
+      }));
+      setEstado(map);
+      setLoading(false);
+    });
+  }, [tenant.id]);
+
+  async function salvar() {
+    setSaving(true); setErro(null);
+    const p_modules = GRUPOS.flatMap(g => g.items.map(it => ({ module_key: it.id, enabled: !!estado[it.id] })));
+    const { error } = await supabase.rpc('admin_set_tenant_modules', { p_tenant_id: tenant.id, p_modules });
+    setSaving(false);
+    if (error) { setErro(error.message); return; }
+    onSaved?.();
+    onClose();
+  }
+
+  function setGrupo(items, val) {
+    setEstado(prev => { const n = { ...prev }; items.forEach(it => { n[it.id] = val; }); return n; });
+  }
+
+  const totalOn = estado ? Object.values(estado).filter(Boolean).length : 0;
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(28,27,26,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: 28, width: 560, maxHeight: '84vh', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+        <button onClick={onClose} style={{ position: 'absolute', top: 14, right: 16, background: 'none', border: 'none', color: 'var(--tx2)', cursor: 'pointer', fontSize: 18 }}>✕</button>
+        <h3 style={{ margin: '0 0 2px', fontSize: 16, fontWeight: 700 }}>Telas visíveis · {tenant.name}</h3>
+        <p style={{ margin: '0 0 14px', fontSize: 12.5, color: 'var(--tx2)' }}>
+          Marque o que aparece no menu deste cliente. {estado ? `${totalOn} ativos.` : ''}{erro ? ` · erro: ${erro}` : ''}
+        </p>
+        <div style={{ flex: 1, overflowY: 'auto', paddingRight: 4 }}>
+          {loading ? <div style={{ padding: 30, textAlign: 'center', color: 'var(--tx2)', fontSize: 13 }}>Carregando…</div> : (
+            GRUPOS.map(g => (
+              <div key={g.label} style={{ marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: 'var(--tx2)' }}>{g.label}</div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button className="cv2-btn sec" style={{ padding: '2px 8px', fontSize: 10.5 }} onClick={() => setGrupo(g.items, true)}>todos</button>
+                    <button className="cv2-btn sec" style={{ padding: '2px 8px', fontSize: 10.5 }} onClick={() => setGrupo(g.items, false)}>nenhum</button>
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 16px' }}>
+                  {g.items.map(it => (
+                    <label key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', fontSize: 13, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={!!estado?.[it.id]} onChange={e => setEstado(prev => ({ ...prev, [it.id]: e.target.checked }))} />
+                      <span style={{ color: estado?.[it.id] ? 'var(--tx)' : 'var(--tx2)' }}>{it.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
+          <button className="cv2-btn sec" onClick={onClose}>Cancelar</button>
+          <button className="cv2-btn" disabled={saving || loading} onClick={salvar}>{saving ? 'Salvando…' : 'Salvar telas'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Clientes({ userId }) {
+  const [telasDe, setTelasDe] = useState(null); // tenant com modal de telas aberto
   const [tenants, setTenants] = useState(null);
   const [defesaMap, setDefesaMap] = useState({});
   const [assinaturaMap, setAssinaturaMap] = useState({});
@@ -194,6 +278,7 @@ export default function Clientes({ userId }) {
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <button className="cv2-btn sec" onClick={() => setTelasDe(t)}>Telas</button>
                         {!a && !aberto && (
                           <button className="cv2-btn" disabled={agindo === t.id} onClick={() => { setAssinandoDe(t.id); setPayer({ nome: t.name, email: '', doc: '' }); }}>Gerar assinatura R$ 147</button>
                         )}
@@ -212,6 +297,8 @@ export default function Clientes({ userId }) {
         </div>
       )}
       {tenants && !tenants.length && <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>Nenhum workspace visível.</div>}
+
+      {telasDe && <TelasModal tenant={telasDe} onClose={() => setTelasDe(null)} onSaved={() => setMsg(`Telas de "${telasDe.name}" atualizadas.`)} />}
     </div>
   );
 }

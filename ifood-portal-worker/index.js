@@ -29,6 +29,17 @@ function getConfig() {
 const REVIEWS_URL = 'https://portal.ifood.com.br/reviews/search';
 const TEXTAREA_TESTID = 'review-details-drawer-comment-textarea'; // descoberto via probe read-only
 
+// ── garantirLoja — multi-loja (Fase Gestor F0) ────────────────────────────────
+// Fluxo do switcher CONFIRMADO ao vivo via probe supervisionado em 2026-07-02
+// (probe-switch13.js): status-indicator-v2 → dialog "Status da loja" → botão
+// "Trocar loja" → modal choose-restaurant-modal-list → busca (pressSequentially,
+// NUNCA fill — fill não dispara o filtro) → li[role="option"] por match exato.
+const NOME_LOJA_ATIVA_SEL = '[data-testid="restaurant-profile-name"]';
+const STATUS_INDICATOR_SEL = '[data-testid="status-indicator-v2"]';
+const DIALOG_CONTENT_SEL = '[data-testid="dialog-content"]';
+const MODAL_LOJAS_SEL = '[data-testid="choose-restaurant-modal-list"]';
+const BUSCA_LOJA_SEL = 'input[placeholder="Busque pelo nome ou ID"]';
+
 // ── Schema de saída (boundary validado) ───────────────────────────────────────
 const AvaliacaoSchema = z.object({
   id: z.string().min(1), // nº do pedido (coluna "Pedido") — identificador estável visível na lista
@@ -61,9 +72,116 @@ function clickLeafByText(page, reSource) {
   }, reSource);
 }
 
+function normalizarNomeLoja(s) {
+  return String(s || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+// Lê o nome da loja ativa exibido no header. Retorna null se o elemento não estiver
+// presente (ex.: 1º load pós-login, antes de qualquer loja ser escolhida).
+async function lerNomeLojaAtiva(page) {
+  const texto = await page.$eval(NOME_LOJA_ATIVA_SEL, (el) => el.textContent).catch(() => null);
+  return texto ? texto.trim() : null;
+}
+
+// Passo (c) do fluxo: modal "Escolher loja" já aberto → busca por nome (pressSequentially,
+// NUNCA fill — probe provou que fill não dispara o filtro) e clica o li[role="option"] cuja
+// PRIMEIRA LINHA do texto bate EXATAMENTE com o nome alvo (normalizado).
+async function buscarEEscolherLojaNoModal(page, nomeLoja, alvo) {
+  await page.waitForSelector(MODAL_LOJAS_SEL, { timeout: 20000 }).catch(() => {
+    throw new Error(`garantirLoja: modal "${MODAL_LOJAS_SEL}" não apareceu para buscar a loja.`);
+  });
+
+  const busca = page.locator(BUSCA_LOJA_SEL);
+  await busca.click();
+  await busca.fill(''); // limpa texto residual de execução anterior (fill não dispara filtro, só serve p/ limpar)
+  await busca.pressSequentially(nomeLoja, { delay: 100 });
+  await page.waitForTimeout(3000); // debounce da busca
+
+  const opcoes = page.locator(`${MODAL_LOJAS_SEL} li[role="option"]`);
+  const total = await opcoes.count();
+  let alvoIdx = -1;
+  for (let i = 0; i < total; i++) {
+    const texto = (await opcoes.nth(i).innerText()).trim();
+    const primeiraLinha = normalizarNomeLoja(texto.split('\n')[0]);
+    if (primeiraLinha === alvo) {
+      alvoIdx = i;
+      break;
+    }
+  }
+  if (alvoIdx === -1) {
+    throw new Error(
+      `garantirLoja: loja "${nomeLoja}" não encontrada (match exato) entre ${total} resultado(s) do modal de busca.`
+    );
+  }
+  await opcoes.nth(alvoIdx).click();
+  await page.waitForTimeout(4000);
+}
+
+/**
+ * Garante que a sessão do portal está na loja `nomeLoja` antes de qualquer ação.
+ * Fluxo CONFIRMADO ao vivo (probe supervisionado 2026-07-02):
+ *   (0) já na loja certa (lê NOME_LOJA_ATIVA_SEL) → no-op;
+ *   (a) modal "Escolher loja" já aberto (1º load pós-login) → vai direto à busca (c);
+ *   (b) senão: clica STATUS_INDICATOR_SEL → dialog "Status da loja" → botão "Trocar loja" → abre o modal;
+ *   (c) busca pelo nome e clica o li[role="option"] de match exato.
+ *
+ * PÓS-CONDIÇÃO OBRIGATÓRIA: após qualquer troca, relê o nome da loja ativa na UI e compara
+ * (normalizado) com `nomeLoja`. Divergiu → throw. NUNCA prossegue em loja errada.
+ * Cada passo lança erro claro se o seletor esperado não aparecer — nunca segue às cegas.
+ */
+async function garantirLoja(page, nomeLoja) {
+  const alvo = normalizarNomeLoja(nomeLoja);
+  if (!alvo) throw new Error('garantirLoja: nomeLoja é obrigatório.');
+
+  const nomeAtual = await lerNomeLojaAtiva(page);
+  if (nomeAtual !== null && normalizarNomeLoja(nomeAtual) === alvo) {
+    return; // já na loja certa — no-op
+  }
+
+  const modalJaAberto = await page.$(MODAL_LOJAS_SEL).catch(() => null);
+  if (!modalJaAberto) {
+    // (b) abre o dialog "Status da loja" → botão "Trocar loja"
+    await page.waitForSelector(STATUS_INDICATOR_SEL, { timeout: 20000 }).catch(() => {
+      throw new Error(`garantirLoja: header "${STATUS_INDICATOR_SEL}" não encontrado.`);
+    });
+    await page.click(STATUS_INDICATOR_SEL);
+    await page.waitForSelector(DIALOG_CONTENT_SEL, { timeout: 20000 }).catch(() => {
+      throw new Error('garantirLoja: dialog "Status da loja" não abriu após clicar no header.');
+    });
+
+    const btnTrocar = page.locator(`${DIALOG_CONTENT_SEL} button`, { hasText: 'Trocar loja' });
+    if ((await btnTrocar.count()) === 0) {
+      throw new Error('garantirLoja: botão "Trocar loja" não encontrado dentro do dialog "Status da loja".');
+    }
+    await btnTrocar.first().click();
+  }
+
+  // (c) busca + seleção no modal
+  await buscarEEscolherLojaNoModal(page, nomeLoja, alvo);
+
+  // PÓS-CONDIÇÃO: relê a loja ativa e confirma o match — nunca segue em loja errada.
+  const nomeFinal = await lerNomeLojaAtiva(page);
+  if (nomeFinal === null) {
+    throw new Error(
+      `garantirLoja: pós-troca, "${NOME_LOJA_ATIVA_SEL}" não foi encontrado — não há como confirmar a loja ativa. Abortado por segurança.`
+    );
+  }
+  if (normalizarNomeLoja(nomeFinal) !== alvo) {
+    throw new Error(
+      `garantirLoja: pós-troca, a UI mostra a loja "${nomeFinal}", esperado "${nomeLoja}". ` +
+        'Abortado por segurança (nunca agir em loja errada).'
+    );
+  }
+}
+
 // Garante que a aba principal está em /reviews/search no contexto da loja piloto. SOMENTE leitura
 // (selecionar "Portal do Parceiro" é navegação, não escrita).
 async function abrirListaDeAvaliacoes(page, cfg) {
+  await garantirLoja(page, cfg.loja);
   await settle(page, 1500);
 
   // /chains: escolher "Portal do Parceiro" (loja única) → /home
@@ -94,8 +212,11 @@ async function withPortal(fn) {
   try {
     const ctx = browser.contexts()[0];
     if (!ctx) throw new Error('Nenhum contexto no browser CDP — o ifood-browser está logado?');
-    const page = ctx.pages()[0];
-    if (!page) throw new Error('Nenhuma aba aberta no ifood-browser.');
+    const paginas = ctx.pages();
+    if (!paginas.length) throw new Error('Nenhuma aba aberta no ifood-browser.');
+    // Sobra de aba de login antiga (nunca fechada) engana pages()[0] — prioriza a 1ª aba
+    // autenticada; se todas forem /login, cai no fallback antigo (pages()[0]).
+    const page = paginas.find((p) => !p.url().startsWith('https://portal.ifood.com.br/login')) || paginas[0];
     return await fn(page, cfg);
   } finally {
     // connectOverCDP: close() só desconecta; não fecha o browser do Wandson.
@@ -306,4 +427,11 @@ async function enviarResposta(textoEsperado, opts = {}) {
   });
 }
 
-module.exports = { listarAvaliacoesPendentes, preencherResposta, enviarResposta, AvaliacaoSchema, ListaSchema };
+module.exports = {
+  listarAvaliacoesPendentes,
+  preencherResposta,
+  enviarResposta,
+  garantirLoja,
+  AvaliacaoSchema,
+  ListaSchema,
+};

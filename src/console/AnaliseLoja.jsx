@@ -20,7 +20,7 @@ export default function AnaliseLoja({ tenantDbId, userId }) {
   const carregar = useCallback(async () => {
     if (!tenantDbId) return;
     const [{ data: ls }, { data: as, error }] = await Promise.all([
-      supabase.from('lojas').select('id, nome').eq('tenant_id', tenantDbId).order('nome'),
+      supabase.from('lojas').select('id, nome').eq('tenant_id', tenantDbId).eq('is_contato', false).order('nome'),
       supabase.from('analise_loja').select('id, loja_id, status, diagnostico, erro_detalhe, created_at, processado_em').eq('tenant_id', tenantDbId).order('created_at', { ascending: false }).limit(20),
     ]);
     if (error) { setErro(error.message); return; }
