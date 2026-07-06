@@ -678,6 +678,27 @@ export async function getIfoodSummary(lojaId) {
   return json.data?.summary ?? null;
 }
 
+// Cardápio (Catalog API oficial) por loja — gated por fonte_dados==='api' +
+// membership no Bridge, mesmo padrão de getIfoodSummary. Rota nova (App 3
+// Catálogo, coordenada com o worker que cria routes/ifood-api.js do lado do
+// bridge) — pode ainda não existir (404): erro carrega `.status` pro chamador
+// decidir entre "erro real" e "ainda não disponível".
+export async function getCardapioApiLoja(lojaId) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token || '';
+  const res = await fetch(`${BRIDGE}/api/ifood-api/cardapio/${lojaId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    const err = new Error(`getCardapioApiLoja HTTP ${res.status}: ${body.slice(0, 300)}`);
+    err.status = res.status;
+    throw err;
+  }
+  const json = await res.json();
+  return json.data?.cardapio ?? json.data ?? null;
+}
+
 // ── iFood Review API (fluxo draft→aprovação, homologação App Avaliações) ────
 // Erros trazem status/code/message/retryAfterSeconds do Bridge (routes/ifood*.js)
 // pra o front tratar 400/409/429 com mensagem clara — não um Error genérico.
