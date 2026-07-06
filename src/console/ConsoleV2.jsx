@@ -866,7 +866,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
       case 'vendaerp': return <VendaErpPainel />;
       case 'sistemas': return <Sistemas tenantDbId={tenantDbId} />;
       case 'acesso': return <AcessoUsuarios tenantDbId={tenantDbId} />;
-      case 'auditoria': return <AuditLog tenantDbId={tenantDbId} />;
+      case 'auditoria': return <AuditLog tenantDbId={tenantDbId} userId={userId} />;
       case 'notificacoes': return <Notificacoes tenantDbId={tenantDbId} userId={userId} onNavigate={nav} />;
       case 'monitor': return <MonitorSessoes />;
       case 'pipeline': return <PipelineScreen tenantDbId={tenantDbId} />;

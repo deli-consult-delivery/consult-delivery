@@ -1,38 +1,70 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
+import RequireRole from '../components/auth/RequireRole.jsx';
 
 // ============================================================
 // Console v2 — GAP-6: Audit log (compliance multi-tenant)
 // Viewer de audit_log (admin do tenant): quem/quê/quando/IP.
+// Paginação server-side por keyset (cursor = id, bigint monotônico —
+// audit_log é append-only, então id cresce na mesma ordem de created_at).
+// Evita o cap de 1000 linhas do PostgREST e evita carregar tudo em array.
 // ============================================================
 
-export default function AuditLog({ tenantDbId }) {
+const PAGE_SIZE = 50;
+
+function AuditLogInner({ tenantDbId }) {
   const [rows, setRows] = useState(null);
   const [filtro, setFiltro] = useState('');
+  const [recurso, setRecurso] = useState('');
   const [ator, setAtor] = useState('');
   const [de, setDe] = useState('');
   const [ate, setAte] = useState('');
   const [atorOptions, setAtorOptions] = useState([]);
   const [erro, setErro] = useState(null);
+  const [temMais, setTemMais] = useState(false);
+  const [carregandoMais, setCarregandoMais] = useState(false);
 
-  const carregar = useCallback(async () => {
-    if (!tenantDbId) return;
+  const montarQuery = useCallback((cursorId) => {
     let q = supabase.from('audit_log')
       .select('id, user_id, agent_name, action, resource, ip_address, created_at, metadata')
-      .eq('tenant_id', tenantDbId).order('created_at', { ascending: false }).limit(200);
+      .eq('tenant_id', tenantDbId)
+      .order('id', { ascending: false })
+      .limit(PAGE_SIZE + 1); // +1 só pra saber se há próxima página, sem outra query
     if (filtro) q = q.ilike('action', `%${filtro}%`);
+    if (recurso) q = q.ilike('resource', `%${recurso}%`);
     if (ator) {
       const [tipo, valor] = ator.split(':');
       q = tipo === 'agent' ? q.eq('agent_name', valor) : q.eq('user_id', valor);
     }
     if (de) q = q.gte('created_at', `${de}T00:00:00`);
     if (ate) q = q.lte('created_at', `${ate}T23:59:59`);
-    const { data, error } = await q;
+    if (cursorId) q = q.lt('id', cursorId); // keyset: só linhas mais antigas que o cursor
+    return q;
+  }, [tenantDbId, filtro, recurso, ator, de, ate]);
+
+  const carregar = useCallback(async () => {
+    if (!tenantDbId) return;
+    setErro(null);
+    const { data, error } = await montarQuery(null);
     if (error) { setErro(error.message); return; }
-    setRows(data ?? []);
-  }, [tenantDbId, filtro, ator, de, ate]);
+    const pagina = data ?? [];
+    setTemMais(pagina.length > PAGE_SIZE);
+    setRows(pagina.slice(0, PAGE_SIZE));
+  }, [tenantDbId, montarQuery]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  async function carregarMais() {
+    if (!rows || rows.length === 0) return;
+    setCarregandoMais(true);
+    const cursorId = rows[rows.length - 1].id;
+    const { data, error } = await montarQuery(cursorId);
+    if (error) { setErro(error.message); setCarregandoMais(false); return; }
+    const pagina = data ?? [];
+    setTemMais(pagina.length > PAGE_SIZE);
+    setRows(r => [...r, ...pagina.slice(0, PAGE_SIZE)]);
+    setCarregandoMais(false);
+  }
 
   // opções do select vêm dos dados já carregados (sem query extra) — fixadas na 1ª carga
   useEffect(() => {
@@ -54,7 +86,9 @@ export default function AuditLog({ tenantDbId }) {
       <div className="cv2-sub">Tudo que acontece no workspace fica registrado — quem fez, o quê, quando.{erro ? ` · erro: ${erro} (só admin vê)` : ''}</div>
       <div className="cv2-card" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
         <input placeholder="Filtrar por ação (ex.: aprovar, login)" value={filtro} onChange={e => setFiltro(e.target.value)}
-          style={{ flex: '1 1 220px', padding: '8px 11px', border: '1px solid var(--line)', borderRadius: 4, fontFamily: 'inherit', fontSize: 13 }} />
+          style={{ flex: '1 1 200px', padding: '8px 11px', border: '1px solid var(--line)', borderRadius: 4, fontFamily: 'inherit', fontSize: 13 }} />
+        <input placeholder="Filtrar por recurso (ex.: ifood:item, lojas)" value={recurso} onChange={e => setRecurso(e.target.value)}
+          style={{ flex: '1 1 200px', padding: '8px 11px', border: '1px solid var(--line)', borderRadius: 4, fontFamily: 'inherit', fontSize: 13 }} />
         <select value={ator} onChange={e => setAtor(e.target.value)}
           style={{ padding: '8px 11px', border: '1px solid var(--line)', borderRadius: 4, fontFamily: 'inherit', fontSize: 13 }}>
           <option value="">Todos os usuários/agentes</option>
@@ -89,8 +123,23 @@ export default function AuditLog({ tenantDbId }) {
             </tbody>
           </table>
           </div>
+          {temMais && (
+            <div style={{ textAlign: 'center', marginTop: 12 }}>
+              <button className="cv2-btn sec" disabled={carregandoMais} onClick={carregarMais}>
+                {carregandoMais ? 'Carregando…' : 'Carregar mais'}
+              </button>
+            </div>
+          )}
         </div>
       ) : <div className="cv2-card" style={{ textAlign: 'center', color: 'var(--tx2)' }}>{rows ? 'Nenhum registro.' : 'Carregando…'}</div>}
     </div>
+  );
+}
+
+export default function AuditLog({ tenantDbId, userId }) {
+  return (
+    <RequireRole roles={['admin']} userId={userId}>
+      <AuditLogInner tenantDbId={tenantDbId} />
+    </RequireRole>
   );
 }
