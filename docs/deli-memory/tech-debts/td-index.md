@@ -408,12 +408,12 @@ Opção C: Usar Supabase pg_cron com invocação via HTTP para cada tenant.
 ---
 
 ## TD#54 — 25 branches merged não removidos do remote
-**Status:** 🟡 VIVO (reduzido) — triagem 2026-07-05: 14 branches merged (era 25)
+**Status:** 🟢 RESOLVIDO — triagem 2026-07-06 (brief `brief-85-branches-deadroute.md`): 30 branches squash-merged comprovadas (diff vazio contra `main` OU arquivos byte-idênticos ao `main` atual) deletadas do remote via `git push origin --delete`. Output bruto e lista completa em `~/.ao/briefs/report-85-branches.md`.
 **Descoberto em:** S1-G00 T5 (2026-05-24)
 **Severidade:** Baixa — higiene de repositório
 
-**Evidência:** `git branch -r --merged origin/main` retorna 14 branches (`git status` confirma clean). Alguém já limpou parte do lote original.
-**Recomendação (não implementado — decisão de repo, fora do escopo desta triagem):** ativar "Auto-delete head branches" nas Settings do GitHub (resolve de raiz, evita recorrência) + `git push origin --delete` nas 14 restantes numa sessão dedicada.
+**Evidência da resolução:** repo tinha 65 branches remotas (excluindo `main`/`gh-pages`) em 2026-07-06; nenhuma via `git branch -r --merged` (todo o fluxo é squash-merge, não fast-forward) — critério de segurança usado foi comparar o conteúdo dos arquivos alterados por cada branch contra o `main` atual. 30 identificadas como squash-merged e removidas; 0 falhas.
+**Recomendação ainda pendente (fora do escopo desta triagem):** ativar "Auto-delete head branches" nas Settings do GitHub — resolve de raiz, evita a branch órfã se acumular de novo a cada PR squash-merged.
 
 **Sintoma:**
 `git branch -r --merged origin/main` retorna 25 branches além de main/gh-pages.
@@ -427,12 +427,11 @@ Ou ativar "Auto-delete head branches" nas Settings do GitHub repo.
 ---
 
 ## TD#55 — 23 branches unmerged potencialmente stale (lote 2026-05-15)
-**Status:** 🔴 VIVO — PIOROU MUITO (triagem 2026-07-05: 471 branches unmerged, era 23)
+**Status:** 🟡 MUITO REDUZIDO — triagem 2026-07-06: **33 branches unmerged** (era 471 em 2026-07-05 — a maior parte já tinha sido resolvida entre uma triagem e outra pelo próprio fluxo de PRs squash-merge da noite/madrugada). As 33 restantes foram classificadas em 4 grupos com recomendação em `docs/deli-memory/tech-debts/td55-branches-triagem.md` — decisão final por grupo é do Wandson, nenhuma deletada nesta rodada (critério do brief: só delete automática com squash-merge comprovado).
 **Descoberto em:** S1-G00 T5 (2026-05-24)
-**Severidade:** Média — risco de código pendente não mergeado e acúmulo de drift
+**Severidade:** Média → Baixa (volume caiu ~93%) — risco residual é só nos grupos B/C/D da triagem (código não incorporado, se existir)
 
-**Evidência:** `git branch -r --no-merged origin/main` retorna **471** branches. Maioria é `claude/*` (nomes gerados automaticamente por sessões headless, ex. `claude/agitated-cray-5d3b5e`) e `ao/*` (worktrees do orquestrador, ex. `ao/consult-delivery-22/root`) — volume cresceu por causa da automação (AO orchestrator + sessões Claude), não do fluxo manual de PRs original.
-**Recomendação (não implementado — decisão/triagem grande, fora do escopo "queimar pequeno"):** script dedicado que (1) separa `claude/*`/`ao/*` (prováveis descartáveis, confirmar se órfãos antes de deletar) dos `wandson/*`/`feat/*`/`fix/*` manuais (revisar 1-a-1: merge ou delete explícito), (2) aplica idade mínima (>15 dias) antes de considerar stale.
+**Evidência 2026-07-06:** `git branch -r --no-merged origin/main` (após excluir 30 squash-merged deletadas via TD#54) retorna 33 branches. Grupo A (4, sessões `claude/*` automáticas), Grupo B (8, stale >30 dias), Grupo C (6, sprint recente 11-17 dias), Grupo D (15, sprint da madrugada 07-06 sem PR aberto — várias com "gêmea" já squash-merged sob nome diferente). Detalhe completo e recomendação por branch em `td55-branches-triagem.md`.
 
 **Sintoma:**
 29 branches no remote não mergeados em main. Após excluir os 6 ativos da série piloto:
