@@ -338,5 +338,66 @@ function sbFetchStub(routes) {
     passed++;
   }
 
+  // 16) GET merchant-interruptions: lê pausas ativas da loja
+  {
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => p.startsWith('ifood_merchants?'), value: [{ merchant_id: 'merch-1' }] },
+    ]);
+    const ifood = { listarInterrupcoes: async (merchantId) => [{ id: 'int-1', merchantId }] };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/merchant-interruptions/loja-1');
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.body.data.interrupcoes[0].id, 'int-1');
+    server.close();
+    passed++;
+  }
+
+  // 17) GET merchant-opening-hours: lê turnos de funcionamento
+  {
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => p.startsWith('ifood_merchants?'), value: [{ merchant_id: 'merch-1' }] },
+    ]);
+    const ifood = { listarHorarios: async () => ({ shifts: [{ dayOfWeek: 'MONDAY', start: '08:00', duration: 600 }] }) };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/merchant-opening-hours/loja-1');
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.body.data.horarios.shifts[0].dayOfWeek, 'MONDAY');
+    server.close();
+    passed++;
+  }
+
+  // 18) 429 com Retry-After → status 429 e retryAfterSeconds exposto no JSON
+  //     (mecanismo canônico: IfoodApiError.retryAfterMs, setado por ifoodFetch em 429)
+  {
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => p.startsWith('ifood_merchants?'), value: [{ merchant_id: 'merch-1' }] },
+    ]);
+    const IfoodApiError = class extends Error {
+      constructor(msg, status, body) { super(msg); this.name = 'IfoodApiError'; this.status = status; this.body = body; }
+    };
+    const ifood = {
+      listarInterrupcoes: async () => {
+        const err = new IfoodApiError('rate limited', 429, { message: 'rate limited' });
+        err.retryAfterMs = 3000;
+        throw err;
+      },
+    };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/merchant-interruptions/loja-1');
+    assert.strictEqual(r.status, 429);
+    assert.strictEqual(r.body.retryAfterSeconds, 3);
+    server.close();
+    passed++;
+  }
+
   process.stdout.write(`\nifood-api-routes: todos os ${passed} cenários passaram.\n`);
 })();

@@ -28,12 +28,13 @@ function freshIfood() {
   return require('../lib/ifood');
 }
 
-function jsonResponse(status, body) {
+function jsonResponse(status, body, headers = {}) {
   return {
     ok: status >= 200 && status < 300,
     status,
     statusText: `status-${status}`,
     text: async () => JSON.stringify(body),
+    headers: { get: (name) => headers[name.toLowerCase()] ?? null },
   };
 }
 
@@ -337,6 +338,27 @@ function restoreFetch() {
     clearCreds();
   });
 
+  // ── Merchant v1.0 — Interrupções (pausas) ───────────────────────────────────
+  await check('criarInterrupcao: POST correto, body {start,end} → 201 {id,start,end}', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-int', expiresIn: 21600 });
+      }
+      return jsonResponse(201, { id: 'int-1', start: '2026-07-10T10:00:00Z', end: '2026-07-10T12:00:00Z' });
+    });
+    const ifood = freshIfood();
+    const res = await ifood.criarInterrupcao('merchant-1', { start: '2026-07-10T10:00:00Z', end: '2026-07-10T12:00:00Z' });
+    assert.deepStrictEqual(res, { id: 'int-1', start: '2026-07-10T10:00:00Z', end: '2026-07-10T12:00:00Z' });
+    const call = calls.find((c) => c.url.includes('/interruptions'));
+    assert.strictEqual(call.url, 'https://sandbox.ifood.test/merchant/v1.0/merchants/merchant-1/interruptions');
+    assert.strictEqual(call.opts.method, 'POST');
+    assert.deepStrictEqual(JSON.parse(call.opts.body), { start: '2026-07-10T10:00:00Z', end: '2026-07-10T12:00:00Z' });
+    restoreFetch();
+    clearCreds();
+  });
+
   // ── Retry-After (429) — respeita o header no lugar do backoff fixo ──────────
   await check('withRetry: 429 com Retry-After curto → espera o valor do header, não o backoff fixo', async () => {
     setCreds();
@@ -366,6 +388,115 @@ function restoreFetch() {
     assert.strictEqual(statusCallCount, 2, 'deveria ter retentado 1x após o 429');
     // Retry-After: 0 → deveria pular o backoff fixo de 1000ms do 2º attempt.
     assert.ok(elapsed < 900, `esperava respeitar Retry-After:0 (rápido), levou ${elapsed}ms`);
+    restoreFetch();
+    clearCreds();
+  });
+
+  await check('criarInterrupcao: sem start/end → IfoodApiError status 0, zero chamada', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, () => jsonResponse(200, { accessToken: 'tok-x', expiresIn: 21600 }));
+    const ifood = freshIfood();
+    await assert.rejects(() => ifood.criarInterrupcao('merchant-1', {}), (err) => err.status === 0);
+    assert.strictEqual(calls.filter((c) => c.url.includes('/interruptions')).length, 0);
+    restoreFetch();
+    clearCreds();
+  });
+
+  await check('removerInterrupcao: DELETE correto → 204 sem corpo', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-del', expiresIn: 21600 });
+      }
+      return { ok: true, status: 204, statusText: 'No Content', text: async () => '', headers: { get: () => null } };
+    });
+    const ifood = freshIfood();
+    const res = await ifood.removerInterrupcao('merchant-1', 'int-1');
+    assert.strictEqual(res, null);
+    const call = calls.find((c) => c.url.includes('/interruptions/int-1'));
+    assert.strictEqual(call.opts.method, 'DELETE');
+    restoreFetch();
+    clearCreds();
+  });
+
+  await check('removerInterrupcao: 409 InterruptionOverlap propaga status e body.code', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-409', expiresIn: 21600 });
+      }
+      return jsonResponse(409, { code: 'InterruptionOverlap', message: 'Interrupção conflita com outra existente' });
+    });
+    const ifood = freshIfood();
+    await assert.rejects(
+      () => ifood.removerInterrupcao('merchant-1', 'int-1'),
+      (err) => err.status === 409 && err.body.code === 'InterruptionOverlap'
+    );
+    restoreFetch();
+    clearCreds();
+  });
+
+  // ── Merchant v1.0 — Horários de funcionamento ───────────────────────────────
+  await check('listarHorarios / atualizarHorarios: paths e método corretos', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-hrs', expiresIn: 21600 });
+      }
+      if (url.includes('/opening-hours')) {
+        return jsonResponse(200, { shifts: [{ dayOfWeek: 'MONDAY', start: '08:00', duration: 600 }] });
+      }
+      return jsonResponse(404, {});
+    });
+    const ifood = freshIfood();
+    const lidos = await ifood.listarHorarios('merchant-1');
+    assert.deepStrictEqual(lidos, { shifts: [{ dayOfWeek: 'MONDAY', start: '08:00', duration: 600 }] });
+
+    const atualizados = await ifood.atualizarHorarios('merchant-1', [{ dayOfWeek: 'TUESDAY', start: '09:00', duration: 480 }]);
+    assert.deepStrictEqual(atualizados, { shifts: [{ dayOfWeek: 'MONDAY', start: '08:00', duration: 600 }] });
+
+    const putCall = calls.find((c) => c.opts.method === 'PUT');
+    assert.strictEqual(putCall.url, 'https://sandbox.ifood.test/merchant/v1.0/merchants/merchant-1/opening-hours');
+    assert.deepStrictEqual(JSON.parse(putCall.opts.body), { shifts: [{ dayOfWeek: 'TUESDAY', start: '09:00', duration: 480 }] });
+    restoreFetch();
+    clearCreds();
+  });
+
+  await check('atualizarHorarios: shifts vazio/ausente → IfoodApiError status 0, zero chamada PUT', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, () => jsonResponse(200, { accessToken: 'tok-x', expiresIn: 21600 }));
+    const ifood = freshIfood();
+    await assert.rejects(() => ifood.atualizarHorarios('merchant-1', []), (err) => err.status === 0);
+    assert.strictEqual(calls.filter((c) => c.opts.method === 'PUT').length, 0);
+    restoreFetch();
+    clearCreds();
+  });
+
+  // ── 429 com Retry-After — GET respeita o header, não o backoff fixo ─────────
+  await check('withRetry: 429 com Retry-After → aguarda o valor do header antes de retentar', async () => {
+    setCreds();
+    const calls = [];
+    const timestamps = [];
+    mockFetch(calls, (url) => {
+      timestamps.push(Date.now());
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-ra', expiresIn: 21600 });
+      }
+      const n = calls.filter((c) => c.url.includes('/interruptions')).length;
+      if (n === 1) return jsonResponse(429, { message: 'rate limited' }, { 'retry-after': '1' });
+      return jsonResponse(200, []);
+    });
+    const ifood = freshIfood();
+    const inicio = Date.now();
+    const res = await ifood.listarInterrupcoes('merchant-1');
+    assert.deepStrictEqual(res, []);
+    const decorrido = Date.now() - inicio;
+    assert.ok(decorrido >= 950, `deveria ter esperado ~1000ms (Retry-After), esperou ${decorrido}ms`);
     restoreFetch();
     clearCreds();
   });
