@@ -5,8 +5,15 @@
  * USD por milhão de tokens. cacheWrite5m = escrita de cache de 5min (padrão da API quando
  * cache_control é usado sem "ttl"); cacheRead = leitura de cache (cache hit).
  *
- * Modelo não listado (ex: futuro provider Ollama/OpenRouter) → calcularCustoUsd retorna null.
- * Nunca gravar 0 fake para modelo desconhecido.
+ * Modelo não listado (ex: OpenRouter usa "anthropic/claude-sonnet-4.6" — mapeado pro
+ * caller para "claude-sonnet-4-6" antes de chamar calcularCustoUsd, ver llm-tools.ts)
+ * → calcularCustoUsd retorna null. Nunca gravar 0 fake para modelo desconhecido.
+ *
+ * Ollama Cloud (kimi-k2.6:cloud, provider primário via LLM_PROVIDER=ollama-cloud)
+ * NÃO entra nesta tabela de propósito: pesquisado 2026-07-06 (TD instrumentação de
+ * custo) — Ollama Cloud cobra assinatura mensal fixa por GPU-time (Free/Pro $20/
+ * Max $100), não por token. Não existe um "USD desta chamada" a calcular; cost_usd
+ * fica null por design pra toda chamada via Ollama, não é gap de instrumentação.
  */
 interface ModelPricing {
   input: number;

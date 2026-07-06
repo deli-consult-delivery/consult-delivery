@@ -179,14 +179,18 @@ export const gestorConversa = task({
     // 4. Loop agentico
     let reply = "";
     const maxTurns = 5;
+    // null até o 1º turno com custo calculável — nunca soma 0 fake quando todos
+    // os turnos caem no Ollama (sem custo por token, ver llm-tools.ts).
+    let costUsd: number | null = null;
 
     for (let turn = 0; turn < maxTurns; turn++) {
-      const { message } = await chatWithTools({
+      const { message, cost_usd } = await chatWithTools({
         system: systemPrompt,
         messages,
         tools: allTools,
         maxTokens: 1536,
       });
+      if (cost_usd != null) costUsd = (costUsd ?? 0) + cost_usd;
 
       if (message.tool_calls?.length) {
         const toolCall = message.tool_calls[0];
@@ -328,6 +332,7 @@ export const gestorConversa = task({
       tenantId: input.tenant_id,
       triggeredBy: input.user_id,
       durationMs: Date.now() - startedAt,
+      costUsd,
     });
 
     return output;

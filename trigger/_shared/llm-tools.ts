@@ -59,7 +59,7 @@ async function callOpenAICompat(
   apiKey: string,
   modelo: string,
   { system, messages, tools, maxTokens = 1536 }: ChatWithToolsInput
-): Promise<{ content: string | null; tool_calls?: ToolCall[] }> {
+): Promise<{ content: string | null; tool_calls?: ToolCall[]; usage?: { prompt_tokens: number; completion_tokens: number } }> {
   const body = {
     model: modelo,
     max_tokens: maxTokens,
@@ -77,10 +77,17 @@ async function callOpenAICompat(
   }
   const data = (await r.json()) as {
     choices?: Array<{ message?: { content?: string | null; tool_calls?: ToolCall[] } }>;
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
   };
   const message = data.choices?.[0]?.message;
   if (!message) throw new Error("resposta sem choices[0].message");
-  return { content: message.content ?? null, tool_calls: message.tool_calls };
+  return {
+    content: message.content ?? null,
+    tool_calls: message.tool_calls,
+    usage: data.usage
+      ? { prompt_tokens: data.usage.prompt_tokens ?? 0, completion_tokens: data.usage.completion_tokens ?? 0 }
+      : undefined,
+  };
 }
 
 async function callOllamaCloud(input: ChatWithToolsInput): Promise<ChatWithToolsResult> {
@@ -95,6 +102,9 @@ async function callOllamaCloud(input: ChatWithToolsInput): Promise<ChatWithTools
     message: { role: "assistant", content, ...(tool_calls?.length ? { tool_calls } : {}) },
     provider: "ollama",
     modelo,
+    // Ollama Cloud é assinatura mensal fixa por GPU-time, não cobrança por token —
+    // não existe "USD por esta chamada" a calcular (pesquisado 2026-07-06, ver
+    // docs/decisions/... TD cost_usd). cost_usd fica null por design, não é bug.
   };
 }
 
@@ -104,11 +114,16 @@ async function callOpenRouter(input: ChatWithToolsInput): Promise<ChatWithToolsR
 
   const modelo = "anthropic/claude-sonnet-4.6";
   const endpoint = "https://openrouter.ai/api/v1/chat/completions";
-  const { content, tool_calls } = await callOpenAICompat(endpoint, apiKey, modelo, input);
+  const { content, tool_calls, usage } = await callOpenAICompat(endpoint, apiKey, modelo, input);
   return {
     message: { role: "assistant", content, ...(tool_calls?.length ? { tool_calls } : {}) },
     provider: "openrouter",
     modelo,
+    // OpenRouter cobra por token do modelo real (Claude Sonnet) — calculável via
+    // a mesma tabela usada pro Anthropic nativo, mapeando o nome do modelo.
+    cost_usd: usage
+      ? calcularCustoUsd("claude-sonnet-4-6", { input_tokens: usage.prompt_tokens, output_tokens: usage.completion_tokens })
+      : null,
   };
 }
 
