@@ -724,5 +724,41 @@ function sbFetchStub(routes) {
     passed++;
   }
 
+  // GET catalogo/:lojaId — árvore catálogo→categorias→itens (App 3 Catálogo)
+  {
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => p.startsWith('ifood_merchants?'), value: [{ merchant_id: 'merch-1' }] },
+    ]);
+    const ifood = {
+      getCardapio: async (merchantId) => ({
+        catalogos: [{ catalogId: 'cat-1', categorias: [{ categoryId: 'catg-1', nome: 'Combos', itens: [{ itemId: 'item-1', nome: 'Combo X', preco: 29.9, disponivel: true }] }] }],
+      }),
+    };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/catalogo/loja-1');
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.body.data.cardapio.catalogos[0].categorias[0].itens[0].nome, 'Combo X');
+    server.close();
+    passed++;
+  }
+
+  // GET catalogo/:lojaId — loja sem ifood_merchants → 404 (mesmo gate das demais rotas)
+  {
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => p.startsWith('ifood_merchants?'), value: [] },
+    ]);
+    const app = buildApp({ sbFetch, ifood: {} });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/catalogo/loja-1');
+    assert.strictEqual(r.status, 404);
+    server.close();
+    passed++;
+  }
+
   process.stdout.write(`\nifood-api-routes: todos os ${passed} cenários passaram.\n`);
 })();
