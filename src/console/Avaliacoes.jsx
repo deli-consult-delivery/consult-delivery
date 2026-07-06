@@ -14,6 +14,7 @@ import {
   enviarAvaliacoesGrupo,
   sugerirTomLoja,
 } from '../lib/miaApi.js';
+import AvaliacoesReviewApi from './AvaliacoesReviewApi.jsx';
 
 // ============================================================
 // Aba "Avaliações" — agente IA p/ responder avaliações do iFood.
@@ -569,7 +570,11 @@ export default function Avaliacoes({ tenantDbId, userId }) {
         </div>
       )}
 
-      {lojaId && (
+      {lojaId && loja?.fonte_dados === 'api' && (
+        <AvaliacoesReviewApi loja={loja} tenantDbId={tenantDbId} />
+      )}
+
+      {lojaId && loja?.fonte_dados !== 'api' && (
         <>
           {/* Config da loja: logística + tom */}
           <div className="cv2-card">
