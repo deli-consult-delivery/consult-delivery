@@ -738,20 +738,18 @@ export async function setLojaConsultoriaAtiva(lojaId, ativa) {
   return data;
 }
 
-export async function listEvoGroups() {
-  const EVO_URL  = import.meta.env.VITE_EVOLUTION_URL;
-  const EVO_KEY  = import.meta.env.VITE_EVOLUTION_KEY;
-  const EVO_INST = import.meta.env.VITE_EVOLUTION_INST || 'consult-delivery';
-  if (!EVO_URL || !EVO_KEY) {
-    throw new Error('Evolution API não configurada (VITE_EVOLUTION_URL / VITE_EVOLUTION_KEY ausentes)');
-  }
-  const r = await fetch(`${EVO_URL}/group/fetchAllGroups/${EVO_INST}?getParticipants=false`, {
-    headers: { apikey: EVO_KEY },
+// Grupos WhatsApp via Bridge (GET /whatsapp/groups) — a chave da Evolution
+// nunca sai do servidor; front autentica com o JWT da sessão.
+export async function listEvoGroups(tenantId) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token || '';
+  const r = await fetch(`${BRIDGE}/whatsapp/groups?tenant_id=${encodeURIComponent(tenantId || '')}`, {
+    headers: { Authorization: `Bearer ${token}` },
   });
-  if (!r.ok) throw new Error(`fetchAllGroups HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  if (!r.ok) throw new Error(`listEvoGroups HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
   const data = await r.json();
-  return (Array.isArray(data) ? data : [])
-    .map(g => ({ id: g.id, name: g.subject || g.id }))
+  return (Array.isArray(data?.groups) ? data.groups : [])
+    .map(g => ({ id: g.jid, name: g.name || g.jid }))
     .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 }
 
