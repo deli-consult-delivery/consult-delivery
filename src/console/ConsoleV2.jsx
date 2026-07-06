@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase.js';
-import { listTenantsWithRole } from '../lib/api.js';
+import { listTenantsWithRole, getIfoodSummary } from '../lib/api.js';
 import { CvSprite, Ico } from './CvIcons.jsx';
 // telas cv2 (visual claro)
 import AtivarLoja from './AtivarLoja.jsx';
@@ -393,6 +393,70 @@ function useKpisAvaliacao(tenantDbId) {
   return av;
 }
 
+// Resumo de notas iFood (Review API /summary) — só busca quando a loja do
+// tenant já migrou para fonte_dados='api'. Tenant sem loja nessa fonte (ex:
+// T-HOMOLOG ainda sendo criado por outro worker) → 'sem-loja', card não renderiza.
+function useIfoodSummary(tenantDbId) {
+  const [st, setSt] = useState({ status: 'checking', summary: null, erro: null });
+  useEffect(() => {
+    if (!tenantDbId) { setSt({ status: 'sem-loja', summary: null, erro: null }); return; }
+    let alive = true;
+    setSt({ status: 'checking', summary: null, erro: null });
+    (async () => {
+      const { data: lojasApi } = await supabase
+        .from('lojas')
+        .select('id')
+        .eq('tenant_id', tenantDbId)
+        .eq('fonte_dados', 'api')
+        .limit(1);
+      if (!alive) return;
+      const loja = lojasApi?.[0];
+      if (!loja) { setSt({ status: 'sem-loja', summary: null, erro: null }); return; }
+      setSt({ status: 'loading', summary: null, erro: null });
+      try {
+        const summary = await getIfoodSummary(loja.id);
+        if (!alive) return;
+        setSt({ status: 'ok', summary, erro: null });
+      } catch (e) {
+        if (!alive) return;
+        setSt({ status: 'erro', summary: null, erro: e.message });
+      }
+    })();
+    return () => { alive = false; };
+  }, [tenantDbId]);
+  return st;
+}
+
+function CardNotasIfood({ tenantDbId }) {
+  const { status, summary, erro } = useIfoodSummary(tenantDbId);
+  if (status === 'checking' || status === 'sem-loja') return null;
+  const score = summary?.score;
+  const total = summary?.totalReviewsCount;
+  const validas = summary?.validReviewsCount;
+  return (
+    <div className="cv2-card">
+      <h3>Notas iFood</h3>
+      {status === 'loading' && (
+        <div style={{ fontSize: 13, color: 'var(--tx2)' }}>Carregando…</div>
+      )}
+      {status === 'erro' && (
+        <div style={{ fontSize: 13, color: 'var(--red)' }}>Erro ao carregar: {erro}</div>
+      )}
+      {status === 'ok' && (
+        <>
+          <div style={{ fontSize: 32, fontWeight: 700, color: 'var(--ink)', lineHeight: 1.2 }}>
+            {score != null ? `${Number(score).toFixed(1)} ⭐` : '—'}
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--tx2)', marginTop: 4, lineHeight: 1.8 }}>
+            {total != null ? `${total} avaliações no total` : 'sem dados de total'}
+            {validas != null ? ` · ${validas} válidas` : ''}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function VisaoGeralAvaliacao({ tenantNome, tenantDbId, onNav }) {
   const av = useKpisAvaliacao(tenantDbId);
   const npsCorLabel = s => s == null ? 'var(--tx2)' : s >= 50 ? 'var(--green)' : s >= 0 ? 'var(--warn,#f59e0b)' : 'var(--red)';
@@ -423,6 +487,7 @@ function VisaoGeralAvaliacao({ tenantNome, tenantDbId, onNav }) {
           <button className="cv2-btn" onClick={() => onNav('nps')}>Abrir NPS</button>
         </div>
       </div>
+      <CardNotasIfood tenantDbId={tenantDbId} />
     </div>
   );
 }

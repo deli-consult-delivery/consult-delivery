@@ -662,6 +662,22 @@ export async function enviarWhatsAppAvaliacao({ tenantId, chatId, texto }) {
   return res.json();
 }
 
+// Resumo de notas da Review API (iFood oficial) — alimenta o card "Notas iFood"
+// da Visão Geral. Rota já gated por fonte_dados==='api' + membership no Bridge.
+export async function getIfoodSummary(lojaId) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token || '';
+  const res = await fetch(`${BRIDGE}/api/ifood-api/summary/${lojaId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`getIfoodSummary HTTP ${res.status}: ${body.slice(0, 300)}`);
+  }
+  const json = await res.json();
+  return json.data?.summary ?? null;
+}
+
 export async function getAvaliacoesConfig(lojaId) {
   const { data, error } = await supabase
     .from('avaliacoes_loja_config')
