@@ -123,19 +123,22 @@ export default function PainelAgentes({ tenantDbId }) {
       const [
         { data: ag, error: e1 },
         { data: ta, error: e2 },
+        { data: tac, error: e4 },
         { data: runs, error: e3 },
       ] = await Promise.all([
         supabase.from('agents').select('id, name, role, letter, color, description, is_active, category, default_modo, custom_model, custom_max_tokens, custom_prompt').order('name'),
-        supabase.from('tenant_agents').select('agent_id, modo, config').eq('tenant_id', tenantDbId),
+        supabase.from('tenant_agents').select('agent_id').eq('tenant_id', tenantDbId),
+        // fonte canônica de config: tenant_agent_config (docs/decisions/gap2-unificacao-config.md)
+        supabase.from('tenant_agent_config').select('agent_id, config').eq('tenant_id', tenantDbId),
         supabase.from('agent_runs').select('agent_id, cost_usd, status').eq('tenant_id', tenantDbId).gte('created_at', desde).limit(1000),
       ]);
-      if (e1 || e2 || e3) throw (e1 || e2 || e3);
+      if (e1 || e2 || e3 || e4) throw (e1 || e2 || e3 || e4);
 
-      // mapa ativo
+      // mapa ativo (habilitação vem de tenant_agents; config vem de tenant_agent_config)
       const ativoMap = {};
+      for (const row of (ta ?? [])) ativoMap[row.agent_id] = true;
       const configMap = {};
-      for (const row of (ta ?? [])) {
-        ativoMap[row.agent_id] = true;
+      for (const row of (tac ?? [])) {
         if (row.config) configMap[row.agent_id] = row.config;
       }
 
@@ -167,11 +170,9 @@ export default function PainelAgentes({ tenantDbId }) {
         if (error) throw error;
         setAtivos(prev => { const n = { ...prev }; delete n[agentId]; return n; });
       } else {
-        const agente = agentes.find(a => a.id === agentId);
         const { error } = await supabase.from('tenant_agents').upsert({
           tenant_id: tenantDbId,
           agent_id: agentId,
-          modo: agente?.default_modo || 'revisao',
         }, { onConflict: 'tenant_id,agent_id' });
         if (error) throw error;
         setAtivos(prev => ({ ...prev, [agentId]: true }));
@@ -186,11 +187,14 @@ export default function PainelAgentes({ tenantDbId }) {
   async function salvarConfig(agentId, patch) {
     setSaving(agentId);
     try {
-      // tenta atualizar config no campo jsonb de tenant_agents
-      const { error } = await supabase.from('tenant_agents')
-        .update({ config: { ...(configs[agentId] || {}), ...patch } })
-        .eq('tenant_id', tenantDbId)
-        .eq('agent_id', agentId);
+      // fonte canônica: tenant_agent_config (docs/decisions/gap2-unificacao-config.md);
+      // upsert pois pode não existir linha ainda para este (tenant, agente)
+      const { error } = await supabase.from('tenant_agent_config')
+        .upsert({
+          tenant_id: tenantDbId,
+          agent_id: agentId,
+          config: { ...(configs[agentId] || {}), ...patch },
+        }, { onConflict: 'tenant_id,agent_id' });
       if (error) throw error;
       setConfigs(prev => ({ ...prev, [agentId]: { ...(prev[agentId] || {}), ...patch } }));
     } catch (err) {
