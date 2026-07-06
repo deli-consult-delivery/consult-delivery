@@ -6,7 +6,7 @@ import NovaLojaModal from './NovaLojaModal.jsx';
 const STATUS_COLORS = {
   onboarding: '#f59e0b',
   ativo: '#10b981', ativa: '#10b981',
-  pausado: 'var(--tx2)', pausada: 'var(--tx2)',
+  pausado: '#76716c', pausada: '#76716c', // hex (não var(--tx2)) — usado com +'20' de alpha abaixo
   encerrado: '#ef4444', encerrada: '#ef4444',
   inativo: '#ef4444', inativa: '#ef4444',
 };
@@ -187,8 +187,8 @@ export default function LojasListView({ tenantDbId, userId, go }) {
                   <td style={{ padding: '10px 14px' }}>
                     <span style={{
                       fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20,
-                      background: (STATUS_COLORS[l.status] || 'var(--tx2)') + '20',
-                      color: STATUS_COLORS[l.status] || 'var(--tx2)',
+                      background: (STATUS_COLORS[l.status] || '#76716c') + '20',
+                      color: STATUS_COLORS[l.status] || '#76716c',
                     }}>
                       {STATUS_LABEL[l.status] || l.status || '—'}
                     </span>

@@ -11,7 +11,7 @@ const BRIDGE = import.meta.env.VITE_BRIDGE_URL || 'https://bridge.consultdeliver
 const STATUS_COLORS = {
   onboarding: '#f59e0b',
   ativo: '#10b981', ativa: '#10b981',
-  pausado: 'var(--tx2)', pausada: 'var(--tx2)',
+  pausado: '#76716c', pausada: '#76716c', // hex (não var(--tx2)) — usado com +'20' de alpha abaixo
   encerrado: '#ef4444', encerrada: '#ef4444',
   inativo: '#ef4444', inativa: '#ef4444',
 };
@@ -43,16 +43,17 @@ const STATUS_TAREFA_LABEL = {
   cancelada: 'Cancelada',
 };
 
+// Hex (não var(--tx2)) — todas usadas com +'20' de alpha nos badges abaixo.
 const STATUS_TAREFA_COLOR = {
-  rascunho: 'var(--tx2)',
-  aguardando_envio: 'var(--tx2)',
+  rascunho: '#76716c',
+  aguardando_envio: '#76716c',
   aguardando_aprovacao: '#f59e0b',
   aprovada: '#3b82f6',
   rejeitada: '#ef4444',
   em_execucao: '#f97316',
   aguardando_validacao: '#8b5cf6',
   concluida: '#10b981',
-  cancelada: 'var(--tx2)',
+  cancelada: '#76716c',
 };
 
 const BLOCO_LABEL = {
@@ -177,7 +178,7 @@ export default function LojaWorkspace({ tenantDbId, userId, go, lojaId, allowedM
   if (loading) return <div style={{ padding: 24, color: 'var(--tx2)', fontSize: 14 }}>Carregando…</div>;
   if (!loja) return <div style={{ padding: 24, color: '#ef4444', fontSize: 14 }}>Loja não encontrada.</div>;
 
-  const statusColor = STATUS_COLORS[loja.status] || 'var(--tx2)';
+  const statusColor = STATUS_COLORS[loja.status] || '#76716c';
   const isFonteApi = loja.fonte_dados === 'api';
   const tabs = isFonteApi ? [...BASE_TABS, 'Merchant iFood'] : BASE_TABS;
   // Tenant com allowlist restrita (ex: T-HOMOLOG) — sem branding de agentes/
@@ -897,8 +898,8 @@ function TabTarefas({ lojaId, tenantDbId }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {filtradas.map(t => {
             const isOpen      = expanded === t.id;
-            const statusColor = STATUS_TAREFA_COLOR[t.status] || 'var(--tx2)';
-            const priorColor  = PRIORIDADE_COLOR[t.prioridade] || 'var(--tx2)';
+            const statusColor = STATUS_TAREFA_COLOR[t.status] || '#76716c';
+            const priorColor  = PRIORIDADE_COLOR[t.prioridade] || '#76716c';
             return (
               <div key={t.id} style={{ background: 'var(--panel,#fff)', border: `1px solid ${isOpen ? 'var(--tx2)' : 'var(--line)'}`, borderRadius: 10, overflow: 'hidden' }}>
                 {/* Row header */}
@@ -1274,8 +1275,8 @@ function RelatorioModal({ relatorio, onClose }) {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {byBloco[bloco].map((t, i) => {
-                    const sc = STATUS_TAREFA_COLOR[t.status] || 'var(--tx2)';
-                    const pc = PRIORIDADE_COLOR[t.prioridade] || 'var(--tx2)';
+                    const sc = STATUS_TAREFA_COLOR[t.status] || '#76716c';
+                    const pc = PRIORIDADE_COLOR[t.prioridade] || '#76716c';
                     return (
                       <div key={t.id} style={{ background: 'var(--panel,#fff)', border: '1px solid var(--line)', borderRadius: 8, padding: '12px 14px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
@@ -1502,7 +1503,7 @@ function TarefaDetailModal({ tarefaId, tenantDbId, onClose, onRefresh }) {
         {/* Header */}
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 10 }}>
           {t && (
-            <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: (STATUS_TAREFA_COLOR[t.status] || 'var(--tx2)') + '20', color: STATUS_TAREFA_COLOR[t.status] || 'var(--tx2)', flexShrink: 0 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: (STATUS_TAREFA_COLOR[t.status] || '#76716c') + '20', color: STATUS_TAREFA_COLOR[t.status] || '#76716c', flexShrink: 0 }}>
               {STATUS_TAREFA_LABEL[t.status] || t.status}
             </span>
           )}
