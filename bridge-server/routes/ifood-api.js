@@ -38,8 +38,12 @@ module.exports = function ({ requireJwtOrInternal, ifood, sbFetch, assertTenantM
           ok: false,
           status: err?.status ?? null,
           error: err?.message,
+          // 429: expõe o Retry-After (em segundos) do iFood pro chamador respeitar.
           retryAfterSeconds: status === 429 && typeof err?.retryAfterMs === 'number'
             ? Math.ceil(err.retryAfterMs / 1000)
+            : null,
+          details: err?.body && typeof err.body === 'object'
+            ? { message: err.body.message ?? null, code: err.body.code ?? null }
             : null,
         });
       }
@@ -87,6 +91,22 @@ module.exports = function ({ requireJwtOrInternal, ifood, sbFetch, assertTenantM
     if (!ctx) return;
     const status = await ifood.getStatusLoja(ctx.merchantId, ctx.loja.tenant_id);
     return { loja_id: ctx.loja.id, merchant_id: ctx.merchantId, status };
+  }));
+
+  // ── GET /ifood-api/merchant-interruptions/:lojaId — pausas ativas/agendadas ──
+  router.get('/ifood-api/merchant-interruptions/:lojaId', requireJwtOrInternal, handle(async (req, res) => {
+    const ctx = await resolveLojaGated(req, res);
+    if (!ctx) return;
+    const interrupcoes = await ifood.listarInterrupcoes(ctx.merchantId, ctx.loja.tenant_id);
+    return { loja_id: ctx.loja.id, merchant_id: ctx.merchantId, interrupcoes };
+  }));
+
+  // ── GET /ifood-api/merchant-opening-hours/:lojaId — turnos de funcionamento ──
+  router.get('/ifood-api/merchant-opening-hours/:lojaId', requireJwtOrInternal, handle(async (req, res) => {
+    const ctx = await resolveLojaGated(req, res);
+    if (!ctx) return;
+    const horarios = await ifood.listarHorarios(ctx.merchantId, ctx.loja.tenant_id);
+    return { loja_id: ctx.loja.id, merchant_id: ctx.merchantId, horarios };
   }));
 
   // ── GET /ifood-api/reviews/:lojaId — reviews da API + dupla-checagem × `avaliacoes` ─

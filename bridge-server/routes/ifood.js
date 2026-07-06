@@ -20,15 +20,19 @@
 // ANTES de interpolar na URL (anti path traversal / injeção de path).
 const MERCHANT_ID_RE = /^[0-9A-Za-z-]+$/;
 
-// Operações de ESCRITA suportadas no MVP gated (F2 onda 1 + homologação Review).
+// Operações de ESCRITA suportadas no MVP gated (F2 onda 1 + Merchant/Review homologação).
 // Cada uma mapeia para um método SEM retry do lib/ifood.js, despachado SÓ no
 // /aprovar. `argKeys` lista os campos de metadata (na ordem) passados ao método
 // APÓS merchantId e ANTES de tenantId — pausar/reabrir usam só item_id;
-// responder_review precisa de review_id + texto (assinatura própria do método).
+// responder_review precisa de review_id + texto; Merchant usa interrupcao
+// (objeto {start,end,description}), interruption_id ou shifts (array).
 const OPERACOES_ESCRITA = {
   'ifood.pausar_item': { metodo: 'pausarItem', verbo: 'Pausar', agent: 'BRENO', argKeys: ['item_id'] },
   'ifood.reabrir_item': { metodo: 'reabrirItem', verbo: 'Reabrir', agent: 'BRENO', argKeys: ['item_id'] },
   'ifood.responder_review': { metodo: 'responderReview', verbo: 'Responder avaliação', agent: 'BRENO', argKeys: ['review_id', 'texto'] },
+  'ifood.pausar_loja': { metodo: 'criarInterrupcao', verbo: 'Pausar loja', agent: 'BRENO', argKeys: ['interrupcao'] },
+  'ifood.despausar_loja': { metodo: 'removerInterrupcao', verbo: 'Despausar loja', agent: 'BRENO', argKeys: ['interruption_id'] },
+  'ifood.atualizar_horarios': { metodo: 'atualizarHorarios', verbo: 'Atualizar horários', agent: 'BRENO', argKeys: ['shifts'] },
 };
 
 module.exports = function ({ requireJwtOrInternal, ifood, supabaseSelect, assertTenantMember, sbFetch, supabaseInsert }) {
@@ -57,6 +61,7 @@ module.exports = function ({ requireJwtOrInternal, ifood, supabaseSelect, assert
           details: err?.body && typeof err.body === 'object'
             ? { message: err.body.message ?? null, code: err.body.code ?? null }
             : null,
+          // 429: expõe o Retry-After (em segundos) do iFood pro chamador respeitar.
           retryAfterSeconds: status === 429 && typeof err?.retryAfterMs === 'number'
             ? Math.ceil(err.retryAfterMs / 1000)
             : null,
@@ -235,17 +240,92 @@ module.exports = function ({ requireJwtOrInternal, ifood, supabaseSelect, assert
   //   (autonomy_level='amarelo', status='pending'). A escrita real só ocorre no
   //   /aprovar — aqui nada toca a API de escrita do iFood.
   // ════════════════════════════════════════════════════════════════════════════
+  // Monta { content, metadata } por operação. Item (pausar/reabrir) resolve o
+  // cardápio ao vivo (nunca chuta — ambíguo/não-encontrado é reportado ANTES de
+  // chegar aqui, ver chamador). Loja/horários usam os parâmetros direto (o
+  // humano no front escolhe start/end/turnos — não há o que desambiguar).
+  // Retorna null e já responde (400/422) se a validação falhar.
+  async function prepararDraftIfood(res, operacao, spec, parametros, ctx) {
+    if (operacao === 'ifood.pausar_item' || operacao === 'ifood.reabrir_item') {
+      const item_nome = parametros?.item_nome ? String(parametros.item_nome) : null;
+      const external_code = parametros?.external_code ? String(parametros.external_code) : null;
+      if (!item_nome && !external_code) {
+        res.status(400).json({ ok: false, error: 'parametros.item_nome ou parametros.external_code obrigatório' });
+        return null;
+      }
+      const resolved = await resolverItem(ctx.merchantId, ctx.tenantId, { item_nome, external_code });
+      if (!resolved.ok) {
+        // NÃO cria draft: devolve candidatos p/ o humano desambiguar (nunca chuta)
+        res.status(422).json({
+          ok: false,
+          error: resolved.motivo === 'ambiguo'
+            ? 'Mais de um item casou — desambigue.'
+            : 'Nenhum item casou com o nome/externalCode informado.',
+          motivo: resolved.motivo,
+          candidatos: resolved.candidatos,
+        });
+        return null;
+      }
+      const alvo = item_nome || external_code;
+      return {
+        content: `${spec.verbo} ${resolved.item.nome || alvo} no iFood`,
+        metadata: {
+          operacao,
+          merchant_id: ctx.merchantId,
+          item_id: resolved.item.itemId,
+          product_id: resolved.item.productId ?? null,
+          item_nome: resolved.item.nome ?? null,
+          tenant_id: ctx.tenantId,
+        },
+      };
+    }
+
+    if (operacao === 'ifood.pausar_loja') {
+      const { start, end, description } = parametros || {};
+      if (!start || !end) {
+        res.status(400).json({ ok: false, error: 'parametros.start e parametros.end (ISO 8601) são obrigatórios' });
+        return null;
+      }
+      return {
+        content: `Pausar loja no iFood (${start} → ${end})`,
+        metadata: {
+          operacao,
+          merchant_id: ctx.merchantId,
+          interrupcao: { start: String(start), end: String(end), description: description ? String(description) : null },
+          tenant_id: ctx.tenantId,
+        },
+      };
+    }
+
+    if (operacao === 'ifood.despausar_loja') {
+      const interruption_id = parametros?.interruption_id ? String(parametros.interruption_id) : null;
+      if (!interruption_id) {
+        res.status(400).json({ ok: false, error: 'parametros.interruption_id é obrigatório' });
+        return null;
+      }
+      return {
+        content: `Remover pausa da loja no iFood (${interruption_id})`,
+        metadata: { operacao, merchant_id: ctx.merchantId, interruption_id, tenant_id: ctx.tenantId },
+      };
+    }
+
+    // ifood.atualizar_horarios
+    const shifts = Array.isArray(parametros?.shifts) ? parametros.shifts : null;
+    if (!shifts || shifts.length === 0) {
+      res.status(400).json({ ok: false, error: 'parametros.shifts (array) é obrigatório' });
+      return null;
+    }
+    return {
+      content: 'Atualizar horários de funcionamento no iFood',
+      metadata: { operacao, merchant_id: ctx.merchantId, shifts, tenant_id: ctx.tenantId },
+    };
+  }
+
   router.post('/ifood/acao', requireJwtOrInternal, handle(async (req, res) => {
     const { operacao, parametros } = req.body || {};
     const spec = OPERACOES_ESCRITA[operacao];
     if (!spec) {
       res.status(400).json({ ok: false, error: `operacao inválida: ${operacao ?? '(ausente)'}` });
-      return;
-    }
-    const item_nome = parametros?.item_nome ? String(parametros.item_nome) : null;
-    const external_code = parametros?.external_code ? String(parametros.external_code) : null;
-    if (!item_nome && !external_code) {
-      res.status(400).json({ ok: false, error: 'parametros.item_nome ou parametros.external_code obrigatório' });
       return;
     }
 
@@ -256,22 +336,10 @@ module.exports = function ({ requireJwtOrInternal, ifood, supabaseSelect, assert
       return;
     }
 
-    const resolved = await resolverItem(ctx.merchantId, ctx.tenantId, { item_nome, external_code });
-    if (!resolved.ok) {
-      // NÃO cria draft: devolve candidatos p/ o humano desambiguar (nunca chuta)
-      res.status(422).json({
-        ok: false,
-        error: resolved.motivo === 'ambiguo'
-          ? 'Mais de um item casou — desambigue.'
-          : 'Nenhum item casou com o nome/externalCode informado.',
-        motivo: resolved.motivo,
-        candidatos: resolved.candidatos,
-      });
-      return;
-    }
+    const prep = await prepararDraftIfood(res, operacao, spec, parametros, ctx);
+    if (!prep) return; // validação falhou — resposta já enviada
+    const { content, metadata } = prep;
 
-    const alvo = item_nome || external_code;
-    const content = `${spec.verbo} ${resolved.item.nome || alvo} no iFood`;
     const draft = await sbFetch('agent_drafts', {
       method: 'POST',
       prefer: 'return=representation',
@@ -282,14 +350,7 @@ module.exports = function ({ requireJwtOrInternal, ifood, supabaseSelect, assert
         autonomy_level: 'amarelo', // valor EXATO — CHECK constraint
         status: 'pending',
         content,
-        metadata: {
-          operacao,
-          merchant_id: ctx.merchantId,
-          item_id: resolved.item.itemId,
-          product_id: resolved.item.productId ?? null,
-          item_nome: resolved.item.nome ?? null,
-          tenant_id: ctx.tenantId,
-        },
+        metadata,
       },
     });
     const row = Array.isArray(draft) ? draft[0] : draft;
@@ -308,7 +369,7 @@ module.exports = function ({ requireJwtOrInternal, ifood, supabaseSelect, assert
       },
       prefer: 'return=minimal',
     }).catch(notifErr => console.error('[ifood/acao] erro ao notificar draft:', notifErr.message));
-    return { draft_id: row.id, operacao, item_id: resolved.item.itemId, content };
+    return { draft_id: row.id, operacao, content };
   }));
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -349,12 +410,18 @@ module.exports = function ({ requireJwtOrInternal, ifood, supabaseSelect, assert
     const merchantId = meta.merchant_id ? String(meta.merchant_id) : null;
     const argKeys = spec.argKeys || ['item_id'];
     const args = argKeys.map((k) => meta[k]);
+    // Valida ANTES do try: metadata corrompido/incompleto é bug de programação
+    // (nunca ocorreria num draft criado normalmente por /acao), não uma falha do
+    // iFood — responde 400 sem marcar o draft 'failed' permanentemente.
     if (!merchantId || args.some((v) => v === undefined || v === null || v === '')) {
       res.status(400).json({ ok: false, error: `metadata incompleto: merchant_id/${argKeys.join('/')} ausente` });
       return;
     }
-    // usado nas mensagens de audit_log/erro abaixo (item_id OU review_id, conforme a operação)
-    const alvoId = String(args[0]);
+    // usado no resource do audit_log abaixo (item_id/review_id/interruption_id
+    // quando escalar; cai pro merchantId quando o 1º arg é objeto/array — ex.
+    // interrupcao/shifts, que não têm um id de alvo legível antes da chamada real).
+    const primeiroArg = args[0];
+    const alvoId = (typeof primeiroArg === 'object' && primeiroArg !== null) ? merchantId : String(primeiroArg);
 
     let resultado;
     try {
@@ -364,7 +431,18 @@ module.exports = function ({ requireJwtOrInternal, ifood, supabaseSelect, assert
       const lastError = String(err?.message || 'erro desconhecido').slice(0, 400);
       await sbFetch(
         `agent_drafts?id=eq.${encodeURIComponent(draftId)}&tenant_id=eq.${encodeURIComponent(tenantId)}`,
-        { method: 'PATCH', body: { status: 'failed', metadata: { ...meta, last_error: lastError, last_error_at: new Date().toISOString() } } }
+        {
+          method: 'PATCH',
+          body: {
+            status: 'failed',
+            metadata: {
+              ...meta,
+              last_error: lastError,
+              last_error_code: err?.body && typeof err.body === 'object' ? (err.body.code ?? null) : null,
+              last_error_at: new Date().toISOString(),
+            },
+          },
+        }
       );
       if (supabaseInsert) {
         await supabaseInsert('audit_log', {
