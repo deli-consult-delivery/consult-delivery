@@ -653,5 +653,76 @@ function sbFetchStub(routes) {
     passed++;
   }
 
+  // 32) GET events/:lojaId — resolve merchant e repassa merchantIds/groups/types ao client
+  {
+    let paramsRecebidos = null;
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => p.startsWith('ifood_merchants?'), value: [{ merchant_id: 'merch-1' }] },
+    ]);
+    const ifood = {
+      listarEventos: async (params) => { paramsRecebidos = params; return [{ id: 'evt-1', fullCode: 'ORDER_PLACED' }]; },
+    };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/events/loja-1?groups=ORDER_STATUS');
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.body.data.eventos[0].fullCode, 'ORDER_PLACED');
+    assert.strictEqual(paramsRecebidos.merchantIds, 'merch-1');
+    assert.strictEqual(paramsRecebidos.groups, 'ORDER_STATUS');
+    server.close();
+    passed++;
+  }
+
+  // 33) GET events/:lojaId — flag em 'portal' sem ?dryrun=1 → 409, NUNCA chama o client
+  {
+    let ifoodChamado = false;
+    const sbFetch = sbFetchStub([{ test: (p) => p.startsWith('lojas?'), value: [LOJA_PORTAL] }]);
+    const ifood = { listarEventos: async () => { ifoodChamado = true; return []; } };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/events/loja-2');
+    assert.strictEqual(r.status, 409);
+    assert.strictEqual(ifoodChamado, false);
+    server.close();
+    passed++;
+  }
+
+  // 34) POST events/:lojaId/ack — eventIds ausente/vazio → 400, antes de resolver a loja
+  {
+    const sbFetch = sbFetchStub([]); // não deveria nem consultar a loja
+    const app = buildApp({ sbFetch, ifood: {} });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await post(server, '/api/ifood-api/events/loja-1/ack', { eventIds: [] });
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.body.code, 'EVENT_IDS_INVALIDO');
+    server.close();
+    passed++;
+  }
+
+  // 35) POST events/:lojaId/ack — eventIds válidos + loja em fonte_dados='api' → 200, repassa ao client
+  {
+    let idsRecebidos = null;
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => p.startsWith('ifood_merchants?'), value: [{ merchant_id: 'merch-1' }] },
+    ]);
+    const ifood = {
+      confirmarEventos: async (eventIds) => { idsRecebidos = eventIds; return [{ id: 'evt-1' }]; },
+    };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await post(server, '/api/ifood-api/events/loja-1/ack', { eventIds: ['evt-1', 'evt-2'] });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.body.data.total, 2);
+    assert.deepStrictEqual(idsRecebidos, ['evt-1', 'evt-2']);
+    server.close();
+    passed++;
+  }
+
   process.stdout.write(`\nifood-api-routes: todos os ${passed} cenários passaram.\n`);
 })();
