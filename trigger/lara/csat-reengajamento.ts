@@ -1,4 +1,4 @@
-import { schedules, logger } from "@trigger.dev/sdk/v3";
+import { schedules, task, logger } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
 import { getSupabase } from "../_shared/supabase";
 import { logAgentRun } from "../_shared/audit";
@@ -119,11 +119,27 @@ export function montarMensagemReengajamento(
   });
 }
 
-// ─── Task (cron diário — safety net, dispara via trigger.dev deploy) ───────
+// ─── Task orquestradora (schedule) — dispara a task de negócio 1x/dia ──────
+// Padrão do repo (ver trigger/vera/relatorio-diario.ts): schedules.task nunca
+// recebe payload custom (só o payload fixo de agendamento do Trigger.dev) —
+// por isso a lógica de negócio (com tenant_id opcional p/ disparo manual/teste)
+// vive numa task comum separada, disparada por aqui sem payload.
 
-export const laraCsatReengajamento = schedules.task({
-  id: "lara-csat-reengajamento",
+export const laraCsatReengajamentoSchedule = schedules.task({
+  id: "lara-csat-reengajamento-schedule",
   cron: "0 14 * * *", // 11h BRT
+  retry: { maxAttempts: 2, minTimeoutInMs: 5_000 },
+
+  run: async () => {
+    logger.info("lara-csat-reengajamento-schedule: disparando task principal");
+    return laraCsatReengajamento.triggerAndWait({}).unwrap();
+  },
+});
+
+// ─── Task de negócio — aceita tenant_id opcional (disparo manual/teste) ────
+
+export const laraCsatReengajamento = task({
+  id: "lara-csat-reengajamento",
   retry: { maxAttempts: 2, minTimeoutInMs: 5_000 },
 
   run: async (payload: unknown, { ctx }) => {
