@@ -52,6 +52,10 @@ COMMIT;
 --
 -- BEGIN;
 -- SET LOCAL role anon;
--- INSERT INTO public.deli_agenda (tenant_id, tipo, resumo) VALUES ('<qualquer-uuid>', 'teste-isolamento', 'x');
+-- -- tipo precisa ser um dos valores de deli_agenda_tipo_check (revisao_matinal
+-- -- | supervisao | alerta) -- 'teste-isolamento' violaria o CHECK antes de
+-- -- chegar no RLS e mascararia o teste.
+-- INSERT INTO public.deli_agenda (tenant_id, tipo, resumo)
+--   VALUES ((SELECT id FROM public.tenants LIMIT 1), 'alerta', 'teste de isolamento RLS');
 -- -- esperado: erro "new row violates row-level security policy"
 -- ROLLBACK;

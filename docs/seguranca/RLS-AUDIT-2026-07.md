@@ -17,6 +17,7 @@
 - **Evidência:** `public.messages` tem 4 policies corretas (`messages_select_tenant`, `messages_insert_tenant`, `messages_update_tenant` via `accessible_tenant_ids()`; `messages_member_all` via `is_member_of()`) **e também** `"messages_auth_all" FOR ALL TO authenticated USING (true) WITH CHECK (true)` (baseline linha ~11380). Policies permissivas do Postgres se combinam com `OR` — a 5ª policy sozinha libera **qualquer usuário autenticado, de qualquer tenant**, a ler/editar/apagar qualquer mensagem de qualquer conversa de WhatsApp de qualquer outro tenant. É o conteúdo real das conversas com clientes — o maior blast radius do lote.
 - **Consumidores (grep `.from('messages')`, 32 ocorrências, 10 arquivos):** `src/console/ChatV2.jsx`, `src/console/chat/ChatAoVivoV2.jsx`, `src/console/chat/engine/{useAcoesMsg,useConversas,useEnvio,useEvolutionHealth,useIA,useThread}.js`, `src/lib/api.js`, `src/screens/ChatScreen.jsx`. Todas as queries reais filtram por `tenant_id` ou `conversation_id` — nenhuma depende do acesso irrestrito.
 - **Fix:** `supabase/migrations/20260706_011_messages_drop_redundant_auth_all.sql` — `DROP POLICY "messages_auth_all"`. As 4 policies restantes continuam cobrindo 100% do acesso legítimo.
+- **Achado na revisão do #776 (aplicar ANTES da 011):** 927 linhas em prod têm `messages.tenant_id IS NULL`. `messages_select_tenant`/`messages_update_tenant` já têm fallback via `conversation_id` pra esse caso, mas `messages_member_all` (que cobre DELETE) usa só `is_member_of(tenant_id)` — sem `messages_auth_all` como rede de segurança, DELETE dessas linhas vira no-op silencioso pra qualquer authenticated (mesmo padrão do bug de UPDATE silencioso da 20260706_009). Fix: `supabase/migrations/20260706_014_messages_backfill_tenant_id.sql` — preenche `tenant_id` a partir de `conversations.tenant_id` (aditivo, idempotente, sem rollback possível por ser backfill de dado — documentado no cabeçalho).
 
 ### P0-2 — `deli_agenda`: policy de INSERT "nomeada" pra service_role mas sem `TO`
 
@@ -254,8 +255,9 @@ Legenda: RLS = `ENABLE ROW LEVEL SECURITY` presente (todas as 177 têm). "Polici
 
 ## Migrations desta PR (branch `wandson/rls-audit-0607`, NÃO aplicadas)
 
-1. `supabase/migrations/20260706_011_messages_drop_redundant_auth_all.sql`
-2. `supabase/migrations/20260706_012_deli_agenda_insert_service_role_scope.sql`
-3. `supabase/migrations/20260706_013_canais_internos_remove_anon_access.sql`
+1. `supabase/migrations/20260706_014_messages_backfill_tenant_id.sql` — **aplicar ANTES da 011** (backfill de dado; ver P0-1 acima)
+2. `supabase/migrations/20260706_011_messages_drop_redundant_auth_all.sql`
+3. `supabase/migrations/20260706_012_deli_agenda_insert_service_role_scope.sql`
+4. `supabase/migrations/20260706_013_canais_internos_remove_anon_access.sql`
 
-Cada uma: aditiva/reversível, idempotente, com teste de isolamento documentado no cabeçalho (não executado — a orquestradora aplica com teste real).
+Cada uma: aditiva, idempotente, com teste de isolamento (ou contagem antes/depois, no caso da 014) documentado no cabeçalho (não executado — a orquestradora aplica com teste real). Reversibilidade: 011/012/013 revertem por `CREATE POLICY` (documentado no rollback de cada cabeçalho); 014 é backfill de dado, sem rollback possível (documentado no próprio cabeçalho).
