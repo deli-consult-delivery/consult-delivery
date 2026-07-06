@@ -616,8 +616,9 @@ function sbFetchStub(routes) {
     passed++;
   }
 
-  // 30) GET antecipacoes: calculationDate + anticipatedPaymentDate juntos →
-  //     400 FILTRO_ANTECIPACAO_CONFLITANTE, client nunca chamado
+  // 30) GET antecipacoes: dataInicio inválida → 400 DATA_INVALIDA, client nunca
+  //     chamado (rota corrigida pós-smoke: filtro é período, não data única —
+  //     ver lib.listarAntecipacoes)
   {
     let ifoodChamado = false;
     const sbFetch = sbFetchStub([
@@ -628,9 +629,9 @@ function sbFetchStub(routes) {
     const app = buildApp({ sbFetch, ifood });
     const server = http.createServer(app).listen(0);
     await new Promise((r) => server.once('listening', r));
-    const r = await get(server, '/api/ifood-api/antecipacoes/loja-1?calculationDate=2026-07-01&anticipatedPaymentDate=2026-07-02');
+    const r = await get(server, '/api/ifood-api/antecipacoes/loja-1?dataInicio=01-07-2026');
     assert.strictEqual(r.status, 400);
-    assert.strictEqual(r.body.code, 'FILTRO_ANTECIPACAO_CONFLITANTE');
+    assert.strictEqual(r.body.code, 'DATA_INVALIDA');
     assert.strictEqual(ifoodChamado, false);
     server.close();
     passed++;

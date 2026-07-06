@@ -444,7 +444,8 @@ function restoreFetch() {
   });
 
   // ── listarRepasses — Settlement API: path e período (default 7 dias) ───────
-  await check('listarRepasses: sem período → default de 7 dias (beginSettlementDate/endSettlementDate)', async () => {
+  // Params CONFIRMADOS LIVE (smoke 2026-07-06): beginPaymentDate/endPaymentDate.
+  await check('listarRepasses: sem período → default de 7 dias (beginPaymentDate/endPaymentDate)', async () => {
     setCreds();
     const calls = [];
     mockFetch(calls, (url) => {
@@ -460,8 +461,8 @@ function restoreFetch() {
     const call = calls.find((c) => c.url.includes('/financial/v3.0/merchants/merchant-1/settlements'));
     assert.ok(call, 'deveria ter chamado o endpoint de settlements');
     const parsedUrl = new URL(call.url);
-    const begin = parsedUrl.searchParams.get('beginSettlementDate');
-    const end = parsedUrl.searchParams.get('endSettlementDate');
+    const begin = parsedUrl.searchParams.get('beginPaymentDate');
+    const end = parsedUrl.searchParams.get('endPaymentDate');
     assert.match(begin, /^\d{4}-\d{2}-\d{2}$/);
     assert.match(end, /^\d{4}-\d{2}-\d{2}$/);
     const diffDias = (new Date(end) - new Date(begin)) / (24 * 60 * 60 * 1000);
@@ -484,66 +485,82 @@ function restoreFetch() {
     assert.deepStrictEqual(res, { settlements: [{ id: 'set-1' }] });
     const call = calls.find((c) => c.url.includes('/settlements'));
     const parsedUrl = new URL(call.url);
-    assert.strictEqual(parsedUrl.searchParams.get('beginSettlementDate'), '2026-06-01');
-    assert.strictEqual(parsedUrl.searchParams.get('endSettlementDate'), '2026-06-15');
+    assert.strictEqual(parsedUrl.searchParams.get('beginPaymentDate'), '2026-06-01');
+    assert.strictEqual(parsedUrl.searchParams.get('endPaymentDate'), '2026-06-15');
     restoreFetch();
     clearCreds();
   });
 
-  // ── listarAntecipacoes — Anticipation API: filtros mutuamente exclusivos ────
-  await check('listarAntecipacoes: sem filtro → chama sem calculationDate/anticipatedPaymentDate na query', async () => {
+  // ── listarAntecipacoes — Anticipation API: período (não mais data única) ───
+  // CONFIRMADO LIVE (smoke 2026-07-06): beginCalculationDate/endCalculationDate
+  // é um INTERVALO — a doc pública original ("calculationDate OU
+  // anticipatedPaymentDate, nunca os dois") estava errada; o sandbox real
+  // rejeitou data única com 400 "At least one date range must be provided".
+  await check('listarAntecipacoes: sem período → default de 7 dias (beginCalculationDate/endCalculationDate)', async () => {
     setCreds();
     const calls = [];
     mockFetch(calls, (url) => {
       if (url.endsWith('/authentication/v1.0/oauth/token')) {
         return jsonResponse(200, { accessToken: 'tok-antecip', expiresIn: 21600 });
       }
-      return jsonResponse(200, { anticipations: [] });
+      return jsonResponse(200, { settlements: [] });
     });
     const ifood = freshIfood();
     const res = await ifood.listarAntecipacoes('merchant-1');
-    assert.deepStrictEqual(res, { anticipations: [] });
+    assert.deepStrictEqual(res, { settlements: [] });
     const call = calls.find((c) => c.url.includes('/financial/v3.0/merchants/merchant-1/anticipations'));
     assert.ok(call, 'deveria ter chamado o endpoint de anticipations');
     const parsedUrl = new URL(call.url);
-    assert.strictEqual(parsedUrl.searchParams.get('calculationDate'), null);
-    assert.strictEqual(parsedUrl.searchParams.get('anticipatedPaymentDate'), null);
+    const begin = parsedUrl.searchParams.get('beginCalculationDate');
+    const end = parsedUrl.searchParams.get('endCalculationDate');
+    assert.match(begin, /^\d{4}-\d{2}-\d{2}$/);
+    assert.match(end, /^\d{4}-\d{2}-\d{2}$/);
+    const diffDias = (new Date(end) - new Date(begin)) / (24 * 60 * 60 * 1000);
+    assert.strictEqual(diffDias, 7, 'default deve cobrir uma janela de 7 dias');
     restoreFetch();
     clearCreds();
   });
 
-  await check('listarAntecipacoes: calculationDate E anticipatedPaymentDate juntos → IfoodApiError status 0, zero fetch', async () => {
+  await check('listarAntecipacoes: dataInicio/dataFim explícitos → usados sem alteração', async () => {
     setCreds();
     const calls = [];
-    mockFetch(calls, () => jsonResponse(200, {}));
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-antecip-2', expiresIn: 21600 });
+      }
+      return jsonResponse(200, { settlements: [{ id: 'ant-1' }] });
+    });
     const ifood = freshIfood();
-    await assert.rejects(
-      () => ifood.listarAntecipacoes('merchant-1', { calculationDate: '2026-06-01', anticipatedPaymentDate: '2026-06-02' }),
-      (err) => err.name === 'IfoodApiError' && err.status === 0
-    );
-    assert.strictEqual(calls.length, 0, 'não deveria ter feito nenhuma chamada de rede');
+    const res = await ifood.listarAntecipacoes('merchant-1', { dataInicio: '2026-06-01', dataFim: '2026-06-15' });
+    assert.deepStrictEqual(res, { settlements: [{ id: 'ant-1' }] });
+    const call = calls.find((c) => c.url.includes('/anticipations'));
+    const parsedUrl = new URL(call.url);
+    assert.strictEqual(parsedUrl.searchParams.get('beginCalculationDate'), '2026-06-01');
+    assert.strictEqual(parsedUrl.searchParams.get('endCalculationDate'), '2026-06-15');
     restoreFetch();
     clearCreds();
   });
 
-  // ── listarOcorrencias — Reconciliation (occurrences): path e período ───────
-  await check('listarOcorrencias: path correto e período default de 7 dias', async () => {
+  // ── listarOcorrencias — path corrigido (financial-events), NÃO RESOLVIDO no
+  // smoke live (500 no sandbox) — ver ressalva no cabeçalho da função. Teste
+  // cobre só o contrato do client (path/query), não confirma sucesso real.
+  await check('listarOcorrencias: path financial-events e período default de 7 dias', async () => {
     setCreds();
     const calls = [];
     mockFetch(calls, (url) => {
       if (url.endsWith('/authentication/v1.0/oauth/token')) {
         return jsonResponse(200, { accessToken: 'tok-ocorr', expiresIn: 21600 });
       }
-      return jsonResponse(200, { occurrences: [] });
+      return jsonResponse(200, { events: [] });
     });
     const ifood = freshIfood();
     const res = await ifood.listarOcorrencias('merchant-1');
-    assert.deepStrictEqual(res, { occurrences: [] });
-    const call = calls.find((c) => c.url.includes('/financial/v3.0/merchants/merchant-1/occurrences'));
-    assert.ok(call, 'deveria ter chamado o endpoint de occurrences');
+    assert.deepStrictEqual(res, { events: [] });
+    const call = calls.find((c) => c.url.includes('/financial/v3.0/merchants/merchant-1/financial-events'));
+    assert.ok(call, 'deveria ter chamado o endpoint financial-events');
     const parsedUrl = new URL(call.url);
-    assert.match(parsedUrl.searchParams.get('beginDate'), /^\d{4}-\d{2}-\d{2}$/);
-    assert.match(parsedUrl.searchParams.get('endDate'), /^\d{4}-\d{2}-\d{2}$/);
+    assert.match(parsedUrl.searchParams.get('beginPaymentDate'), /^\d{4}-\d{2}-\d{2}$/);
+    assert.match(parsedUrl.searchParams.get('endPaymentDate'), /^\d{4}-\d{2}-\d{2}$/);
     restoreFetch();
     clearCreds();
   });
@@ -897,6 +914,44 @@ function restoreFetch() {
     const muitos = Array.from({ length: 2001 }, (_, i) => `evt-${i}`);
     await assert.rejects(() => ifood.confirmarEventos(muitos), (err) => err.status === 0);
     assert.strictEqual(calls.length, 0);
+    restoreFetch();
+    clearCreds();
+  });
+
+  // ── x-request-homologation — plugável via env (achado §9 de PR #789) ───────
+  await check('ifoodFetch: IFOOD_HOMOLOGATION_HEADER=true → envia x-request-homologation', async () => {
+    setCreds();
+    process.env.IFOOD_HOMOLOGATION_HEADER = 'true';
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-homolog', expiresIn: 21600 });
+      }
+      return jsonResponse(200, {});
+    });
+    const ifood = freshIfood();
+    await ifood.getStatusLoja('merchant-1');
+    const call = calls.find((c) => c.url.includes('/status'));
+    assert.strictEqual(call.opts.headers['x-request-homologation'], 'true');
+    restoreFetch();
+    delete process.env.IFOOD_HOMOLOGATION_HEADER;
+    clearCreds();
+  });
+
+  await check('ifoodFetch: sem IFOOD_HOMOLOGATION_HEADER (default) → header ausente', async () => {
+    setCreds();
+    delete process.env.IFOOD_HOMOLOGATION_HEADER;
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-sem-homolog', expiresIn: 21600 });
+      }
+      return jsonResponse(200, {});
+    });
+    const ifood = freshIfood();
+    await ifood.getStatusLoja('merchant-1');
+    const call = calls.find((c) => c.url.includes('/status'));
+    assert.strictEqual(call.opts.headers['x-request-homologation'], undefined);
     restoreFetch();
     clearCreds();
   });
