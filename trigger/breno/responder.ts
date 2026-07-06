@@ -313,7 +313,7 @@ REGRAS:
         await agentExecutarTarefa.trigger({
           tenant_id:    input.tenant_id,
           task_id:      taskId,
-          triggered_by: ctx.run.id,
+          triggered_by: input.triggered_by,
         });
         logger.info("breno-responder: agent-executar-tarefa disparado", { taskId });
       } catch (err) {
