@@ -193,8 +193,8 @@ function AnomaliaCard({ anomalia, onResolve }) {
         background: sevColor, marginTop: 5, flexShrink: 0,
       }} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, color: 'var(--tx)', fontWeight: 600 }}>{anomalia.tipo}</div>
-        <div style={{ fontSize: 12, color: 'var(--tx2)', marginTop: 2, wordBreak: 'break-word' }}>{anomalia.descricao}</div>
+        <div style={{ fontSize: 13, color: 'var(--tx)', fontWeight: 600 }}>{anomalia.metrica}</div>
+        <div style={{ fontSize: 12, color: 'var(--tx2)', marginTop: 2, wordBreak: 'break-word' }}>{anomalia.explicacao}</div>
         <div style={{ fontSize: 11, color: 'var(--tx2)', marginTop: 4, opacity: 0.7 }}>{relativeTime(anomalia.created_at)}</div>
       </div>
       <button
@@ -288,7 +288,7 @@ function PainelTab({ tenantDbId, userId }) {
   async function loadAnomalias() {
     const { data } = await supabase
       .from('vera_anomalias')
-      .select('id, tipo, descricao, severidade, created_at')
+      .select('id, metrica, explicacao, severidade, created_at')
       .eq('tenant_id', tenantDbId)
       .eq('resolvida', false)
       .order('created_at', { ascending: false })

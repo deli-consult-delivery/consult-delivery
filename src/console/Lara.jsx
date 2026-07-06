@@ -640,7 +640,7 @@ export default function Lara({ tenantDbId, userId }) {
                       </span>
                     </div>
                     <div style={{ fontSize: 13, whiteSpace: 'pre-wrap', lineHeight: 1.6, color: 'var(--tx)', marginBottom: isPending ? 10 : 0 }}>
-                      {d.body}
+                      {d.content}
                     </div>
                     {isPending && (
                       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
@@ -650,7 +650,7 @@ export default function Lara({ tenantDbId, userId }) {
                         }}>
                           ✓ Aprovar
                         </button>
-                        <CopyBtn text={d.body} />
+                        <CopyBtn text={d.content} />
                         <button onClick={() => updateDraftStatus(d.id, 'rejected')} style={{
                           padding: '7px 14px', borderRadius: 8, border: '1px solid var(--line)',
                           background: 'transparent', color: 'var(--tx2)', fontSize: 12, cursor: 'pointer',
@@ -661,7 +661,7 @@ export default function Lara({ tenantDbId, userId }) {
                     )}
                     {isApproved && (
                       <div style={{ marginTop: 6, display: 'flex', gap: 8 }}>
-                        <CopyBtn text={d.body} />
+                        <CopyBtn text={d.content} />
                       </div>
                     )}
                   </div>
