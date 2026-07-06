@@ -501,6 +501,10 @@ function restoreFetch() {
     clearCreds();
   });
 
+  // Nota: o cap de 30s (Math.min(err.retryAfterMs, 30_000) em withRetry) não tem
+  // teste dedicado — validar via timer real levaria ~30s no suite. Cobertura do
+  // mecanismo de respeitar o header (valores curtos) já está nos testes acima.
+
   restoreFetch();
   if (failures > 0) {
     process.stdout.write(`\n${failures} falha(s) de ${passes + failures}.\n`);

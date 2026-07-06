@@ -130,7 +130,6 @@ function shouldRetry(status) {
 
 async function withRetry(fn, maxAttempts = 3) {
   const delaysMs = [0, 1000, 2000];
-  let lastError = null;
   let nextDelayOverrideMs = null;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const delay = nextDelayOverrideMs ?? (delaysMs[attempt] ?? 2000);
@@ -141,7 +140,6 @@ async function withRetry(fn, maxAttempts = 3) {
     } catch (err) {
       // erro não-HTTP (Zod/config/programação) não é transitório → não retenta
       if (!(err instanceof IfoodApiError)) throw err;
-      lastError = err;
       if (!shouldRetry(err.status)) throw err;
       if (attempt === maxAttempts - 1) throw err;
       if (err.status === 429 && typeof err.retryAfterMs === 'number') {
@@ -149,7 +147,7 @@ async function withRetry(fn, maxAttempts = 3) {
       }
     }
   }
-  throw lastError ?? new IfoodApiError('withRetry esgotou tentativas', 0, null);
+  throw new IfoodApiError('withRetry esgotou tentativas', 0, null);
 }
 
 // ---------------------------------------------------------------------------
