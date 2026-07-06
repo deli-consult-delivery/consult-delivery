@@ -26,6 +26,7 @@ class IfoodApiError extends Error {
     this.name = 'IfoodApiError';
     this.status = status; // 0 = rede/timeout/credencial ausente; 4xx/5xx = HTTP do iFood
     this.body = body; // corpo de erro do iFood (regra de negócio)
+    // this.retryAfterMs é setado à parte em ifoodFetch pra 429 (não passa pelo construtor).
   }
 }
 
@@ -427,6 +428,67 @@ async function deletarCategoria(merchantId, categoryId, tenantId) {
   ).then(tolerant);
 }
 
+// ---------------------------------------------------------------------------
+// Merchant v1.0 — Interrupções (pausas programadas da loja) e Horários de
+// funcionamento. Mesma regra de escrita: SEM retry (POST/PUT/DELETE não são
+// retentados; só as leituras GET usam withRetry).
+// ---------------------------------------------------------------------------
+
+// Lista as interrupções (pausas) ativas/agendadas da loja.
+async function listarInterrupcoes(merchantId, tenantId) {
+  assertPathId(merchantId, 'merchantId');
+  return withRetry(() =>
+    ifoodFetch(`/merchant/v1.0/merchants/${merchantId}/interruptions`, {}, tenantId)
+  ).then(tolerant);
+}
+
+// Cria uma interrupção (pausa a loja entre start/end, ISO 8601) → 201 {id,start,end,...}.
+async function criarInterrupcao(merchantId, { start, end, description } = {}, tenantId) {
+  assertPathId(merchantId, 'merchantId');
+  if (!start || !end) {
+    throw new IfoodApiError('criarInterrupcao: start e end são obrigatórios', 0, null);
+  }
+  const body = { start, end };
+  if (description) body.description = String(description);
+  return ifoodFetch(
+    `/merchant/v1.0/merchants/${merchantId}/interruptions`,
+    { method: 'POST', body },
+    tenantId
+  ).then(tolerant);
+}
+
+// Remove uma interrupção (despausa a loja) → 204 sem corpo.
+async function removerInterrupcao(merchantId, interruptionId, tenantId) {
+  assertPathId(merchantId, 'merchantId');
+  assertPathId(interruptionId, 'interruptionId');
+  return ifoodFetch(
+    `/merchant/v1.0/merchants/${merchantId}/interruptions/${interruptionId}`,
+    { method: 'DELETE' },
+    tenantId
+  ).then(tolerant);
+}
+
+// Lista os turnos de horário de funcionamento (dayOfWeek/start/duration).
+async function listarHorarios(merchantId, tenantId) {
+  assertPathId(merchantId, 'merchantId');
+  return withRetry(() =>
+    ifoodFetch(`/merchant/v1.0/merchants/${merchantId}/opening-hours`, {}, tenantId)
+  ).then(tolerant);
+}
+
+// Substitui os turnos de horário de funcionamento (PUT — corpo inteiro).
+async function atualizarHorarios(merchantId, shifts, tenantId) {
+  assertPathId(merchantId, 'merchantId');
+  if (!Array.isArray(shifts) || shifts.length === 0) {
+    throw new IfoodApiError('atualizarHorarios: shifts (array) é obrigatório', 0, null);
+  }
+  return ifoodFetch(
+    `/merchant/v1.0/merchants/${merchantId}/opening-hours`,
+    { method: 'PUT', body: { shifts } },
+    tenantId
+  ).then(tolerant);
+}
+
 // Responde uma avaliação (review) — mensagem PÚBLICA ao cliente do lojista.
 // Path confirmado no 00-api-reference.md (POST /review/v2.0/merchants/{merchantId}/reviews/{reviewId}/answers).
 // Corpo `{ text }` segue o schema documentado da API iFood — ainda NÃO confirmado
@@ -610,4 +672,10 @@ module.exports = {
   reabrirItem,
   deletarCategoria,
   responderReview,
+  // escrita (Merchant v1.0) — sem retry
+  listarInterrupcoes,
+  criarInterrupcao,
+  removerInterrupcao,
+  listarHorarios,
+  atualizarHorarios,
 };
