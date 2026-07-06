@@ -16,6 +16,11 @@ const { compararReviews } = require('../lib/ifood-dupla-checagem');
 const REVIEW_ID_RE = /^[0-9A-Za-z-]+$/;
 const TEXTO_MIN = 10;
 const TEXTO_MAX = 300;
+const DATA_RE = /^\d{4}-\d{2}-\d{2}$/; // yyyy-MM-dd — mesmo formato de <input type="date">
+
+function dataInvalida(valor) {
+  return valor !== undefined && !DATA_RE.test(valor);
+}
 
 module.exports = function ({ requireJwtOrInternal, ifood, sbFetch, assertTenantMember }) {
   const router = require('express').Router();
@@ -111,11 +116,12 @@ module.exports = function ({ requireJwtOrInternal, ifood, sbFetch, assertTenantM
 
   // ── GET /ifood-api/reviews/:lojaId — reviews da API + dupla-checagem × `avaliacoes` ─
   // Paginação opcional ?page=&size= (size máx. 50 — o iFood responde 400 acima disso;
-  // rejeitamos antes de gastar uma chamada à rede).
+  // rejeitamos antes de gastar uma chamada à rede). Filtro opcional ?dataInicio=&dataFim=
+  // (yyyy-MM-dd) — critério "Filtro por data" do checklist de homologação Review.
   router.get('/ifood-api/reviews/:lojaId', requireJwtOrInternal, handle(async (req, res) => {
     const ctx = await resolveLojaGated(req, res);
     if (!ctx) return;
-    const { page, size } = req.query;
+    const { page, size, dataInicio, dataFim } = req.query;
     if (size !== undefined && (!Number.isFinite(Number(size)) || Number(size) < 1 || Number(size) > 50)) {
       res.status(400).json({
         ok: false,
@@ -125,7 +131,16 @@ module.exports = function ({ requireJwtOrInternal, ifood, sbFetch, assertTenantM
       });
       return;
     }
-    const raw = await ifood.listarReviews(ctx.merchantId, { page, size }, ctx.loja.tenant_id);
+    if (dataInvalida(dataInicio) || dataInvalida(dataFim)) {
+      res.status(400).json({
+        ok: false,
+        error: 'dataInicio/dataFim devem estar no formato yyyy-MM-dd',
+        code: 'DATA_INVALIDA',
+        message: 'Informe as datas do filtro no formato yyyy-MM-dd (ex.: 2026-07-01).',
+      });
+      return;
+    }
+    const raw = await ifood.listarReviews(ctx.merchantId, { page, size, dataInicio, dataFim }, ctx.loja.tenant_id);
     const apiReviews = Array.isArray(raw) ? raw : (raw?.reviews ?? raw?.items ?? []);
     const avaliacoesRows = await sbFetch(
       `avaliacoes?loja_id=eq.${encodeURIComponent(ctx.loja.id)}&select=id,nota,comentario,nome_cliente`
@@ -141,6 +156,22 @@ module.exports = function ({ requireJwtOrInternal, ifood, sbFetch, assertTenantM
       pageCount: raw?.pageCount ?? null,
       diff,
     };
+  }));
+
+  // ── GET /ifood-api/reviews/:lojaId/:reviewId — detalhe de UMA review ────────
+  // Critério "Obter detalhes" do checklist Review: 200 com todos os campos V2
+  // (replies[].from MERCHANT|CUSTOMER); reviewId inexistente → 404 (repassado
+  // direto do iFood pelo handle() genérico — sem tratamento especial aqui).
+  router.get('/ifood-api/reviews/:lojaId/:reviewId', requireJwtOrInternal, handle(async (req, res) => {
+    const { reviewId } = req.params;
+    if (!REVIEW_ID_RE.test(reviewId)) {
+      res.status(400).json({ ok: false, error: 'reviewId em formato inválido', code: 'REVIEW_ID_INVALIDO', message: 'reviewId em formato inválido.' });
+      return;
+    }
+    const ctx = await resolveLojaGated(req, res);
+    if (!ctx) return;
+    const review = await ifood.getReviewDetalhe(ctx.merchantId, reviewId, ctx.loja.tenant_id);
+    return { loja_id: ctx.loja.id, merchant_id: ctx.merchantId, review };
   }));
 
   // ── POST /ifood-api/reviews/:lojaId/:reviewId/draft — cria o DRAFT amarelo ──

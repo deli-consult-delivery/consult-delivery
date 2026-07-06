@@ -419,5 +419,106 @@ function sbFetchStub(routes) {
     passed++;
   }
 
+  // 20) reviews: ?dataInicio=&dataFim= inválidos → 400 DATA_INVALIDA, nunca chama o client
+  {
+    let ifoodChamado = false;
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => p.startsWith('ifood_merchants?'), value: [{ merchant_id: 'merch-1' }] },
+    ]);
+    const ifood = { listarReviews: async () => { ifoodChamado = true; return []; } };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/reviews/loja-1?dataInicio=01-07-2026');
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.body.code, 'DATA_INVALIDA');
+    assert.strictEqual(ifoodChamado, false);
+    server.close();
+    passed++;
+  }
+
+  // 21) reviews: ?dataInicio=&dataFim= válidos → repassados ao client
+  {
+    let paramsRecebidos = null;
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => p.startsWith('ifood_merchants?'), value: [{ merchant_id: 'merch-1' }] },
+      { test: (p) => p.startsWith('avaliacoes?'), value: [] },
+    ]);
+    const ifood = {
+      listarReviews: async (merchantId, params) => { paramsRecebidos = params; return []; },
+    };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/reviews/loja-1?dataInicio=2026-07-01&dataFim=2026-07-06');
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(paramsRecebidos.dataInicio, '2026-07-01');
+    assert.strictEqual(paramsRecebidos.dataFim, '2026-07-06');
+    server.close();
+    passed++;
+  }
+
+  // 22) GET reviews/:lojaId/:reviewId — detalhe de uma review (200 com replies[].from)
+  {
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => p.startsWith('ifood_merchants?'), value: [{ merchant_id: 'merch-1' }] },
+    ]);
+    const ifood = {
+      getReviewDetalhe: async (merchantId, reviewId) => ({
+        id: reviewId, score: 5, replies: [{ from: 'MERCHANT', text: 'Obrigado!' }],
+      }),
+    };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/reviews/loja-1/review-1');
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.body.data.review.id, 'review-1');
+    assert.strictEqual(r.body.data.review.replies[0].from, 'MERCHANT');
+    server.close();
+    passed++;
+  }
+
+  // 23) GET reviews/:lojaId/:reviewId — reviewId inexistente → 404 repassado do iFood
+  {
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => p.startsWith('ifood_merchants?'), value: [{ merchant_id: 'merch-1' }] },
+    ]);
+    const IfoodApiError = class extends Error {
+      constructor(msg, status, body) { super(msg); this.name = 'IfoodApiError'; this.status = status; this.body = body; }
+    };
+    const ifood = {
+      getReviewDetalhe: async () => { throw new IfoodApiError('not found', 404, { message: 'review não encontrada' }); },
+    };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/reviews/loja-1/review-inexistente');
+    assert.strictEqual(r.status, 404);
+    assert.strictEqual(r.body.details.message, 'review não encontrada');
+    server.close();
+    passed++;
+  }
+
+  // 24) GET reviews/:lojaId/:reviewId — reviewId malformado → 400, nunca chama o client
+  {
+    let ifoodChamado = false;
+    const sbFetch = sbFetchStub([{ test: (p) => p.startsWith('lojas?'), value: [LOJA_API] }]);
+    const ifood = { getReviewDetalhe: async () => { ifoodChamado = true; return {}; } };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/reviews/loja-1/review_1');
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.body.code, 'REVIEW_ID_INVALIDO');
+    assert.strictEqual(ifoodChamado, false);
+    server.close();
+    passed++;
+  }
+
   process.stdout.write(`\nifood-api-routes: todos os ${passed} cenários passaram.\n`);
 })();
