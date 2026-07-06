@@ -678,6 +678,33 @@ export async function getIfoodSummary(lojaId) {
   return json.data?.summary ?? null;
 }
 
+// Cardápio (Catalog API oficial) por loja — GET /ifood-api/catalogo/:lojaId
+// (#799, mergeado), gated por fonte_dados==='api' + membership no Bridge,
+// mesmo padrão de getIfoodSummary. Distingue 404 "rota não existe" (corpo
+// não é o envelope JSON {ok:...} — Express default, ex: rota removida/nunca
+// deployada) de 404 "condição de negócio" (resolveLojaGated: loja não
+// encontrada / sem ifood_merchants vinculado — SEMPRE vem com {ok:false,...}
+// no corpo) via `err.rotaAusente`. Só o primeiro deve virar "indisponível";
+// o segundo é um erro de configuração real e deve aparecer como tal.
+export async function getCardapioApiLoja(lojaId) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token || '';
+  const res = await fetch(`${BRIDGE}/api/ifood-api/catalogo/${lojaId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    let json = null;
+    try { json = JSON.parse(body); } catch { /* corpo não-JSON (ex: "Cannot GET ...") */ }
+    const err = new Error(json?.error || `getCardapioApiLoja HTTP ${res.status}: ${body.slice(0, 300)}`);
+    err.status = res.status;
+    err.rotaAusente = res.status === 404 && !json; // 404 sem envelope JSON = rota inexistente
+    throw err;
+  }
+  const json = await res.json();
+  return json.data?.cardapio ?? json.data ?? null;
+}
+
 // ── iFood Review API (fluxo draft→aprovação, homologação App Avaliações) ────
 // Erros trazem status/code/message/retryAfterSeconds do Bridge (routes/ifood*.js)
 // pra o front tratar 400/409/429 com mensagem clara — não um Error genérico.
