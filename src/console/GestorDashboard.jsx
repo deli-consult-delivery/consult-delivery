@@ -93,7 +93,7 @@ export default function GestorDashboard({ tenantDbId, userId, onNavigate }) {
         .eq('loja_id', lojaId).eq('tenant_id', tenantDbId)
         .gte('data', desde).order('data', { ascending: false }),
       supabase.from('client_timeline')
-        .select('id, event_type, description, payload, ts, agent_name')
+        .select('id, event_type, title, payload, ts, agent_name')
         .eq('loja_id', lojaId).eq('tenant_id', tenantDbId)
         .order('ts', { ascending: false }).limit(30),
       supabase.from('agent_drafts')
@@ -231,7 +231,7 @@ export default function GestorDashboard({ tenantDbId, userId, onNavigate }) {
                 <span className="cv2-bdg mut">{ev.event_type}</span>
                 <span style={{ fontSize: 11.5, color: 'var(--tx2)' }}>{fmtDataHora(ev.ts)}</span>
               </div>
-              <div style={{ fontSize: 13, marginTop: 4 }}>{ev.description}</div>
+              <div style={{ fontSize: 13, marginTop: 4 }}>{ev.title}</div>
             </div>
           ))
         )}
