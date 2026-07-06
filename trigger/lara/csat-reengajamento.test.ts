@@ -1,6 +1,7 @@
 /**
  * Teste da régua de reengajamento CSAT — fixtures: enviada há 4d sem resposta
- * (draft), respondida (nada), já reengajada (nada). Sem rede.
+ * (draft), respondida (nada), já reengajada (nada, via msg_enviada_status
+ * persistido E via dedup em agent_drafts). Sem rede.
  * Roda com: npx tsx trigger/lara/csat-reengajamento.test.ts
  */
 
@@ -9,6 +10,7 @@ import {
   decidirReengajamento,
   montarMensagemReengajamento,
   REENGAJAMENTO_DIAS_MIN,
+  MSG_STATUS_REENGAJADO,
   type AvaliacaoCandidata,
 } from "./csat-reengajamento";
 
@@ -43,10 +45,24 @@ function run() {
   assert.strictEqual(decisao2.criar, false, "respondida não deve gerar reengajamento");
   assert.strictEqual(decisao2.motivo, "ja_respondida_ou_expirada");
 
-  // ── Caso 3: já reengajada antes → nunca cria 2º draft (dedup — precedente #526) ──
+  // ── Caso 3: já reengajada antes (dedup via agent_drafts) → nunca cria 2º draft (precedente #526) ──
   const decisao3 = decidirReengajamento(enviada4dSemResposta, agora, true);
-  assert.strictEqual(decisao3.criar, false, "já reengajada não deve gerar 2º draft");
+  assert.strictEqual(decisao3.criar, false, "já reengajada (dedup agent_drafts) não deve gerar 2º draft");
   assert.strictEqual(decisao3.motivo, "ja_reengajado");
+
+  // ── Caso 3b: já reengajada antes (msg_enviada_status='reengajado' persistido na linha) ──
+  // Esta é a fonte de verdade que corrige o starvation: sem ela, order+limit(50) refaz
+  // sempre a mesma janela das mais antigas e o resto da fila nunca é varrido.
+  const jaReengajadaNaLinha: Pick<
+    AvaliacaoCandidata,
+    "status" | "msg_enviada_at" | "public_token_expires_at" | "msg_enviada_status"
+  > = {
+    ...enviada4dSemResposta,
+    msg_enviada_status: MSG_STATUS_REENGAJADO,
+  };
+  const decisao3b = decidirReengajamento(jaReengajadaNaLinha, agora, false);
+  assert.strictEqual(decisao3b.criar, false, "msg_enviada_status='reengajado' não deve gerar 2º draft, mesmo sem dedup em agent_drafts");
+  assert.strictEqual(decisao3b.motivo, "ja_reengajado");
 
   // ── Caso 4: dentro do prazo mínimo (2 dias < 3) → ainda não é hora ──
   const enviada2d: Pick<AvaliacaoCandidata, "status" | "msg_enviada_at" | "public_token_expires_at"> = {

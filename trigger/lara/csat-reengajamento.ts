@@ -9,6 +9,12 @@ import { logAgentRun } from "../_shared/audit";
 
 export const REENGAJAMENTO_DIAS_MIN = 3;
 
+// Marca a própria avaliação como já reengajada e é EXCLUÍDA na query fonte —
+// sem isso, limit(50) + dedup só em memória faz starvation: as mesmas 50 linhas
+// mais antigas (order by msg_enviada_at asc) voltam todo dia como "ja_reengajado"
+// e o resto da fila nunca é varrido em volume alto (ex. ~1000 pendentes).
+export const MSG_STATUS_REENGAJADO = "reengajado";
+
 const PUBLIC_BASE =
   process.env.VITE_PUBLIC_URL ||
   process.env.PUBLIC_BASE_URL ||
@@ -33,6 +39,7 @@ export interface AvaliacaoCandidata {
   nome_cliente: string | null;
   contact_identifier?: string | null;
   ticket_code?: number | null;
+  msg_enviada_status?: string | null;
 }
 
 // ─── Schemas ──────────────────────────────────────────────────────────────
@@ -75,7 +82,10 @@ export interface DecisaoReengajamento {
  * + nunca reengajada antes (máx 1 por pesquisa — precedente do bug #526 de heartbeat).
  */
 export function decidirReengajamento(
-  av: Pick<AvaliacaoCandidata, "status" | "msg_enviada_at" | "public_token_expires_at">,
+  av: Pick<
+    AvaliacaoCandidata,
+    "status" | "msg_enviada_at" | "public_token_expires_at" | "msg_enviada_status"
+  >,
   agora: Date,
   jaReengajado: boolean,
   diasMin: number = REENGAJAMENTO_DIAS_MIN
@@ -89,7 +99,11 @@ export function decidirReengajamento(
   const diasPassados = (agora.getTime() - new Date(av.msg_enviada_at).getTime()) / 86_400_000;
   if (diasPassados < diasMin) return { criar: false, motivo: "dentro_do_prazo" };
 
-  if (jaReengajado) return { criar: false, motivo: "ja_reengajado" };
+  // Fonte de verdade é msg_enviada_status='reengajado' (persistido na própria linha,
+  // já excluído na query fonte); jaReengajado cobre o retry-safety-net via agent_drafts.
+  if (av.msg_enviada_status === MSG_STATUS_REENGAJADO || jaReengajado) {
+    return { criar: false, motivo: "ja_reengajado" };
+  }
 
   return { criar: true, motivo: "elegivel" };
 }
@@ -124,12 +138,15 @@ export const laraCsatReengajamento = schedules.task({
     let query = sb
       .from("atendimento_avaliacoes")
       .select(
-        "id, tenant_id, status, msg_enviada_at, public_token, public_token_expires_at, nome_cliente, contact_identifier, ticket_code"
+        "id, tenant_id, status, msg_enviada_at, msg_enviada_status, public_token, public_token_expires_at, nome_cliente, contact_identifier, ticket_code"
       )
       .eq("status", "pendente")
       .not("msg_enviada_at", "is", null)
       .lte("msg_enviada_at", cutoff)
       .gt("public_token_expires_at", agora.toISOString())
+      // Exclui quem já foi reengajado — sem isso, order+limit sempre refaz a
+      // mesma janela das 50 mais antigas e o restante da fila nunca é varrido.
+      .neq("msg_enviada_status", MSG_STATUS_REENGAJADO)
       .order("msg_enviada_at", { ascending: true })
       .limit(50);
 
@@ -165,7 +182,10 @@ export const laraCsatReengajamento = schedules.task({
 
     for (const av of candidatos as AvaliacaoCandidata[]) {
       // Dedup: já existe reengajamento gerado para esta avaliação (qualquer status do draft)?
-      const { data: existente } = await sb
+      // Retry-safety-net do msg_enviada_status (ex.: draft criado mas a marcação da linha
+      // falhou antes de terminar o run). Erro transitório aqui NUNCA deve ser tratado como
+      // "não existe" — fail-open criaria um 2º draft; classifica como falha e não prossegue.
+      const { data: existente, error: dedupErr } = await sb
         .from("agent_drafts")
         .select("id")
         .eq("agent_name", "lara")
@@ -173,6 +193,21 @@ export const laraCsatReengajamento = schedules.task({
         .filter("metadata->>tipo", "eq", "csat_reengajamento")
         .limit(1)
         .maybeSingle();
+
+      if (dedupErr) {
+        logger.error("lara-csat-reengajamento: falha ao checar dedup", {
+          avaliacaoId: av.id,
+          err: dedupErr.message,
+        });
+        falhas++;
+        resultados.push({
+          avaliacao_id: av.id,
+          tenant_id: av.tenant_id,
+          status: "falhou",
+          detalhe: `dedup_check_falhou: ${dedupErr.message}`,
+        });
+        continue;
+      }
 
       const decisao = decidirReengajamento(av, agora, !!existente);
 
@@ -223,6 +258,20 @@ export const laraCsatReengajamento = schedules.task({
           detalhe: draftErr.message,
         });
         continue;
+      }
+
+      // Marca a linha como reengajada para sair da query fonte nas próximas execuções
+      // (fix de starvation — ver comentário na query acima). Falha aqui não desfaz o
+      // draft: o dedup via agent_drafts acima cobre esse caso na próxima execução.
+      const { error: marcarErr } = await sb
+        .from("atendimento_avaliacoes")
+        .update({ msg_enviada_status: MSG_STATUS_REENGAJADO })
+        .eq("id", av.id);
+      if (marcarErr) {
+        logger.error("lara-csat-reengajamento: falha ao marcar avaliação como reengajada", {
+          avaliacaoId: av.id,
+          err: marcarErr.message,
+        });
       }
 
       draftsCriados++;
