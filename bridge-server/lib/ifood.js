@@ -297,7 +297,12 @@ async function getSummaryReviews(merchantId, tenantId) {
     // negócio confirmada live no sandbox, não erro de fato) — trata como sucesso
     // com summary null. Cacheado pelo mesmo TTL: sem isso, cada mount do card
     // bateria na API sem proteção de rate limit enquanto a loja não tiver reviews.
-    if (err instanceof IfoodApiError && err.status === 404) {
+    // Só esse 404 específico (checado pelo corpo) vira sucesso — qualquer outro
+    // 404 (merchantId errado, rota descontinuada) continua propagando erro, pra
+    // não mascarar um problema real como "loja sem avaliações".
+    const isSummaryNotFound = err instanceof IfoodApiError && err.status === 404
+      && /summary not found/i.test(err.body?.errorMessage || '');
+    if (isSummaryNotFound) {
       data = null;
     } else {
       throw err;

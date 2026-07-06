@@ -258,6 +258,26 @@ function restoreFetch() {
     clearCreds();
   });
 
+  // ── getSummaryReviews — 404 "genérico" (merchantId errado etc.) NÃO vira null ─
+  await check('getSummaryReviews: 404 sem "Summary not found" no corpo continua propagando erro', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-404-generico', expiresIn: 21600 });
+      }
+      return jsonResponse(404, { errorType: 'Not Found', errorMessage: 'Merchant not found' });
+    });
+    const ifood = freshIfood();
+    await assert.rejects(
+      () => ifood.getSummaryReviews('merchant-inexistente'),
+      (err) => err.status === 404,
+      '404 com mensagem diferente de "Summary not found" não deveria virar sucesso silencioso'
+    );
+    restoreFetch();
+    clearCreds();
+  });
+
   // ── listarVendas — período default (7 dias) quando dataInicio/dataFim faltam ──
   await check('listarVendas: sem período → default de 7 dias (beginSalesDate/endSalesDate)', async () => {
     setCreds();
