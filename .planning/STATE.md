@@ -102,6 +102,6 @@ Phase 3 ░░░░░░░░░░░░
 
 ## Session Continuity
 
-**Last updated:** 2026-05-01 — project initialized, roadmap created
-**Last action:** Roadmap written — 3 phases, 35 requirements mapped
-**Resume from:** /gsd-discuss-phase 1
+**Last updated:** 2026-07-06 — sessão worker W1 (sprint homologação iFood, fora do escopo deste roadmap antigo): PR #757 aberto — migrations 20260706_001/002 (tenants cd-homolog/cd-demo + allowlist tenant_modules) + fixes ConsoleV2 (radar na Visão Geral, chat-legado removido, label Avaliações iFood). Aguarda revisão/aplicação pela orquestradora.
+**Last action:** PR #757 criado (branch wandson/homolog-demo-tenants) — NÃO mergeado, migrations NÃO aplicadas por este worker
+**Resume from:** orquestradora revisa PR #757
