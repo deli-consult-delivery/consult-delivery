@@ -499,7 +499,9 @@ export default function Avaliacoes({ tenantDbId, userId }) {
       <h1>Avaliações <span className="cv2-mock">iFood · IA</span></h1>
       <div className="cv2-rule" />
       <div className="cv2-sub">
-        Gere respostas humanizadas (≤300 caracteres, no tom da loja) às avaliações do iFood, com insights de consultoria — colagem manual, sem API do iFood.
+        {loja?.fonte_dados === 'api'
+          ? 'Gere respostas humanizadas (≤300 caracteres, no tom da loja) às avaliações do iFood, com insights de consultoria — via API oficial do iFood, com aprovação humana.'
+          : 'Gere respostas humanizadas (≤300 caracteres, no tom da loja) às avaliações do iFood, com insights de consultoria — colagem manual, sem API do iFood.'}
         {erro ? <span style={{ color: 'var(--red)' }}> · erro: {erro}</span> : ''}
         {aviso ? <span style={{ color: 'var(--green)' }}> · {aviso}</span> : ''}
       </div>
