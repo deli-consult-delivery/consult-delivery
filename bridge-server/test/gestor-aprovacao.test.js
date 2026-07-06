@@ -210,9 +210,12 @@ function fakeJsonResponse(status, body) {
   r = await post(server, `/api/gestor/aprovar/draft-x`, { tenant_id: TENANT });
   assert.strictEqual(r.status, 400); passed++;
 
-  // 10) rejeitar — happy path → 200, PATCH status=rejected
+  // 10) rejeitar — happy path → 200, PATCH status=rejected, NUNCA dispara envio
+  //     (fetchFn/Evolution nem é injetado aqui — se a rota de rejeitar chamasse
+  //     o runner de portal ou a Evolution API, este cenário explodiria).
   {
     const patched = [];
+    let fetchFnChamado = false;
     stubs = {
       sbFetch: (p, opts) => {
         if (p.startsWith('tenant_members')) return [{ role: 'admin' }];
@@ -220,11 +223,13 @@ function fakeJsonResponse(status, body) {
         if (p.startsWith('agent_drafts')) return [{ id: DRAFT_WHATSAPP }];
         return [];
       },
+      fetchFn: () => { fetchFnChamado = true; throw new Error('rejeitar NUNCA deveria chamar o runner de portal/Evolution'); },
     };
     r = await post(server, `/api/gestor/rejeitar/${DRAFT_WHATSAPP}`, { tenant_id: TENANT });
     assert.strictEqual(r.status, 200);
     assert.strictEqual(patched.length, 1);
     assert.strictEqual(patched[0].opts.body.status, 'rejected');
+    assert.strictEqual(fetchFnChamado, false, 'rejeitar não deveria disparar nenhum envio');
     passed++;
   }
 
