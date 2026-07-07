@@ -54,6 +54,19 @@ module.exports = function ({ requireJwt, sbFetch }) {
       // tela protegida por <RequireRole> (achado real do onboarding manual).
       await sbFetch('rpc/seed_rbac_system_roles', { method: 'POST', body: { p_tenant_id: tenant.id } });
 
+      // BUG CRÍTICO corrigido (revisão do PR #821): sem esta linha, o caller
+      // (admin da agência que acabou de criar a loja) não tem tenant_members
+      // no tenant NOVO — /users/invite (routes/users.js:29-32) checa
+      // tenant_members do caller no tenant_id do convite e dá 403 sempre,
+      // mesmo sendo admin legítimo da agência-mãe. Mesmo padrão da RPC
+      // create_workspace já existente no baseline (INSERT tenant_members
+      // logo após o INSERT tenants).
+      await sbFetch('tenant_members', {
+        method: 'POST',
+        prefer: 'return=minimal',
+        body: { tenant_id: tenant.id, user_id: req.user.id, role: 'admin' },
+      });
+
       await sbFetch('audit_log', {
         method: 'POST',
         prefer: 'return=minimal',
