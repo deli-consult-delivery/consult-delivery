@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
+import { mapErro } from '../lib/mapErro.js';
 import { GRUPOS } from './moduleCatalog.js';
 
 // ============================================================
@@ -29,7 +30,7 @@ function TelasModal({ tenant, onClose, onSaved }) {
 
   useEffect(() => {
     supabase.rpc('admin_get_tenant_modules', { p_tenant_id: tenant.id }).then(({ data, error }) => {
-      if (error) { setErro(error.message); setLoading(false); return; }
+      if (error) { setErro(mapErro(error.message)); setLoading(false); return; }
       const rows = data ?? [];
       const temAllowlist = rows.length > 0;
       const byKey = {};
@@ -49,7 +50,7 @@ function TelasModal({ tenant, onClose, onSaved }) {
     const p_modules = GRUPOS.flatMap(g => g.items.map(it => ({ module_key: it.id, enabled: !!estado[it.id] })));
     const { error } = await supabase.rpc('admin_set_tenant_modules', { p_tenant_id: tenant.id, p_modules });
     setSaving(false);
-    if (error) { setErro(error.message); return; }
+    if (error) { setErro(mapErro(error.message)); return; }
     onSaved?.();
     onClose();
   }
