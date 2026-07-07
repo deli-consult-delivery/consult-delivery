@@ -903,7 +903,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
           if (items.length === 0) return null;
           return (
             <div key={i}>
-              <div className="cv2-grp">{g.label}</div>
+              <div className="cv2-grp"><Ico name={g.ic || 'i-grid'} size={12} />{g.label}</div>
               {items.map(it => (
                 <div key={it.id} className={`cv2-item${tela === it.id ? ' on' : ''}`} onClick={() => { navWithParams(it.id, {}); setSidebarOpen(false); }}>
                   <Ico name={it.ic} />{it.label}
