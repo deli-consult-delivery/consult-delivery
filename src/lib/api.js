@@ -706,6 +706,32 @@ export async function getCardapioApiLoja(lojaId) {
   return json.data?.cardapio ?? json.data ?? null;
 }
 
+// Itens não-vendáveis (arquivados/fora do catálogo ativo) — App 3 Catálogo M2.
+// Mesmo padrão de getCardapioApiLoja: mesma distinção 404 "rota ausente" × 404
+// "condição de negócio" via err.rotaAusente. groupId = identificador do catálogo
+// (campo que o próprio iFood devolve em cada catalog); catalogId opcional
+// sobrescreve via query (a doc usa catalogId nesta rota, diferente de
+// sellableItems que usa groupId — em muitos merchants são o mesmo id).
+export async function getUnsellableApiLoja(lojaId, groupId, { catalogId } = {}) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token || '';
+  const qs = catalogId ? `?catalogId=${encodeURIComponent(catalogId)}` : '';
+  const res = await fetch(`${BRIDGE}/api/ifood-api/catalogo/${lojaId}/unsellable/${encodeURIComponent(groupId)}${qs}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    let json = null;
+    try { json = JSON.parse(body); } catch { /* corpo não-JSON */ }
+    const err = new Error(json?.error || `getUnsellableApiLoja HTTP ${res.status}: ${body.slice(0, 300)}`);
+    err.status = res.status;
+    err.rotaAusente = res.status === 404 && !json;
+    throw err;
+  }
+  const json = await res.json();
+  return json.data?.itens ?? json.data ?? null;
+}
+
 // ── iFood Review API (fluxo draft→aprovação, homologação App Avaliações) ────
 // Erros trazem status/code/message/retryAfterSeconds do Bridge (routes/ifood*.js)
 // pra o front tratar 400/409/429 com mensagem clara — não um Error genérico.
