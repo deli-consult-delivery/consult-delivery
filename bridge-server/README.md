@@ -110,3 +110,47 @@ pm2 restart bridge-server   # ou: systemctl restart bridge-server
 ```
 
 `TRIGGER_SECRET_KEY` deve ser adicionado ao Infisical antes do próximo deploy.
+
+---
+
+## Testes offline
+
+Os testes do `bridge-server/` são scripts `node:assert` puros (não vitest) em
+`test/*.test.js` — **zero rede real**, todo I/O externo é mockado.
+
+### Setup (1x por worktree)
+
+```bash
+cd bridge-server
+npm install        # instala express etc. — sem isso os testes falham com
+                   # "Cannot find module 'express'" (bridge-server tem package.json
+                   # próprio, node_modules não vem do root)
+```
+
+### Rodar
+
+```bash
+# Todos os testes do bridge-server:
+node test/*.test.js
+
+# Um arquivo específico:
+node test/ifood-api-routes.test.js
+```
+
+### Cobertura (2026-07-06, `docs/qa/TEST-SUITE-STATUS.md`)
+
+18 arquivos, 100% verde — `asaas-webhook-rate-limit` · `auth-integration` ·
+`auth-middleware` · `breno-aprovacao` · `gestor-aprovacao` · `ifood-api-routes`
+(39 cenários) · `ifood-aprovar-routes` · `ifood-dupla-checagem` ·
+`ifood-reviews-size` · `ifood-routes-acao-aprovar` · `ifood.test.js` (47
+asserções) · `loop-autorizar` · `loop-despachar` · `loop-erp-confirm-code` ·
+`portal-worker` · `pricing` · `semaforo` · `vendaerp-write`.
+
+### Notas
+
+- Os testes do `bridge-server/` são `node:assert` (não vitest `describe/it`) —
+  rodar com `node`, não `npx vitest`.
+- `npx vitest run` (sem escopo) varre o repo inteiro e falha em ~29 arquivos
+  com "No test suite found" porque tenta descobrir estes scripts como se fossem
+  vitest. Para os testes do **frontend** (`src/**/*.test.js`), use
+  `npx vitest run src` (escopo restrito).
