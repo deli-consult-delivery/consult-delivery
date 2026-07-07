@@ -11,6 +11,7 @@ const {
   requireJwtOrInternal,
   makeAssertTenantMember,
 } = require('./lib/auth-middleware');
+const { calcularCustoUsd } = require('./lib/pricing');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -639,6 +640,7 @@ Responda SOMENTE com JSON válido no formato:
       agent_id: 'chat-ai',
       input: { command, user_id: req.user.id, tenant_id, conversation_id },
       output: { tokens_out: data.usage?.output_tokens, tokens_in: data.usage?.input_tokens, model: ANTHROPIC_MODEL },
+      cost_usd: calcularCustoUsd(ANTHROPIC_MODEL, data.usage),
       tenant_id: tenant_id || null,
       triggered_by: req.user.id || null,
       duration_ms: _durationMs,
