@@ -855,7 +855,7 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
       case 'links': return <Links tenantDbId={tenantDbId} userId={userId} />;
       case 'memoria': return <Memorias tenantDbId={tenantDbId} userId={userId} />;
       case 'conhecimento': return <Conhecimento tenantDbId={tenantDbId} userId={userId} />;
-      case 'custos': return <CustosIA tenantDbId={tenantDbId} />;
+      case 'custos': return <CustosIA tenantDbId={tenantDbId} userId={userId} />;
       case 'importar': return <ImportarRelatorios tenantDbId={tenantDbId} userId={userId} />;
       case 'usuarios': return <Usuarios tenantDbId={tenantDbId} userId={userId} />;
       case 'configsys': return <Configuracoes tenantDbId={tenantDbId} userId={userId} onTenantChange={() => {}} />;
