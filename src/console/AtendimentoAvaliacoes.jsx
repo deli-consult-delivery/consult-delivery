@@ -768,7 +768,7 @@ function AtendimentoAvaliacoesContent({ tenantDbId, userId }) {
 
 export default function AtendimentoAvaliacoes({ tenantDbId, userId }) {
   return (
-    <RequireRole roles={['admin', 'consultor']} userId={userId}>
+    <RequireRole roles={['admin', 'consultor']} userId={userId} tenantId={tenantDbId}>
       <AtendimentoAvaliacoesContent tenantDbId={tenantDbId} userId={userId} />
     </RequireRole>
   );

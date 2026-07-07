@@ -138,7 +138,7 @@ function AuditLogInner({ tenantDbId }) {
 
 export default function AuditLog({ tenantDbId, userId }) {
   return (
-    <RequireRole roles={['admin']} userId={userId}>
+    <RequireRole roles={['admin']} userId={userId} tenantId={tenantDbId}>
       <AuditLogInner tenantDbId={tenantDbId} />
     </RequireRole>
   );

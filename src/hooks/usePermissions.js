@@ -1,71 +1,79 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { pickTenantRole, buildPermissionSet, buildAgentAccessMap, buildScreenPermsMap } from './permissions-derive.js';
 
-export function usePermissions(userId) {
+// tenantId é obrigatório: sem ele não há como saber o papel do usuário NESTE
+// tenant. ANTES (usePermissions(userId) só) lia user_roles sem filtro de
+// tenant — tabela órfã sem nenhum caminho de escrita no app (nada grava em
+// user_roles/roles), então divergia da RLS pra qualquer usuário onboardado
+// depois do seed inicial da migration de RBAC.
+export function usePermissions(userId, tenantId) {
   const [permissions, setPermissions] = useState(new Set());
-  const [roleNames, setRoleNames]     = useState(new Set());
+  const [tenantRole, setTenantRole]   = useState(null);
   const [agentAccess, setAgentAccess] = useState({});
   const [screenPerms, setScreenPerms] = useState(new Map());
   const [loading, setLoading]         = useState(true);
 
   useEffect(() => {
-    if (!userId) { setLoading(false); return; }
+    if (!userId || !tenantId) { setLoading(false); return; }
 
     setLoading(true);
 
     (async () => {
-      const [{ data: userRoles }, { data: agents }, { data: screens }] = await Promise.all([
-        supabase.from('user_roles')
-          .select('role_id, roles(name)')
-          .eq('user_id', userId),
+      const [{ data: memberRows }, { data: agents }, { data: screens }] = await Promise.all([
+        supabase.from('tenant_members')
+          .select('role')
+          .eq('user_id', userId)
+          .eq('tenant_id', tenantId)
+          .limit(1),
         supabase.from('user_agent_access')
           // P-3 (onda 2): inclui agent_id para indexação canônica por slug do catálogo.
           // agent_name mantido para backward compat enquanto callers não migram.
           .select('agent_name, agent_id, can_invoke, can_view_history, can_approve_drafts')
-          .eq('user_id', userId),
+          .eq('user_id', userId)
+          .eq('tenant_id', tenantId),
         supabase.from('user_screen_permissions')
           .select('screen_id, allowed')
-          .eq('user_id', userId),
+          .eq('user_id', userId)
+          .eq('tenant_id', tenantId),
       ]);
 
-      let permSet = new Set();
-      const nameSet = new Set();
-      if (userRoles?.length) {
-        const roleIds = userRoles.map(r => r.role_id);
-        userRoles.forEach(r => { if (r.roles?.name) nameSet.add(r.roles.name); });
+      const role = pickTenantRole(memberRows);
 
-        const { data: perms } = await supabase
-          .from('role_permissions')
-          .select('resource, action')
-          .in('role_id', roleIds);
-        permSet = new Set((perms ?? []).map(p => `${p.resource}:${p.action}`));
+      // Permissões finas (resource:action) continuam vindo de roles/
+      // role_permissions — só a resolução do role_id mudou: em vez de
+      // user_roles (órfã), busca pelo NOME do papel de tenant_members
+      // dentro do MESMO tenant (roles.tenant_id + roles.name).
+      let permSet = new Set();
+      if (role) {
+        const { data: roleRow } = await supabase
+          .from('roles')
+          .select('id')
+          .eq('tenant_id', tenantId)
+          .eq('name', role)
+          .maybeSingle();
+        if (roleRow?.id) {
+          const { data: perms } = await supabase
+            .from('role_permissions')
+            .select('resource, action')
+            .eq('role_id', roleRow.id);
+          permSet = buildPermissionSet(perms);
+        }
       }
 
-      // P-3: indexa por agent_id (slug canônico) E por agent_name (legado).
-      // Callers existentes usando agent_name continuam funcionando.
-      // Novos callers devem usar agent_id (ex: 'analise-ifood' em vez de 'analista-ifood').
-      const agentMap = {};
-      (agents ?? []).forEach(a => {
-        if (a.agent_id)   agentMap[a.agent_id]   = a;
-        if (a.agent_name) agentMap[a.agent_name] = a;
-      });
-
-      const screenMap = new Map();
-      (screens ?? []).forEach(s => screenMap.set(s.screen_id, s.allowed));
-
       setPermissions(permSet);
-      setRoleNames(nameSet);
-      setAgentAccess(agentMap);
-      setScreenPerms(screenMap);
+      setTenantRole(role);
+      setAgentAccess(buildAgentAccessMap(agents));
+      setScreenPerms(buildScreenPermsMap(screens));
       setLoading(false);
     })();
-  }, [userId]);
+  }, [userId, tenantId]);
 
   return {
     loading,
     agentAccess,
     can:             (resource, action) => permissions.has(`${resource}:${action}`),
-    hasRole:         (name)             => roleNames.has(name),
+    hasRole:         (name)             => tenantRole === name,
     canInvokeAgent:  (name)             => agentAccess[name]?.can_invoke        ?? false,
     canViewHistory:  (name)             => agentAccess[name]?.can_view_history   ?? false,
     canApproveDraft: (name)             => agentAccess[name]?.can_approve_drafts ?? false,

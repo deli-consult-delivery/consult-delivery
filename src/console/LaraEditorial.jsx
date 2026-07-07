@@ -383,7 +383,7 @@ const TABS = ['Rascunhos', 'Calendário', 'Publicados'];
 export default function LaraEditorial({ tenantDbId, userId }) {
   const [activeTab, setActiveTab] = useState(0);
   const [toast, setToast] = useState(null);
-  const { can } = usePermissions(userId);
+  const { can } = usePermissions(userId, tenantDbId);
   const canApprove = can('content', 'approve') || can('content', 'edit');
 
   const showToast = useCallback((msg, type = 'error') => {

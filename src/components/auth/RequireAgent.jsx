@@ -12,11 +12,12 @@ import AccessDenied from './AccessDenied';
  * Props:
  *   agentName — nome do agente no OpenClaw (ex: analista-ifood, deli)
  *   userId    — auth.users.id do usuário logado
+ *   tenantId  — tenant atual (user_agent_access é escopado por tenant)
  *   children  — conteúdo exibido se autorizado
  *   fallback  — elemento exibido se negado (padrão: <AccessDenied />)
  */
-export default function RequireAgent({ agentName, userId, children, fallback }) {
-  const { canInvokeAgent, loading } = usePermissions(userId);
+export default function RequireAgent({ agentName, userId, tenantId, children, fallback }) {
+  const { canInvokeAgent, loading } = usePermissions(userId, tenantId);
 
   if (loading) return null;
   if (!canInvokeAgent(agentName)) {

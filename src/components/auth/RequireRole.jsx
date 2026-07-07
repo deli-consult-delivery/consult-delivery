@@ -12,8 +12,8 @@ import AccessDenied from './AccessDenied';
  *   2. Por role name (array):  <RequireRole roles={['admin']} screenId="agents" ...>
  *   3. Por permissão resource+action: <RequireRole resource="financeiro" action="view" ...>
  */
-export default function RequireRole({ resource, action, roles, userId, screenId, children, fallback }) {
-  const { can, hasRole, canAccessScreen, loading } = usePermissions(userId);
+export default function RequireRole({ resource, action, roles, userId, tenantId, screenId, children, fallback }) {
+  const { can, hasRole, canAccessScreen, loading } = usePermissions(userId, tenantId);
 
   if (loading) return null;
 
