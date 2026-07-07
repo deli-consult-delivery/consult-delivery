@@ -226,7 +226,7 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
     try {
       const periodo = calcPeriodo(janela, customIni, customFim);
       const porLoja = q => (lojaId === SEM_LOJA ? q.is('loja_id', null) : q.eq('loja_id', lojaId));
-      const [mapa, { data: casosRows, error: e3 }, serieRows] = await Promise.all([
+      const [mapa, { data: casosRows, error: e3 }, serieRows, { count: cTotal, error: eCt }, { count: cAtraso, error: eCa }] = await Promise.all([
         lerMetricas(supabase, {
           tenantId: tenantDbId,
           lojaId: lojaId === SEM_LOJA ? null : lojaId,
@@ -245,14 +245,30 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
           metrica: SERIE_METRICAS.map(s => s.key),
           periodo,
         }).catch(() => []),
+        // Counts reais de defesa_casos (sem o cap de 500) — para o KPI "R$
+        // defendido (Defesa)" não sub-contar. 2 queries head:true paralelas:
+        // total de casos + casos com motivo de atraso. Mesmo padrão de
+        // ConsoleV2.jsx:251. Falha → mantém o último valor (não zera por erro
+        // transitório). defendidoCentavos (soma de resultado_valor_centavos
+        // onde status='ganho') continua do array capado — aggregação exigiria
+        // RPC/SUM server-side, fora do escopo (dívida honesta).
+        porLoja(supabase.from('defesa_casos').select('*', { count: 'exact', head: true })
+          .eq('tenant_id', tenantDbId)),
+        porLoja(supabase.from('defesa_casos').select('*', { count: 'exact', head: true })
+          .eq('tenant_id', tenantDbId).ilike('motivo', '%atras%')),
       ]);
       if (e3) throw e3;
       setM(mapa);
       setSerie(serieRows ?? []);
       const cs = casosRows ?? [];
-      const atraso = cs.filter(c => /atras/i.test(c.motivo || '')).length;
       const defendido = cs.filter(c => c.status === 'ganho').reduce((s, c) => s + (Number(c.resultado_valor_centavos) || 0), 0);
-      setCasos({ total: cs.length, atraso, defendidoCentavos: defendido });
+      // total/atraso: counts reais quando disponíveis (fallback do array capado
+      // se a query de count falhou — sem flash de "0" no KPI).
+      setCasos({
+        total: !eCt ? (cTotal ?? 0) : cs.length,
+        atraso: !eCa ? (cAtraso ?? 0) : cs.filter(c => /atras/i.test(c.motivo || '')).length,
+        defendidoCentavos: defendido,
+      });
     } catch (err) {
       setErro(err?.message || 'erro ao carregar');
     }
@@ -448,7 +464,7 @@ export default function RadarReal({ tenantNome, tenantDbId }) {
         <Kpi l="Ticket médio" v={ticket != null ? fmtBRL(ticket) : '—'} d={melhorDia ? `melhor dia: ${melhorDia}` : ''} mut />
         <Kpi l="Conversão do cardápio" v={conv != null ? `${conv}%` : '—'} d={conv != null ? (conv < 25 ? 'abaixo do ideal' : 'saudável') : ''} neg={conv != null && conv < 25} />
         <Kpi l="Cancelamentos" v={cancQtd != null ? fmtNum(cancQtd) : '—'} d={cancMotivo ? `top: ${cancMotivo}` : ''} neg={cancQtd > 0} />
-        <Kpi l="R$ defendido (Defesa)" v={fmtBRL(casos.defendidoCentavos / 100)} d={`${casos.total} casos · ${casos.atraso} por atraso`} mut />
+        <Kpi l="R$ defendido (Defesa)" v={fmtBRL(casos.defendidoCentavos / 100)} d={`${casos.total} casos · ${casos.atraso} por atraso · aprox. (500 recentes)`} mut />
       </div>
 
       {cruzamentos.length > 0 && (
