@@ -18,6 +18,7 @@
 async function pushNotifyTenant({ sbFetch, tenantId, title, body, route }) {
   const SUPABASE_URL         = process.env.SUPABASE_URL;
   const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const BRIDGE_SECRET        = process.env.BRIDGE_SECRET || '';
   if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) return;
 
   try {
@@ -27,7 +28,11 @@ async function pushNotifyTenant({ sbFetch, tenantId, title, body, route }) {
 
     await fetch(`${SUPABASE_URL}/functions/v1/dispatch-push-notification`, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+        ...(BRIDGE_SECRET ? { 'x-bridge-secret': BRIDGE_SECRET } : {}),
+      },
       body:    JSON.stringify({ tenant_id: tenantId, target_user_ids: targetUserIds, title, body, route }),
     });
   } catch (err) {
