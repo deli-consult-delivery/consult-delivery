@@ -43,6 +43,8 @@ A sessão **Cowork** (desktop) parou aqui e passou o bastão para a **sessão Cl
 
 ## 🔴 Onde parou
 
+_Última sessão: 2026-07-06 noite, leva 5 (Orquestradora autônoma, loop paralelo ~7 workers Sonnet + revisão multi-agente por PR) — 20 PRs mergeados (#809-#832), 5 migrations aplicadas pela orquestradora (20260707_001 GAP-2 config de agente, 20260706_019 RLS user_agent_access, 20260707_003 índices perf, 20260707_004 CvNovas CRUD). Frentes: QA C2 A+B (7 fixes P1), CSAT/LARA, segurança P2 + vite-secret + testes bridge auth mutation-proof + drafts mutation-proof + rate-limit + webhook-auth, GAP-2 unificação config, higiene branches, scheduler por-tenant PoC, CvNovas CRUD leva1+2, cost_usd instrumentação leva1+2, tela Auditoria keyset+RBAC, onboarding self-service (fix 403 crítico pego na revisão), gestão de membros, índices perf, RBAC/tenant sync. **🔴 INCIDENTE: main quebrado** — commit 834944d corrompeu PainelAvaliacoesConsultor.jsx em base64/1 linha (build quebrado; repo não tem build-check em PR); restaurado via #817. **IDOR persist-profile-pic FECHADO em prod** (Edge Function v16 deployada via MCP; falta teste cross-tenant). Método: revisão adversarial por PR pegou bugs reais (403 onboarding, title≠description, GRANT anon, TO authenticated, colisão migration 003). ⚠️ Pendências Wandson: ticket iFood vetado · rotar chave Evolution · deploy Trigger.dev #822/#828 (cost_usd) · 100 drafts CSAT na fila · teste cross-tenant do IDOR. Track: T3 GAPs/plataforma + P0/P1 segurança + QA C2._
+
 _Última sessão: 2026-07-06 dia, leva 4 (final) — OS 3 APPS DE HOMOLOGAÇÃO PRONTOS NO QUE NÃO DEPENDE DO WANDSON (Orquestradora autônoma, continuação direta das levas 1-3 acima — **App 3 Catálogo COMPLETO no autônomo: #799 (rota gated live, 200 confirmado), #801 (tela dual-flow com 3 fixes do review, incl. 1 HIGH de path errado), #806 (alterar preço via draft→aprovação), #805 (matriz de cobertura). #802 consolida o programa dos 3 apps numa página só. #804 re-smoka a matriz de Finanças via rota real do Bridge (M2/M3 confirmados 200, M4/M5 seguem lacuna confirmada — 404/500 nos 3 paths testados).** **Placar acumulado desde a noite de 06/07: ~52 PRs mergeados, 22 migrations aplicadas.** **Status dos 3 apps**: App 1 Avaliações ✅ pronto (só gates do Wandson) · App 2 Finanças ✅ pronto (1 lacuna documentada e não-bloqueante: ajuste financeiro/chargeback sem path confirmado) · App 3 Catálogo ✅ pronto (leitura herdada + escrita nova de preço via draft→aprovação, mesma lacuna de escopo — sem mecanismo batch, decisão informada). **Ordem estratégica travada** (`PROGRAMA-HOMOLOGACAO.md`): homologar Avaliações primeiro (único apto a ticket hoje) → só então abrir o próximo (1 app por vez, mesma fila/CNPJ no portal do iFood) — Finanças e Catálogo continuam em build/documentação em paralelo, só o *ticket* deles espera a vez. **⚠️ Pendências do Wandson — inalteradas**: ticket vetado hoje por ordem dele · rotacionar a chave Evolution. Track: T6/T9 Homologação iFood (3 apps) + P0/P1 segurança.)_
 
 _Última sessão: 2026-07-06 dia, leva 3 — SPRINT APP 2 FINANÇAS COMPLETO + QA VISUAL + APP 3 CATÁLOGO INICIADO (Orquestradora autônoma, continuação direta das levas 1-2 acima — **PRs #788-#800 (13 PRs), client Financial corrigido por smoke live real, tela financeiro-ifood com polish, QA visual formal dos 2 tenants via magic link (PASSA), 1 incidente de processo regularizado + regra dura registrada em memória, App 3 (Catálogo) já com pesquisa entregue.**
@@ -416,6 +418,8 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 
 ## 👉 Próxima ação (para a sessão da VPS continuar)
 
+0-LEVA5-0607. Colher PRs restantes da leva 5 em revisão (#829 rate-limit, #830 webhook-auth, #831 rbac-sync, #832 gestão-membros); QA C2 PRECISA-BROWSER via magic links; deploys pendentes do Wandson. **Track: T3 GAPs/plataforma + P0/P1 segurança + QA C2.**
+
 0-CONSOLIDACAO. **🛑 Aguarda o Wandson (madrugada 04→05/07, 14 PRs #723/#726-#738):** **(1)** aprovar o SQL do squash baseline (runbook `docs/runbooks/RUNBOOK-SQUASH-BASELINE.md`, PR #727 já em main) → janela combinada: domingo 05/07; **(2)** aprovar a aplicação da migration de higienização de lojas/contatos (PR #729, `docs/estrategia/HIGIENIZACAO-LOJAS-ANALISE.md` — diagnóstico prod: 1178 total/1028 contatos/150 lojas); **(3)** confirmar o deploy do Trigger.dev do PR #737 (instrumentação `cost_usd`) — a orquestradora tentou/tentará via PAT, conferir status no log de sessões. Todos os GAPs 1-8 do T3 (auditoria #726) estão fechados. **Track: T3 GAPs / Plano de Continuidade (B1/B3/C1/C2/C3).**
 
 0-CONSOLIDACAO-LEVA2. **✅ FECHADA (05/07 tarde) — os 3 gates abaixo foram executados na LEVA 3.** ~~`pm2 restart bridge-server` na VPS~~ ✅ feito (main `f413e68`) · ~~smoke visual da tela CRM~~ ✅ aprovado pelo Wandson · ~~credenciais `IFOOD_CLIENT_ID`/`IFOOD_CLIENT_SECRET`~~ segue como única pendência real (ver 0-CONSOLIDACAO-LEVA3). **Track: T3 GAPs / Plano de Continuidade (Semana 3 B2 / GAP-3 / Frente A).**
@@ -496,6 +500,19 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 ---
 
 ## 📋 Log de sessões
+
+### 2026-07-06 noite, leva 5 (Orquestradora autônoma — loop paralelo ~7 workers Sonnet + revisão multi-agente por PR — 20 PRs #809-#832, 5 migrations aplicadas)
+
+- **QA C2 A+B:** 7 fixes P1 de coluna inexistente (Deli/PainelAgentes/GestorDashboard/Lara/ChatScreen/Cora), 8 achados P6/P10 e 2 de isolamento documentados (não corrigidos, PR dedicado).
+- **Segurança:** P2 diversos + vite-secret + testes bridge auth mutation-proof + drafts mutation-proof + rate-limit (#829) + webhook-auth (#830). IDOR persist-profile-pic **fechado em prod** (Edge Function v16 via MCP; falta teste cross-tenant).
+- **GAP-2:** unificação de config de agente (migration `20260707_001`).
+- **Plataforma:** higiene de branches, scheduler por-tenant PoC, CvNovas CRUD leva1+2 (migration `20260707_004`), cost_usd instrumentação leva1+2, tela Auditoria keyset+RBAC, onboarding self-service (fix 403 crítico pego na revisão), gestão de membros (#832), RBAC/tenant sync (#831).
+- **Performance:** índices compostos faltantes em `audit_log`/`agent_runs`/`reviews` (migration `20260707_003`), confirmados via `EXPLAIN` real.
+- **RLS:** `user_agent_access` corrigido (migration `20260706_019` — policy não correlacionava com `tenant_id` da linha); `notificacoes` investigado e confirmado falso positivo (RLS já protegia).
+- **🔴 Incidente:** commit `834944d` corrompeu `PainelAvaliacoesConsultor.jsx` (virou 1 linha de base64, build quebrado em todo o `main`, sem build-check em PR) — restaurado via hotfix #817.
+- **Método:** revisão adversarial por PR pegou bugs reais antes do merge — 403 onboarding, `title`≠`description`, GRANT anon, `TO authenticated` faltando, colisão de numeração de migration.
+- **⚠️ Pendências do Wandson:** ticket iFood vetado · rotacionar chave Evolution · deploy Trigger.dev `#822`/`#828` (cost_usd) · 100 drafts CSAT na fila (LARA) · teste cross-tenant do IDOR fechado.
+
 
 ### 2026-07-06 dia, leva 4 — final (Orquestradora autônoma — App 3 Catálogo completo, programa dos 3 apps consolidado, matriz Finanças re-smokada [T6/T9 Homologação iFood — 3 apps])
 - **App 3 (Catálogo) fechado de ponta a ponta:**
