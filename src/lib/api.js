@@ -955,10 +955,17 @@ export async function listAuditLog(tenantId, filters = {}) {
 
 
 export async function listNotifications(tenantId, userId, { onlyUnread = false, limit = 50 } = {}) {
+  // Defense-in-depth: a RLS de `internal_notifications` já limita a
+  // `recipient_user_id = auth.uid() OR (recipient_user_id IS NULL AND tenant
+  // member)`, mas espelhamos o filtro na query client-side para que o dado
+  // nunca dependa só da policy (anti-vazamento se a RLS for desligada/bypassada
+  // por service_role, ou se a coluna mudar). Notificações broadcast
+  // (recipient_user_id NULL) continuam visíveis a todos os membros do tenant.
   let q = supabase
     .from('internal_notifications')
     .select('id, kind, agent, title, body, link, read_at, created_at, recipient_user_id')
     .eq('tenant_id', tenantId)
+    .or(`recipient_user_id.eq.${userId},recipient_user_id.is.null`)
     .order('created_at', { ascending: false })
     .limit(limit);
   if (onlyUnread) q = q.is('read_at', null);
@@ -972,6 +979,7 @@ export async function countUnreadNotifications(tenantId, userId) {
     .from('internal_notifications')
     .select('id', { count: 'exact', head: true })
     .eq('tenant_id', tenantId)
+    .or(`recipient_user_id.eq.${userId},recipient_user_id.is.null`)
     .is('read_at', null);
   if (error) throw error;
   return count ?? 0;
