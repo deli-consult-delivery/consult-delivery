@@ -55,8 +55,15 @@ Chamadas **vivas** (alcançáveis a partir de `ConsoleV2.jsx`, confirmado via gr
 | `console/AtendimentoAvaliacoes.jsx:771` | `<RequireRole roles={['admin','consultor']}>` | tela inteira de CSAT |
 | `console/AuditLog.jsx:141` | `<RequireRole roles={['admin']}>` | tela inteira de auditoria |
 | `console/NpsResultados.jsx:382` | `<RequireRole roles={['admin','gestor']}>` | tela inteira de NPS |
-| `console/Disparos.jsx:432` | `<RequireRole resource="approve_drafts" action="execute">` | aprovação de disparo em massa |
-| `console/LaraEditorial.jsx:387` | `can('content','approve') \|\| can('content','edit')` | botão de aprovar/publicar conteúdo |
+| `console/Disparos.jsx:432` | `<RequireRole resource="approve_drafts" action="approve">` | aprovação de disparo em massa |
+| `console/LaraEditorial.jsx:387` | `can('lara','approve') \|\| can('lara','execute')` | botão de aprovar/publicar conteúdo |
+
+> **Correção 2026-07-06 (PR #831 follow-up, `wandson/rbac-can-fix`):** a revisão do #831 achou que os
+> dois `can()` acima nunca resolviam `true` pra ninguém — `Disparos.jsx` pedia `approve_drafts:execute`
+> mas `role_permissions` só tem `approve_drafts:approve` (admin/deli_owner); `LaraEditorial.jsx`/
+> `LaraEditorialScreen.jsx` pediam o resource `content` (que não existe) em vez de `lara` (que existe,
+> `approve`/`execute`, admin/marketing). Corrigido no client pra bater com os dados reais — não foi
+> adicionada nenhuma permissão nova, o catálogo existente já é semanticamente coerente pros dois casos.
 
 Chamadas **mortas** (grep confirma zero importador alcançável — não corrigidas no código consumidor,
 só a fonte de dados foi ajustada por consistência):
