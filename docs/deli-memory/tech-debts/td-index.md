@@ -415,6 +415,8 @@ Opção C: Usar Supabase pg_cron com invocação via HTTP para cada tenant.
 **Evidência da resolução:** repo tinha 65 branches remotas (excluindo `main`/`gh-pages`) em 2026-07-06; nenhuma via `git branch -r --merged` (todo o fluxo é squash-merge, não fast-forward) — critério de segurança usado foi comparar o conteúdo dos arquivos alterados por cada branch contra o `main` atual. 30 identificadas como squash-merged e removidas; 0 falhas.
 **Recomendação ainda pendente (fora do escopo desta triagem):** ativar "Auto-delete head branches" nas Settings do GitHub — resolve de raiz, evita a branch órfã se acumular de novo a cada PR squash-merged.
 
+**Segunda rodada 2026-07-07** (PRs #809–#851 acumularam mais órfãs): 74 branches remotas → 28 depois. 47 deletadas com prova refinada (conteúdo comparado contra o `mergeCommit.oid` específico do PR, não só o `main` atual — elimina falso-negativo de `main` ter evoluído os mesmos arquivos depois do merge). 14 com PR mergeado mas conteúdo divergente do merge commit + 6 sem PR mergeado encontrado → NÃO deletadas, ficam para triagem manual. Detalhe completo, metodologia e as duas listas de exceção em `td54-limpeza-0607.md`. Recomendação de auto-delete no GitHub ainda pendente.
+
 **Sintoma:**
 `git branch -r --merged origin/main` retorna 25 branches além de main/gh-pages.
 Todos já foram merged — não têm código pendente.
