@@ -53,7 +53,7 @@ desenvolvimento"; o segundo aparece como erro real. Sem essa distinção, um bug
 | # | Endpoint/Critério | Status | Client (`lib/ifood.js`) | Rota | Front (`CardapioIfood.jsx`) | Evidência |
 |---|---|---|---|---|---|---|
 | M1 | Cardápio agregado (catálogo→categorias→itens, disponibilidade efetiva por canal) | ✅ IMPLEMENTADO + 🔵 CONFIRMADO LIVE | `getCardapio` (`lib/ifood.js:814`, reusa `listarCatalogos`/`listarCategorias`/`listarItensCategoria`) | `GET /ifood/cardapio?tenant_id=` (rota antiga, tenant-wide) **e** `GET /ifood-api/catalogo/:lojaId` (#799, gated por `fonte_dados`) — ambas ativas | Fluxo dual: tenant sem loja em `fonte_dados='api'` → rota antiga (zero regressão); tenant com loja(s) migrada(s) → rota nova por-loja, seletor de loja (`CardapioIfood.jsx:103-152`) | Offline: 2 cenários do #799 em `test/ifood-api-routes.test.js` (200 árvore completa; 404 sem `ifood_merchants`) — 37 cenários totais na suíte. **🔵 Smoke live** (`report-88-catalogo.md`, 2026-07-06): `GET /ifood-api/catalogo/:lojaId` real (loja `2494ee86...`, merchant `92a0ec17...`) → `200`, `cardapio.catalogos[0].categorias[0].itens[0]` = item real do sandbox (`X-Burger Teste Cd`, `preco:25`, `disponivel:true`) |
-| M2 | Itens não-vendáveis (`unsellableItems`, arquivados/fora do catálogo ativo) | ❌ LACUNA | Nenhuma função | Nenhuma rota | Nenhum consumo — `CardapioIfood.jsx` só lista itens vendáveis via `getCardapio` | Documentado como gap em `catalogo-endpoints.md §2` — path usa `{catalogId}` (diferente de `sellableItems`, que usa `{groupId}`). Sem mudança desde a v1 |
+| M2 | Itens não-vendáveis (`unsellableItems`, arquivados/fora do catálogo ativo) | ✅ IMPLEMENTADO (offline) | `listarUnsellableItems(merchantId, catalogId, tenantId)` (`lib/ifood.js:283`) — `GET /catalog/v2.0/merchants/{merchantId}/catalogs/{catalogId}/unsellableItems`. A doc usa `{catalogId}` no path (diferente de `sellableItems` que usa `{groupId}`) — respeitado. | `GET /ifood-api/catalogo/:lojaId/unsellable/:groupId` (`routes/ifood-api.js`, #PR-pendente) — gated por `resolveLojaGated`; `?catalogId=` opcional sobrescreve o `groupId` do path | Nenhum consumo no front ainda (`CardapioIfood.jsx` só lista itens vendáveis via `getCardapio`) | Offline: 2 cenários novos em `test/ifood-api-routes.test.js` (200 repassa array; `?catalogId=` vence o path) + 1 em `test/ifood.test.js` (path usa `catalogId`, não `groupId`). **Ainda sem smoke live** (confirmar contra sandbox real antes do ticket). Suíte 39 cenários rotas + 47 asserções client |
 | M3 | Versão do catálogo (`/catalog/version`) | ❌ LACUNA | Nenhuma função | Nenhuma rota | Não se aplica hoje (só relevante se algum merchant estiver preso em Catalog v1) | Baixa prioridade, sem mudança desde a v1 |
 
 ## Escrita — Disponibilidade (pausar/reabrir item)
@@ -109,8 +109,8 @@ desenvolvimento"; o segundo aparece como erro real. Sem essa distinção, um bug
 - **Multi-contexto (M9)**: 🟡 risco silencioso segue em produção, sem mudança desde a v1 — o
   sandbox de teste só tem 1 catálogo/contexto, então o smoke live disponível não prova nem
   desmente o problema. Continua sendo o maior risco não resolvido da categoria Catálogo.
-- **Itens não-vendáveis/versão de catálogo (M2/M3)**: ❌ lacunas conhecidas, baixa prioridade,
-  sem mudança.
+- **Itens não-vendáveis/versão de catálogo (M2/M3)**: M2 ✅ implementado (offline, sem
+  smoke live ainda); M3 (versão de catálogo) ❌ lacuna de baixa prioridade, sem mudança.
 
 ### Pendências recomendadas antes de qualquer ticket de homologação Catálogo
 
@@ -122,5 +122,6 @@ desenvolvimento"; o segundo aparece como erro real. Sem essa distinção, um bug
 3. **UI de preço (T5/T7)** — ✅ implementada (botão "Alterar preço" + input decimal no
    `CardapioIfood.jsx`, cria draft amarelo via `POST /api/ifood/acao`). Falta só o smoke live
    de M6/M7 (confirmar que o PATCH reflete no app).
-4. Itens não-vendáveis (M2) — implementar só se a homologação ou o produto exigir mostrar itens
-   arquivados; não é bloqueante hoje.
+4. Itens não-vendáveis (M2) — ✅ backend + rota implementados (offline testado); falta só
+   consumo no front (`CardapioIfood.jsx`) e smoke live, se a homologação ou o produto
+   exigir mostrar itens arquivados. Não é bloqueante para o ticket.

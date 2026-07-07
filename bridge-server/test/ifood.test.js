@@ -990,6 +990,29 @@ function restoreFetch() {
     clearCreds();
   });
 
+  await check('listarUnsellableItems: usa catalogId (NÃO groupId) no path', async () => {
+    setCreds();
+    const calls = [];
+    mockFetch(calls, (url) => {
+      if (url.endsWith('/authentication/v1.0/oauth/token')) {
+        return jsonResponse(200, { accessToken: 'tok-unsell', expiresIn: 21600 });
+      }
+      // Path esperado: /catalog/v2.0/merchants/{merchantId}/catalogs/{catalogId}/unsellableItems
+      if (url.includes('/unsellableItems')) {
+        return jsonResponse(200, [{ id: 'item-9', status: 'UNAVAILABLE' }]);
+      }
+      return jsonResponse(200, {});
+    });
+    const ifood = freshIfood();
+    const out = await ifood.listarUnsellableItems('merch-1', 'cat-real');
+    const call = calls.find((c) => c.url.includes('/unsellableItems'));
+    assert.ok(call, 'esperava uma chamada para /unsellableItems');
+    assert.ok(call.url.includes('/catalogs/cat-real/unsellableItems'), `path deve usar catalogId=cat-real, foi: ${call.url}`);
+    assert.ok(Array.isArray(out) && out[0]?.id === 'item-9');
+    restoreFetch();
+    clearCreds();
+  });
+
   restoreFetch();
   if (failures > 0) {
     process.stdout.write(`\n${failures} falha(s) de ${passes + failures}.\n`);

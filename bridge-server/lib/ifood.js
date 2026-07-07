@@ -278,6 +278,17 @@ async function listarSellableItems(merchantId, groupId, tenantId) {
   ).then(tolerant);
 }
 
+// Itens NÃO-vendáveis (arquivados/fora do catálogo ativo) — a doc usa o param
+// `catalogId` (NÃO `groupId`) nesta rota, diferente de sellableItems. Ver
+// catalogo-endpoints.md §1-2: path confirmado na pesquisa, shape do payload
+// igual ao sellableItems (mesma estrutura de item); confirmar contra o sandbox
+// real no 1º live (mesma ressalva de sempre).
+async function listarUnsellableItems(merchantId, catalogId, tenantId) {
+  return withRetry(() =>
+    ifoodFetch(`/catalog/v2.0/merchants/${merchantId}/catalogs/${catalogId}/unsellableItems`, {}, tenantId)
+  ).then(tolerant);
+}
+
 // Status da loja — aberta/fechada agora.
 async function getStatusLoja(merchantId, tenantId) {
   return withRetry(() =>
@@ -885,6 +896,7 @@ module.exports = {
   listarMerchants,
   listarCatalogos,
   listarSellableItems,
+  listarUnsellableItems,
   getStatusLoja,
   listarReviews,
   getReviewDetalhe,
