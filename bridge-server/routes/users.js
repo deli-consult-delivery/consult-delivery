@@ -106,6 +106,17 @@ module.exports = function ({ requireJwt, sbFetch, SUPABASE_URL, SUPABASE_SERVICE
         return res.status(403).json({ error: 'Apenas administradores podem reenviar convites' });
       }
 
+      // Confirma que o e-mail é de um membro PENDENTE deste tenant — sem
+      // isso, um admin poderia forçar o GoTrue a mandar e-mail de convite
+      // pra qualquer endereço, confirmado ou de fora do tenant.
+      const pendente = await sbFetch(
+        `rpc/is_pending_tenant_member`,
+        { method: 'POST', body: { p_tenant_id: tenant_id, p_email: email } }
+      );
+      if (pendente !== true) {
+        return res.status(409).json({ error: 'Este e-mail não é um convite pendente deste tenant' });
+      }
+
       const inviteRes = await fetch(`${SUPABASE_URL}/auth/v1/invite`, {
         method: 'POST',
         headers: adminHeaders,
