@@ -68,6 +68,13 @@ export default function Execucoes({ tenantDbId }) {
   const [filtroAgente, setFiltroAgente] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('');
   const [expandido, setExpandido] = useState(null);
+  // Contagens reais (não capadas em 1000) — mesmo padrão de ConsoleV2.jsx:251
+  // (count exact, head true). Respeitam os mesmos filtros (agente/status) da
+  // lista. Sem isso, o KPI "Execucoes no periodo" mostrava no max 1000 (cap da
+  // lista) em vez do total real (ex.: 1975 em 15d no tenant Consult).
+  const [total, setTotal] = useState(0);
+  const [ok, setOk] = useState(0);
+  const [falhas, setFalhas] = useState(0);
 
   const carregar = useCallback(async () => {
     if (!tenantDbId) return;
@@ -83,11 +90,28 @@ export default function Execucoes({ tenantDbId }) {
       if (filtroAgente) q = q.eq('agent_id', filtroAgente);
       if (filtroStatus) q = q.eq('status', filtroStatus);
 
-      const [{ data: rows, error: e1 }, { data: ag, error: e2 }] = await Promise.all([
+      // Counts reais (mesmos filtros da lista, sem o cap). 3 queries head:true
+      // paralelas + a lista. Falha numa delas → mantém o último valor (não zera
+      // o KPI por erro transitório). PostgREST count é exato (não estimado).
+      const baseCount = () => supabase.from('agent_runs').select('*', { count: 'exact', head: true })
+        .eq('tenant_id', tenantDbId).gte('created_at', desde);
+      const totalQ = baseCount();
+      const okQ = baseCount().in('status', ['ok', 'completed', 'success']);
+      const falhasQ = baseCount().in('status', ['failed', 'error', 'timeout']);
+      if (filtroAgente) { totalQ.eq('agent_id', filtroAgente); okQ.eq('agent_id', filtroAgente); falhasQ.eq('agent_id', filtroAgente); }
+      if (filtroStatus) { totalQ.eq('status', filtroStatus); okQ.eq('status', filtroStatus); falhasQ.eq('status', filtroStatus); }
+
+      const [{ data: rows, error: e1 }, { data: ag, error: e2 }, { count: cT, error: eT }, { count: cOk, error: eOk }, { count: cF, error: eF }] = await Promise.all([
         q,
         supabase.from('agents').select('id, name, letter, color'),
+        totalQ,
+        okQ,
+        falhasQ,
       ]);
       if (e1 || e2) throw (e1 || e2);
+      if (!eT) setTotal(cT ?? 0);
+      if (!eOk) setOk(cOk ?? 0);
+      if (!eF) setFalhas(cF ?? 0);
 
       const agMap = {};
       for (const a of (ag ?? [])) agMap[a.id] = a;
@@ -110,10 +134,10 @@ export default function Execucoes({ tenantDbId }) {
     ? [...new Set(runs.map(r => r.status).filter(Boolean))]
     : [];
 
-  // KPIs
-  const total = runs?.length ?? 0;
-  const ok = runs?.filter(r => ['ok', 'completed', 'success'].includes(r.status)).length ?? 0;
-  const falhas = runs?.filter(r => ['failed', 'error', 'timeout'].includes(r.status)).length ?? 0;
+  // KPIs — total/ok/falhas vêm de counts reais (count: 'exact', head: true),
+  // não do array capado em 1000. custoTotal/durMedia seguem do array (aggregação
+  // de cost_usd/duration_ms exigiria RPC/SUM server-side; dívida honesta — ver
+  // rótulos no render).
   const custoTotal = (runs ?? []).reduce((s, r) => s + (Number(r.cost_usd) || 0), 0);
   const durMedia = (() => {
     const comDur = (runs ?? []).filter(r => r.duration_ms > 0);
@@ -167,7 +191,7 @@ export default function Execucoes({ tenantDbId }) {
         <div className="cv2-kpi">
           <div className="l">Execucoes no periodo</div>
           <div className="v">{runs ? fmt(total) : '…'}</div>
-          <div className="d mut">{janela}d · limit 1000</div>
+          <div className="d mut">{janela}d · {filtroAgente || filtroStatus ? 'filtrado' : 'total real'}</div>
         </div>
         <div className="cv2-kpi">
           <div className="l">Ok / Falhas</div>
@@ -177,12 +201,12 @@ export default function Execucoes({ tenantDbId }) {
         <div className="cv2-kpi">
           <div className="l">Custo total</div>
           <div className="v">{runs ? `US$ ${custoTotal.toFixed(4)}` : '…'}</div>
-          <div className="d mut">no periodo filtrado</div>
+          <div className="d mut">aprox. (ate 1000 recentes)</div>
         </div>
         <div className="cv2-kpi">
           <div className="l">Duracao media</div>
           <div className="v">{runs ? fmtDur(durMedia) : '…'}</div>
-          <div className="d mut">runs com duracao registrada</div>
+          <div className="d mut">aprox. (ate 1000 recentes)</div>
         </div>
       </div>
 
