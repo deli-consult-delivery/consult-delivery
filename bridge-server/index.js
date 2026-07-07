@@ -16,6 +16,13 @@ const { calcularCustoUsd } = require('./lib/pricing');
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
+// Topologia confirmada ao vivo na VPS (nginx -T, read-only, correção do PR
+// #844): Cloudflare (proxied) -> nginx local (proxy_pass localhost:3001,
+// X-Forwarded-For via $proxy_add_x_forwarded_for) -> este app. 2 hops
+// confiáveis -> req.ip já extrai o IP real do cliente da cadeia, em vez do
+// header cru (spoofável sem isto). Ver memory/vps-infra.md.
+app.set('trust proxy', 2);
+
 // ── Env vars ────────────────────────────────────────────────────────────────
 const BRIDGE_SECRET          = process.env.BRIDGE_SECRET;
 const SUPABASE_URL           = process.env.SUPABASE_URL;
@@ -675,14 +682,17 @@ const ASAAS_STATUS_MAP = {
 };
 
 // Rate limit em memória: 30 req/min por IP — mesmo padrão de routes/publico-aprovacao.js.
-// Lê x-forwarded-for diretamente (não depende de app.set('trust proxy',...), que não
-// está configurado neste app — se o bridge estiver atrás de proxy/load balancer,
-// req.ip sozinho refletiria o IP do proxy, não do cliente real).
+// Usa req.ip (Express extrai da cadeia confiável via trust proxy=2), NUNCA lê
+// x-forwarded-for cru —
+// achado da revisão do PR #839: não há reverse proxy/load balancer confirmado na
+// frente da porta 3001 (ver docs/deli-memory/tech-debts/trust-proxy-bridge.md), então
+// x-forwarded-for é um header que o próprio atacante controla — usá-lo pra rate-limit
+// deixa o limite trivialmente contornável (é só mandar um IP diferente a cada request).
 const webhooksAsaasRateLimitMap = new Map(); // IP → { count, resetAt }
 const WEBHOOKS_ASAAS_RATE_LIMIT = 30;
 const WEBHOOKS_ASAAS_WINDOW_MS = 60_000;
 function webhooksAsaasRateLimit(req, res, next) {
-  const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+  const ip = req.ip || 'unknown';
   const now = Date.now();
   let entry = webhooksAsaasRateLimitMap.get(ip);
   if (!entry || now >= entry.resetAt) {

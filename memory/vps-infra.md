@@ -18,6 +18,14 @@
 - **Gerenciado por:** PM2 — processo chamado `bridge-server`
 - **Persistência:** `pm2-root.service` (systemd, habilitado — sobrevive a reboots)
 - **Env vars:** `/root/consult-delivery/bridge-server/.env` (dotenvx)
+- **Topologia de rede (confirmada ao vivo, `nginx -T`, PR #844):**
+  `Cliente → Cloudflare (bridge.consultdelivery.com.br, proxied/laranja) → nginx local
+  na VPS (proxy_pass http://localhost:3001; proxy_set_header X-Forwarded-For
+  $proxy_add_x_forwarded_for) → bridge-server:3001`. **2 hops confiáveis**
+  (Cloudflare + nginx) → `bridge-server/index.js` usa `app.set('trust proxy', 2)` +
+  `req.ip` nas rotas com rate-limit por IP (nunca ler `x-forwarded-for` cru — era
+  spoofável antes disso, achado do PR #839/correção do #844). Doc completo:
+  `docs/deli-memory/tech-debts/trust-proxy-bridge.md`.
 
 ### Como atualizar e reiniciar o bridge
 

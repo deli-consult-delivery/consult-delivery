@@ -20,7 +20,9 @@ const RATE_LIMIT   = 60;
 const WINDOW_MS    = 60_000;
 
 function rateLimit(req, res, next) {
-  const ip  = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+  // req.ip (Express, trust proxy=2 em index.js) — ver
+  // docs/deli-memory/tech-debts/trust-proxy-bridge.md.
+  const ip  = req.ip || 'unknown';
   const now = Date.now();
 
   let entry = rateLimitMap.get(ip);
