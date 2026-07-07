@@ -210,13 +210,17 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
       console.log(`[cora-aprovacao] mensagem enviada → ${targetPhone}${isTest}`);
 
       // 7. Atualizar draft → sent (filtra por tenant_id p/ não cruzar tenants)
+      //    reviewer_id/reviewed_at rastreiam quem aprovou — antes eram null (service_role
+      //    bypassa RLS, então o campo nunca era preenchido pelo JWT). Espelha gestor-aprovacao.
       await sbFetch(
         `agent_drafts?id=eq.${encodeURIComponent(draft_id)}&tenant_id=eq.${encodeURIComponent(tenant_id)}`,
         {
           method: 'PATCH',
           body: {
-            status:  'sent',
-            sent_at: new Date().toISOString(),
+            status:      'sent',
+            reviewer_id: req.user?.id ?? null,
+            reviewed_at: new Date().toISOString(),
+            sent_at:     new Date().toISOString(),
           },
         }
       );
@@ -266,12 +270,15 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
       const meta = draft.metadata || {};
 
       // 2. Atualizar draft → rejected (filtra por tenant_id p/ não cruzar tenants)
+      //    reviewer_id/reviewed_at rastreiam quem rejeitou — antes eram null (mesmo bug do aprovar).
       await sbFetch(
         `agent_drafts?id=eq.${encodeURIComponent(draft_id)}&tenant_id=eq.${encodeURIComponent(tenant_id)}`,
         {
           method: 'PATCH',
           body: {
-            status:   'rejected',
+            status:          'rejected',
+            reviewer_id:      req.user?.id ?? null,
+            reviewed_at:      new Date().toISOString(),
             metadata: { ...meta, motivo_rejeicao: motivo ?? null },
           },
         }
