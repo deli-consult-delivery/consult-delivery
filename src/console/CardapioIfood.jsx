@@ -55,6 +55,8 @@ function categoriasDe(cardapio) {
 function ItemLinha({ item, tenantDbId, onAcaoFeita }) {
   const [agindo, setAgindo] = useState(false);
   const [msg, setMsg] = useState(null);
+  const [editandoPreco, setEditandoPreco] = useState(false);
+  const [novoPreco, setNovoPreco] = useState('');
   const disponivel = item.disponivel === true;
 
   async function acao(operacao) {
@@ -65,6 +67,29 @@ function ItemLinha({ item, tenantDbId, onAcaoFeita }) {
         body: { operacao, parametros: { item_nome: item.nome } },
       });
       setMsg('Solicitação enviada para aprovação (draft amarelo).');
+      onAcaoFeita?.();
+    } catch (e) {
+      setMsg(`Falhou: ${e.message}`);
+    } finally {
+      setAgindo(false);
+    }
+  }
+
+  async function salvarPreco() {
+    const price = Number(novoPreco.replace(',', '.'));
+    if (!Number.isFinite(price) || price <= 0) {
+      setMsg('Preço inválido — informe um número maior que zero.');
+      return;
+    }
+    setAgindo(true); setMsg(null);
+    try {
+      await bridgeFetch(`/api/ifood/acao?tenant_id=${encodeURIComponent(tenantDbId)}`, {
+        method: 'POST',
+        body: { operacao: 'ifood.alterar_preco', parametros: { item_nome: item.nome, price } },
+      });
+      setMsg(`Solicitação de novo preço ${fmtBRL(price)} enviada para aprovação.`);
+      setEditandoPreco(false);
+      setNovoPreco('');
       onAcaoFeita?.();
     } catch (e) {
       setMsg(`Falhou: ${e.message}`);
@@ -85,7 +110,38 @@ function ItemLinha({ item, tenantDbId, onAcaoFeita }) {
         {item.descricao && (
           <div style={{ fontSize: 12.5, color: 'var(--tx2)', lineHeight: 1.5, marginBottom: 2 }}>{item.descricao}</div>
         )}
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{fmtBRL(item.preco)}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {editandoPreco ? (
+            <>
+              <span style={{ fontSize: 12.5, color: 'var(--tx2)' }}>Novo preço (R$):</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder={typeof item.preco === 'number' ? item.preco.toFixed(2) : '0,00'}
+                value={novoPreco}
+                onChange={e => setNovoPreco(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') salvarPreco(); if (e.key === 'Escape') { setEditandoPreco(false); setNovoPreco(''); } }}
+                disabled={agindo}
+                autoFocus
+                style={{ width: 90, fontSize: 12.5, padding: '3px 6px', border: '1px solid var(--bd)', borderRadius: 4 }}
+              />
+              <button className="cv2-btn" style={{ fontSize: 11 }} disabled={agindo} onClick={salvarPreco}>Salvar</button>
+              <button className="cv2-btn sec" style={{ fontSize: 11 }} disabled={agindo} onClick={() => { setEditandoPreco(false); setNovoPreco(''); }}>Cancelar</button>
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{fmtBRL(item.preco)}</span>
+              <button
+                className="cv2-btn sec"
+                style={{ fontSize: 11, padding: '2px 8px' }}
+                disabled={agindo}
+                onClick={() => { setEditandoPreco(true); setNovoPreco(''); setMsg(null); }}
+              >
+                Alterar preço
+              </button>
+            </>
+          )}
+        </div>
         {msg && <div style={{ fontSize: 11.5, color: 'var(--tx2)', marginTop: 4 }}>{msg}</div>}
       </div>
       <button
