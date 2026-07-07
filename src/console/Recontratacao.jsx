@@ -180,6 +180,10 @@ export default function Recontratacao({ tenantDbId, userId }) {
   const [bulkErr, setBulkErr] = useState('');
   const [confirmBulk, setConfirmBulk] = useState(false);
   const [toast, setToast] = useState('');
+  // Count real de customers (não capado em 500) — mesmo padrão de ConsoleV2.jsx:251
+  // (count exact, head true). Sem isso, o KPI "Total clientes" e o "{X} de {Y} clientes"
+  // sub-contam (ex.: 1172 customers reais, KPI mostrava no max 500).
+  const [totalCustomers, setTotalCustomers] = useState(0);
 
   function showToast(msg) {
     setToast(msg);
@@ -193,11 +197,15 @@ export default function Recontratacao({ tenantDbId, userId }) {
     Promise.all([
       supabase.from('customers').select('id,name,phone_normalized,phone,status').eq('tenant_id', tenantDbId).limit(500),
       supabase.from('aceite_recontratacao').select('id,customer_id,pacote_ofertado,status,mensagem_enviada_em,respondido_em').eq('tenant_id', tenantDbId),
-    ]).then(([{ data: custs, error: e1 }, { data: ac, error: e2 }]) => {
+      // Count real de customers do tenant (sem o cap de 500). PostgREST count é
+      // exato. Falha → mantém o último valor (não zera KPI por erro transitório).
+      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantDbId),
+    ]).then(([{ data: custs, error: e1 }, { data: ac, error: e2 }, { count: nC, error: e3 }]) => {
       if (cancelled) return;
       if (e1 || e2) { showToast((e1 || e2).message || 'Erro ao carregar dados.'); setLoading(false); return; }
       setCustomers(custs || []);
       setAceites(ac || []);
+      if (!e3) setTotalCustomers(nC ?? 0);
       setLoading(false);
     });
     return () => { cancelled = true; };
@@ -214,8 +222,10 @@ export default function Recontratacao({ tenantDbId, userId }) {
   // Clientes sem oferta (para envio em massa)
   const semOferta = customers.filter(c => !aceiteMap[c.id]);
 
-  // Totals
-  const total    = customers.length;
+  // Totals — `total` (customers) vem do count real (count: 'exact', head: true),
+  // não do length do array capado em 500. `aceitos`/`enviados` vêm de `aceites`
+  // (segunda query, sem cap explícito). `pct` = aceitos/total real.
+  const total    = totalCustomers;
   const aceitos  = aceites.filter(a => a.status === 'aceito').length;
   const enviados = aceites.filter(a => a.mensagem_enviada_em).length;
   const pct      = total > 0 ? Math.round((aceitos / total) * 100) : 0;
