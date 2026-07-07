@@ -27,14 +27,20 @@ export default function AcessoUsuarios({ tenantDbId }) {
   }, [tenantDbId, sel]);
 
   const carregarGrants = useCallback(async () => {
-    if (!sel) return;
+    if (!sel || !tenantDbId) return;
+    // Defense-in-depth: filtra por tenant_id além de user_id — se um user_id
+    // pertencer a 2+ tenants, grants de outro tenant não vazam para a tela.
+    // A RLS já limita via accessible_tenant_ids(), mas o espelho client-side
+    // garante que o dado da tela nunca dependa só da policy.
     const { data, error } = await supabase.from('user_agent_access')
-      .select('agent_id, agent_name, can_invoke, can_view_history, can_approve_drafts').eq('user_id', sel);
+      .select('agent_id, agent_name, can_invoke, can_view_history, can_approve_drafts')
+      .eq('user_id', sel)
+      .eq('tenant_id', tenantDbId);
     if (error) { setErro(error.message); return; }
     const map = {};
     (data ?? []).forEach(g => { map[g.agent_id || g.agent_name] = g; });
     setGrants(map);
-  }, [sel]);
+  }, [sel, tenantDbId]);
 
   useEffect(() => { carregar(); }, [carregar]);
   useEffect(() => { carregarGrants(); }, [carregarGrants]);
