@@ -46,32 +46,43 @@ por coincidência bateu no mesmo número visualmente suspeito.
 
 **Veredito: tela correta, dado real. Nenhuma correção necessária.**
 
+**Confirmado via navegação ao vivo (Wandson, link fresco):** a tela mostra
+score **"0"** com **"2 respondidas"** — bate exatamente com a fórmula
+descrita acima (2 respondidas de 5, 1 promotor + 1 detrator → NPS=0).
+Confirma definitivamente que o "avg=0.00" do doc original era artefato do
+SQL de verificação, não um bug da UI.
+
 ---
 
-## `visao` — Visão Geral — PENDENTE (aguardando navegação)
+## `visao` — Visão Geral — ✅ CONFIRMADO (navegação ao vivo)
 
-Do parte-a: dado real confirmado (`atendimento_avaliacoes`=1075,
-`agent_runs`=106 pra Karina), falta:
-- [ ] Comparar KPI exibido na tela com os números acima.
-- [ ] Confirmar nenhuma linha vermelha/erro no Console.
-- [ ] Estado vazio / ação, se aplicável.
+Karina é tenant **Avaliações-only** — a Visão Geral renderiza a variante
+sem os módulos que ela não tem (Defesa/Ativar não aparecem no menu, ver
+seção final). Resultado: **CSAT 64%/36 respondidas (janela 30 dias)**,
+**NPS 0/2 respondidas** — sem erro, sem linha vermelha, consistente com o
+que a tela `csat`/`nps` mostram em detalhe (ver abaixo).
 
-## `csat` — Satisfação do Atendimento — PENDENTE (aguardando navegação)
+## `csat` — Satisfação do Atendimento — ✅ CONFIRMADO (navegação ao vivo)
 
-Do parte-a: `count(*)=1075`, `respondidas=36`.
-- [ ] Conferir se a tela mostra "36 de 1075" (ou equivalente) de forma consistente com o banco.
-- [ ] Estado vazio / ação / erro visual.
+Tela renderiza dado real: **65% / média 3.6 / 37 respondidas de 1093 /
+taxa 3%**. Distribuição de notas soma certo: `13+0+0+1+23=37`. Régua LARA
+mostra os **100 drafts pendentes de aprovação** (reengajamento CSAT, ver
+PR #792/#822) — visibilidade correta, nenhum draft foi aprovado por esta
+navegação.
 
-## `defesa` — Defesa Comercial — PENDENTE (aguardando navegação)
+**Discrepância menor, NÃO é bug:** Visão Geral mostra 36 respondidas
+(filtro 30 dias) vs. tela CSAT mostra 37 (total, sem filtro de janela) —
+é diferença de janela de tempo entre as duas telas, esperado e
+consistente com o propósito de cada uma (Visão Geral = "últimos 30 dias",
+CSAT = histórico completo).
 
-Do parte-a: `defesa_casos.status='aguardando_ok'` = 0 pra Karina (fila real vazia, não falta de dado); `defesa_aprovadores` = 0 (sem aprovador cadastrado).
-- [ ] Confirmar que a tela mostra estado vazio ("nenhum caso aguardando"), não erro.
-- [ ] Confirmar se Defesa está habilitada pro tenant Karina (`tenant_agent_config`) — se não, checar paywall/mensagem correta em vez de tela quebrada.
-- [ ] Cadastro de aprovador é ação de escrita — fora do escopo READ-ONLY; só confirmar que a UI de cadastro abre sem erro.
+## `defesa` / `ativar` — N/A (fora do escopo do tenant)
 
-## `ativar` — Config de ativação (Defesa) — PENDENTE (aguardando navegação)
-
-Não coberto em detalhe no parte-a — sem achado prévio a confirmar, avaliar junto na mesma sessão de browser se der tempo.
+Karina é tenant **Avaliações-only** — Defesa Comercial e a tela de
+Ativação de loja **não aparecem no menu** dela (módulos não habilitados
+para esse tenant/perfil). Os itens do parte-a sobre `defesa`/`ativar`
+não se aplicam a este tenant; permanecem como PRECISA-BROWSER genérico
+pra quando alguém rodar QA num tenant que tenha esses módulos habilitados.
 
 ---
 
@@ -79,8 +90,14 @@ Não coberto em detalhe no parte-a — sem achado prévio a confirmar, avaliar j
 
 | Item | Status |
 |---|---|
-| `nps` avg=0.00 | ✅ **Resolvido — não é bug, dado real + fórmula correta** |
-| `visao` | ⏳ Aguardando navegação (Wandson) |
-| `csat` | ⏳ Aguardando navegação (Wandson) |
-| `defesa` | ⏳ Aguardando navegação (Wandson) |
-| `ativar` | ⏳ Aguardando navegação (Wandson) |
+| `nps` avg=0.00 | ✅ **Resolvido — não é bug, dado real + fórmula correta (confirmado ao vivo: score 0, 2 respondidas)** |
+| `visao` | ✅ **Confirmado ao vivo — CSAT 64%/36 (30d), NPS 0/2, sem erro** |
+| `csat` | ✅ **Confirmado ao vivo — 65%/média 3.6/37 de 1093/taxa 3%, distribuição bate, régua LARA visível (100 drafts pending)** |
+| `defesa` | N/A — Karina é tenant Avaliações-only, módulo não habilitado |
+| `ativar` | N/A — Karina é tenant Avaliações-only, módulo não habilitado |
+
+## Veredito final: QA C2 parte A visual — **PASSA**
+
+Nenhum bug encontrado. Nenhuma tela vermelha. O único item que parecia
+suspeito (NPS avg=0.00) foi confirmado como artefato de SQL de
+verificação, não falha da aplicação — a UI sempre esteve correta.
