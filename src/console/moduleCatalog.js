@@ -10,8 +10,6 @@ export const GRUPOS = [
     { id: 'crm', ic: 'i-users', label: 'Clientes' },
     { id: 'lojas', ic: 'i-store', label: 'Lojas' },
     { id: 'chat',             ic: 'i-chat',  label: 'Chat ao Vivo' },
-    // ponytail: temporário — remover quando o Wandson terminar de comparar legado x cv2
-    { id: 'chat-legado',      ic: 'i-clock', label: 'Chat ao Vivo (legado)' },
     { id: 'respostas-rapidas', ic: 'i-reply', label: 'Respostas Rápidas' },
     { id: 'mia', ic: 'i-eye', label: 'Conversas · MIA' },
     { id: 'aprovacoes', ic: 'i-check', label: 'Aprovações' },
@@ -33,7 +31,7 @@ export const GRUPOS = [
   // com ponto). Agrupado por assunto — mesmos ids/module_key, só label/grupo mudou.
   { label: 'Avaliações', items: [
     { id: 'avaliacoes', ic: 'i-eye', label: 'Avaliações Recebidas' },
-    { id: 'resp-avaliacoes', ic: 'i-star', label: 'Respostas de Avaliações' },
+    { id: 'resp-avaliacoes', ic: 'i-star', label: 'Avaliações iFood' },
     { id: 'csat', ic: 'i-check', label: 'Satisfação do Atendimento (CSAT)' },
     { id: 'nps', ic: 'i-target', label: 'Lealdade da Marca (NPS)' },
     { id: 'controle-atendimentos', ic: 'i-chart', label: 'Controle de Atendimento' },
