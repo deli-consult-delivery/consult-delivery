@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase.js';
+import RequireRole from '../components/auth/RequireRole.jsx';
+import { usePermissions } from '../hooks/usePermissions';
 
 // ============================================================
 // Console v2 — T1/GAP-4: Custos de IA
@@ -51,11 +53,24 @@ function Kpi({ l, v, d, mut }) {
   );
 }
 
-export default function CustosIA({ tenantDbId }) {
+export default function CustosIA({ tenantDbId, userId }) {
   const [rows, setRows] = useState(null);
   const [agentes, setAgentes] = useState(null);
   const [erro, setErro] = useState(null);
   const [expandidoAg, setExpandidoAg] = useState(null);
+
+  // "Por tenant" — agregação server-side via RPC (custo_por_tenant_agente),
+  // não pagina agent_runs cru: sempre <= (nº tenants acessíveis x nº agentes),
+  // bem abaixo do cap de 1000 do PostgREST mesmo com muitos tenants. RLS
+  // hierárquica de agent_runs decide o que aparece (admin de agência vê as
+  // lojas filhas; usuário de 1 loja só vê a própria). Fetch e render são
+  // gateados por role admin (isAdmin abaixo) — RLS na função (SECURITY
+  // INVOKER) é a segunda camada, não a única.
+  const [porTenant, setPorTenant] = useState(null);
+  const [tenantsMap, setTenantsMap] = useState({});
+  const [erroTenant, setErroTenant] = useState(null);
+  const { hasRole, loading: loadingPerms } = usePermissions(userId, tenantDbId);
+  const isAdmin = !loadingPerms && hasRole('admin');
 
   useEffect(() => {
     if (!tenantDbId) return;
@@ -80,6 +95,34 @@ export default function CustosIA({ tenantDbId }) {
     })();
     return () => { alive = false; };
   }, [tenantDbId]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    let alive = true;
+    (async () => {
+      try {
+        const { data, error } = await supabase.rpc('custo_por_tenant_agente', { dias_atras: 30 });
+        if (error) throw error;
+        const linhas = data ?? [];
+        if (!alive) return;
+        setPorTenant(linhas);
+        const tenantIds = [...new Set(linhas.map(r => r.tenant_id))];
+        if (tenantIds.length) {
+          const { data: tRows, error: eT } = await supabase
+            .from('tenants')
+            .select('id, name, slug')
+            .in('id', tenantIds);
+          if (eT) throw eT;
+          const map = {};
+          (tRows ?? []).forEach(t => { map[t.id] = t; });
+          if (alive) setTenantsMap(map);
+        }
+      } catch (err) {
+        if (alive) setErroTenant(err?.message || 'erro ao carregar custo por tenant');
+      }
+    })();
+    return () => { alive = false; };
+  }, [isAdmin]);
 
   if (!rows) {
     return (
@@ -267,6 +310,87 @@ export default function CustosIA({ tenantDbId }) {
         <div style={{ fontSize: 11.5, color: 'var(--tx2)', marginTop: 8 }}>
           PICO = dia com custo &gt; {PICO_MULT}x a media diaria do periodo.
         </div>
+      </div>
+
+      <RequireRole roles={['admin']} userId={userId} tenantId={tenantDbId} fallback={null}>
+        <PorTenant dados={porTenant} tenantsMap={tenantsMap} erro={erroTenant} />
+      </RequireRole>
+    </div>
+  );
+}
+
+// --- Card "Por tenant" (admin only — ve custo de todas as lojas acessiveis) ---
+function PorTenant({ dados, tenantsMap, erro }) {
+  if (erro) {
+    return (
+      <div className="cv2-card">
+        <h3>Por tenant</h3>
+        <div style={{ color: 'var(--red)', fontSize: 13 }}>Erro: {erro}</div>
+      </div>
+    );
+  }
+  if (!dados) {
+    return (
+      <div className="cv2-card">
+        <h3>Por tenant</h3>
+        <div style={{ color: 'var(--tx2)', fontSize: 13 }}>Carregando...</div>
+      </div>
+    );
+  }
+
+  // Rollup por tenant (soma dos agentes) pra ordenar e exibir subtotal.
+  const porTenantId = {};
+  for (const r of dados) {
+    const id = r.tenant_id;
+    if (!porTenantId[id]) porTenantId[id] = { execucoes: 0, custo: 0, agentes: [] };
+    porTenantId[id].execucoes += Number(r.execucoes) || 0;
+    porTenantId[id].custo += Number(r.custo_total) || 0;
+    porTenantId[id].agentes.push(r);
+  }
+  const tenantsList = Object.entries(porTenantId).sort((a, b) => b[1].custo - a[1].custo);
+
+  return (
+    <div className="cv2-card">
+      <h3>Por tenant (30 dias)</h3>
+      {tenantsList.length === 0 ? (
+        <div style={{ color: 'var(--tx2)', fontSize: 13 }}>
+          Nenhum tenant acessivel com execucoes no periodo.
+        </div>
+      ) : (
+        <div className="cv2-tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Tenant</th>
+                <th>Agente</th>
+                <th>Execucoes</th>
+                <th>Custo total (US$)</th>
+                <th>Media / run (US$)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tenantsList.map(([tenantId, resumo]) => {
+                const t = tenantsMap[tenantId];
+                const agentesOrdenados = [...resumo.agentes].sort(
+                  (a, b) => Number(b.custo_total) - Number(a.custo_total)
+                );
+                return agentesOrdenados.map((r, i) => (
+                  <tr key={`${tenantId}-${r.agent_id}`}>
+                    <td>{i === 0 ? (t?.name || t?.slug || tenantId) : ''}</td>
+                    <td>{r.agent_id}</td>
+                    <td>{Number(r.execucoes).toLocaleString('pt-BR')}</td>
+                    <td>{fmt(r.custo_total)}</td>
+                    <td>{fmt(r.custo_medio)}</td>
+                  </tr>
+                ));
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div style={{ fontSize: 11.5, color: 'var(--tx2)', marginTop: 8 }}>
+        Agregado no Postgres (custo_por_tenant_agente) — respeita a mesma RLS hierarquica
+        de agent_runs, sem limite de linhas do PostgREST.
       </div>
     </div>
   );
