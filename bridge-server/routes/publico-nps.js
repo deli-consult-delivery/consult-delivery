@@ -33,7 +33,9 @@ const RATE_LIMIT   = 60;
 const WINDOW_MS    = 60_000;
 
 function rateLimit(req, res, next) {
-  const ip  = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+  // req.socket.remoteAddress (não x-forwarded-for, spoofável — ver
+  // docs/deli-memory/tech-debts/trust-proxy-bridge.md, achado do PR #839).
+  const ip  = req.socket.remoteAddress || 'unknown';
   const now = Date.now();
 
   let entry = rateLimitNps.get(ip);

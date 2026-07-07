@@ -17,9 +17,10 @@ const CONTRATO_STATUS_MAP = {
 
 // Rate limit simples em memória: 30 req/min por IP (mesmo padrão de datacrazy-webhook.js
 // e routes/publico-aprovacao.js). Anti-abuse: token fixo no header é vulnerável a
-// brute-force/flood sem isso. IP lido via x-forwarded-for (não via req.ip) porque este
-// app não tem app.set('trust proxy',...) configurado — atrás de proxy/load balancer,
-// req.ip sozinho refletiria o IP do proxy, não o do cliente real.
+// brute-force/flood sem isso. IP via req.socket.remoteAddress (real da conexão TCP),
+// NUNCA x-forwarded-for — sem reverse proxy confirmado na frente da porta 3001 (achado
+// da revisão do PR #839, ver docs/deli-memory/tech-debts/trust-proxy-bridge.md), esse
+// header é controlado pelo próprio atacante e contornaria o rate-limit trivialmente.
 const rateLimitMap = new Map();
 function isRateLimited(ip) {
   const now = Date.now();
@@ -44,7 +45,7 @@ module.exports = function ({ supabaseInsert, supabaseSelect, supabaseUpdate, ASA
   const router = require('express').Router();
 
   router.post('/asaas/webhook', async (req, res) => {
-    const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
+    const ip = req.socket?.remoteAddress || 'unknown';
     if (isRateLimited(ip)) {
       return res.status(429).json({ error: 'limite_de_requisicoes_excedido' });
     }

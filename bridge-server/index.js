@@ -675,14 +675,16 @@ const ASAAS_STATUS_MAP = {
 };
 
 // Rate limit em memória: 30 req/min por IP — mesmo padrão de routes/publico-aprovacao.js.
-// Lê x-forwarded-for diretamente (não depende de app.set('trust proxy',...), que não
-// está configurado neste app — se o bridge estiver atrás de proxy/load balancer,
-// req.ip sozinho refletiria o IP do proxy, não do cliente real).
+// Usa SÓ req.socket.remoteAddress (IP real da conexão TCP), NUNCA x-forwarded-for —
+// achado da revisão do PR #839: não há reverse proxy/load balancer confirmado na
+// frente da porta 3001 (ver docs/deli-memory/tech-debts/trust-proxy-bridge.md), então
+// x-forwarded-for é um header que o próprio atacante controla — usá-lo pra rate-limit
+// deixa o limite trivialmente contornável (é só mandar um IP diferente a cada request).
 const webhooksAsaasRateLimitMap = new Map(); // IP → { count, resetAt }
 const WEBHOOKS_ASAAS_RATE_LIMIT = 30;
 const WEBHOOKS_ASAAS_WINDOW_MS = 60_000;
 function webhooksAsaasRateLimit(req, res, next) {
-  const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+  const ip = req.socket.remoteAddress || 'unknown';
   const now = Date.now();
   let entry = webhooksAsaasRateLimitMap.get(ip);
   if (!entry || now >= entry.resetAt) {
