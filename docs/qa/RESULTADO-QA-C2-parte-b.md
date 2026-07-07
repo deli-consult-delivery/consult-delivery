@@ -10,7 +10,7 @@ Zero escrita/migration em prod. Checks de Ação/Erro que exigem navegador estã
 - **PASSA (estático):** 36 telas
 - **FALHA corrigida neste PR (P1 — coluna inexistente):** 7 telas
 - **FALHA registrada, NÃO corrigida neste PR (P6/P10 — contagem client-side sobre lista capada):** 8 telas
-- **FALHA registrada, NÃO corrigida (isolamento tenant/usuário — merece PR dedicado com revisão focada):** 2 telas
+- **FALHA de isolamento corrigida no PR #860 (2026-07-07):** 2 telas (notificações + acesso) — defense-in-depth (espelho client-side da RLS)
 - **PRECISA-BROWSER (Bridge-only ou requer interação real):** 14 telas
 
 ## FALHAS P1 corrigidas neste PR (diff mínimo)
@@ -46,12 +46,17 @@ Evidência = contagem real via `count(*)` comparada ao cap.
 (padrão já usado em `CustosIA.buscarTodosRuns`, que pagina via `.range()` até esgotar, e em
 `ConsoleV2.useKpisReais` pro caso #173). Merece PR próprio por tela (mudança de query real, não 1 linha).
 
-## FALHAS de isolamento — NÃO corrigidas, recomendo PR dedicado com revisão focada
+## FALHAS de isolamento — ✅ CORRIGIDAS no PR #860 (2026-07-07, defense-in-depth)
 
-| Tela | Arquivo:linha | Bug | Evidência |
-|---|---|---|---|
-| `notificacoes` | `src/lib/api.js:930-941 listNotifications` | Filtra só por `tenant_id`, **não** por `recipient_user_id` — qualquer usuário vê notificações de outros usuários do mesmo tenant | Consult tem 397 linhas em `internal_notifications`, Karina 12 — volume real suficiente pra expor visualmente |
-| `acesso` | `src/console/AcessoUsuarios.jsx:31-32` | `user_agent_access.select(...).eq('user_id', sel)` sem `.eq('tenant_id', tenantDbId)`, embora a coluna exista — se um `user_id` pertencer a 2+ tenants, grants de outro tenant vazam | `SELECT count(*)` de grants órfãos (P7) hoje = **0** — sem exploit ativo agora (nenhum usuário multi-tenant hoje), mas o código está errado e vira exploit assim que existir |
+> A RLS de ambas as tabelas já limitava o acesso no nível do banco. O PR #860
+> adicionou o **espelho client-side** do filtro (defense-in-depth: o dado da
+> tela nunca depende só da policy — se a RLS for desligada/bypassada por
+> service_role, ou a coluna mudar, o frontend continua filtrando).
+
+| Tela | Arquivo:linha | Bug | Fix (#860) | Evidência (pré-fix) |
+|---|---|---|---|---|
+| `notificacoes` | `src/lib/api.js:957-978` `listNotifications`/`countUnreadNotifications` | Filtrava só por `tenant_id`, **não** por `recipient_user_id` — qualquer usuário via notificações de outros usuários do mesmo tenant | Adicionado `.or('recipient_user_id.eq.{userId},recipient_user_id.is.null')` — broadcasts (recipient_user_id NULL) continuam visíveis a todos os membros do tenant, direcionadas só ao destinatário | Consult tem 397 linhas em `internal_notifications`, Karina 12 — volume real suficiente pra expor visualmente |
+| `acesso` | `src/console/AcessoUsuarios.jsx:29-37` `carregarGrants` | `user_agent_access.select(...).eq('user_id', sel)` sem `.eq('tenant_id', tenantDbId)` — se um `user_id` pertencer a 2+ tenants, grants de outro tenant vazam | Adicionado `.eq('tenant_id', tenantDbId)` + guard `!tenantDbId` retorna cedo | `SELECT count(*)` de grants órfãos (P7) hoje = **0** — sem exploit ativo agora (nenhum usuário multi-tenant hoje), mas o código estava errado e virava exploit assim que existisse |
 
 ## Telas PASSA (estático) — sem achado
 
