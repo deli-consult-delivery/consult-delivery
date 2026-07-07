@@ -15,7 +15,7 @@ export default function LaraEditorialScreen({ tenantDbId, userId }) {
   const { can } = usePermissions(userId, tenantDbId);
 
   // marketing e admin podem aprovar/publicar
-  const canApprove = can('content', 'approve') || can('content', 'edit');
+  const canApprove = can('lara', 'approve') || can('lara', 'execute');
 
   return (
     <div style={{ padding: '24px 20px', maxWidth: 860, margin: '0 auto' }}>

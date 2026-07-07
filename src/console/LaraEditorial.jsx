@@ -384,7 +384,7 @@ export default function LaraEditorial({ tenantDbId, userId }) {
   const [activeTab, setActiveTab] = useState(0);
   const [toast, setToast] = useState(null);
   const { can } = usePermissions(userId, tenantDbId);
-  const canApprove = can('content', 'approve') || can('content', 'edit');
+  const canApprove = can('lara', 'approve') || can('lara', 'execute');
 
   const showToast = useCallback((msg, type = 'error') => {
     setToast({ msg, type });

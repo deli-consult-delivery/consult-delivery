@@ -429,7 +429,7 @@ function DisparosContent({ tenantDbId, userId }) {
 
 export default function Disparos({ tenantDbId, userId }) {
   return (
-    <RequireRole resource="approve_drafts" action="execute" userId={userId} tenantId={tenantDbId}>
+    <RequireRole resource="approve_drafts" action="approve" userId={userId} tenantId={tenantDbId}>
       <DisparosContent tenantDbId={tenantDbId} userId={userId} />
     </RequireRole>
   );
