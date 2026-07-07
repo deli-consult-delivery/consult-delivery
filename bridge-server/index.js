@@ -674,7 +674,38 @@ const ASAAS_STATUS_MAP = {
   PAYMENT_AWAITING_CHARGEBACK_REVERSAL: 'overdue',
 };
 
-app.post('/webhooks/asaas', async (req, res) => {
+// Rate limit em memória: 30 req/min por IP — mesmo padrão de routes/publico-aprovacao.js.
+// Lê x-forwarded-for diretamente (não depende de app.set('trust proxy',...), que não
+// está configurado neste app — se o bridge estiver atrás de proxy/load balancer,
+// req.ip sozinho refletiria o IP do proxy, não do cliente real).
+const webhooksAsaasRateLimitMap = new Map(); // IP → { count, resetAt }
+const WEBHOOKS_ASAAS_RATE_LIMIT = 30;
+const WEBHOOKS_ASAAS_WINDOW_MS = 60_000;
+function webhooksAsaasRateLimit(req, res, next) {
+  const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  let entry = webhooksAsaasRateLimitMap.get(ip);
+  if (!entry || now >= entry.resetAt) {
+    entry = { count: 0, resetAt: now + WEBHOOKS_ASAAS_WINDOW_MS };
+    webhooksAsaasRateLimitMap.set(ip, entry);
+  }
+  entry.count++;
+  if (entry.count > WEBHOOKS_ASAAS_RATE_LIMIT) {
+    return res.status(429).json({ error: 'limite_de_requisicoes_excedido' });
+  }
+  next();
+}
+// Limpeza periódica do map (evita memory leak em uptime longo). .unref() —
+// não impede o processo de sair em scripts/testes que requerem este arquivo
+// sem manter outro listener rodando pra sempre.
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of webhooksAsaasRateLimitMap) {
+    if (now >= entry.resetAt) webhooksAsaasRateLimitMap.delete(ip);
+  }
+}, WEBHOOKS_ASAAS_WINDOW_MS).unref();
+
+app.post('/webhooks/asaas', webhooksAsaasRateLimit, async (req, res) => {
   // 1. Validar token — Asaas envia em asaas-access-token (lowercase)
   const token = req.headers['asaas-access-token'] || req.headers['x-asaas-access-token'] || '';
   if (!ASAAS_WEBHOOK_SECRET) {

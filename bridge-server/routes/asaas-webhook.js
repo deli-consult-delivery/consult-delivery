@@ -15,8 +15,11 @@ const CONTRATO_STATUS_MAP = {
   PAYMENT_REFUNDED:             'cancelado',
 };
 
-// Rate limit simples em memória: 30 req/min por IP (mesmo padrão de datacrazy-webhook.js).
-// Anti-abuse: token fixo no header é vulnerável a brute-force/flood sem isso.
+// Rate limit simples em memória: 30 req/min por IP (mesmo padrão de datacrazy-webhook.js
+// e routes/publico-aprovacao.js). Anti-abuse: token fixo no header é vulnerável a
+// brute-force/flood sem isso. IP lido via x-forwarded-for (não via req.ip) porque este
+// app não tem app.set('trust proxy',...) configurado — atrás de proxy/load balancer,
+// req.ip sozinho refletiria o IP do proxy, não o do cliente real.
 const rateLimitMap = new Map();
 function isRateLimited(ip) {
   const now = Date.now();
@@ -26,12 +29,22 @@ function isRateLimited(ip) {
   rateLimitMap.set(ip, entry);
   return entry.count > 30;
 }
+// Limpeza periódica do map (evita memory leak em uptime longo).
+// .unref() — não impede o processo de sair (crítico pra scripts/testes que
+// requerem este módulo e não têm outro listener rodando pra sempre; no bridge
+// real, o servidor HTTP já mantém o processo vivo por conta própria).
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of rateLimitMap) {
+    if (now >= entry.resetAt) rateLimitMap.delete(ip);
+  }
+}, 60_000).unref();
 
 module.exports = function ({ supabaseInsert, supabaseSelect, supabaseUpdate, ASAAS_WEBHOOK_SECRET }) {
   const router = require('express').Router();
 
   router.post('/asaas/webhook', async (req, res) => {
-    const ip = req.ip || req.socket?.remoteAddress || 'unknown';
+    const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
     if (isRateLimited(ip)) {
       return res.status(429).json({ error: 'limite_de_requisicoes_excedido' });
     }
