@@ -1,42 +1,36 @@
-# Trust proxy no bridge-server — decisão (PR #839, follow-up)
+# Trust proxy no bridge-server — RESOLVIDO (PR #839 → #844)
 
-## Achado
+## Achado original (PR #839)
 Várias rotas públicas do bridge (`asaas-webhook.js`, `crm-atendimento-webhook.js`,
 `publico-aprovacao.js`, `publico-avaliacao.js`, `publico-nps.js`, `wizard-publico.js`,
-mais o handler `/webhooks/asaas` em `index.js`) faziam rate-limit lendo
-`req.headers['x-forwarded-for']` **sem** `app.set('trust proxy', ...)` configurado.
-`x-forwarded-for` é um header que **o próprio cliente HTTP envia** — sem um proxy de
-confiança na frente que o sobrescreva/anexe de forma controlada, um atacante manda
-`X-Forwarded-For: <ip aleatório>` a cada request e contorna o rate-limit trivialmente
-(o código sempre pegava o 1º valor da lista, que é exatamente o campo controlado pelo
-cliente).
+mais `/webhooks/asaas` em `index.js`) faziam rate-limit lendo `x-forwarded-for`
+diretamente, sem `app.set('trust proxy', ...)` — header 100% controlado pelo cliente,
+spoofável.
 
-## Investigação da topologia
-- `memory/vps-infra.md`: bridge roda via PM2 direto na porta 3001, sem menção de
-  nginx/Caddy/load balancer na frente.
-- Busca em `memory/`, `docs/deli-memory/`, `docs/infra/` por
-  nginx/"reverse proxy"/"trust proxy"/cloudflare: **zero resultado**.
-- Sem acesso à VPS nesta sessão (regra dura) pra confirmar ao vivo (`nginx -T`,
-  `curl -v`, etc.) se existe algum terminador de TLS na frente de `bridge.consultdelivery.com.br`.
+## ⚠️ Erro da 1ª correção (revertido)
+A 1ª tentativa (mesmo PR #844, 1ª rodada) assumiu, por não achar menção a proxy em
+`memory/`, que **não havia** reverse proxy na frente — e trocou tudo para
+`req.socket.remoteAddress` puro. **Isso estava errado**: a topologia real (documentada
+em `.planning/.continue-here.md`, não verificada na 1ª busca) sempre teve nginx +
+Cloudflare na frente. Com `req.socket.remoteAddress`, TODO tráfego chegaria de
+`127.0.0.1` (o nginx local) — o rate-limit viraria um bucket **global** (todos os
+visitantes somados), derrubando com 429 tráfego legítimo (ex.: webhooks de pagamento
+Asaas) na primeira rajada de qualquer origem.
 
-## Decisão
-**Sem confirmação de um proxy de confiança, a escolha segura é não confiar em
-`x-forwarded-for`.** Configurar `app.set('trust proxy', N)` sem ter certeza do número
-de hops e de que o proxy realmente *sobrescreve* (não só anexa) o header seria pior
-que o bug atual — o app passaria a confiar cegamente num valor que pode continuar
-vindo direto do atacante.
+## Topologia confirmada ao vivo (`nginx -T` na VPS, read-only)
+```
+Cliente → Cloudflare (bridge.consultdelivery.com.br, proxied) → nginx local
+  (proxy_pass http://localhost:3001; X-Forwarded-For via $proxy_add_x_forwarded_for)
+  → bridge-server:3001
+```
+**2 hops confiáveis** (Cloudflare + nginx). Registrado em `memory/vps-infra.md`.
 
-**Fix aplicado**: as 7 rotas passam a usar exclusivamente `req.socket.remoteAddress`
-(o IP real da conexão TCP, não falsificável pelo cliente) para o rate-limit. Efeito
-colateral aceito: se um dia existir de fato um proxy/CDN na frente, todas as
-requisições passarão a contar como vindo do IP do proxy — o rate-limit vira "por
-proxy" em vez de "por cliente final" (menos preciso, mas nunca inseguro).
+## Fix definitivo
+- `bridge-server/index.js`: `app.set('trust proxy', 2)`.
+- As 7 rotas usam `req.ip` (Express extrai o IP real do cliente da cadeia
+  `X-Forwarded-For`, confiando só nos 2 hops declarados) — nunca mais leem o header
+  cru nem usam `req.socket.remoteAddress` puro.
 
-## Reabertura (se/quando confirmado que há proxy)
-Se alguém confirmar ao vivo (acesso à VPS) que há nginx/Cloudflare/LB na frente da
-porta 3001 e qual o número exato de hops confiáveis:
-1. `app.set('trust proxy', <hops>)` em `bridge-server/index.js`.
-2. Trocar as 7 ocorrências de `req.socket.remoteAddress` por `req.ip` (Express já
-   resolve `req.ip` corretamente combinando `trust proxy` + `x-forwarded-for`).
-3. Remover este documento (ou marcar como resolvido) e apagar a ressalva dos
-   comentários nas rotas.
+## Lição
+Antes de decidir topologia de rede, buscar em **`.planning/`** além de `memory/` — o
+handoff de sessão anterior (`.continue-here.md`) já tinha a resposta.
