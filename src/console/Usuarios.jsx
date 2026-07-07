@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../lib/supabase.js';
+import { mapErro } from '../lib/mapErro.js';
 import Icon from '../components/Icon.jsx';
 
 const BRIDGE = import.meta.env.VITE_BRIDGE_URL || 'https://bridge.consultdelivery.com.br';
@@ -176,7 +177,7 @@ function EditRoleModal({ member, tenantDbId, onClose, onSuccess }) {
       p_new_role: role,
     });
     setSaving(false);
-    if (err) { setError(err.message); return; }
+    if (err) { setError(mapErro(err.message)); return; }
     onSuccess();
     onClose();
   }
@@ -223,7 +224,7 @@ function EditNameModal({ member, tenantDbId, onClose, onSuccess }) {
       p_display_name: name.trim(),
     });
     setSaving(false);
-    if (err) { setError(err.message); return; }
+    if (err) { setError(mapErro(err.message)); return; }
     onSuccess();
     onClose();
   }
@@ -266,7 +267,7 @@ function RemoveModal({ member, tenantDbId, onClose, onSuccess }) {
       p_user_id: member.user_id,
     });
     setRemoving(false);
-    if (err) { setError(err.message); return; }
+    if (err) { setError(mapErro(err.message)); return; }
     onSuccess();
     onClose();
   }

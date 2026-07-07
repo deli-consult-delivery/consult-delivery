@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase.js';
+import { mapErro } from '../lib/mapErro.js';
 import Icon from '../components/Icon.jsx';
 import UserAvatar from '../components/UserAvatar.jsx';
 import CustomFieldsManager from './Settings/CustomFieldsManager.jsx';
@@ -182,7 +183,7 @@ function EditNameModal({ member, tenantDbId, onClose, onSuccess }) {
       p_display_name: name.trim(),
     });
     setSaving(false);
-    if (err) { setError(err.message); return; }
+    if (err) { setError(mapErro(err.message)); return; }
     onSuccess();
     onClose();
   }
@@ -224,7 +225,7 @@ function EditRoleModal({ member, tenantDbId, onClose, onSuccess }) {
       p_new_role: role,
     });
     setSaving(false);
-    if (err) { setError(err.message); return; }
+    if (err) { setError(mapErro(err.message)); return; }
     onSuccess();
     onClose();
   }
@@ -259,7 +260,7 @@ function RemoveUserModal({ member, tenantDbId, onClose, onSuccess }) {
       p_user_id: member.user_id,
     });
     setRemoving(false);
-    if (err) { setError(err.message); return; }
+    if (err) { setError(mapErro(err.message)); return; }
     onSuccess();
     onClose();
   }
