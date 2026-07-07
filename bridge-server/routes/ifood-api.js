@@ -272,6 +272,23 @@ module.exports = function ({ requireJwtOrInternal, ifood, sbFetch, assertTenantM
     return { loja_id: ctx.loja.id, merchant_id: ctx.merchantId, cardapio };
   }));
 
+  // ── GET /ifood-api/catalogo/:lojaId/unsellable/:groupId — itens não-vendáveis
+  // (arquivados/fora do catálogo ativo). App 3 Catálogo (M2 da matriz). A doc
+  // usa `catalogId` no path (NÃO `groupId` como em sellableItems) — mas como o
+  // seletor de catálogo do Console trabalha com `groupId` (campo que o próprio
+  // iFood devolve em cada catalog), aceitamos ambos: se o caller passar o
+  // `catalogId` real (query ?catalogId=), usa-o; senão cai no `groupId` do path
+  // (que na prática é o mesmo identificador em muitos merchants). Confirmar
+  // contra o sandbox real no 1º live (ressalva de sempre).
+  router.get('/ifood-api/catalogo/:lojaId/unsellable/:groupId', requireJwtOrInternal, handle(async (req, res) => {
+    const ctx = await resolveLojaGated(req, res);
+    if (!ctx) return;
+    const { groupId } = req.params;
+    const catalogId = req.query.catalogId ? String(req.query.catalogId) : groupId;
+    const itens = await ifood.listarUnsellableItems(ctx.merchantId, catalogId, ctx.loja.tenant_id);
+    return { loja_id: ctx.loja.id, merchant_id: ctx.merchantId, groupId, catalogId, itens };
+  }));
+
   // ── GET /ifood-api/repasses/:lojaId — Settlement API (liquidação/repasses) ──
   // Filtro opcional ?dataInicio=&dataFim= (yyyy-MM-dd) — default 7 dias (mesmo
   // comportamento de listarVendas). CONFIRMADO LIVE (smoke 2026-07-06).

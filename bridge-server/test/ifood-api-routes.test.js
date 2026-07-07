@@ -761,5 +761,60 @@ function sbFetchStub(routes) {
     passed++;
   }
 
+  // GET catalogo/:lojaId/unsellable/:groupId — itens não-vendáveis (App 3 M2).
+  // Valida que o client é chamado com merchantId + catalogId e que a resposta
+  // repassa o array devolvido pelo iFood. Usa groupId do path como catalogId
+  // (fallback quando ?catalogId= não vem).
+  {
+    let chamadoCom = null;
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => p.startsWith('ifood_merchants?'), value: [{ merchant_id: 'merch-1' }] },
+    ]);
+    const ifood = {
+      listarUnsellableItems: async (merchantId, catalogId, _tenantId) => {
+        chamadoCom = { merchantId, catalogId };
+        return [{ id: 'item-9', name: 'Item arquivado', status: 'UNAVAILABLE' }];
+      },
+    };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/catalogo/loja-1/unsellable/grp-1');
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(chamadoCom.merchantId, 'merch-1');
+    assert.strictEqual(chamadoCom.catalogId, 'grp-1'); // fallback: groupId do path
+    assert.strictEqual(r.body.data.itens[0].id, 'item-9');
+    assert.strictEqual(r.body.data.groupId, 'grp-1');
+    server.close();
+    passed++;
+  }
+
+  // GET catalogo/:lojaId/unsellable/:groupId?catalogId=cat-real — ?catalogId=
+  // sobrescreve o groupId do path (a doc usa catalogId nesta rota, diferente de
+  // sellableItems que usa groupId).
+  {
+    let chamadoCom = null;
+    const sbFetch = sbFetchStub([
+      { test: (p) => p.startsWith('lojas?'), value: [LOJA_API] },
+      { test: (p) => p.startsWith('ifood_merchants?'), value: [{ merchant_id: 'merch-1' }] },
+    ]);
+    const ifood = {
+      listarUnsellableItems: async (merchantId, catalogId, _tenantId) => {
+        chamadoCom = { merchantId, catalogId };
+        return [];
+      },
+    };
+    const app = buildApp({ sbFetch, ifood });
+    const server = http.createServer(app).listen(0);
+    await new Promise((r) => server.once('listening', r));
+    const r = await get(server, '/api/ifood-api/catalogo/loja-1/unsellable/grp-1?catalogId=cat-real');
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(chamadoCom.catalogId, 'cat-real'); // query vence o path
+    assert.strictEqual(r.body.data.catalogId, 'cat-real');
+    server.close();
+    passed++;
+  }
+
   process.stdout.write(`\nifood-api-routes: todos os ${passed} cenários passaram.\n`);
 })();
