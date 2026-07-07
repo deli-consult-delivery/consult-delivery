@@ -18,7 +18,19 @@ const MENSAGENS = {
   'not authorized: platform operator only': 'Só um operador da plataforma pode fazer essa ação.',
 };
 
+// Formas genéricas do Postgres/PostgREST — não são um código fixo (o nome da
+// tabela/constraint varia), então casam por padrão em vez de chave exata.
+// Cobre qualquer escrita bloqueada por RLS/constraint, não só as 9 RPCs
+// mapeadas acima em MENSAGENS (auditoria de cobertura, PR follow-up do #841).
+const PADROES = [
+  { re: /new row violates row-level security policy/i, msg: 'Você não tem permissão para fazer essa ação.' },
+  { re: /permission denied for table/i, msg: 'Você não tem permissão para fazer essa ação.' },
+  { re: /duplicate key value violates unique constraint/i, msg: 'Já existe um registro com esses dados.' },
+];
+
 export function mapErro(mensagemBruta) {
   if (!mensagemBruta) return mensagemBruta;
-  return MENSAGENS[mensagemBruta] ?? mensagemBruta;
+  if (MENSAGENS[mensagemBruta]) return MENSAGENS[mensagemBruta];
+  const padrao = PADROES.find(p => p.re.test(mensagemBruta));
+  return padrao ? padrao.msg : mensagemBruta;
 }

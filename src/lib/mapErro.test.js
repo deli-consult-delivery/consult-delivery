@@ -15,6 +15,15 @@ describe('mapErro', () => {
     expect(mapErro('not authorized: platform operator only')).toMatch(/operador da plataforma/);
   });
 
+  it('padrões genéricos de RLS/constraint (qualquer tabela) — casam por regex, não chave exata', () => {
+    expect(mapErro('new row violates row-level security policy for table "quick_replies"'))
+      .toBe('Você não tem permissão para fazer essa ação.');
+    expect(mapErro('permission denied for table tenant_members'))
+      .toBe('Você não tem permissão para fazer essa ação.');
+    expect(mapErro('duplicate key value violates unique constraint "departments_name_key"'))
+      .toBe('Já existe um registro com esses dados.');
+  });
+
   it('código desconhecido → devolve a mensagem original (nunca esconde erro real)', () => {
     expect(mapErro('algum_erro_novo_nao_mapeado')).toBe('algum_erro_novo_nao_mapeado');
   });
