@@ -1,9 +1,11 @@
 name: PR Build Check
 
-# Gate obrigatório de build em todo PR contra main. Sem isso, um arquivo
+# Gate obrigatório de build/tipo em todo PR contra main. Sem isso, um arquivo
 # corrompido (ex.: incidente #817 — JSX virou base64 e quebrou o build de
 # produção) só é detectado depois do merge. Este workflow roda ANTES do
-# merge e falha o check se `npm run build` (Vite) quebrar.
+# merge e falha o check se: o front (Vite) não compilar, o trigger/
+# (Trigger.dev) não passar `tsc --noEmit`, ou algum .js de bridge-server/
+# tocado no PR tiver erro de sintaxe.
 
 on:
   pull_request:
@@ -33,6 +35,19 @@ jobs:
 
       - name: Build (Vite) — falha o check se quebrar
         run: npm run build
+
+      # Trigger.dev (trigger/) não tem check de tipo em PR hoje. tsconfig.json
+      # da raiz já inclui trigger/**/*.ts (+ src/agents/**/*.ts) com strict:true,
+      # noEmit:true — typescript já é devDependency (npm ci acima já instalou),
+      # zero custo extra de instalação. "Se houver tsconfig" (guard defensivo):
+      # não falha o job caso o tsconfig suma/mova no futuro, só avisa.
+      - name: Typecheck — trigger/ (Trigger.dev)
+        run: |
+          if [ -f tsconfig.json ]; then
+            npx tsc --noEmit
+          else
+            echo "Sem tsconfig.json na raiz — pulando typecheck do trigger/."
+          fi
 
       # Opcional/barato: sintaxe dos .js do bridge-server tocados neste PR.
       # node --check é um parse-only, não roda o arquivo — pega exatamente a
