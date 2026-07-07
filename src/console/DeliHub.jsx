@@ -183,12 +183,19 @@ export default function DeliHub({ tenantDbId, userId }) {
   const [sending, setSending] = useState(false);
   const [overlay, setOverlay] = useState(null); // null | 'bom-dia' | 'encerramento'
   const [erro, setErro] = useState(null);
+  // Contagens reais (não capadas) — mesmo padrão de ConsoleV2.jsx:251 (count exact,
+  // head true). Sem isso, o KPI "Execuções (30d)" mostrava 50 (o cap da lista) em
+  // vez do total real (ex.: 3904 no tenant Consult). A lista `runs` continua capada
+  // em 50 para o feed de recentes; os KPIs usam estes counts reais.
+  const [totalRuns, setTotalRuns] = useState(0);
+  const [totalOk, setTotalOk] = useState(0);
 
   const carregar = useCallback(async () => {
     if (!tenantDbId) return;
     setLoading(true);
     try {
       const desde = new Date(Date.now() - 30 * 86400000).toISOString();
+      // Lista das 50 recentes para o feed (continua capada — é o feed, não o total)
       const { data, error } = await supabase
         .from('agent_runs')
         .select('id, agent_id, status, cost_usd, created_at, input')
@@ -198,6 +205,19 @@ export default function DeliHub({ tenantDbId, userId }) {
         .limit(50);
       if (error) throw error;
       setRuns(data || []);
+
+      // Contagens reais (count exact, head true) — 2 queries paralelas:
+      // total de runs no período + total de runs success no período. Ambas
+      // ignoram o cap de 50 da lista. Falha de rede numa delas → mantém o último
+      // valor (não zera o KPI por um erro transitório).
+      const [totalRes, okRes] = await Promise.all([
+        supabase.from('agent_runs').select('*', { count: 'exact', head: true })
+          .eq('tenant_id', tenantDbId).gte('created_at', desde),
+        supabase.from('agent_runs').select('*', { count: 'exact', head: true })
+          .eq('tenant_id', tenantDbId).gte('created_at', desde).eq('status', 'success'),
+      ]);
+      if (!totalRes.error) setTotalRuns(totalRes.count ?? 0);
+      if (!okRes.error) setTotalOk(okRes.count ?? 0);
     } catch (err) {
       setErro(err?.message || 'Erro ao carregar execuções');
     } finally {
@@ -243,9 +263,12 @@ export default function DeliHub({ tenantDbId, userId }) {
   }
 
   const stats = buildStats(runs);
-  const totalRuns = runs.length;
-  const totalOk = runs.filter(r => r.status === 'success').length;
   const taxaOk = totalRuns ? Math.round((totalOk / totalRuns) * 100) : 0;
+  // ⚠️ Dívida honesta: custoTotal é soma das 50 runs mais recentes (array capado),
+  // não do total real. Aggregação de cost_usd no período exige RPC/SUM server-side
+  // (PostgREST não suporta aggregação direta); fora do escopo deste fix (P6/P10 —
+  // contagem client-side sobre lista capada). O KPI "Execuções (30d)" e a "Taxa
+  // de sucesso" agora usam counts reais; "Custo de IA" segue sub-contado.
   const custoTotal = runs.reduce((s, r) => s + (Number(r.cost_usd) || 0), 0);
   const agentesAtivos = Object.keys(stats).filter(id => stats[id].total > 0).length;
   const recentes = runs.slice(0, 10);
@@ -313,7 +336,7 @@ export default function DeliHub({ tenantDbId, userId }) {
         <div className="cv2-kpi">
           <div className="l">Custo de IA (30d)</div>
           <div className="v">{loading ? '…' : `US$ ${custoTotal.toFixed(4)}`}</div>
-          <div className="d mut">todos os agentes</div>
+          <div className="d mut">aprox. (50 recentes)</div>
         </div>
         <div className="cv2-kpi">
           <div className="l">Agentes com atividade</div>
