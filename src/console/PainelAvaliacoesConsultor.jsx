@@ -323,40 +323,10 @@ function AvisoGruposFaltando({ lojasSemGrupo }) {
   );
 }
 
-function AlertBanner({ overdueReviews, todayReviews, onGoToStore, onDismiss, onDismissId }) {
-  if (overdueReviews.length === 0 && todayReviews.length === 0) return null;
+function AlertBanner({ todayReviews, onGoToStore, onDismiss, onDismissId }) {
+  if (todayReviews.length === 0) return null;
   return (
     <div style={{ marginBottom: 12 }}>
-      {overdueReviews.length > 0 && (
-        <div style={{
-          background: '#fef2f2', border: '1px solid #fca5a5', borderLeft: '4px solid #ef4444',
-          borderRadius: 8, padding: '10px 14px', marginBottom: 8,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span style={{ fontWeight: 700, fontSize: 13, color: '#991b1b' }}>
-              🔴 {overdueReviews.length} avaliação{overdueReviews.length !== 1 ? 'ões' : ''} com prazo vencido
-            </span>
-            <button onClick={onDismiss} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#991b1b', fontSize: 18, lineHeight: 1 }}>✕</button>
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {overdueReviews.map(r => (
-              <span key={r.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-                <button onClick={() => onGoToStore(r.store)} style={{
-                  background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '6px 0 0 6px',
-                  padding: '3px 8px', fontSize: 11.5, cursor: 'pointer', color: '#7f1d1d', fontFamily: 'inherit',
-                }}>
-                  {r.store.split(' - ')[0]} · Pedido {r.orderId} · venceu {fmtDate(r.deadline)}
-                </button>
-                <button onClick={() => onDismissId && onDismissId(r.id)} style={{
-                  background: '#fca5a5', border: '1px solid #fca5a5', borderRadius: '0 6px 6px 0',
-                  borderLeft: 'none', padding: '3px 7px', fontSize: 12, cursor: 'pointer',
-                  color: '#7f1d1d', fontFamily: 'inherit', lineHeight: 1,
-                }} title="Arquivar este alerta">✕</button>
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
       {todayReviews.length > 0 && (
         <div style={{
           background: '#fffbeb', border: '1px solid #fcd34d', borderLeft: '4px solid #f59e0b',
@@ -366,9 +336,7 @@ function AlertBanner({ overdueReviews, todayReviews, onGoToStore, onDismiss, onD
             <span style={{ fontWeight: 700, fontSize: 13, color: '#92400e' }}>
               🟡 {todayReviews.length} avaliação{todayReviews.length !== 1 ? 'ões' : ''} vence{todayReviews.length === 1 ? '' : 'm'} hoje
             </span>
-            {overdueReviews.length === 0 && (
-              <button onClick={onDismiss} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#92400e', fontSize: 18, lineHeight: 1 }}>✕</button>
-            )}
+            <button onClick={onDismiss} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#92400e', fontSize: 18, lineHeight: 1 }}>✕</button>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {todayReviews.map(r => (
@@ -958,11 +926,10 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
   const activeReviews   = reviews.filter(r => !isArchivedFn(r, todayISO));
   const archivedReviews = reviews.filter(r =>  isArchivedFn(r, todayISO));
 
-  const { overdueReviews, todayReviews } = useMemo(() => {
+  const { todayReviews } = useMemo(() => {
     const nonPub = reviews.filter(r => r.status !== 'published');
     return {
-      overdueReviews: nonPub.filter(r => r.deadline && r.deadline < todayISO),
-      todayReviews:   nonPub.filter(r => r.deadline === todayISO),
+      todayReviews: nonPub.filter(r => r.deadline === todayISO),
     };
   }, [reviews, todayISO]);
 
@@ -1191,7 +1158,6 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
 
       {!alertDismissed && (
         <AlertBanner
-          overdueReviews={overdueReviews.filter(r => !dismissedAlertIds.has(r.id))}
           todayReviews={todayReviews.filter(r => !dismissedAlertIds.has(r.id))}
           onGoToStore={handleGoToStore}
           onDismiss={handleDismissAlert}
