@@ -70,7 +70,7 @@ desenvolvimento"; o segundo aparece como erro real. Sem essa distinção, um bug
 | M6 | Editar preço de item, via draft→aprovação | ✅ IMPLEMENTADO (offline) | `alterarPrecoItem(merchantId, itemId, novoPreco, tenantId)` (`lib/ifood.js:633`) — `PATCH /catalog/v2.0/merchants/{id}/items/{itemId}` `{price:{value}}`. Validação server-side: preço deve ser número finito > 0 (rejeita ANTES de tocar a rede). `OPERACOES_ESCRITA['ifood.alterar_preco']` (`routes/ifood.js:36`) + branch de resolução de item + validação de preço em `prepararDraftIfood` (`routes/ifood.js:295-334`) — preço inválido (`<=0`/NaN) → 400, nunca cria draft; item ambíguo/não encontrado → 422 com candidatos |
 | M7 | ⚠️ Decisão do endpoint — **RESOLVIDA**: `PATCH /items/{itemId}` síncrono (não o mecanismo em lote) | ✅ DECISÃO INFORMADA, registrada no código | O #806 escolheu explicitamente o MESMO endpoint síncrono já usado por `pausarItem`/`reabrirItem` (só troca o campo do merge patch, de `status` pra `price`), em vez do mecanismo em lote assíncrono (`PATCH /items/price` → `202 {batchId}` + `GET /batch/{id}`) que o research #800 encontrou mas nunca confirmou contra o sandbox. Nota explícita no código (`lib/ifood.js:633+`): decisão informada, não especulativa — o PATCH direto já é usado e validado neste client. **Ainda não confirmado contra o sandbox real** (sem smoke live de alteração de preço até o momento desta matriz) — só testado offline |
 | M8 | Testes offline de M6/M7 | ✅ IMPLEMENTADO | `lib/ifood.js`: +2 casos em `test/ifood.test.js` (PATCH correto com `{price:{value}}`; preço `<=0`/NaN rejeitado antes da rede) — suíte em 46 asserções totais. Rotas: +3 casos em `test/ifood-routes-acao-aprovar.test.js` (draft criado com `item_id`/`price` corretos; `price<=0` → 400 sem criar draft; aprovar despacha `alterarPrecoItem` com os 4 argumentos certos) — suíte em 13 cenários totais |
-| T5 | Preço na UI (`CardapioIfood.jsx`) | ❌ LACUNA — backend/draft pronto, **sem botão/campo na tela** | `grep -n "preco\|alterar_preco" src/console/CardapioIfood.jsx` só retorna a exibição do preço formatado (`fmtBRL`), nenhum controle de edição. Hoje só é possível disparar `ifood.alterar_preco` via chamada direta ao Bridge (Hermes/API), não pelo Console. Diferente de M4/T2 (disponibilidade), que tem client+dispatch+UI completos — preço tem client+dispatch mas falta o último passo (UI) |
+| T5 | Preço na UI (`CardapioIfood.jsx`) | ✅ IMPLEMENTADO (offline) | Botão "Alterar preço" ao lado do preço exibido em cada item (`CardapioIfood.jsx:113-140`). Clica → input decimal (`inputMode="decimal"`) + Salvar/Cancelar. Enter salva, Esc cancela. `salvarPreco()` valida client-side (price > 0, finito, aceita vírgula decimal) → `POST /api/ifood/acao` com `operacao='ifood.alterar_preco'` e `parametros={item_nome, price}` — cria draft amarelo, nunca chama a API do iFood direto. Fecha a lacuna T5/T7 (backend + dispatch já prontos desde #806, faltava só o controle na tela). Build verde (vite build 6.33s). **Ainda sem smoke live** (confirmar contra o sandbox real antes do ticket) |
 
 ## Multi-contexto (preço/disponibilidade por canal) — sem mudança desde a v1
 
@@ -88,7 +88,7 @@ desenvolvimento"; o segundo aparece como erro real. Sem essa distinção, um bug
 | T4 | Reset de `lojaId` ao trocar de tenant (anti-vazamento cross-tenant) | ✅ IMPLEMENTADO, em `main` | `CardapioIfood.jsx:116-133` — reset de `lojasApi`/`lojaId` ANTES do fetch, não só depois |
 | T5' | Distinção 404 "rota ausente" × 404 "condição de negócio" | ✅ IMPLEMENTADO (achado de revisão do #801, ver §1) | `CardapioIfood.jsx:147` (`e.rotaAusente`) + contrato em `src/lib/api.js:getCardapioApiLoja` |
 | T6 | Race guard (troca rápida de loja não deixa resposta atrasada sobrescrever estado) | ✅ IMPLEMENTADO (achado de revisão do #801) | `reqIdRef` em `CardapioIfood.jsx:110,137,143,146,150` |
-| T7 | Preço na UI | ❌ LACUNA — ver M6/T5 acima (tabela de Preço) | — |
+| T7 | Preço na UI | ✅ IMPLEMENTADO (offline) — ver T5 acima | Botão "Alterar preço" + input decimal no `CardapioIfood.jsx`; cria draft via `POST /api/ifood/acao` (`ifood.alterar_preco`). Sem smoke live ainda |
 | T8 | Visual (console.css) | ✅ — usa `cv2-card`/`cv2-btn`/`cv2-bdg`/`cv2-sub`, mesmo padrão das demais telas | `CardapioIfood.jsx` inteiro |
 
 ---
@@ -100,11 +100,12 @@ desenvolvimento"; o segundo aparece como erro real. Sem essa distinção, um bug
   antes do #801 mergear — o processo funcionou como deveria.
 - **Escrita de disponibilidade (M4/M5/T2)**: ✅ completa e correta, ponta a ponta, desde antes
   desta leva — sem gaps, sem mudança.
-- **Escrita de preço (M6/M7/M8)**: ✅ decisão tomada e implementada, testada offline (13+46
-  asserções). Escolheu o endpoint síncrono já validado (`PATCH /items/{itemId}`) em vez do
-  mecanismo em lote não confirmado — decisão correta e conservadora. **Falta**: (a) smoke live da
-  alteração de preço em si (nunca rodou contra o sandbox real); (b) UI na tela — hoje só
-  acionável via chamada direta ao Bridge, não pelo Console (T5/T7).
+- **Escrita de preço (M6/M7/M8/T5/T7)**: ✅ decisão tomada e implementada, testada offline (13+46
+  asserções) + UI no Console. Escolheu o endpoint síncrono já validado
+  (`PATCH /items/{itemId}`) em vez do mecanismo em lote não confirmado — decisão correta e
+  conservadora. **Falta**: smoke live da alteração de preço em si (nunca rodou contra o
+  sandbox real) — o backend, o dispatch e a UI estão prontos, só falta confirmar contra o
+  sandbox antes do ticket.
 - **Multi-contexto (M9)**: 🟡 risco silencioso segue em produção, sem mudança desde a v1 — o
   sandbox de teste só tem 1 catálogo/contexto, então o smoke live disponível não prova nem
   desmente o problema. Continua sendo o maior risco não resolvido da categoria Catálogo.
@@ -118,7 +119,8 @@ desenvolvimento"; o segundo aparece como erro real. Sem essa distinção, um bug
    `pickContextModifier` usando `'DEFAULT'` errado permanece não verificável.
 2. **Smoke live de M6/M7** (alterar preço) — confirmar que `PATCH /items/{itemId}` com `{price}`
    realmente reflete no app, já que só foi testado offline até agora.
-3. **UI de preço (T5/T7)** — decidir se entra no escopo do App 3 v1 ou fica para depois; hoje é
-   a única ação de escrita implementada no backend sem controle correspondente no Console.
+3. **UI de preço (T5/T7)** — ✅ implementada (botão "Alterar preço" + input decimal no
+   `CardapioIfood.jsx`, cria draft amarelo via `POST /api/ifood/acao`). Falta só o smoke live
+   de M6/M7 (confirmar que o PATCH reflete no app).
 4. Itens não-vendáveis (M2) — implementar só se a homologação ou o produto exigir mostrar itens
    arquivados; não é bloqueante hoje.

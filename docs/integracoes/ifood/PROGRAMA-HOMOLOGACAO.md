@@ -45,11 +45,12 @@
 
 ## App 3 — Catálogo
 
-**Status: 🔨 EM BUILD — research pronta, implementação não iniciada**
+**Status: 🔨 EM BUILD — research + UI de preço prontas; falta matriz de cobertura final, smoke live, QA visual**
 
-- Só a pesquisa dos endpoints públicos do módulo Catalog foi feita até agora (leitura de catálogos/categorias/itens já existe no client desde antes deste sprint — `unsellableItems` ainda não implementado; escrita — criar categoria, PUT item, pausar/reabrir item, deletar categoria — já existe e já é gated por draft→aprovação, reaproveitável).
-- Falta: matriz de cobertura, tela no ConsoleV2, smoke live, QA visual — mesmo pipeline dos Apps 1 e 2, só que ainda no início.
-- Sem pendência estratégica: o ticket dele só entra na fila depois que Avaliações + Finanças tiverem passado (ou pelo menos Avaliações concluído e Finanças com data marcada) — o build pode continuar em paralelo sem pressa de ticket.
+- Pesquisa dos endpoints públicos do módulo Catalog feita (leitura de catálogos/categorias/itens já existe no client desde antes deste sprint; escrita — criar categoria, PUT item, pausar/reabrir item, deletar categoria — já existe e já é gated por draft→aprovação).
+- **UI de alteração de preço implementada** (`CardapioIfood.jsx`): botão "Alterar preço" + input decimal, cria draft amarelo via `POST /api/ifood/acao` (`ifood.alterar_preco`). Fecha a lacuna T5/T7 — backend + dispatch já prontos desde #806, agora com controle na tela.
+- Falta: smoke live da alteração de preço (confirmar `PATCH /items/{itemId}` contra o sandbox real), matriz de cobertura final, QA visual — mesmo pipeline dos Apps 1 e 2.
+- Sem pendência estratégica: o ticket dele só entra na fila depois que Avaliações + Finanças tiverem passado — o build pode continuar em paralelo sem pressa de ticket.
 
 **Docs**:
 - Research (endpoints públicos): [`catalogo-endpoints.md`](./catalogo-endpoints.md)
@@ -62,4 +63,4 @@
 |---|---|---|---|---|
 | 1 — Avaliações | ✅ completo | ✅ 3 rodadas (leitura+escrita) | ✅ feito, achados corrigidos | 🔲 aguardando gates D1 do Wandson |
 | 2 — Finanças | ✅ completo (1 lacuna doc.) | ✅ confirmou e corrigiu 2 params errados | 🔲 não feito ainda | 🔲 aguarda a vez (após App 1) |
-| 3 — Catálogo | 🔨 só research | 🔲 não feito | 🔲 não feito | 🔲 aguarda a vez (após App 2) |
+| 3 — Catálogo | 🔨 UI preço pronta, falta smoke live | 🔲 não feito | 🔲 não feito | 🔲 aguarda a vez (após App 2) |
