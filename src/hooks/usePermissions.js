@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { pickTenantRole, buildPermissionSet, buildAgentAccessMap, buildScreenPermsMap } from './permissions-derive.js';
+import { pickTenantRole, buildPermissionSet, buildAgentAccessMap, buildScreenPermsMap, resolveHasRole, resolveCan, resolveCanInvokeAgent } from './permissions-derive.js';
 
 // tenantId é obrigatório: sem ele não há como saber o papel do usuário NESTE
 // tenant. ANTES (usePermissions(userId) só) lia user_roles sem filtro de
@@ -72,9 +72,9 @@ export function usePermissions(userId, tenantId) {
   return {
     loading,
     agentAccess,
-    can:             (resource, action) => permissions.has(`${resource}:${action}`),
-    hasRole:         (name)             => tenantRole === name,
-    canInvokeAgent:  (name)             => agentAccess[name]?.can_invoke        ?? false,
+    can:             (resource, action) => resolveCan(permissions, resource, action),
+    hasRole:         (name)             => resolveHasRole(tenantRole, name),
+    canInvokeAgent:  (name)             => resolveCanInvokeAgent(agentAccess, name),
     canViewHistory:  (name)             => agentAccess[name]?.can_view_history   ?? false,
     canApproveDraft: (name)             => agentAccess[name]?.can_approve_drafts ?? false,
     canAccessScreen: (screenId)         => screenPerms.has(screenId) ? screenPerms.get(screenId) : null,
