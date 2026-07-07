@@ -370,14 +370,23 @@ export default function PipelineScreen({ tenantDbId }) {
 
   async function carregar(tenantId, horas) {
     const desde = new Date(Date.now() - horas * 60 * 60 * 1000).toISOString();
+    // Ordenação: `created_at desc` PRIMEIRO (mais recentes primeiro) — tela de
+    // monitoramento ao vivo quer ver as runs novas, não as de estágio inicial
+    // do pipeline. Antes a query ordenava `pipeline_position` asc primeiro, o
+    // que com o `.limit(200)` descartava runs com pipeline_position alto
+    // (estágios finais) mesmo que recentes — quando o volume excedia o cap
+    // (ex.: 186/24h no tenant Consult, perto de estourar), execuções recentes
+    // sumiam do Kanban. Cap aumentado pra 1000 (mesmo teto do Execucoes.jsx);
+    // o re-sort por coluna (pipeline_position asc dentro da coluna) continua
+    // sendo feito client-side em runsPerCol.
     const { data, error } = await supabase
       .from('agent_runs')
       .select('id, tenant_id, agent_id, status, input, output, duration_ms, cost_usd, created_at, completed_at, trigger_dev_run_id, explanation, confidence_score, pipeline_stage, pipeline_position')
       .eq('tenant_id', tenantId)
       .gte('created_at', desde)
-      .order('pipeline_position', { ascending: true })
       .order('created_at', { ascending: false })
-      .limit(200);
+      .order('pipeline_position', { ascending: true })
+      .limit(1000);
 
     if (error) {
       setErro(error.message);
