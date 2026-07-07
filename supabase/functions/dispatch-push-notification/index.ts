@@ -14,14 +14,26 @@ const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
 );
 
+// Auditoria 2026-07-07: função só chamada pelo bridge-server
+// (lib/push-notify.js), nunca pelo front — sem checagem alguma, qualquer
+// portador da anon key podia disparar push para qualquer tenant/usuário.
+// FAIL-OPEN se BRIDGE_SECRET não estiver configurado (deploy sozinho não
+// quebra nada); bridge-server já foi atualizado nesta mesma PR para mandar
+// o header assim que fizer merge/deploy (auto-deploy do Bridge é imediato).
+const BRIDGE_SECRET = Deno.env.get('BRIDGE_SECRET') || '';
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+        'Access-Control-Allow-Headers': 'Authorization, Content-Type, x-bridge-secret',
       },
     });
+  }
+
+  if (BRIDGE_SECRET && req.headers.get('x-bridge-secret') !== BRIDGE_SECRET) {
+    return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 });
   }
 
   try {

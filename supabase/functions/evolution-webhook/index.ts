@@ -15,6 +15,23 @@ const supabase = createClient(
 const BRIDGE_URL    = Deno.env.get('BRIDGE_SERVER_URL') || 'http://187.127.25.24:3001';
 const BRIDGE_SECRET = Deno.env.get('BRIDGE_SECRET')    || '';
 
+// Auditoria de segurança 2026-07-07: este webhook não validava NENHUMA
+// assinatura/secret do Evolution — qualquer POST com um instance_name
+// existente era processado. O Evolution API (self-hosted, config atual deste
+// projeto) não envia header de assinatura configurável nas chamadas de
+// webhook — a única forma de autenticar sem mudar o código do Evolution é um
+// segredo embutido na própria URL configurada (query string), já que o
+// Evolution só faz POST pra URL cadastrada, preservando query params.
+//
+// FAIL-OPEN por design: se EVOLUTION_WEBHOOK_SECRET não estiver configurado,
+// a checagem é pulada e o webhook funciona exatamente como hoje — deployar
+// esta function sozinha NÃO quebra nada. A validação só passa a valer depois
+// que (1) o secret for configurado nas secrets da function E (2) a URL do
+// webhook cadastrada no Evolution for atualizada para incluir
+// `?secret=<valor>` (mudança de config no Evolution, não um deploy de
+// código) — ver docs/seguranca/webhook-auth.md para o trade-off completo.
+const WEBHOOK_SECRET = Deno.env.get('EVOLUTION_WEBHOOK_SECRET') || '';
+
 const MENTION_REGEX = /@(analista|copiloto|co-piloto|deli|cora|lara|sofia|breno|max|vera)\b/i;
 
 function extractMentionedAgent(text: string): string | null {
@@ -34,6 +51,13 @@ const HANDLED_EVENTS = new Set([
 
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response('ok', { status: 200 });
+
+  if (WEBHOOK_SECRET) {
+    const provided = new URL(req.url).searchParams.get('secret');
+    if (provided !== WEBHOOK_SECRET) {
+      return new Response('unauthorized', { status: 401 });
+    }
+  }
 
   try {
     const body = await req.json();
