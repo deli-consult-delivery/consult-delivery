@@ -33,3 +33,28 @@ export function buildScreenPermsMap(screens) {
   (screens ?? []).forEach(s => screenMap.set(s.screen_id, s.allowed));
   return screenMap;
 }
+
+// Espelham 1:1 os one-liners que usePermissions.js expõe como hasRole/can/
+// canInvokeAgent — extraídos pra cá pra não haver duas implementações (uma
+// testada, outra rodando de verdade) que possam divergir com o tempo.
+export function resolveHasRole(tenantRole, name) {
+  return tenantRole === name;
+}
+
+export function resolveCan(permissionSet, resource, action) {
+  return permissionSet.has(`${resource}:${action}`);
+}
+
+export function resolveCanInvokeAgent(agentAccessMap, name) {
+  return agentAccessMap[name]?.can_invoke ?? false;
+}
+
+// Árvore de decisão do <RequireRole> (fora do componente pra testar sem
+// jsdom/react-test-renderer — chamar o componente como função quebra por
+// causa do hook usePermissions lá dentro, que exige um dispatcher de render).
+// Prioridade: override manual de tela > roles (array, OR) > resource+action.
+export function resolveRequireRoleAccess({ screenOverride, roles, resource, action, hasRole, can }) {
+  if (screenOverride === true)  return true;
+  if (screenOverride === false) return false;
+  return roles ? roles.some(r => hasRole(r)) : can(resource, action);
+}

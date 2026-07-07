@@ -1,4 +1,5 @@
 import { usePermissions } from '../../hooks/usePermissions';
+import { resolveRequireRoleAccess } from '../../hooks/permissions-derive.js';
 import AccessDenied from './AccessDenied';
 
 /**
@@ -17,17 +18,8 @@ export default function RequireRole({ resource, action, roles, userId, tenantId,
 
   if (loading) return null;
 
-  // Override manual por tela tem prioridade sobre roles
-  if (screenId) {
-    const override = canAccessScreen(screenId);
-    if (override === true)  return children;
-    if (override === false) return fallback ?? <AccessDenied />;
-    // null → sem registro, continua para verificação por role
-  }
-
-  const allowed = roles
-    ? roles.some(r => hasRole(r))
-    : can(resource, action);
+  const screenOverride = screenId ? canAccessScreen(screenId) : null;
+  const allowed = resolveRequireRoleAccess({ screenOverride, roles, resource, action, hasRole, can });
 
   if (!allowed) return fallback ?? <AccessDenied />;
   return children;
