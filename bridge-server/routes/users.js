@@ -78,5 +78,57 @@ module.exports = function ({ requireJwt, sbFetch, SUPABASE_URL, SUPABASE_SERVICE
     }
   });
 
+  // POST /users/resend-invite — reenvia o e-mail de convite (Supabase Auth)
+  // pra um membro que ainda não confirmou (status 'pending' = last_sign_in_at
+  // NULL). Não cria tenant_members de novo (já existe) — só reexecuta o envio.
+  router.post('/users/resend-invite', requireJwt, async (req, res) => {
+    const { email, tenant_id } = req.body;
+
+    if (!email || !tenant_id) {
+      return res.status(400).json({ error: 'email e tenant_id são obrigatórios' });
+    }
+    if (!SUPABASE_SERVICE_KEY) {
+      return res.status(503).json({ error: 'SUPABASE_SERVICE_KEY não configurado' });
+    }
+
+    const adminHeaders = {
+      'Content-Type': 'application/json',
+      apikey: SUPABASE_SERVICE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+    };
+
+    try {
+      // Mesmo gate de admin do /users/invite
+      const callerRows = await sbFetch(
+        `tenant_members?tenant_id=eq.${encodeURIComponent(tenant_id)}&user_id=eq.${encodeURIComponent(req.user.id)}&select=role&limit=1`
+      );
+      if (!callerRows?.length || !['admin', 'owner'].includes(callerRows[0].role)) {
+        return res.status(403).json({ error: 'Apenas administradores podem reenviar convites' });
+      }
+
+      const inviteRes = await fetch(`${SUPABASE_URL}/auth/v1/invite`, {
+        method: 'POST',
+        headers: adminHeaders,
+        body: JSON.stringify({ email, data: { tenant_id } }),
+      });
+
+      let inviteData;
+      try { inviteData = await inviteRes.json(); }
+      catch { return res.status(502).json({ error: 'Resposta inválida do serviço de autenticação' }); }
+      if (!inviteRes.ok) {
+        // GoTrue erra "already registered" quando o usuário já confirmou —
+        // sinal de que não está mais pendente (front deve recarregar a lista).
+        const msg = inviteData?.msg || inviteData?.message || inviteData?.error_description || 'Erro ao reenviar convite';
+        return res.status(422).json({ error: msg });
+      }
+
+      console.log(`[api/users/resend-invite] email=${email} tenant=${tenant_id} por user=${req.user.id}`);
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error('[api/users/resend-invite]', err.message);
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   return router;
 };

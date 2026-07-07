@@ -490,6 +490,8 @@ export default function Usuarios({ tenantDbId, userId }) {
   const [editingName, setEditingName] = useState(null);
   const [removing, setRemoving] = useState(null);
   const [screenPerms, setScreenPerms] = useState(null);
+  const [resendingId, setResendingId] = useState(null);
+  const [resendMsg, setResendMsg] = useState(null);
   const [search, setSearch] = useState('');
 
   function loadMembers() {
@@ -502,6 +504,26 @@ export default function Usuarios({ tenantDbId, userId }) {
   }
 
   useEffect(() => { loadMembers(); }, [tenantDbId]);
+
+  async function reenviarConvite(member) {
+    setResendingId(member.user_id); setResendMsg(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${BRIDGE}/api/users/resend-invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ email: member.email, tenant_id: tenantDbId }),
+      });
+      const json = await res.json().catch(() => ({}));
+      setResendMsg(res.ok
+        ? { type: 'ok', text: `Convite reenviado para ${member.email}.` }
+        : { type: 'erro', text: json.error || `Falha ao reenviar (${res.status})` });
+    } catch (err) {
+      setResendMsg({ type: 'erro', text: err?.message || 'Falha ao reenviar convite' });
+    } finally {
+      setResendingId(null);
+    }
+  }
 
   useEffect(() => {
     if (!tenantDbId) return;
@@ -546,6 +568,12 @@ export default function Usuarios({ tenantDbId, userId }) {
       </div>
 
       {tenantType === 'agency' && <CriarLojaCard tenantDbId={tenantDbId} onCreated={loadMembers} />}
+
+      {resendMsg && (
+        <div className="cv2-card" style={{ marginBottom: 16, color: resendMsg.type === 'ok' ? 'var(--green)' : 'var(--red)', fontSize: 13 }}>
+          {resendMsg.type === 'ok' ? '✓' : '⚠'} {resendMsg.text}
+        </div>
+      )}
 
       {/* Métricas rápidas */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginBottom: 28 }}>
@@ -673,6 +701,15 @@ export default function Usuarios({ tenantDbId, userId }) {
                             <button onClick={() => { setScreenPerms(m); setActiveMenu(null); }} style={menuBtnStyle}>
                               <Icon name="settings" size={13} /> Permissões de tela
                             </button>
+                            {status === 'pending' && (
+                              <button
+                                onClick={() => { reenviarConvite(m); setActiveMenu(null); }}
+                                disabled={resendingId === m.user_id}
+                                style={menuBtnStyle}
+                              >
+                                <Icon name="mail" size={13} /> {resendingId === m.user_id ? 'Reenviando…' : 'Reenviar convite'}
+                              </button>
+                            )}
                             {!isMe && (
                               <button onClick={() => { setRemoving(m); setActiveMenu(null); }} style={{ ...menuBtnStyle, color: 'var(--red)' }}>
                                 <Icon name="trash" size={13} /> Remover usuário
