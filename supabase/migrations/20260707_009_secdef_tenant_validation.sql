@@ -1,4 +1,4 @@
--- 20260707_001_secdef_tenant_validation.sql
+-- 20260707_009_secdef_tenant_validation.sql
 -- Auditoria SECURITY DEFINER (docs/seguranca/security-definer-audit.md).
 -- 2 funcoes confiavam em parametro do caller sem validar auth.uid():
 --
