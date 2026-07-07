@@ -7,6 +7,7 @@ describe('mapErro', () => {
   it('traduz os códigos conhecidos de RPCs de RBAC/settings', () => {
     expect(mapErro('permission_denied')).toBe('Você não tem permissão para fazer essa ação.');
     expect(mapErro('cannot_remove_self')).toBe('Você não pode remover a si mesmo.');
+    expect(mapErro('cannot_remove_last_admin')).toBe('Não é possível remover o último administrador do tenant.');
     expect(mapErro('cannot_edit_own_name_here')).toMatch(/perfil/);
     expect(mapErro('cannot_change_own_role')).toMatch(/próprio papel/);
     expect(mapErro('display_name_empty')).toMatch(/em branco/);

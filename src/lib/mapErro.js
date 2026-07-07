@@ -10,6 +10,7 @@
 const MENSAGENS = {
   permission_denied: 'Você não tem permissão para fazer essa ação.',
   cannot_remove_self: 'Você não pode remover a si mesmo.',
+  cannot_remove_last_admin: 'Não é possível remover o último administrador do tenant.',
   cannot_edit_own_name_here: 'Edite seu próprio nome pelo seu perfil, não por aqui.',
   cannot_change_own_role: 'Você não pode alterar seu próprio papel.',
   display_name_empty: 'O nome não pode ficar em branco.',
