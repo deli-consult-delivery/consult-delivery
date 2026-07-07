@@ -118,6 +118,11 @@ export function useConversas(tenantDbId, opts = {}) {
   // resultado da busca server-side (>=3 chars). null = sem busca server ativa.
   const [buscaServer, setBuscaServer] = useState(null);
   const [buscandoServer, setBuscandoServer] = useState(false);
+  // Counts reais por status_v2 (não capados em LIMIT_CONVS=150) — para os
+  // badges da barra de filtros. Sem isso, badges (aguardando/abertos/etc.)
+  // sub-contam quando o tenant tem >150 conversas (ex.: Consult tem 177).
+  // Mesmo padrão de ConsoleV2.jsx:251 (count exact, head true).
+  const [countsStatus, setCountsStatus] = useState({});
 
   const activeIdRef = useRef(null); // a UI registra a conversa ativa aqui (via setActiveRef)
 
@@ -156,6 +161,19 @@ export function useConversas(tenantDbId, opts = {}) {
 
     setConvs(rows.map((c) => toConvShape(c, lastMsgMap[c.id] || null)));
     setLoading(false);
+
+    // Counts reais por status_v2 (sem o cap de 150) — 7 queries head:true
+    // paralelas. Falha numa delas → mantém o último valor (não zera o badge
+    // por erro transitório). PostgREST count é exato. `interno` NÃO entra
+    // aqui (canais internos vêm de extraConcs, já contados corretamente).
+    const SV2_COUNT = ['open', 'waiting', 'in_progress', 'automacao', 'closed', 'falha', 'archived'];
+    const countResults = await Promise.all(
+      SV2_COUNT.map((sv) => supabase.from('conversations').select('*', { count: 'exact', head: true })
+        .eq('tenant_id', tenantDbId).eq('status_v2', sv))
+    );
+    const next = {};
+    SV2_COUNT.forEach((sv, i) => { if (!countResults[i].error) next[sv] = countResults[i].count ?? 0; });
+    if (Object.keys(next).length > 0) setCountsStatus((prev) => ({ ...prev, ...next }));
   }, [tenantDbId]);
 
   useEffect(() => { loadConvs(); }, [loadConvs]);
@@ -225,15 +243,37 @@ export function useConversas(tenantDbId, opts = {}) {
     [convs, extraConvs],
   );
 
-  // ── contadores (derivados da lista combinada) ───────────────────────────────
+  // ── contadores ──────────────────────────────────────────────────────────────
+  // Counts reais por status_v2 (count: 'exact', head: true) quando disponíveis,
+  // não o length do array capado em 150. `interno` continua derivado de convsAll
+  // (canais internos vêm de extraConvs, já contados corretamente). Fallback:
+  // se countsStatus[sv] estiver undefined (1ª carga antes das queries count
+  // terminarem, ou erro), usa a contagem do array como antes.
   const contadores = useMemo(() => {
     const acc = { ...CONTADOR_ZERO };
+    // fallback do array (garante que sempre há um número, mesmo antes das
+    // queries count terminarem — sem flash de "0" no badge)
     convsAll.forEach((c) => {
       const sv = c.status_v2 || 'open';
       FILTROS.forEach((f) => { if (f.sv2.includes(sv)) acc[f.id] += 1; });
     });
+    // sobrescreve com counts reais por status_v2 (exceto interno)
+    if (countsStatus && Object.keys(countsStatus).length > 0) {
+      const recalc = { ...CONTADOR_ZERO };
+      // interno: mantém do fallback (extraConvs)
+      convsAll.forEach((c) => {
+        if ((c.status_v2 || 'open') === 'interno') {
+          FILTROS.forEach((f) => { if (f.sv2.includes('interno')) recalc[f.id] += 1; });
+        }
+      });
+      // demais filtros: soma os counts reais dos status_v2 que cada filtro cobre
+      FILTROS.forEach((f) => {
+        if (f.id === 'interno') { acc[f.id] = recalc[f.id]; return; }
+        acc[f.id] = f.sv2.reduce((n, sv) => n + (countsStatus[sv] ?? 0), 0);
+      });
+    }
     return acc;
-  }, [convsAll]);
+  }, [convsAll, countsStatus]);
 
   // ── lista filtrada (estado + busca) ─────────────────────────────────────────
   // Com busca server-side ativa (>=3 chars) usa a base ampla retornada do banco;
