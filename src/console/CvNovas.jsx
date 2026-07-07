@@ -30,6 +30,7 @@ function CrudTela({ titulo, sub, table, tenantDbId, userId, cols, fields, toRow,
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadErr, setLoadErr] = useState('');   // erro de leitura — distinto de err (erro de salvar)
+  const [delErr, setDelErr] = useState('');     // erro de exclusão (RLS/FK) — antes engolido silenciosamente
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({});
   const [err, setErr] = useState('');
@@ -72,9 +73,11 @@ function CrudTela({ titulo, sub, table, tenantDbId, userId, cols, fields, toRow,
 
   async function remove(id) {
     setBusy(true);
+    setDelErr('');
     const { error } = await supabase.from(table).delete().eq('id', id).eq('tenant_id', tenantDbId);
     setBusy(false);
-    if (!error) setRows(rs => rs.filter(r => r.id !== id));
+    if (error) { setDelErr(error.message); return; }
+    setRows(rs => rs.filter(r => r.id !== id));
   }
 
   // ----- edição inline -----
@@ -135,6 +138,12 @@ function CrudTela({ titulo, sub, table, tenantDbId, userId, cols, fields, toRow,
           <b style={{ fontSize: 13 }}>{titulo}</b>
           <button className="cv2-btn" onClick={() => { setAdding(a => !a); setErr(''); }}>{adding ? 'Cancelar' : acao}</button>
         </div>
+
+        {delErr && (
+          <div style={{ color: 'var(--red)', fontSize: 12, padding: '10px 16px', fontWeight: 600, borderBottom: '1px solid var(--line)' }}>
+            Erro ao excluir: {delErr}
+          </div>
+        )}
 
         {adding && (
           <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)', background: '#faf9f8' }}>
@@ -344,10 +353,12 @@ export function Arquivos({ tenantDbId, userId }) {
 
   async function remove(rec) {
     setBusy(true);
+    setErr('');
     if (rec.storage_path) await supabase.storage.from(FILES_BUCKET).remove([rec.storage_path]);
     const { error } = await supabase.from('tenant_files').delete().eq('id', rec.id).eq('tenant_id', tenantDbId);
     setBusy(false);
-    if (!error) setRows(rs => rs.filter(r => r.id !== rec.id));
+    if (error) { setErr(error.message); return; }
+    setRows(rs => rs.filter(r => r.id !== rec.id));
   }
 
   // Renomear/mover pasta — só metadado (tenant_files), nunca toca o objeto no
