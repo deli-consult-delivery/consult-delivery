@@ -861,10 +861,10 @@ export default function ConsoleV2({ tenantInfo, tenantDbId: propDbId, userId }) 
       case 'configsys': return <Configuracoes tenantDbId={tenantDbId} userId={userId} onTenantChange={() => {}} />;
       case 'clientesplat': return <Clientes userId={userId} />;
       case 'marca': return <Marca tenantDbId={tenantDbId} onChanged={recarregarBrand} />;
-      case 'provedores': return <Provedores tenantDbId={tenantDbId} />;
-      case 'integracoes': return <Integracoes tenantDbId={tenantDbId} />;
+      case 'provedores': return <Provedores tenantDbId={tenantDbId} userId={userId} />;
+      case 'integracoes': return <Integracoes tenantDbId={tenantDbId} userId={userId} />;
       case 'vendaerp': return <VendaErpPainel />;
-      case 'sistemas': return <Sistemas tenantDbId={tenantDbId} />;
+      case 'sistemas': return <Sistemas tenantDbId={tenantDbId} userId={userId} />;
       case 'acesso': return <AcessoUsuarios tenantDbId={tenantDbId} />;
       case 'auditoria': return <AuditLog tenantDbId={tenantDbId} userId={userId} />;
       case 'notificacoes': return <Notificacoes tenantDbId={tenantDbId} userId={userId} onNavigate={nav} />;

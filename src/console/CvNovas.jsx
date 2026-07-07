@@ -1,43 +1,12 @@
 // ============================================================
-// Console v2 · telas funcionais (Gatilhos, Tópicos, Tarefas,
-// Links, Arquivos) + telas de referência (Provedores/Integrações/Sistemas).
-// Visual fiel ao generic() do protótipo (docs/prototipo/console-v2.html);
-// CRUD real contra Supabase (tabelas tenant_* · RLS por tenant).
-// Sem dado fake: estado vazio até o cliente cadastrar.
+// Console v2 · telas do CvNovas (Gatilhos, Tópicos, Tarefas, Links, Arquivos,
+// Provedores, Integrações, Sistemas) — CRUD real contra Supabase (tabelas
+// tenant_* · RLS por tenant). Visual fiel ao generic() do protótipo
+// (docs/prototipo/console-v2.html). Sem dado fake: estado vazio até o
+// cliente cadastrar; erro de leitura/escrita sempre exibido (nunca silencioso).
 // ============================================================
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase.js';
-
-// ---------- Tela read-only (referência: Provedores/Integrações/Sistemas) -----
-function Tela({ titulo, sub, kpis, cols, rows, acao, nota }) {
-  return (
-    <div>
-      <h1>{titulo}</h1>
-      <div className="cv2-rule" />
-      <div className="cv2-sub">{sub}</div>
-      {kpis && <div className="cv2-kpis">{kpis}</div>}
-      <div className="cv2-card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div className="cv2-spread" style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
-          <b style={{ fontSize: 13 }}>{titulo}</b>
-          {acao && <button className="cv2-btn sec" disabled title="Disponível na próxima atualização">{acao}</button>}
-        </div>
-        <div className="cv2-tbl-wrap">
-        <table className="cv2-tbl">
-          <thead><tr>{cols.map((c, i) => <th key={i}>{c}</th>)}</tr></thead>
-          <tbody>
-            {(rows && rows.length) ? rows.map((r, i) => (
-              <tr key={i}>{r.map((cell, j) => <td key={j} dangerouslySetInnerHTML={{ __html: cell }} />)}</tr>
-            )) : (
-              <tr><td colSpan={cols.length} style={{ textAlign: 'center', color: 'var(--tx2)', padding: 28 }}>— nenhum registro ainda —</td></tr>
-            )}
-          </tbody>
-        </table>
-        </div>
-      </div>
-      {nota && <div className="cv2-sub" style={{ marginTop: 10, fontSize: 11.5 }}>{nota}</div>}
-    </div>
-  );
-}
 
 // ---------- estilos de formulário (consistentes com o design system) ---------
 const inp = { background: '#faf9f8', border: '1px solid var(--line)', borderRadius: 4, padding: '8px 11px', fontSize: 13, outline: 'none', fontWeight: 500, color: 'var(--tx)', fontFamily: 'inherit', minWidth: 0 };
@@ -60,6 +29,7 @@ function Campo({ f, value, onChange }) {
 function CrudTela({ titulo, sub, table, tenantDbId, userId, cols, fields, toRow, acao, nota }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadErr, setLoadErr] = useState('');   // erro de leitura — distinto de err (erro de salvar)
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({});
   const [err, setErr] = useState('');
@@ -71,8 +41,9 @@ function CrudTela({ titulo, sub, table, tenantDbId, userId, cols, fields, toRow,
   const load = useCallback(async () => {
     if (!tenantDbId) { setLoading(false); return; }
     setLoading(true);
+    setLoadErr('');
     const { data, error } = await supabase.from(table).select('*').eq('tenant_id', tenantDbId).order('created_at', { ascending: false }).limit(100);
-    if (!error) setRows(data || []);
+    if (error) setLoadErr(error.message); else setRows(data || []);
     setLoading(false);
   }, [table, tenantDbId]);
 
@@ -186,6 +157,8 @@ function CrudTela({ titulo, sub, table, tenantDbId, userId, cols, fields, toRow,
           <tbody>
             {loading ? (
               <tr><td colSpan={allCols.length} style={{ textAlign: 'center', color: 'var(--tx2)', padding: 28 }}>carregando…</td></tr>
+            ) : loadErr ? (
+              <tr><td colSpan={allCols.length} style={{ textAlign: 'center', color: 'var(--red)', padding: 28 }}>Erro ao carregar: {loadErr}</td></tr>
             ) : rows.length ? rows.map(rec => {
               if (editId === rec.id) {
                 // 1 input por field editável; colunas read-only restantes ficam vazias
@@ -326,9 +299,10 @@ export function Arquivos({ tenantDbId, userId }) {
   const load = useCallback(async () => {
     if (!tenantDbId) { setLoading(false); return; }
     setLoading(true);
+    setErr('');
     const { data, error } = await supabase.from('tenant_files').select('*')
       .eq('tenant_id', tenantDbId).order('created_at', { ascending: false }).limit(200);
-    if (!error) setRows(data || []);
+    if (error) setErr(error.message); else setRows(data || []);
     setLoading(false);
   }, [tenantDbId]);
 
@@ -460,69 +434,52 @@ export function Arquivos({ tenantDbId, userId }) {
 }
 
 // ============================================================
-// TELAS DE REFERÊNCIA (leitura — configuração feita pela equipe CD)
+// TELAS DE REFERÊNCIA — leva 2: CRUD real (antes só leitura).
+// A integração/config de fato (ex.: segredo no Infisical) continua sendo feita
+// pela equipe CD; aqui o cliente só gerencia a REFERÊNCIA/label exibida, nunca
+// a credencial em si (chave_ref é texto livre, não o valor secreto).
 // ============================================================
-const NOTA = 'Leitura — a configuração desta tela é feita pela equipe Consult Delivery (cofre Infisical).';
-
-// helper de escape p/ valores vindos do banco (vão p/ dangerouslySetInnerHTML em <Tela>)
-const esc = v => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-// Hook de leitura read-only por tenant (mesmo padrão de Arquivos/CrudTela).
-// Robusto: query falha ou tabela inexistente → rows = [] (estado vazio gracioso).
-function useRefRows(table, tenantDbId, mapRow) {
-  const [rows, setRows] = useState([]);
-
-  const load = useCallback(async () => {
-    if (!tenantDbId) { setRows([]); return; }
-    const { data, error } = await supabase.from(table)
-      .select('*').eq('tenant_id', tenantDbId).order('ordem', { ascending: true });
-    if (error || !data) { setRows([]); return; }
-    setRows(data.map(mapRow));
-  }, [table, tenantDbId, mapRow]);
-
-  useEffect(() => { load(); }, [load]);
-  return rows;
-}
-
 const ST_PROV = { ativo: 'ok', fallback: 'mut', inativo: 'mut' };
 
-export function Provedores({ tenantDbId }) {
-  const mapRow = useCallback(rec => {
-    const cls = ST_PROV[rec.status] || 'mut';
-    const st = esc(rec.status || '—');
-    return [
-      esc(rec.provider),
-      esc(rec.modelo_padrao || '—'),
-      rec.chave_ref ? esc(rec.chave_ref) : '—',
-      `<span class="cv2-bdg ${cls}">${st}</span>`,
-    ];
-  }, []);
-  const rows = useRefRows('tenant_provedores', tenantDbId, mapRow);
-  return <Tela titulo="Provedores de IA" sub="Cada cliente pode usar a própria chave (BYO-key via cofre)."
-    cols={['Provider', 'Modelo padrão', 'Chave', 'Status']} rows={rows} nota={NOTA} />;
+export function Provedores({ tenantDbId, userId }) {
+  return <CrudTela titulo="Provedores de IA" sub="Cada cliente pode usar a própria chave (BYO-key via cofre)."
+    table="tenant_provedores" tenantDbId={tenantDbId} userId={userId}
+    cols={['Provider', 'Modelo padrão', 'Chave', 'Status']}
+    fields={[
+      { key: 'provider', label: 'Provider', type: 'text', required: true },
+      { key: 'modelo_padrao', label: 'Modelo padrão', type: 'text' },
+      { key: 'chave_ref', label: 'Chave (referência)', type: 'text' },
+      { key: 'status', label: 'Status', type: 'select', default: 'ativo', options: [{ v: 'ativo', l: 'Ativo' }, { v: 'fallback', l: 'Fallback' }, { v: 'inativo', l: 'Inativo' }] },
+    ]}
+    toRow={r => [r.provider, r.modelo_padrao || '—', r.chave_ref || '—', <Bdg cls={ST_PROV[r.status] || 'mut'}>{r.status}</Bdg>]}
+    acao="+ Novo provedor"
+    nota="Chave = referência/label do segredo no cofre Infisical, nunca o valor real da credencial." />;
 }
+
 const ST_INT = { conectada: 'ok', pendente: 'mut', desconectada: 'mut' };
 
-export function Integracoes({ tenantDbId }) {
-  const mapRow = useCallback(rec => {
-    const cls = ST_INT[rec.status] || 'mut';
-    return [
-      esc(rec.nome),
-      `<span class="cv2-bdg ${cls}">${esc(rec.status || '—')}</span>`,
-      esc(rec.usada_por || '—'),
-    ];
-  }, []);
-  const rows = useRefRows('tenant_integracoes', tenantDbId, mapRow);
-  return <Tela titulo="Integrações" sub="Conexões do cliente — a integração é feita pela equipe Consult Delivery."
-    cols={['Integração', 'Status', 'Usada por']} rows={rows} nota={NOTA} />;
+export function Integracoes({ tenantDbId, userId }) {
+  return <CrudTela titulo="Integrações" sub="Conexões do cliente."
+    table="tenant_integracoes" tenantDbId={tenantDbId} userId={userId}
+    cols={['Integração', 'Status', 'Usada por']}
+    fields={[
+      { key: 'nome', label: 'Integração', type: 'text', required: true, wide: true },
+      { key: 'status', label: 'Status', type: 'select', default: 'pendente', options: [{ v: 'conectada', l: 'Conectada' }, { v: 'pendente', l: 'Pendente' }, { v: 'desconectada', l: 'Desconectada' }] },
+      { key: 'usada_por', label: 'Usada por', type: 'text' },
+    ]}
+    toRow={r => [r.nome, <Bdg cls={ST_INT[r.status] || 'mut'}>{r.status}</Bdg>, r.usada_por || '—']}
+    acao="+ Nova integração" />;
 }
-export function Sistemas({ tenantDbId }) {
-  const mapRow = useCallback(rec => [
-    esc(rec.nome),
-    esc(rec.endereco || '—'),
-    esc(rec.tipo || '—'),
-  ], []);
-  const rows = useRefRows('tenant_sistemas', tenantDbId, mapRow);
-  return <Tela titulo="Sistemas externos" sub="Atalhos e referências dos sistemas do cliente."
-    cols={['Sistema', 'Endereço', 'Tipo']} rows={rows} nota="Leitura — referência dos sistemas do cliente." />;
+
+export function Sistemas({ tenantDbId, userId }) {
+  return <CrudTela titulo="Sistemas externos" sub="Atalhos e referências dos sistemas do cliente."
+    table="tenant_sistemas" tenantDbId={tenantDbId} userId={userId}
+    cols={['Sistema', 'Endereço', 'Tipo']}
+    fields={[
+      { key: 'nome', label: 'Sistema', type: 'text', required: true, wide: true },
+      { key: 'endereco', label: 'Endereço', type: 'text', wide: true },
+      { key: 'tipo', label: 'Tipo', type: 'text' },
+    ]}
+    toRow={r => [r.nome, r.endereco || '—', r.tipo || '—']}
+    acao="+ Novo sistema" />;
 }
