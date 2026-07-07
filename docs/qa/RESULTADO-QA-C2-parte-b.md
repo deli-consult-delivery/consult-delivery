@@ -35,7 +35,7 @@ Evidência = contagem real via `count(*)` comparada ao cap.
 |---|---|---|---|---|
 | `controle-atendimentos` | `ControleAtendimentos.jsx:261-274` | 500 | **1075** (Karina, 30d) | CSAT/tempo médio sub-contam hoje, não é risco latente |
 | `hub` | `DeliHub.jsx:194-198` | 50 | **3904** (Consult, 30d) | KPI "Execuções" sempre mostra 50 |
-| `atividade` | `Execucoes.jsx:82` | 1000 | **1975** (Consult, 15d) / 1194 (7d) | Sub-conta execuções/custo — mesma classe do caso #173 já corrigido em `visao`, nunca replicado aqui |
+| `atividade` | `Execucoes.jsx:82` | 1000 | **1975** (Consult, 15d) / 1194 (7d) | ✅ CORRIGIDO (#863, 2026-07-07) — KPIs total/ok/falhas e taxa de sucesso agora usam `count: 'exact', head: true` real (3 queries paralelas, respeitando filtros). Dívida honesta: custo/duração seguem do array capado (rótulo "aprox. (ate 1000 recentes)") — aggregação exigiria RPC/SUM server-side. Mesma classe do caso #173 já corrigido em `visao` |
 | `chat` | `console/chat/engine/useConversas.js` LIMIT_CONVS=150 | 150 | **177** (Consult) | Badges de filtro (aguardando/abertos) sub-contam |
 | `aprovacoes` | `AprovacoesUnificadas.jsx:244-249` | 100 | **394** (Consult, agent_drafts aprováveis) | `totalDrafts` sub-conta |
 | `recontratacao` | `Recontratacao.jsx:194,218` | 500 | **1172** (Consult, customers) | "X de Y" incorreto |
