@@ -379,7 +379,7 @@ function NpsResultadosContent({ tenantDbId, userId }) {
 
 export default function NpsResultados({ tenantDbId, userId }) {
   return (
-    <RequireRole roles={['admin', 'gestor']} userId={userId}>
+    <RequireRole roles={['admin', 'gestor']} userId={userId} tenantId={tenantDbId}>
       <NpsResultadosContent tenantDbId={tenantDbId} userId={userId} />
     </RequireRole>
   );

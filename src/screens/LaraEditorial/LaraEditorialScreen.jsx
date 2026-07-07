@@ -12,7 +12,7 @@ const TABS = [
 
 export default function LaraEditorialScreen({ tenantDbId, userId }) {
   const [tab, setTab] = useState('drafts');
-  const { can } = usePermissions(userId);
+  const { can } = usePermissions(userId, tenantDbId);
 
   // marketing e admin podem aprovar/publicar
   const canApprove = can('content', 'approve') || can('content', 'edit');
