@@ -235,11 +235,20 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
   const [filtroOrigem, setFiltroOrigem] = useState('');
   const [filtroAgente, setFiltroAgente] = useState('');
   const [filtroLoja, setFiltroLoja] = useState('');
+  // Contagens reais (não capadas em 100/50/100) — mesmo padrão de ConsoleV2.jsx:251
+  // (count exact, head true). Sem isso, o KPI "Total fila" sub-conta (ex.: 394 no
+  // tenant Consult, KPI mostrava no max 250 = 100+50+100 caps das listas). As
+  // listas continuam capadas para o feed; os KPIs usam estes counts reais.
+  const [cDrafts, setCDrafts] = useState(0);
+  const [cCasos, setCCasos] = useState(0);
+  const [cSugestoes, setCSugestoes] = useState(0);
 
   const carregar = useCallback(async () => {
     if (!tenantDbId) return;
     try {
-      const [{ data: dr, error: e1 }, { data: ca, error: e2 }, { data: sg, error: e3 }] = await Promise.all([
+      const [{ data: dr, error: e1 }, { data: ca, error: e2 }, { data: sg, error: e3 },
+        { count: nD, error: eD }, { count: nC, error: eC }, { count: nS, error: eS },
+      ] = await Promise.all([
         supabase
           .from('agent_drafts')
           .select('id, agent_name, channel, target_id, subject, content, status, metadata, created_at, loja_id, loja:lojas(id, nome)')
@@ -261,6 +270,17 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
           .eq('status', 'pendente')
           .order('criada_em', { ascending: false })
           .limit(100),
+        // Counts reais (mesmos filtros das listas, sem o cap). PostgREST count é
+        // exato. Falha numa deles → mantém o último valor (não zera KPI por erro
+        // transitório). O count de drafts aplica os mesmos .not('channel'/'agent_name')
+        // que draftsAprovacao faz client-side, pra casar com o que a tela mostra.
+        supabase.from('agent_drafts').select('*', { count: 'exact', head: true })
+          .eq('tenant_id', tenantDbId).in('status', DRAFT_STATUS_APROVAVEL)
+          .not('channel', 'in', CANAIS_OCULTOS).not('agent_name', 'in', AGENTES_OCULTOS),
+        supabase.from('defesa_casos').select('*', { count: 'exact', head: true })
+          .eq('tenant_id', tenantDbId).eq('status', 'aguardando_ok'),
+        supabase.from('sugestoes_ia').select('*', { count: 'exact', head: true })
+          .eq('tenant_id', tenantDbId).eq('status', 'pendente'),
       ]);
 
       // e1 pode ser erro de tabela inexistente (agent_drafts) — degradar graciosamente
@@ -274,6 +294,9 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
       setDrafts(e1 ? [] : draftsAprovacao);
       setCasos(ca ?? []);
       setSugestoes(sg ?? []);
+      if (!eD) setCDrafts(nD ?? 0);
+      if (!eC) setCCasos(nC ?? 0);
+      if (!eS) setCSugestoes(nS ?? 0);
     } catch (err) {
       setErro(err?.message || 'erro ao carregar');
     }
@@ -423,9 +446,11 @@ export default function AprovacoesUnificadas({ tenantDbId, userId }) {
     await carregar();
   }
 
-  const totalDrafts = drafts?.length ?? 0;
-  const totalCasos = casos?.length ?? 0;
-  const totalSugestoes = sugestoes?.length ?? 0;
+  // KPIs usam counts reais (count: 'exact', head: true), não o length do array
+  // capado. As listas continuam capadas (100/50/100) para o feed/filtros.
+  const totalDrafts = cDrafts;
+  const totalCasos = cCasos;
+  const totalSugestoes = cSugestoes;
   const total = totalDrafts + totalCasos + totalSugestoes;
 
   // Opcoes de filtro derivadas dos itens carregados (origem/agente/loja).
