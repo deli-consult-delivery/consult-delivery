@@ -669,13 +669,12 @@ function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, st
   const today       = new Date().toISOString().slice(0, 10);
   const tomorrow    = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
   const minDeadline = reviews.reduce((m, r) => r.deadline && (!m || r.deadline < m) ? r.deadline : m, null);
-  const isOverdue   = minDeadline && minDeadline < today;
-  const isUrgent    = !isOverdue && minDeadline && minDeadline <= tomorrow;
+  const isUrgent    = minDeadline && minDeadline <= tomorrow && minDeadline >= today;
   const isBusy      = busyStore === storeName;
 
   return (
     <div id={`${idPrefix}-${storeName.replace(/[\s'&]/g, '-')}`} style={{
-      border: `1px solid ${isOverdue ? '#fca5a5' : 'var(--line)'}`,
+      border: `1px solid var(--line)`,
       borderRadius: 8, marginBottom: 10, background: '#fff', overflow: 'hidden',
     }}>
       <div style={{
@@ -690,11 +689,6 @@ function StoreAccordion({ storeName, reviews, defaultOpen, busyId, busyStore, st
         >
           <span style={{ fontSize: 15, color: 'var(--tx2)', lineHeight: 1 }}>{open ? '▾' : '▸'}</span>
           <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--ink)' }}>{storeName}</span>
-          {isOverdue && (
-            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, fontWeight: 600, background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', whiteSpace: 'nowrap' }}>
-              🔴 venceu {fmtDate(minDeadline)}
-            </span>
-          )}
           {isUrgent && (
             <span className="cv2-bdg warn" style={{ fontSize: 11 }}>⏳ urgente {fmtDate(minDeadline)}</span>
           )}
