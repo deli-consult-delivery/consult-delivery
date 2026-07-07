@@ -1,0 +1,57 @@
+name: PR Build Check
+
+# Gate obrigatório de build em todo PR contra main. Sem isso, um arquivo
+# corrompido (ex.: incidente #817 — JSX virou base64 e quebrou o build de
+# produção) só é detectado depois do merge. Este workflow roda ANTES do
+# merge e falha o check se `npm run build` (Vite) quebrar.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (Vite) — falha o check se quebrar
+        run: npm run build
+
+      # Opcional/barato: sintaxe dos .js do bridge-server tocados neste PR.
+      # node --check é um parse-only, não roda o arquivo — pega exatamente a
+      # classe de erro do #817 (arquivo virando conteúdo inválido) sem custo
+      # de instalar as deps do bridge-server.
+      - name: Syntax check — bridge-server/*.js alterados no PR
+        run: |
+          set -e
+          BASE="origin/${{ github.event.pull_request.base.ref }}"
+          CHANGED=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- 'bridge-server/**/*.js' || true)
+          if [ -z "$CHANGED" ]; then
+            echo "Nenhum .js de bridge-server/ alterado neste PR."
+            exit 0
+          fi
+          echo "Verificando sintaxe de:"
+          echo "$CHANGED"
+          STATUS=0
+          while IFS= read -r f; do
+            [ -f "$f" ] || continue
+            node --check "$f" || STATUS=1
+          done <<< "$CHANGED"
+          exit $STATUS
