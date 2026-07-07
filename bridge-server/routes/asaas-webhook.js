@@ -15,10 +15,27 @@ const CONTRATO_STATUS_MAP = {
   PAYMENT_REFUNDED:             'cancelado',
 };
 
+// Rate limit simples em memória: 30 req/min por IP (mesmo padrão de datacrazy-webhook.js).
+// Anti-abuse: token fixo no header é vulnerável a brute-force/flood sem isso.
+const rateLimitMap = new Map();
+function isRateLimited(ip) {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip) || { count: 0, resetAt: now + 60_000 };
+  if (now > entry.resetAt) { entry.count = 0; entry.resetAt = now + 60_000; }
+  entry.count++;
+  rateLimitMap.set(ip, entry);
+  return entry.count > 30;
+}
+
 module.exports = function ({ supabaseInsert, supabaseSelect, supabaseUpdate, ASAAS_WEBHOOK_SECRET }) {
   const router = require('express').Router();
 
   router.post('/asaas/webhook', async (req, res) => {
+    const ip = req.ip || req.socket?.remoteAddress || 'unknown';
+    if (isRateLimited(ip)) {
+      return res.status(429).json({ error: 'limite_de_requisicoes_excedido' });
+    }
+
     // 1. Validar token
     const token = req.headers['asaas-access-token'] || req.headers['x-asaas-access-token'] || '';
     if (!ASAAS_WEBHOOK_SECRET) {
