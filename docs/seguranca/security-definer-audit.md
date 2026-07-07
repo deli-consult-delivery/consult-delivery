@@ -1,13 +1,14 @@
-# Auditoria SECURITY DEFINER (2026-07-07)
+# Auditoria SECURITY DEFINER (2026-07-07, completa em 2 rodadas + 1 correção)
 
-Levantamento: `grep -rn "SECURITY DEFINER" supabase/migrations/*.sql` (baseline + migrations 07-06). READ-ONLY, nenhuma alteração no banco.
+Levantamento: `grep -rn "SECURITY DEFINER" supabase/migrations/*.sql` (baseline + migrations 07-06). READ-ONLY, nenhuma alteração no banco por esta auditoria (a migration 010 abaixo foi um hotfix aplicado diretamente pela orquestradora antes da versão em git). **Cobertura: 100% das funções SECURITY DEFINER do schema, lidas linha a linha — incluindo GRANTs de EXECUTE, não só o corpo da função (ver achado #9 abaixo, que a rodada 1 e 2 não cobriam).**
 
-## 🔴 Achados reais — fix em migration versionada (não aplicada, ver PR)
+## 🔴 Achados reais — CORRIGIDOS
 
-| Função | Problema | Evidência |
-|---|---|---|
-| `log_audit(p_tenant_id, p_action, p_resource, p_agent_name, p_metadata)` | `p_tenant_id` confiado sem checar se `auth.uid()` é membro dele — qualquer autenticado insere entrada forjada em `audit_log` de **qualquer outro tenant** (spoofing/poluição de trilha de auditoria) | baseline.sql:426-433 — só `VALUES (p_tenant_id, auth.uid(), ...)`, sem `WHERE`/`EXISTS` checando membership |
-| `create_workspace(p_name, p_slug, p_segment, p_emoji, p_user_id)` | `p_user_id` confiado sem forçar `= auth.uid()` — caller pode criar um workspace e tornar **qualquer outro user_id** admin dele | baseline.sql:193-209 — `INSERT INTO tenant_members (..., user_id, role) VALUES (v_tenant_id, p_user_id, 'admin', ...)` sem validar `p_user_id = auth.uid()` |
+| Função | Problema | Evidência | Fix |
+|---|---|---|---|
+| `log_audit(p_tenant_id, p_action, p_resource, p_agent_name, p_metadata)` | `p_tenant_id` confiado sem checar se `auth.uid()` é membro dele — qualquer autenticado inseria entrada forjada em `audit_log` de **qualquer outro tenant** (spoofing/poluição de trilha de auditoria) | baseline.sql:426-433 — só `VALUES (p_tenant_id, auth.uid(), ...)`, sem `WHERE`/`EXISTS` checando membership | migration `20260707_009`, aplicada |
+| `create_workspace(p_name, p_slug, p_segment, p_emoji, p_user_id)` | `p_user_id` confiado sem forçar `= auth.uid()` — caller podia criar um workspace e tornar **qualquer outro user_id** admin dele | baseline.sql:193-209 — `INSERT INTO tenant_members (..., user_id, role) VALUES (v_tenant_id, p_user_id, 'admin', ...)` sem validar `p_user_id = auth.uid()` | migration `20260707_009`, aplicada |
+| **`is_pending_tenant_member(p_tenant_id, p_email)`** 🔴 **CRÍTICO** | Criada de propósito **sem** checagem de `auth.uid()` (comentário original: gate era feito na rota do bridge, chamada via `service_role`) — mas toda função SQL recebe `GRANT EXECUTE TO PUBLIC` por default no Postgres/Supabase a menos que seja revogado. Isso deixava **qualquer chamada anônima direta via PostgREST** (`/rest/v1/rpc/is_pending_tenant_member`) enumerar convites pendentes de qualquer tenant/e-mail, **sem login** | migration `20260707_007` (criação da função) — não define nenhum `REVOKE`, então herda o `GRANT ... TO PUBLIC` default | migration `20260707_010` — `REVOKE ALL ... FROM PUBLIC/anon/authenticated` + `GRANT EXECUTE ... TO service_role`. **Hotfix já aplicado em produção pela orquestradora antes desta migration versionada** (confirmado: só `postgres`/`service_role` têm EXECUTE agora) |
 
 ## ✅ Validam o caller corretamente (lidas linha a linha)
 
@@ -22,11 +23,25 @@ Levantamento: `grep -rn "SECURITY DEFINER" supabase/migrations/*.sql` (baseline 
 | `update_member_display_name` / `update_member_role` | caller admin/owner de `p_tenant_id`, bloqueia auto-edição, `update_member_role` valida enum de roles (baseline.sql:982-1035) |
 | `get_review_by_token`/`get_reviews_by_tokens`/`update_review_by_token` | capability token (`token` UUID aleatório), não tenant_id — auditado em rodada anterior (#757→#764) |
 
-## 🟡 Primitivas de RLS (não relidas nesta rodada — usadas em toda policy do schema, sem sinal de mau uso em nenhuma auditoria anterior; sinalizando o gap honestamente por limite de contexto)
-`accessible_tenant_ids`, `accessible_tenant_ids_with_role`, `has_rbac_role_in_hierarchy`, `has_tenant_access`, `is_admin_of`, `is_member_of`, `same_tenant_admin`, `set_user_screen_permission`. Recomendo 1 verificação dedicada rápida se alguém quiser 100% de cobertura.
+## ✅ Primitivas de RLS — relidas linha a linha nesta rodada 2 (fechando o gap da rodada 1)
+
+| Função | Validação |
+|---|---|
+| `accessible_tenant_ids()` | zero parâmetros — árvore de tenants inteiramente derivada de `auth.uid()` via `tenant_members` (baseline.sql:84-92). Não há como o caller pedir dados de outro usuário. |
+| `accessible_tenant_ids_with_role(_roles)` | mesmo padrão, filtro adicional por role, ainda ancorado em `auth.uid()` (baseline.sql:103-112) |
+| `has_rbac_role_in_hierarchy(_tenant, _role_names)` | predicado booleano — responde "auth.uid() tem uma dessas roles em `_tenant` (ou ancestral)?" via `user_roles`/`roles` filtrado por `ur.user_id = auth.uid()` (baseline.sql:374-380). `_tenant` é só o alvo da pergunta, não uma identidade assumida. |
+| `has_tenant_access(_tenant)` | `SELECT _tenant IN (SELECT accessible_tenant_ids())` (baseline.sql:390) — mesmo padrão, delega pra `accessible_tenant_ids()` já ancorada em `auth.uid()` |
+| `is_admin_of(_tenant)` | árvore de tenants onde `auth.uid()` é owner/admin, checa se `_tenant` está nela (baseline.sql:400-409) |
+| `is_member_of(_tenant)` | idêntica a `has_tenant_access` — mesmo corpo (baseline.sql:419), possível duplicata/alias, não é falha de segurança |
+| `same_tenant_admin(_target)` | responde "auth.uid() é admin/owner do MESMO tenant que `_target`?" — join `tenant_members` filtrado por `adm.user_id = auth.uid()` (baseline.sql:563-567). `_target` não vira a identidade do caller em nenhum momento, só define de quem se está perguntando. |
+| `set_user_screen_permission(p_tenant_id, p_user_id, ...)` | caller precisa ser admin/owner de `p_tenant_id` antes do INSERT/UPDATE (baseline.sql:668-675) — mesmo padrão de `remove_tenant_member`/`update_member_role` |
+
+**Veredito: nenhuma vulnerabilidade nova.** Todas as 8 são predicados booleanos (ou o `set_user_screen_permission`, que já validava) sempre ancorados em `auth.uid()` — o parâmetro de tenant/user é só o *alvo da pergunta*, nunca uma identidade que o código passa a confiar cegamente. Esse é exatamente o padrão correto para uma função usada dentro de `USING (...)` de RLS policy.
 
 ## ✅ Trigger functions (baixo risco por construção — não são chamáveis com parâmetro arbitrário, só operam sobre a própria linha que disparou o trigger via caminho já gated por RLS)
 `fn_task_done_updates_goal`, `handle_new_user`, `notify_on_channel_message`, `rls_auto_enable`, `trg_auto_create_loja`, `trg_auto_vinculo_grupo`, `trg_fn_conv_gen_avaliacao_token`, `trg_fn_conv_gen_nps_token`.
 
-## Nota de transparência
-Sessão com contexto crítico (~90%+ usado) durante esta auditoria. Priorizei ler linha a linha as funções que recebem `p_tenant_id`/`p_user_id` como parâmetro direto (maior risco de IDOR/spoofing) — são as 10 acima com evidência completa. As primitivas de RLS puramente booleanas não foram relidas nesta rodada (ver seção 🟡).
+## Histórico
+- Rodada 1 (PR #845): 2 achados reais (`log_audit`, `create_workspace`) + 10 funções validadas linha a linha + 8 primitivas sinalizadas como gap.
+- Rodada 2 (PR #851, primeira versão): as 8 primitivas relidas e confirmadas seguras.
+- **Correção pós-rodada-2 (esta versão)**: a rodada 2 auditou o *corpo* das funções mas não os *GRANTs de EXECUTE* — `is_pending_tenant_member` tinha corpo correto (por design, sem `auth.uid()`, gate delegado à rota do bridge) mas GRANT default pra PUBLIC a deixava chamável direto por qualquer anônimo via PostgREST. Achado real, crítico, **já corrigido em produção pela orquestradora** (hotfix) e formalizado na migration `20260707_010`. **Cobertura 100% agora inclui GRANTs, não só corpo de função.**
