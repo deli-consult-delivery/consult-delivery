@@ -45,16 +45,21 @@
 
 ## App 3 — Catálogo
 
-**Status: 🔨 EM BUILD — research + UI de preço + itens arquivados prontas; falta matriz de cobertura final, smoke live, QA visual**
+**Status: 🟡 BUILD AVANÇADO — matriz v3 + smoke live feito; ⚠️ 1 bug bloqueante (M2 shape) + escrita PATCH real + QA visual em prod pendentes**
 
-- Pesquisa dos endpoints públicos do módulo Catalog feita (leitura de catálogos/categorias/itens já existe no client desde antes deste sprint; escrita — criar categoria, PUT item, pausar/reabrir item, deletar categoria — já existe e já é gated por draft→aprovação).
-- **UI de alteração de preço implementada** (`CardapioIfood.jsx`, #855): botão "Alterar preço" + input decimal, cria draft amarelo via `POST /api/ifood/acao` (`ifood.alterar_preco`). Fecha a lacuna T5/T7.
-- **Itens não-vendáveis implementados ponta a ponta** (#856 + #857): `listarUnsellableItems` no client + rota gated `GET /ifood-api/catalogo/:lojaId/unsellable/:groupId` + botão "Mostrar arquivados" no `CardapioIfood.jsx`. Fecha a lacuna M2.
-- Falta: smoke live (confirmar `unsellableItems` + alteração de preço contra o sandbox real), matriz de cobertura final, QA visual — mesmo pipeline dos Apps 1 e 2.
+- Pesquisa dos endpoints públicos do módulo Catalog feita (leitura de catálogos/categorias/itens já existe no client desde antes deste sprint; escrita — pausar/reabrir item, alterar preço — já é gated por draft→aprovação).
+- **Matriz de cobertura final v3** pronta (`homologacao-matriz-catalogo.md`, espelha Avaliações/Finanças): mapeia cada critério → implementação → evidência (offline/live/lacuna), sem maquiagem.
+- **Smoke live feito** (`report-89-catalogo-smoke.md`, 2026-07-07, via Bridge deployado em prod): M1 catálogo 200 (item real reproduzido); **M2 unsellableItems rota 200** + ⚠️ achado de shape (`itens={categories:[]}`, não array — front sempre "Nenhum item arquivado"); **M6/M7 alterar_preco draft confirmado live** (resolução de item contra sandbox real + draft amarelo criado com metadata correto); gates server-side (preço `<=0` → 400, item não-resolvível → 422) confirmados ao vivo sem criar draft.
+- **QA visual feito via harness** (`QA-VISUAL-CARDAPIO-2026-07-07.md`): render cv2 + botões "Alterar preço"/"Mostrar arquivados"/"Pausar" + seletor de loja + bug M2 evidenciado visualmente. **Não é QA em prod/tenant real** (exige login) — fica como pendência.
+- **⚠️ Bloqueante p/ ticket**: corrigir bug de shape M2 (normalizar `itens.categories[].items[]` → `ItemLinha` no front ou na rota) — senão "Mostrar arquivados" sempre mostra "Nenhum item arquivado" mesmo com itens reais.
+- **Pendências não-bloqueantes**: smoke live da **escrita PATCH real** (após `/aprovar`, amarelo = `ok` do Wandson); smoke de M9 (`contextModifiers`, precisa item com >1 contexto no sandbox); QA visual em prod; M3 (versão de catálogo) ❌ lacuna baixa prioridade.
 - Sem pendência estratégica: o ticket dele só entra na fila depois que Avaliações + Finanças tiverem passado — o build pode continuar em paralelo sem pressa de ticket.
 
 **Docs**:
 - Research (endpoints públicos): [`catalogo-endpoints.md`](./catalogo-endpoints.md)
+- Matriz de cobertura final: [`homologacao-matriz-catalogo.md`](./homologacao-matriz-catalogo.md)
+- Smoke live (evidência bruta): [`report-89-catalogo-smoke.md`](./report-89-catalogo-smoke.md)
+- QA visual (harness): [`QA-VISUAL-CARDAPIO-2026-07-07.md`](./QA-VISUAL-CARDAPIO-2026-07-07.md)
 
 ---
 
@@ -64,4 +69,4 @@
 |---|---|---|---|---|
 | 1 — Avaliações | ✅ completo | ✅ 3 rodadas (leitura+escrita) | ✅ feito, achados corrigidos | 🔲 aguardando gates D1 do Wandson |
 | 2 — Finanças | ✅ completo (1 lacuna doc.) | ✅ confirmou e corrigiu 2 params errados | 🔲 não feito ainda | 🔲 aguarda a vez (após App 1) |
-| 3 — Catálogo | 🔨 preço + arquivados prontos, falta smoke live | 🔲 não feito | 🔲 não feito | 🔲 aguarda a vez (após App 2) |
+| 3 — Catálogo | 🟡 matriz v3 + smoke live feitos, ⚠️ bug M2 shape bloqueante | ✅ M1/M2-rota/M6-draft confirmados (M2 shape bug) | ✅ harness cv2 (não em prod) | 🔲 aguarda a vez (após App 2) + fix M2 |

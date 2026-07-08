@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>QA Visual — CardapioIfood (harness mockado)</title>
+<link rel="stylesheet" href="../../src/console/console.css" />
+<script src="vendor/react.js"></script>
+<script src="vendor/react-dom.js"></script>
+<style>
+  body { background: var(--bg, #f5f6f8); margin: 0; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const { useState, useCallback, useRef } = React;
+const h = React.createElement;
+
+const fmtBRL = (v) =>
+  typeof v === 'number' ? v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—';
+
+function categoriasDe(cardapio) {
+  const cats = [];
+  for (const cat of (cardapio?.catalogos ?? []).flatMap(c => c?.categorias ?? [])) {
+    cats.push({ nome: cat?.nome || 'Sem categoria', itens: cat?.itens ?? [] });
+  }
+  return cats;
+}
+
+function ItemLinha({ item, onAcaoFeita }) {
+  const [agindo, setAgindo] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [editandoPreco, setEditandoPreco] = useState(false);
+  const [novoPreco, setNovoPreco] = useState('');
+  const disponivel = item.disponivel === true;
+
+  async function acao(operacao) {
+    setAgindo(true); setMsg(null);
+    await new Promise(r => setTimeout(r, 200));
+    setMsg('Solicitação enviada para aprovação (draft amarelo). [MOCK]');
+    setAgindo(false);
+    onAcaoFeita?.();
+  }
+
+  async function salvarPreco() {
+    const price = Number(novoPreco.replace(',', '.'));
+    if (!Number.isFinite(price) || price <= 0) {
+      setMsg('Preço inválido — informe um número maior que zero.');
+      return;
+    }
+    setAgindo(true); setMsg(null);
+    await new Promise(r => setTimeout(r, 200));
+    setMsg('Solicitação de novo preço ' + fmtBRL(price) + ' enviada para aprovação. [MOCK draft criado]');
+    setEditandoPreco(false); setNovoPreco(''); setAgindo(false);
+    onAcaoFeita?.();
+  }
+
+  const leftChildren = [
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 2 } },
+      h('span', { style: { fontSize: 13.5, fontWeight: 700, color: 'var(--ink)' } }, item.nome || '—'),
+      h('span', { className: 'cv2-bdg ' + (disponivel ? 'ok' : 'err'), style: { fontSize: 11 } }, disponivel ? 'Disponível' : 'Pausado')
+    )
+  ];
+  if (item.descricao) {
+    leftChildren.push(h('div', { style: { fontSize: 12.5, color: 'var(--tx2)', lineHeight: 1.5, marginBottom: 2 } }, item.descricao));
+  }
+
+  const priceRow = editandoPreco
+    ? [
+        h('span', { style: { fontSize: 12.5, color: 'var(--tx2)' } }, 'Novo preço (R$):'),
+        h('input', {
+          type: 'text', inputMode: 'decimal',
+          placeholder: typeof item.preco === 'number' ? item.preco.toFixed(2) : '0,00',
+          value: novoPreco,
+          onChange: e => setNovoPreco(e.target.value),
+          onKeyDown: e => { if (e.key === 'Enter') salvarPreco(); if (e.key === 'Escape') { setEditandoPreco(false); setNovoPreco(''); } },
+          disabled: agindo, autoFocus: true,
+          style: { width: 90, fontSize: 12.5, padding: '3px 6px', border: '1px solid var(--bd)', borderRadius: 4 },
+          'data-testid': 'input-preco'
+        }),
+        h('button', { className: 'cv2-btn', style: { fontSize: 11 }, disabled: agindo, onClick: salvarPreco }, 'Salvar'),
+        h('button', { className: 'cv2-btn sec', style: { fontSize: 11 }, disabled: agindo, onClick: () => { setEditandoPreco(false); setNovoPreco(''); } }, 'Cancelar'),
+      ]
+    : [
+        h('span', { style: { fontSize: 13, fontWeight: 700, color: 'var(--ink)' } }, fmtBRL(item.preco)),
+        h('button', {
+          className: 'cv2-btn sec',
+          style: { fontSize: 11, padding: '2px 8px' },
+          disabled: agindo,
+          onClick: () => { setEditandoPreco(true); setNovoPreco(''); setMsg(null); },
+          'data-testid': 'btn-alterar-preco'
+        }, 'Alterar preço'),
+      ];
+  leftChildren.push(h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } }, priceRow));
+  if (msg) leftChildren.push(h('div', { style: { fontSize: 11.5, color: 'var(--tx2)', marginTop: 4 } }, msg));
+
+  return h('div', { className: 'cv2-card', style: { marginBottom: 8, display: 'flex', alignItems: 'flex-start', gap: 10 } },
+    h('div', { style: { flex: 1, minWidth: 0 } }, leftChildren),
+    h('button', {
+      className: 'cv2-btn sec',
+      style: { fontSize: 12, flexShrink: 0 },
+      disabled: agindo,
+      onClick: () => acao(disponivel ? 'ifood.pausar_item' : 'ifood.reabrir_item')
+    }, agindo ? '…' : disponivel ? 'Pausar' : 'Reabrir')
+  );
+}
+
+function CardapioIfoodMock() {
+  const cardapioMock = {
+    catalogos: [{
+      catalogId: '3248add5-39ba-4b12-864f-412b3f6ebf96',
+      groupId: 'ffca0022-eb43-4205-9a1b-73a72f8e3f95',
+      status: 'AVAILABLE',
+      categorias: [{
+        categoryId: 'e615dd3b-ee56-4ed9-bf48-b680988d3caf',
+        nome: 'Teste-Cd', status: 'AVAILABLE',
+        itens: [{
+          itemId: '0bb349b1-23c2-4397-8a0f-378b646398e6',
+          nome: 'X-Burger Teste Cd',
+          descricao: 'Item de teste criado pela integracao Cd',
+          preco: 25, externalCode: 'CD_TESTE_XBURGER',
+          disponivel: true, status: 'AVAILABLE',
+        }],
+      }],
+    }],
+  };
+  const unsellableRawMock = { categories: [] };
+
+  const [lojaId, setLojaId] = useState('2494ee86-41b4-481b-994b-6f54965ced30');
+  const [cats] = useState(categoriasDe(cardapioMock));
+  const [mostrarArquivados, setMostrarArquivados] = useState(false);
+  const [arquivados, setArquivados] = useState(null);
+  const [carregandoArq, setCarregandoArq] = useState(false);
+
+  const carregarArquivados = useCallback(async () => {
+    setCarregandoArq(true);
+    await new Promise(r => setTimeout(r, 150));
+    const itens = unsellableRawMock;
+    const rawArr = Array.isArray(itens) ? itens : [];
+    const norm = rawArr.map((it) => ({ /* ... */ }));
+    setArquivados(norm);
+    setCarregandoArq(false);
+  }, []);
+
+  const totalItens = (cats ?? []).reduce((n, c) => n + c.itens.length, 0);
+
+  const catBlocks = cats.map((cat, i) =>
+    cat.itens.length > 0
+      ? h('div', { key: i, style: { marginBottom: 18 } },
+          h('div', { style: { fontSize: 12, fontWeight: 700, color: 'var(--tx2)', letterSpacing: '0.06em', margin: '12px 0 8px', textTransform: 'uppercase' } },
+            cat.nome + ' (' + cat.itens.length + ')'),
+          cat.itens.map((item, j) => h(ItemLinha, { key: item.itemId || j, item }))
+        )
+      : null
+  );
+
+  const arqSection = (lojaId && cats) ? h('div', { style: { marginTop: 24 } }, [
+    h('div', { key: 'h', style: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 } },
+      h('button', {
+        className: 'cv2-btn sec', style: { fontSize: 12 }, disabled: carregandoArq,
+        onClick: () => {
+          if (mostrarArquivados && arquivados) { setMostrarArquivados(false); }
+          else { setMostrarArquivados(true); if (!arquivados) carregarArquivados(); }
+        },
+        'data-testid': 'btn-arquivados'
+      }, carregandoArq ? 'Carregando…' : mostrarArquivados ? 'Ocultar arquivados' : 'Mostrar arquivados')
+    ),
+    mostrarArquivados && arquivados
+      ? (arquivados.length === 0
+          ? h('div', { className: 'cv2-card', style: { textAlign: 'center', color: 'var(--tx2)' } }, [
+              'Nenhum item arquivado.',
+              h('div', { key: 'b', style: { fontSize: 11, marginTop: 6, color: 'var(--red)' } },
+                '⚠️ BUG M2: iFood devolve itens={categories:[]}, não array — front sempre cai aqui mesmo com itens reais.')
+            ])
+          : h('div', null,
+              h('div', { style: { fontSize: 12, fontWeight: 700, color: 'var(--tx2)', letterSpacing: '0.06em', margin: '12px 0 8px', textTransform: 'uppercase' } },
+                'Arquivados (' + arquivados.length + ')')
+            ))
+      : null
+  ]) : null;
+
+  return h('div', { style: { maxWidth: 820, margin: '0 auto', padding: 20 } }, [
+    h('h1', { key: 't' }, 'iFood: Cardápio'),
+    h('div', { key: 'r', className: 'cv2-rule' }),
+    h('div', { key: 's', className: 'cv2-sub' },
+      'Itens do cardápio do iFood por categoria, ao vivo via Bridge. Pausar/Reabrir cria um draft que aguarda sua aprovação.'),
+    h('div', { key: 'bar', style: { marginTop: 12, marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
+      h('select', {
+        value: lojaId, onChange: e => setLojaId(e.target.value),
+        className: 'cv2-btn sec', style: { fontSize: 12, cursor: 'pointer' }
+      }, h('option', { value: '2494ee86-41b4-481b-994b-6f54965ced30' }, 'Teste - CONSULT DELIVERY LTDA')),
+      h('button', { className: 'cv2-btn sec', style: { fontSize: 12 } }, 'Atualizar')
+    ),
+    ...catBlocks,
+    arqSection
+  ]);
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(h(CardapioIfoodMock));
+</script>
+</body>
+</html>
