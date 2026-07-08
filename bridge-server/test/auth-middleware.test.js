@@ -169,15 +169,17 @@ function restoreFetch() { global.fetch = ORIGINAL_FETCH; }
     assert.strictEqual(sbFetchChamado, false);
   });
   await check('assertTenantMember: usuário NÃO é membro do tenant → 403, retorna false (REGRESSÃO se o gate sumir)', async () => {
-    let queryRecebida = null;
-    const assertTenantMember = makeAssertTenantMember(async (path) => { queryRecebida = path; return []; });
+    const calls = [];
+    const assertTenantMember = makeAssertTenantMember(async (path) => { calls.push(path); return []; });
     const req = { user: { id: 'user-de-outro-tenant' } };
     const res = fakeRes();
     const ok = await assertTenantMember(req, res, 'tenant-alvo');
     assert.strictEqual(ok, false);
     assert.strictEqual(res.statusCode, 403);
-    assert.match(queryRecebida, /tenant_id=eq\.tenant-alvo/);
-    assert.match(queryRecebida, /user_id=eq\.user-de-outro-tenant/);
+    // 1ª chamada = checagem de membership direta no tenant solicitado
+    assert.ok(calls.length >= 1, 'deve chamar sbFetch ao menos uma vez');
+    assert.match(calls[0], /tenant_id=eq\.tenant-alvo/);
+    assert.match(calls[0], /user_id=eq\.user-de-outro-tenant/);
   });
   await check('assertTenantMember: usuário É membro do tenant → true, sem resposta de erro', async () => {
     const assertTenantMember = makeAssertTenantMember(async () => [{ tenant_id: 'tenant-alvo' }]);
@@ -186,6 +188,80 @@ function restoreFetch() { global.fetch = ORIGINAL_FETCH; }
     const ok = await assertTenantMember(req, res, 'tenant-alvo');
     assert.strictEqual(ok, true);
     assert.strictEqual(res.statusCode, null);
+  });
+
+  // ── assertTenantMember — MEMBERSHIP HIERÁRQUICA (parent_tenant_id) ────────
+  // Regressão do bug do card Notas iFood 403: usuário-agência membro só do
+  // tenant-pai deve acessar rotas gated de um store filho (cd-homolog/cd-demo).
+  // Cenário: membership direta vazia → sobe parent_tenant_id → acha no ancestral.
+  await check('assertTenantMember: usuário membro do ANCESTRAL (parent) → true (membership hierárquica)', async () => {
+    const calls = [];
+    const sbStub = async (path) => {
+      calls.push(path);
+      // 1ª chamada: membership direta no filho → vazia
+      if (/tenant_members\?tenant_id=eq\.tenant-filho/.test(path)) return [];
+      // 2ª chamada: busca parent_tenant_id do filho → retorna o pai
+      if (/tenants\?id=eq\.tenant-filho/.test(path)) return [{ parent_tenant_id: 'tenant-pai' }];
+      // 3ª chamada: membership no ancestral (pai) → ACHA
+      if (/tenant_members\?tenant_id=eq\.tenant-pai/.test(path)) return [{ tenant_id: 'tenant-pai' }];
+      return [];
+    };
+    const assertTenantMember = makeAssertTenantMember(sbStub);
+    const req = { user: { id: 'user-agencia' } };
+    const res = fakeRes();
+    const ok = await assertTenantMember(req, res, 'tenant-filho');
+    assert.strictEqual(ok, true);
+    assert.strictEqual(res.statusCode, null);
+    // sanity: subiu a árvove (chamou tenants? e o membership do pai)
+    assert.ok(calls.some(c => /tenants\?id=eq\.tenant-filho/.test(c)), 'deve buscar parent_tenant_id do filho');
+    assert.ok(calls.some(c => /tenant_members\?tenant_id=eq\.tenant-pai/.test(c)), 'deve checar membership no ancestral');
+  });
+
+  await check('assertTenantMember: usuário NÃO é membro direto nem de ancestral → 403 (fail-closed hierárquico)', async () => {
+    const sbStub = async (path) => {
+      // membership direta e ancestral sempre vazias
+      if (/tenant_members\?/.test(path)) return [];
+      // árvore: filho → pai → null (raiz)
+      if (/tenants\?id=eq\.tenant-filho/.test(path)) return [{ parent_tenant_id: 'tenant-pai' }];
+      if (/tenants\?id=eq\.tenant-pai/.test(path)) return [{ parent_tenant_id: null }];
+      return [];
+    };
+    const assertTenantMember = makeAssertTenantMember(sbStub);
+    const req = { user: { id: 'user-estranho' } };
+    const res = fakeRes();
+    const ok = await assertTenantMember(req, res, 'tenant-filho');
+    assert.strictEqual(ok, false);
+    assert.strictEqual(res.statusCode, 403);
+  });
+
+  await check('assertTenantMember: erro ao subir árvove (sbFetch reject no tenants?) → 403, NUNCA abre (fail-closed)', async () => {
+    const sbStub = async (path) => {
+      if (/tenant_members\?tenant_id=eq\.tenant-filho/.test(path)) return []; // sem membership direta
+      if (/tenants\?id=eq\.tenant-filho/.test(path)) throw new Error('Supabase 500');
+      return [];
+    };
+    const assertTenantMember = makeAssertTenantMember(sbStub);
+    const req = { user: { id: 'user-1' } };
+    const res = fakeRes();
+    const ok = await assertTenantMember(req, res, 'tenant-filho');
+    assert.strictEqual(ok, false);
+    assert.strictEqual(res.statusCode, 403);
+  });
+
+  await check('assertTenantMember: ciclo de parent (A→B→A) → para sem 403 (proteção anti-loop)', async () => {
+    const sbStub = async (path) => {
+      if (/tenant_members\?/.test(path)) return []; // nunca é membro
+      // ciclo: a→b, b→a
+      if (/tenants\?id=eq\.a/.test(path)) return [{ parent_tenant_id: 'b' }];
+      if (/tenants\?id=eq\.b/.test(path)) return [{ parent_tenant_id: 'a' }];
+      return [];
+    };
+    const assertTenantMember = makeAssertTenantMember(sbStub);
+    const req = { user: { id: 'user-1' } };
+    const res = fakeRes();
+    const ok = await assertTenantMember(req, res, 'a');
+    assert.strictEqual(ok, false);
+    assert.strictEqual(res.statusCode, 403);
   });
 
   process.stdout.write(`\nauth-middleware: ${passed} cenários passaram.\n`);
