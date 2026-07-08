@@ -2,11 +2,11 @@
 // Fonte de verdade compartilhada entre o menu (ConsoleV2) e o editor de
 // módulos por tenant (Clientes → "Telas"). module id = tenant_modules.module_key.
 export const GRUPOS = [
-  { label: 'Início', items: [
+  { label: 'Início', ic: 'i-grid', items: [
     { id: 'visao', ic: 'i-grid', label: 'Visão Geral' },
     { id: 'deli', ic: 'i-bot', label: 'DELI' },
   ]},
-  { label: 'Operação', items: [
+  { label: 'Operação', ic: 'i-store', items: [
     { id: 'crm', ic: 'i-users', label: 'Clientes' },
     { id: 'lojas', ic: 'i-store', label: 'Lojas' },
     { id: 'chat',             ic: 'i-chat',  label: 'Chat ao Vivo' },
@@ -30,7 +30,7 @@ export const GRUPOS = [
   // Renomeado/agrupado 2026-07-01 (QA go-live Karina, bug #7): antes espalhado
   // dentro de "Operação" com nomenclatura inconsistente (travessão, abreviação
   // com ponto). Agrupado por assunto — mesmos ids/module_key, só label/grupo mudou.
-  { label: 'Avaliações', items: [
+  { label: 'Avaliações', ic: 'i-star', items: [
     { id: 'avaliacoes', ic: 'i-eye', label: 'Avaliações Recebidas' },
     { id: 'resp-avaliacoes', ic: 'i-star', label: 'Avaliações iFood' },
     { id: 'csat', ic: 'i-check', label: 'Satisfação do Atendimento (CSAT)' },
@@ -38,7 +38,7 @@ export const GRUPOS = [
     { id: 'controle-atendimentos', ic: 'i-chart', label: 'Controle de Atendimento' },
     { id: 'avaliacao-config', ic: 'i-gear', label: 'Configurações de Avaliação' },
   ]},
-  { label: 'Agentes IA', items: [
+  { label: 'Agentes IA', ic: 'i-bot', items: [
     { id: 'hub', ic: 'i-bot', label: 'Painel Agentes' },
     { id: 'catalogo', ic: 'i-box', label: 'Catálogo' },
     { id: 'estudio', ic: 'i-palette', label: 'Estúdio de Conteúdo' },
@@ -64,7 +64,7 @@ export const GRUPOS = [
     { id: 'modelos', ic: 'i-doc', label: 'Modelos' },
     { id: 'config', ic: 'i-gear', label: 'Config de Agentes' },
   ]},
-  { label: 'Dados', items: [
+  { label: 'Dados', ic: 'i-folder', items: [
     { id: 'arquivos', ic: 'i-folder', label: 'Arquivos' },
     { id: 'links', ic: 'i-link', label: 'Links compartilhados' },
     { id: 'memoria', ic: 'i-brain', label: 'Memória dos agentes' },
@@ -73,7 +73,7 @@ export const GRUPOS = [
     { id: 'importar', ic: 'i-save', label: 'Importar relatórios' },
     { id: 'relatorios', ic: 'i-chart', label: 'Relatórios' },
   ]},
-  { label: 'Sistema', items: [
+  { label: 'Sistema', ic: 'i-gear', items: [
     { id: 'usuarios', ic: 'i-users', label: 'Usuários e equipe', adminOnly: true },
     { id: 'configsys', ic: 'i-gear', label: 'Configurações' },
     { id: 'clientesplat', ic: 'i-users', label: 'Clientes (plataforma)' },

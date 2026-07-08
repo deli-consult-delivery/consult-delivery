@@ -13,7 +13,8 @@
 .cv2-brand img{width:22px;height:22px;display:block;object-fit:contain}
 .cv2-brand .anton{font-size:14px;color:var(--ink);line-height:.95;display:block}
 .cv2-brand small{display:block;color:var(--tx2);font-size:7.5px;letter-spacing:1.6px;font-weight:600;margin-top:2px}
-.cv2-grp{padding:15px 16px 5px;font-size:10px;letter-spacing:1.2px;color:var(--tx2);text-transform:uppercase;font-weight:700}
+.cv2-grp{display:flex;align-items:center;gap:6px;padding:15px 16px 5px;font-size:10px;letter-spacing:1.2px;color:var(--tx2);text-transform:uppercase;font-weight:700}
+.cv2-grp svg{width:12px;height:12px;opacity:.7;flex-shrink:0}
 .cv2-item{display:flex;align-items:center;gap:9px;padding:8px 16px;color:#3c3a37;font-size:13px;font-weight:600;border-left:3px solid transparent;cursor:pointer}
 .cv2-item:hover{background:#faf9f8}
 .cv2-item.on{color:var(--red);background:var(--red-soft);border-left-color:var(--red);font-weight:700}
