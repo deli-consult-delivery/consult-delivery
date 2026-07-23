@@ -1645,6 +1645,16 @@ app.use('/api', require('./routes/vendaerp')({
   erp: require('./lib/vendaerp'),
 }));
 
+// Cardápio Web -> Venda ERP. Sem credenciais, as rotas ficam fail-closed e o
+// worker não inicia; cada webhook válido entra no inbox antes do HTTP 200.
+const cardapioWebRouter = require('./routes/cardapio-web')({
+  requireJwt,
+  assertTenantMember,
+  sbFetch,
+});
+app.use('/api', cardapioWebRouter);
+cardapioWebRouter.startWorker();
+
 // Loop AI-First — despacho de especialista (regra única; Hermes via MCP + Trigger.dev).
 // POST /loop/despachar, protegido por x-internal-token. Substitui a regra que vivia
 // no admin-mcp (cd_despachar_especialista, agora thin RPC para esta rota).

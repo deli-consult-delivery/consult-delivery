@@ -490,6 +490,8 @@ Wandson apontou que o Console v2 tinha divergido do protótipo aprovado. Reconst
 
 ---
 
+15c. **🟡 Cardápio Web → Venda ERP — V1 IMPLEMENTADA, AGUARDANDO ATIVAÇÃO.** Branch `wandson/cardapio-venda-erp`. Fluxo unilateral para pedidos próprios, iFood, 99Food, Keeta e Aiqfome; delivery/retirada no recebimento e mesa/comanda no fechamento; `SalvarEFaturar` gera pedido, estoque e financeiro; status e cancelamento seguem para o Venda; NFC-e fora da V1. Bridge com OAuth PKCE, token cifrado, webhook autenticado, inbox idempotente, correlação, reconciliação sem repetir writes e cliente `Consumidor Final`. **Segurança:** V1 single-tenant por allowlist tenant/merchant/empresa, admin/owner, kill switch, bootstrap one-shot por formulário/body sem segredo na URL, validação da loja autorizada, lease/backoff e FKs compostas; valores fecham em centavos antes de qualquer write; callback e ativação recusam tokens sem `orders` + `store`. Gate live provou criar/faturar/baixar estoque/financeiro/atualizar status/excluir e reverter. QA: suíte Bridge completa, `tsc --noEmit` e build verdes; regressões de subtotal combo/grupo, `10.075` e `Infinity` cobertas. E-mail enviado e `Consumidor Final` criado no Venda ERP. **Pendente:** commit/PR, aplicar `20260723_001`, suporte confirmar `orders` + `store`, configurar credenciais Cardápio Web, reinstalar/autorizar no Sandbox e ativar explicitamente.
+
 ## 📊 Status por track
 
 | Track | Nome | Status | Última ação |

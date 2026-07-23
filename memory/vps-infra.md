@@ -124,3 +124,34 @@ vive num path relativo ao repo, sem o `AppData\...\Consult Delivery\...` do usu�
 Fixado em `4.4.6` — mesma versão de `@trigger.dev/sdk`/`@trigger.dev/build` já usada no projeto,
 pra não divergir. Confirmado ao vivo: versão `20260725.5`, 87 tasks detectadas
 (https://cloud.trigger.dev/projects/v3/proj_slexhoelcjwgbopmbzzr/deployments/2sx5a907).
+
+### Homologação Cardápio Web → Venda ERP (2026-07-23)
+
+- O Venda ERP pode responder `HTTP 200` contendo uma string de erro de negócio;
+  `response.ok` sozinho não comprova sucesso.
+- `Pessoas/Salvar` exige CPF ou CNPJ, inclusive para cliente genérico. O pedido
+  também exige o nome de um cliente já cadastrado.
+- `Pedidos/SalvarEFaturar` exige plano de contas válido.
+- Gate aprovado: `SalvarEFaturar` baixou estoque e criou contas a receber;
+  `ExcluirPedido` reverteu os três efeitos; `Pedidos/Salvar` atualizou status.
+- A ponte vive no Bridge, mas inicia desligada. Segredos novos:
+  `CARDAPIO_WEB_CLIENT_ID`, `CARDAPIO_WEB_WEBHOOK_TOKEN` e
+  `CARDAPIO_WEB_TOKEN_ENCRYPTION_KEY` (32 bytes base64), mais
+  `CARDAPIO_WEB_BOOTSTRAP_TOKEN`. A V1 também exige a allowlist
+  `CARDAPIO_WEB_BOOTSTRAP_TENANT_ID`, `CARDAPIO_WEB_BOOTSTRAP_MERCHANT_ID`,
+  `CARDAPIO_WEB_BOOTSTRAP_VENDA_EMPRESA` e o kill switch
+  `CARDAPIO_WEB_VENDA_WRITE_ENABLED=true`.
+- O callback e a ativação exigem os escopos OAuth `orders` e `store`; `store`
+  é necessário para consultar a loja autorizada e validar o `merchant_id`.
+  Se a permissão for adicionada após a instalação, o app precisa ser reinstalado.
+- Valores monetários são normalizados em centavos com arredondamento half-up e
+  o fechamento entre itens, frete, outras despesas e total ocorre antes de qualquer
+  write no Venda ERP.
+- Situação operacional: solicitação enviada à Cardápio Web e cliente genérico
+  `Consumidor Final` já cadastrado no Venda ERP.
+- A URL pública de instalação é exatamente
+  `https://bridge.consultdelivery.com.br/api/cardapio-web/oauth/start`. Ela
+  renderiza um formulário `no-store`; o código one-shot trafega somente no body
+  urlencoded e nunca no path, query ou redirect.
+- Evidência completa e sanitizada:
+  `docs/integracoes/cardapio-web-venda-erp-homologacao.md`.

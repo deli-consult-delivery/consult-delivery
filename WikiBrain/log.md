@@ -1635,3 +1635,54 @@ Bridge (`bridge-server/lib/vendaerp.js`) é **pass-through** (`JSON.stringify(pa
 **Deploy (GATE 0 autônomo):** PR #640 squash-mergeado via GitHub MCP; `/root/consult-delivery` → `git reset --hard origin/main` (HEAD `92e63e0`); `hermes gateway restart` (PID 2052931, exit 0); `hermes mcp test vendaerp` ✅ **12 tools**; `hermes mcp test cd-admin` ✅ conecta.
 
 **⚠️ Falta (só Wandson):** rodar o write E2E no Telegram (`erp_propor_lancamento` → código out-of-band → `erp_confirmar`) e confirmar que o 417 sumiu (cria documento financeiro real — fora do escopo autônomo).
+
+---
+
+## 2026-07-23 — Gate 1 Cardápio Web → Venda ERP
+
+**Branch:** `wandson/cardapio-venda-erp`, em worktree limpo baseado em
+`origin/main`.
+
+**Decisões aprovadas:** todos os pedidos recebidos no Cardápio Web, inclusive
+iFood, 99Food, Keeta e Aiqfome, seguem para o Venda ERP; delivery e retirada
+entram no recebimento; mesa e comanda entram fechadas; o pedido deve faturar,
+baixar estoque e gerar contas a receber; NFC-e fica fora da V1.
+
+**Homologação:** produto `CW-HML-001` criado e saldo 10 confirmado. A criação de
+`Consumidor Final` sem documento foi recusada com HTTP 417 porque
+`Pessoas/Salvar` exige CPF/CNPJ. `Pedidos/SalvarEFaturar` também comprovou que
+exige plano de contas e cliente previamente cadastrado. Erros de negócio podem
+vir em HTTP 200 como string; `response.ok` não comprova sucesso. Consulta final
+confirmou zero pedidos com a origem de homologação.
+
+**Gate aprovado:** após o cadastro do `Consumidor Final`,
+`SalvarEFaturar` criou o pedido 3, estoque 10→9 e lançamento 626 de R$10.
+`ExcluirPedido [3]` reverteu pedido, estoque e financeiro. Prova adicional
+confirmou `Pedidos/Salvar` atualizando status e cleanup bem-sucedido.
+
+**Implementação:** Bridge Express reutilizado com OAuth PKCE, tokens por
+loja/tenant cifrados em AES-256-GCM, webhook `X-Webhook-Token`, inbox
+idempotente, fetch do pedido completo, de-para PDV, faturamento, status,
+cancelamento e reconciliação sem retry de POST/PUT/DELETE. Migration
+`20260723_001_cardapio_web_venda_erp.sql` criada com RLS e acesso exclusivo
+`service_role`. A integração fica `enabled=false`; migration/segredos/OAuth
+Sandbox ainda não aplicados. Evidências em
+`docs/integracoes/cardapio-web-venda-erp{,-homologacao}.md`.
+
+**Revisão de segurança:** V1 restrita por allowlist fixa de tenant, merchant e
+empresa Venda ERP; somente admin/owner configura; escrita depende de kill
+switch. Bootstrap OAuth usa formulário público sem segredo na URL, recebe o
+código one-shot Base64URL de 32–128 caracteres no body, aplica rate limit por
+IP/global e valida a loja via Partner API. Inbox ganhou
+lease/backoff persistidos e FKs compostas; cancelamento e
+falhas ambíguas permanecem em reconciliação sem repetir writes.
+
+**Fechamento P0:** valores monetários são convertidos para centavos com
+arredondamento half-up e os subtotais de itens/complementos, frete, outras
+despesas e total precisam fechar antes de qualquer write. Callback e ativação
+também exigem os escopos OAuth `orders` e `store`; `store` é usado para validar
+a loja autorizada. Regressões cobrem combo/grupo divergente, `10.075`,
+`Infinity`/`NaN` e valores `null`/booleanos/estruturados. Wandson confirmou o
+envio do e-mail e o cadastro do `Consumidor Final`; falta o suporte confirmar
+ambos os escopos e, se o app já tiver sido instalado, reinstalá-lo antes da
+ativação.

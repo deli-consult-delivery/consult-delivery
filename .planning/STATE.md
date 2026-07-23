@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: None (not started)
 status: planning
-last_updated: "2026-05-08T03:46:15.319Z"
+last_updated: "2026-07-23T16:30:00-03:00"
 progress:
   total_phases: 3
   completed_phases: 0
@@ -102,13 +102,14 @@ Phase 3 ░░░░░░░░░░░░
 
 ## Session Continuity
 
-**Last updated:** 2026-07-06 — sessão worker W1 (sprint homologação iFood, fora do escopo deste roadmap antigo): PR #757 aberto — migrations 20260706_001/002 (tenants cd-homolog/cd-demo + allowlist tenant_modules) + fixes ConsoleV2 (radar na Visão Geral, chat-legado removido, label Avaliações iFood). Aguarda revisão/aplicação pela orquestradora.
-**Last action:** PR #757 criado (branch wandson/homolog-demo-tenants) — NÃO mergeado, migrations NÃO aplicadas por este worker
-**Resume from:** orquestradora revisa PR #757
+**Last updated:** 2026-07-23 — integração Cardápio Web → Venda ERP implementada na branch `wandson/cardapio-venda-erp`, desligada até credenciais e migration.
+**Last action:** Gate Venda ERP aprovado; OAuth PKCE, webhook/inbox, faturamento, status, cancelamento e reconciliação concluídos. Revisão fechou allowlist single-tenant, admin/owner, kill switch, bootstrap one-shot por formulário/body sem segredo na URL e com rate limit por IP/global, lease/backoff e FKs compostas. Valores agora fecham em centavos antes de qualquer write; callback e ativação exigem `orders` + `store`. E-mail enviado e `Consumidor Final` criado no Venda ERP. Migration ainda não aplicada e nenhum segredo configurado.
+**Resume from:** revisão final → commit/PR → aplicar `20260723_001` → suporte confirmar `orders` + `store` → configurar credenciais Cardápio Web → reinstalar/autorizar no Sandbox → habilitar instalação.
 
 ---
 
 ## Sessões avulsas (fora do roadmap GSD)
 
+- **2026-07-23 (Cardápio Web → Venda ERP):** Bridge Express reutilizado, sem microserviço/fila externa/UI. V1 em allowlist fixa de tenant/merchant/empresa, ativação admin/owner + kill switch, tokens OAuth cifrados, bootstrap one-shot com validação da loja, webhook autenticado/idempotente, lease e backoff persistidos, pedidos próprios/marketplaces, mesa/comanda fechada, `SalvarEFaturar`, status, `ExcluirPedido` idempotente e reconciliação sem retry de writes. Gate live provou pedido/estoque/financeiro/reversão/status. Fechamento monetário usa centavos e falha antes do primeiro write; OAuth exige `orders` + `store`. E-mail enviado e `Consumidor Final` criado. Ativação permanece `enabled=false`; migration não aplicada nesta branch sem commit.
 - **2026-07-06 (worker W3, sprint homologação iFood):** Missão P0 segurança do PainelAvaliacoesConsultor. Constatado que credenciais hardcoded, lista fixa de 14 lojas e envio WA direto **já estavam corrigidos em main** (#716/#745). Brecha restante fechada: `listEvoGroups` deixou de chamar Evolution API direto do front (VITE_EVOLUTION_KEY no bundle) e passou a usar `GET /whatsapp/groups` do Bridge, por tenant → **PR #756 MERGEADO**. Débito registrado no PR (segue como missão irmã): `src/lib/evolution.js`, `ChatScreen.jsx` e `ensureWebhookConfig` ainda usam VITE_EVOLUTION_KEY no front.
 - **2026-07-06 (worker W3, follow-up CONCLUÍDO):** Migrados os 3 usos restantes de VITE_EVOLUTION_URL/KEY (`src/lib/evolution.js`, `src/lib/api.js`, `src/screens/ChatScreen.jsx`) + achado extra: `ChatV2.jsx`/`ChatScreen.jsx`/`ChatAoVivoV2.jsx` selecionavam `evolution_url, api_key` de `evolution_instances` direto no client (mesma classe de exposição, key real de produção em vez de placeholder). Solução: novo router `bridge-server/routes/evolution-actions.js` (14 endpoints, `requireJwt` + `assertTenantMember`, resolve credenciais por `instance_name` — identificador já público no front, nunca a key) + `bridge-server/lib/evolution-instance.js`. `ensureWebhookConfig` (api.js) e 8 funções mortas de `evolution.js` deletadas (zero callers). Screen legado não roteado `src/screens/GruposScreen.jsx` deletado. Revisão multi-agente (fix_first) fechou: CORS sem PUT, limite de body 2mb quebrando mídia, IDOR cross-tenant (assertTenantMember) e migration aditiva `20260706_008` (REVOKE/GRANT coluna api_key/evolution_url, não aplicada). Branch `wandson/evolution-front-bridge` → **PR #761 aberto, não mergeado**.
