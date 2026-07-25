@@ -27,6 +27,18 @@ const ASAAS_TO_STATUS: Record<string, string> = {
 
 const BATCH_SIZE = 200;
 
+/**
+ * Cobranças locais com asaas_charge_id que não aparece mais em nenhuma página
+ * do Asaas — ou seja, o charge foi deletado de verdade lá (listChargesAll()
+ * não tem filtro de data, então "ausente" não é "fora da janela consultada").
+ */
+export function encontrarCobrancasOrfas<T extends { asaas_charge_id: string }>(
+  locais: T[],
+  asaasIds: Set<string>
+): T[] {
+  return locais.filter((c) => !asaasIds.has(c.asaas_charge_id));
+}
+
 export const asaasSyncFinanceiro = schedules.task({
   id: "asaas-sync-financeiro",
   cron: "*/30 * * * *",
@@ -92,12 +104,47 @@ export const asaasSyncFinanceiro = schedules.task({
       logger.info(`[sync-financeiro] progresso: ${Math.min(i + BATCH_SIZE, charges.length)}/${charges.length}`);
     }
 
+    // Reconciliação: cobranças locais com asaas_charge_id que o Asaas não retornou
+    // em nenhuma página (listChargesAll() busca sem filtro de data — se o charge foi
+    // realmente deletado no Asaas, ele nunca mais aparece aqui). Sem isso, uma
+    // cobrança excluída no Asaas fica presa como aberta na plataforma pra sempre.
+    const asaasIds = new Set(charges.map((c) => c.id));
+    const { data: locais, error: locaisError } = await sb
+      .from("cobrancas")
+      .select("id, asaas_charge_id, status")
+      .eq("tenant_id", tenantId)
+      .not("asaas_charge_id", "is", null)
+      .neq("status", "canceled");
+
+    let orfas = 0;
+    if (locaisError) {
+      logger.warn(`[sync-financeiro] falha ao buscar cobranças locais p/ reconciliação: ${locaisError.message}`);
+    } else {
+      const orfasRows = encontrarCobrancasOrfas(locais ?? [], asaasIds);
+      if (orfasRows.length) {
+        const { error: cancelError } = await sb
+          .from("cobrancas")
+          .update({ status: "canceled", updated_at: now })
+          .in("id", orfasRows.map((c) => c.id));
+
+        if (cancelError) {
+          logger.warn(`[sync-financeiro] falha ao cancelar ${orfasRows.length} cobrança(s) órfã(s): ${cancelError.message}`);
+        } else {
+          orfas = orfasRows.length;
+          logger.info(`[sync-financeiro] ${orfas} cobrança(s) removida(s) do Asaas → marcada(s) como canceled`, {
+            ids: orfasRows.map((c) => c.id),
+          });
+        }
+      }
+    }
+
     logger.info("asaas-sync-financeiro: concluído", {
       total: charges.length,
       upserted,
       errors,
+      orfas,
     });
 
-    return { total: charges.length, upserted, errors };
+    return { total: charges.length, upserted, errors, orfas };
   },
 });

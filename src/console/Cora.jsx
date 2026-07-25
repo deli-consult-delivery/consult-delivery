@@ -7,7 +7,7 @@ const BRIDGE = import.meta.env.VITE_BRIDGE_URL || 'https://bridge.consultdeliver
 // Colunas explícitas de `cobrancas` — TUDO menos `metadata` (jsonb pesado com o
 // payload bruto do Asaas, nunca lido na UI). Evita arrastar o blob a cada SELECT,
 // que era 81% do tempo total de banco (pg_stat_statements). Não usar `select('*')`.
-const COBRANCAS_COLUMNS = 'id, tenant_id, cliente_id, asaas_charge_id, valor, vencimento, status, billing_type, invoice_url, bank_slip_url, pix_qr_code, customer_name, customer_phone, notas, created_at, updated_at, payment_date, net_value, date_created, invoice_viewed_date, description, confirmed_date';
+const COBRANCAS_COLUMNS = 'id, tenant_id, cliente_id, asaas_charge_id, valor, vencimento, status, billing_type, invoice_url, bank_slip_url, pix_qr_code, customer_name, customer_phone, notas, created_at, updated_at, payment_date, net_value, date_created, invoice_viewed_date, description, confirmed_date, ignorar_cobranca, ignorar_motivo';
 
 // Debounce dos reloads disparados por Realtime: um batch do asaas-sync (~2000 linhas)
 // gera 2000 eventos → sem debounce, 2000 reloads da tabela inteira. Com 2s, vira 1.
