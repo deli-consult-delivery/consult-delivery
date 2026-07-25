@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "lint:jsx": "eslint 'src/**/*.jsx'",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "deploy:trigger": "trigger deploy"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.2",
@@ -30,6 +31,7 @@
     "eslint": "^10.5.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.7.0",
+    "trigger.dev": "4.4.6",
     "typescript": "^5.9.3",
     "vite": "^5.4.8",
     "vitest": "^1.6.1"
