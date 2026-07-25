@@ -106,3 +106,21 @@ Fix: `git fetch origin && git reset --hard origin/main`.
   (a) teste E2E no Telegram em **sessão NOVA** do @DeliConsultBot ("qual o status do VendaERP?" → `erp_status`);
   (b) **ROTACIONAR o `VENDAERP_TOKEN`** (vazou em texto plano no chat): gerar chave nova no token
   "Hermes", trocar no `.env` do Bridge, `pm2 restart bridge-server`, revogar a antiga. Nunca ecoar o token bruto.
+
+## `npx trigger.dev deploy` quebra no Windows (path com espaço) — usar bin local
+
+Rodar `npx trigger.dev@4.4.6 deploy` direto (baixando pro cache global do npx) **falha
+sempre** neste ambiente Windows, no passo `[indexer 2/2]` do build, com
+`Cannot find module '/app/Users/Consult%20Delivery/...managed-index-controller.mjs'`
+(ou `%7E1` se tentar contornar redirecionando `npm_config_cache` pra um path 8.3 tipo
+`CONSUL~1`). Causa: o CLI resolve o path absoluto do próprio pacote no HOST (que inclui
+`C:\Users\Consult Delivery\...\AppData\Local\npm-cache\_npx\<hash>\...`) e tenta reproduzir
+esse mesmo path absoluto dentro do container Docker do build remoto — como o path do host
+tem espaço, vira `%20`/`%7E1` no container e o módulo não existe lá.
+
+**Fix:** instalar `trigger.dev` como devDependency do próprio projeto (`node_modules/trigger.dev`
+vive num path relativo ao repo, sem o `AppData\...\Consult Delivery\...` do usuário) e rodar via
+`npm run deploy:trigger` (script em `package.json` → `trigger deploy`, resolve pro bin local).
+Fixado em `4.4.6` — mesma versão de `@trigger.dev/sdk`/`@trigger.dev/build` já usada no projeto,
+pra não divergir. Confirmado ao vivo: versão `20260725.5`, 87 tasks detectadas
+(https://cloud.trigger.dev/projects/v3/proj_slexhoelcjwgbopmbzzr/deployments/2sx5a907).
