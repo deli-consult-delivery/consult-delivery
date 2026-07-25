@@ -31,11 +31,16 @@ const BATCH_SIZE = 200;
  * Cobranças locais com asaas_charge_id que não aparece mais em nenhuma página
  * do Asaas — ou seja, o charge foi deletado de verdade lá (listChargesAll()
  * não tem filtro de data, então "ausente" não é "fora da janela consultada").
+ *
+ * ponytail: recusa reconciliar contra um `asaasIds` vazio — um Asaas com 0
+ * cobranças pra um tenant real é sinal de resposta suspeita (env/API key
+ * errada), não "cancelar tudo". Ver chamada em `run()` antes desta função.
  */
 export function encontrarCobrancasOrfas<T extends { asaas_charge_id: string }>(
   locais: T[],
   asaasIds: Set<string>
 ): T[] {
+  if (asaasIds.size === 0) return [];
   return locais.filter((c) => !asaasIds.has(c.asaas_charge_id));
 }
 
@@ -117,24 +122,34 @@ export const asaasSyncFinanceiro = schedules.task({
       .neq("status", "canceled");
 
     let orfas = 0;
-    if (locaisError) {
+    if (charges.length === 0) {
+      // Resposta do Asaas sem nenhum charge para um tenant real é sinal de
+      // configuração errada (ex: ASAAS_ENVIRONMENT/API key apontando pro
+      // sandbox), não "cliente zerou tudo". Não reconcilia nesse caso —
+      // encontrarCobrancasOrfas já recusa um asaasIds vazio, isto aqui é só
+      // pra deixar o alerta visível nos logs do run.
+      logger.warn("[sync-financeiro] Asaas retornou 0 cobranças — pulando reconciliação de órfãs (possível config errada)");
+    } else if (locaisError) {
       logger.warn(`[sync-financeiro] falha ao buscar cobranças locais p/ reconciliação: ${locaisError.message}`);
     } else {
       const orfasRows = encontrarCobrancasOrfas(locais ?? [], asaasIds);
-      if (orfasRows.length) {
+      for (let i = 0; i < orfasRows.length; i += BATCH_SIZE) {
+        const idsBatch = orfasRows.slice(i, i + BATCH_SIZE).map((c) => c.id);
         const { error: cancelError } = await sb
           .from("cobrancas")
           .update({ status: "canceled", updated_at: now })
-          .in("id", orfasRows.map((c) => c.id));
+          .in("id", idsBatch);
 
         if (cancelError) {
-          logger.warn(`[sync-financeiro] falha ao cancelar ${orfasRows.length} cobrança(s) órfã(s): ${cancelError.message}`);
+          logger.warn(`[sync-financeiro] falha ao cancelar lote de ${idsBatch.length} cobrança(s) órfã(s): ${cancelError.message}`);
         } else {
-          orfas = orfasRows.length;
-          logger.info(`[sync-financeiro] ${orfas} cobrança(s) removida(s) do Asaas → marcada(s) como canceled`, {
-            ids: orfasRows.map((c) => c.id),
-          });
+          orfas += idsBatch.length;
         }
+      }
+      if (orfas) {
+        logger.info(`[sync-financeiro] ${orfas} cobrança(s) removida(s) do Asaas → marcada(s) como canceled`, {
+          ids: orfasRows.map((c) => c.id),
+        });
       }
     }
 

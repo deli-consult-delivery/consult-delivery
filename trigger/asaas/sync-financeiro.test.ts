@@ -35,4 +35,13 @@ describe("encontrarCobrancasOrfas", () => {
   it("lista vazia de locais: retorna vazio", () => {
     expect(encontrarCobrancasOrfas([], new Set(["pay_1"]))).toHaveLength(0);
   });
+
+  it("asaasIds vazio: não marca nada como órfã (recusa 'cancelar tudo' por resposta suspeita)", () => {
+    const locais = [
+      { id: "c1", asaas_charge_id: "pay_1", status: "overdue" },
+      { id: "c2", asaas_charge_id: "pay_2", status: "pending" },
+    ];
+
+    expect(encontrarCobrancasOrfas(locais, new Set())).toHaveLength(0);
+  });
 });
