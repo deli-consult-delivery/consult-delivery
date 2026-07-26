@@ -95,7 +95,6 @@ function getConfig() {
   const clientId = process.env.CARDAPIO_WEB_CLIENT_ID;
   const redirectUri = process.env.CARDAPIO_WEB_REDIRECT_URI ||
     'https://bridge.consultdelivery.com.br/api/cardapio-web/oauth/callback';
-  if (!clientId) throw new CardapioWebApiError('CARDAPIO_WEB_CLIENT_ID não configurado');
   return {
     clientId,
     redirectUri,
@@ -108,6 +107,25 @@ function getConfig() {
         ? 'https://www.portal.cardapioweb.com/cw-apps'
         : 'https://portal.sandbox.cardapioweb.com/cw-apps'),
   };
+}
+
+function getOAuthConfig() {
+  const config = getConfig();
+  if (!config.clientId) throw new CardapioWebApiError('CARDAPIO_WEB_CLIENT_ID não configurado');
+  return config;
+}
+
+function getStaticAccessToken() {
+  const token = process.env.CARDAPIO_WEB_ACCESS_TOKEN;
+  if (!token) return null;
+  const config = getConfig();
+  if (
+    process.env.CARDAPIO_WEB_ENV !== 'sandbox' ||
+    config.apiBaseUrl !== 'https://integracao.sandbox.cardapioweb.com'
+  ) {
+    throw new CardapioWebApiError('Access Token estático permitido somente no Sandbox');
+  }
+  return token;
 }
 
 function encryptionKey() {
@@ -153,7 +171,7 @@ function hashState(state) {
 }
 
 function authorizationUrl({ state, challenge }) {
-  const config = getConfig();
+  const config = getOAuthConfig();
   const url = new URL(config.authorizationUrl);
   url.search = new URLSearchParams({
     client_id: config.clientId,
@@ -166,7 +184,7 @@ function authorizationUrl({ state, challenge }) {
 }
 
 async function tokenRequest(form) {
-  const config = getConfig();
+  const config = getOAuthConfig();
   let response;
   try {
     response = await fetch(`${config.apiBaseUrl}/api/partner/oauth/token`, {
@@ -254,6 +272,8 @@ module.exports = {
   REQUIRED_SCOPES,
   hasRequiredScopes,
   getConfig,
+  getOAuthConfig,
+  getStaticAccessToken,
   encryptSecret,
   decryptSecret,
   createPkce,

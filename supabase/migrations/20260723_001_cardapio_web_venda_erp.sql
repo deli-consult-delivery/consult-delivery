@@ -8,9 +8,24 @@ CREATE TABLE IF NOT EXISTS public.cardapio_web_installations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
   merchant_id bigint NOT NULL,
-  access_token_ciphertext text NOT NULL,
-  refresh_token_ciphertext text NOT NULL,
-  token_expires_at timestamptz NOT NULL,
+  auth_mode text NOT NULL DEFAULT 'oauth'
+    CHECK (auth_mode IN ('oauth', 'static')),
+  access_token_ciphertext text,
+  refresh_token_ciphertext text,
+  token_expires_at timestamptz,
+  CONSTRAINT cardapio_web_installations_auth_credentials CHECK (
+    (
+      auth_mode = 'oauth' AND
+      access_token_ciphertext IS NOT NULL AND
+      refresh_token_ciphertext IS NOT NULL AND
+      token_expires_at IS NOT NULL
+    ) OR (
+      auth_mode = 'static' AND
+      access_token_ciphertext IS NULL AND
+      refresh_token_ciphertext IS NULL AND
+      token_expires_at IS NULL
+    )
+  ),
   scope text NOT NULL DEFAULT '',
   enabled boolean NOT NULL DEFAULT false,
   status text NOT NULL DEFAULT 'active'
@@ -114,5 +129,6 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.cardapio_web_events TO service_ro
 COMMIT;
 
 -- Isolamento esperado:
--- SET LOCAL ROLE authenticated; SELECT count(*) FROM public.cardapio_web_events; -- 0
+-- BEGIN; SET LOCAL ROLE authenticated; SELECT count(*) FROM public.cardapio_web_events;
+-- expected: permission denied; ROLLBACK;
 -- O Bridge usa service_role e é o único consumidor destas tabelas.

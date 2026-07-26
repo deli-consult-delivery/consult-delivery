@@ -368,6 +368,138 @@ const installation = {
     assert.strictEqual(merchant.id, 3268);
   });
 
+  await check('modo estático usa somente o token do env e nunca tenta refresh', async () => {
+    const correlation = {
+      id: 'corr-static',
+      codigo_pedido_cliente: 'CW-3268-237456',
+      venda_order_code: 3,
+      write_started_at: null,
+      cw_status: 'canceled',
+    };
+    const cw = {
+      getStaticAccessToken: () => 'static-access-token',
+      decryptSecret: () => { throw new Error('decrypt não deveria ser chamado'); },
+      refreshToken: async () => { throw new Error('refresh não deveria ser chamado'); },
+      fetchOrder: async (_orderId, token) => {
+        assert.strictEqual(token, 'static-access-token');
+        return order({ status: 'canceled' });
+      },
+    };
+    const status = await processEvent({
+      tenant_id: installation.tenant_id,
+      merchant_id: 3268,
+      order_id: 237456,
+    }, {
+      ...installation,
+      auth_mode: 'static',
+      merchant_id: 3268,
+      token_expires_at: null,
+      access_token_ciphertext: null,
+      refresh_token_ciphertext: null,
+    }, async (path) => path.startsWith('cardapio_web_orders?') ? [correlation] : [], {
+      cw,
+      erp: { excluirPedido: async () => {} },
+    });
+    assert.strictEqual(status, 'done');
+  });
+
+  await check('token estático é recusado fora do Sandbox sem aparecer no erro', () => {
+    process.env.CARDAPIO_WEB_ACCESS_TOKEN = 'static-secret-test';
+    process.env.CARDAPIO_WEB_ENV = 'production';
+    try {
+      assert.throws(
+        () => cardapio.getStaticAccessToken(),
+        (err) => /somente no Sandbox/.test(err.message) &&
+          !err.message.includes(process.env.CARDAPIO_WEB_ACCESS_TOKEN)
+      );
+    } finally {
+      delete process.env.CARDAPIO_WEB_ACCESS_TOKEN;
+      delete process.env.CARDAPIO_WEB_ENV;
+    }
+  });
+
+  await check('token estático recusa URL-base fora da allowlist do Sandbox', () => {
+    process.env.CARDAPIO_WEB_ACCESS_TOKEN = 'static-secret-test';
+    process.env.CARDAPIO_WEB_ENV = 'sandbox';
+    process.env.CARDAPIO_WEB_BASE_URL = 'https://integracao.cardapioweb.com';
+    try {
+      assert.throws(
+        () => cardapio.getStaticAccessToken(),
+        (err) => /somente no Sandbox/.test(err.message) &&
+          !err.message.includes(process.env.CARDAPIO_WEB_ACCESS_TOKEN)
+      );
+    } finally {
+      delete process.env.CARDAPIO_WEB_ACCESS_TOKEN;
+      delete process.env.CARDAPIO_WEB_ENV;
+      delete process.env.CARDAPIO_WEB_BASE_URL;
+    }
+  });
+
+  await check('401 no modo estático não repete request nem tenta refresh', async () => {
+    let fetches = 0;
+    let refreshes = 0;
+    const unauthorized = new Error('unauthorized');
+    unauthorized.status = 401;
+    const cw = {
+      getStaticAccessToken: () => 'static-access-token',
+      refreshToken: async () => { refreshes++; },
+      fetchOrder: async () => {
+        fetches++;
+        throw unauthorized;
+      },
+    };
+    await assert.rejects(
+      processEvent({
+        tenant_id: installation.tenant_id,
+        merchant_id: 3268,
+        order_id: 237456,
+      }, {
+        ...installation,
+        auth_mode: 'static',
+        merchant_id: 3268,
+      }, async () => [], { cw, erp: {} }),
+      (err) => err === unauthorized
+    );
+    assert.strictEqual(fetches, 1);
+    assert.strictEqual(refreshes, 0);
+  });
+
+  await check('OAuth continua usando token cifrado mesmo com token estático configurado', async () => {
+    const correlation = {
+      id: 'corr-oauth',
+      codigo_pedido_cliente: 'CW-3268-237456',
+      venda_order_code: 3,
+      write_started_at: null,
+      cw_status: 'canceled',
+    };
+    const cw = {
+      getStaticAccessToken: () => { throw new Error('token estático não deveria ser usado'); },
+      decryptSecret: (value) => {
+        assert.strictEqual(value, 'oauth-ciphertext');
+        return 'oauth-access-token';
+      },
+      fetchOrder: async (_orderId, token) => {
+        assert.strictEqual(token, 'oauth-access-token');
+        return order({ status: 'canceled' });
+      },
+    };
+    const status = await processEvent({
+      tenant_id: installation.tenant_id,
+      merchant_id: 3268,
+      order_id: 237456,
+    }, {
+      ...installation,
+      auth_mode: 'oauth',
+      merchant_id: 3268,
+      token_expires_at: '2099-01-01T00:00:00Z',
+      access_token_ciphertext: 'oauth-ciphertext',
+    }, async (path) => path.startsWith('cardapio_web_orders?') ? [correlation] : [], {
+      cw,
+      erp: { excluirPedido: async () => {} },
+    });
+    assert.strictEqual(status, 'done');
+  });
+
   await check('cancelamento após criação ambígua exige reconciliação e não executa DELETE', async () => {
     let deletes = 0;
     const correlation = {

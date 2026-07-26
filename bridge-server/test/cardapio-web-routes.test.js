@@ -76,7 +76,7 @@ async function request(
   }
 }
 
-function routerWithRole(role, calls = [], installationScope = 'orders store') {
+function routerWithRole(role, calls = [], installationScope = 'orders store', authMode = 'oauth') {
   const sbFetch = async (path, options) => {
     calls.push({ path, options });
     if (path.startsWith('tenant_members?')) return [{ role }];
@@ -88,7 +88,9 @@ function routerWithRole(role, calls = [], installationScope = 'orders store') {
       ) ? [{}] : [];
     }
     if (path.startsWith('cardapio_web_installations?') && !options) {
-      return path.includes('select=scope') ? [{ scope: installationScope }] : [];
+      return path.includes('select=auth_mode,scope')
+        ? [{ auth_mode: authMode, scope: installationScope }]
+        : [];
     }
     if (path.startsWith('cardapio_web_installations?') && options?.method === 'PATCH') {
       return [{ enabled: options.body.enabled }];
@@ -217,6 +219,26 @@ function routerWithRole(role, calls = [], installationScope = 'orders store') {
     assert.strictEqual(stateWrite.options.body.bootstrap_token_hash, null);
   });
 
+  await check('OAuth sem client_id falha antes de persistir state', async () => {
+    const calls = [];
+    const clientId = process.env.CARDAPIO_WEB_CLIENT_ID;
+    delete process.env.CARDAPIO_WEB_CLIENT_ID;
+    try {
+      const response = await request(
+        routerWithRole('admin', calls),
+        'GET',
+        `/api/cardapio-web/oauth/start/admin?tenant_id=${TENANT}&merchant_id=3268&venda_empresa=Empresa`
+      );
+      assert.strictEqual(response.status, 503);
+      assert.strictEqual(
+        calls.some((call) => call.path === 'cardapio_web_oauth_states'),
+        false
+      );
+    } finally {
+      process.env.CARDAPIO_WEB_CLIENT_ID = clientId;
+    }
+  });
+
   await check('membro sem papel admin/owner não altera integração', async () => {
     const response = await request(
       routerWithRole('operador'),
@@ -297,6 +319,114 @@ function routerWithRole(role, calls = [], installationScope = 'orders store') {
       assert.strictEqual(response.status, 409);
       assert.match(response.body, /orders e store/);
     } finally {
+      process.env.CARDAPIO_WEB_VENDA_WRITE_ENABLED = 'false';
+    }
+  });
+
+  await check('bootstrap estático valida merchant, é idempotente e preserva OAuth', async () => {
+    const originalFetchMerchant = cardapio.fetchMerchant;
+    process.env.CARDAPIO_WEB_ACCESS_TOKEN = 'static-secret-test';
+    process.env.CARDAPIO_WEB_ENV = 'sandbox';
+    let merchantValidated = false;
+    cardapio.fetchMerchant = async (token) => {
+      assert.strictEqual(token, process.env.CARDAPIO_WEB_ACCESS_TOKEN);
+      merchantValidated = true;
+      return { id: 3268 };
+    };
+    try {
+      const createCalls = [];
+      const createRouter = buildRouter({
+        requireJwt: (_req, _res, next) => next(),
+        assertTenantMember: async () => true,
+        sbFetch: async (path, options) => {
+          createCalls.push({ path, options });
+          if (path.startsWith('cardapio_web_installations?')) return [];
+          if (path === 'cardapio_web_installations') {
+            assert.strictEqual(merchantValidated, true);
+            return [{ id: 'static-installation', ...options.body }];
+          }
+          return [];
+        },
+      });
+      assert.strictEqual(await createRouter.startWorker(), null);
+      const created = createCalls.find((call) => call.path === 'cardapio_web_installations');
+      assert.strictEqual(created.options.body.auth_mode, 'static');
+      assert.strictEqual(created.options.body.enabled, false);
+      assert.strictEqual(created.options.body.access_token_ciphertext, null);
+      assert.strictEqual(created.options.body.refresh_token_ciphertext, null);
+      assert.strictEqual(created.options.body.token_expires_at, null);
+      assert.doesNotMatch(JSON.stringify(created.options.body), /static-secret-test/);
+
+      const restartCalls = [];
+      const restartRouter = buildRouter({
+        requireJwt: (_req, _res, next) => next(),
+        assertTenantMember: async () => true,
+        sbFetch: async (path, options) => {
+          restartCalls.push({ path, options });
+          if (path.includes('select=id,tenant_id,merchant_id,auth_mode')) {
+            return [{
+              id: 'static-installation',
+              tenant_id: TENANT,
+              merchant_id: 3268,
+              auth_mode: 'static',
+              enabled: true,
+            }];
+          }
+          return [];
+        },
+      });
+      assert.strictEqual(await restartRouter.startWorker(), null);
+      assert.strictEqual(restartCalls.some((call) => call.options?.method), false);
+
+      merchantValidated = false;
+      process.env.CARDAPIO_WEB_ENV = 'production';
+      const oauthCalls = [];
+      const oauthRouter = buildRouter({
+        requireJwt: (_req, _res, next) => next(),
+        assertTenantMember: async () => true,
+        sbFetch: async (path, options) => {
+          oauthCalls.push({ path, options });
+          if (path.includes('select=id,tenant_id,merchant_id,auth_mode')) {
+            return [{ id: 'oauth-installation', tenant_id: TENANT, merchant_id: 3268, auth_mode: 'oauth' }];
+          }
+          return [];
+        },
+      });
+      assert.strictEqual(await oauthRouter.startWorker(), null);
+      assert.strictEqual(merchantValidated, false);
+      assert.strictEqual(oauthCalls.some((call) => call.options?.method), false);
+    } finally {
+      cardapio.fetchMerchant = originalFetchMerchant;
+      delete process.env.CARDAPIO_WEB_ACCESS_TOKEN;
+      delete process.env.CARDAPIO_WEB_ENV;
+    }
+  });
+
+  await check('worker pode iniciar apenas com token estático no Sandbox', async () => {
+    const originalFetchMerchant = cardapio.fetchMerchant;
+    process.env.CARDAPIO_WEB_ACCESS_TOKEN = 'static-secret-test';
+    process.env.CARDAPIO_WEB_ENV = 'sandbox';
+    process.env.CARDAPIO_WEB_VENDA_WRITE_ENABLED = 'true';
+    cardapio.fetchMerchant = async () => ({ id: 3268 });
+    try {
+      const router = buildRouter({
+        requireJwt: (_req, _res, next) => next(),
+        assertTenantMember: async () => true,
+        sbFetch: async (path, options) => {
+          if (path.startsWith('cardapio_web_installations?') && !options) return [];
+          if (path === 'cardapio_web_installations') {
+            return [{ id: 'static-installation', ...options.body }];
+          }
+          return [];
+        },
+      });
+      const timer = await router.startWorker();
+      assert.ok(timer);
+      clearInterval(timer);
+    } finally {
+      cardapio.fetchMerchant = originalFetchMerchant;
+      delete process.env.CARDAPIO_WEB_ACCESS_TOKEN;
+      delete process.env.CARDAPIO_WEB_ENV;
       process.env.CARDAPIO_WEB_VENDA_WRITE_ENABLED = 'false';
     }
   });

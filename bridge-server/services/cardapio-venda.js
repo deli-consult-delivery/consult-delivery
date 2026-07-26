@@ -282,6 +282,11 @@ async function findVendaOrder(order, tenantId, erp = vendaerp) {
 }
 
 async function getAccessToken(installation, db, cw = cardapio, forceRefresh = false) {
+  if (installation.auth_mode === 'static') {
+    const token = cw.getStaticAccessToken();
+    if (!token) throw new Error('Access Token estático do Cardápio Web não configurado');
+    return token;
+  }
   if (!forceRefresh && new Date(installation.token_expires_at).getTime() > Date.now() + 120_000) {
     return cw.decryptSecret(installation.access_token_ciphertext);
   }
@@ -594,7 +599,7 @@ async function processEvent(event, installation, db, { cw = cardapio, erp = vend
   try {
     order = await cw.fetchOrder(event.order_id, accessToken);
   } catch (err) {
-    if (err.status !== 401) throw err;
+    if (err.status !== 401 || installation.auth_mode === 'static') throw err;
     accessToken = await getAccessToken(installation, db, cw, true);
     order = await cw.fetchOrder(event.order_id, accessToken);
   }

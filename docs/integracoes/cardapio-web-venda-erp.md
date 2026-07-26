@@ -42,6 +42,7 @@ Configurar somente no Infisical ou `.env` da VPS:
 ```text
 CARDAPIO_WEB_ENV=sandbox
 CARDAPIO_WEB_CLIENT_ID=
+CARDAPIO_WEB_ACCESS_TOKEN=
 CARDAPIO_WEB_WEBHOOK_TOKEN=
 CARDAPIO_WEB_TOKEN_ENCRYPTION_KEY=
 CARDAPIO_WEB_REDIRECT_URI=https://bridge.consultdelivery.com.br/api/cardapio-web/oauth/callback
@@ -55,6 +56,14 @@ CARDAPIO_WEB_VENDA_WRITE_ENABLED=false
 `CARDAPIO_WEB_TOKEN_ENCRYPTION_KEY` deve conter 32 bytes em base64. Tokens OAuth
 são persistidos por tenant com AES-256-GCM; as tabelas não têm acesso
 `anon/authenticated`.
+
+`CARDAPIO_WEB_ACCESS_TOKEN` é opcional e exclusivo do Sandbox. Quando presente,
+o Bridge consulta `GET /api/partner/v1/merchant`, exige o merchant da allowlist e
+cria uma instalação `auth_mode=static` desabilitada. Reinícios preservam sua
+configuração e o estado `enabled`. O token
+fica somente no ambiente: não é persistido, aceito em body/query nem registrado
+em logs. Uma instalação OAuth existente nunca é sobrescrita por esse bootstrap.
+Sem o token estático, o fluxo OAuth PKCE continua inalterado.
 
 O bootstrap só aceita o tenant, merchant e empresa fixos acima. O código deve ser
 aleatório, usar 32–128 caracteres Base64 URL-safe, tem uso único persistido no
@@ -114,11 +123,12 @@ estoque ou lançamento financeiro.
    imprimi-los em log. Cadastrar exatamente
    `https://bridge.consultdelivery.com.br/api/cardapio-web/oauth/start` como URL
    de instalação pública.
-3. Abrir a URL, digitar o código no formulário e rotacioná-lo após a tentativa;
+3. Para OAuth, abrir a URL, digitar o código no formulário e rotacioná-lo após a tentativa;
    alternativamente, iniciar OAuth pela rota `/oauth/start/admin` autenticada,
-   informando tenant, merchant e empresa Venda ERP.
+   informando tenant, merchant e empresa Venda ERP. Para o token estático do
+   Sandbox, reiniciar o Bridge e confirmar o bootstrap automático desabilitado.
 4. Confirmar que a instalação retornada por `GET /integration` contém
-   `orders` e `store` em `scope`.
+   `auth_mode=static`; em OAuth, confirmar também `orders` e `store` em `scope`.
 5. Configurar de-para financeiro, se necessário.
 6. Definir `CARDAPIO_WEB_VENDA_WRITE_ENABLED=true` e fazer
    `PATCH /integration` com `enabled=true`, usando usuário `admin` ou `owner`.

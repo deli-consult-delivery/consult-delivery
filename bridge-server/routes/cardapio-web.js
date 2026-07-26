@@ -62,6 +62,52 @@ module.exports = function buildCardapioWebRouter({ requireJwt, assertTenantMembe
     );
   }
 
+  async function bootstrapStaticInstallation() {
+    if (!process.env.CARDAPIO_WEB_ACCESS_TOKEN) return null;
+    const parsed = StartSchema.safeParse({
+      tenant_id: process.env.CARDAPIO_WEB_BOOTSTRAP_TENANT_ID,
+      merchant_id: process.env.CARDAPIO_WEB_BOOTSTRAP_MERCHANT_ID,
+      venda_empresa: process.env.CARDAPIO_WEB_BOOTSTRAP_VENDA_EMPRESA,
+    });
+    if (!parsed.success || !assertAllowedTarget(parsed.data)) {
+      throw new Error('Allowlist do Cardápio Web estático não configurada');
+    }
+    const input = parsed.data;
+    const existing = await sbFetch(
+      `cardapio_web_installations?merchant_id=eq.${input.merchant_id}` +
+      '&select=id,tenant_id,merchant_id,auth_mode&limit=1'
+    );
+    if (existing?.length) {
+      const installation = existing[0];
+      if (String(installation.tenant_id) !== input.tenant_id) {
+        throw new Error('Merchant Cardápio Web já vinculado a outro tenant');
+      }
+      if (installation.auth_mode !== 'static') return installation;
+    }
+    const accessToken = cardapio.getStaticAccessToken();
+    const merchant = await cardapio.fetchMerchant(accessToken);
+    if (merchant.id !== input.merchant_id) {
+      throw new Error('A loja do Access Token não corresponde à allowlist');
+    }
+    if (existing?.length) return existing[0];
+    const rows = await sbFetch('cardapio_web_installations', {
+      method: 'POST',
+      body: {
+        tenant_id: input.tenant_id,
+        merchant_id: input.merchant_id,
+        auth_mode: 'static',
+        access_token_ciphertext: null,
+        refresh_token_ciphertext: null,
+        token_expires_at: null,
+        scope: '',
+        enabled: false,
+        status: 'active',
+        venda_empresa: input.venda_empresa,
+      },
+    });
+    return rows?.[0] || null;
+  }
+
   async function assertTenantAdmin(req, res, tenantId) {
     if (!req.user?.id) {
       res.status(401).json({ error: 'Autenticação obrigatória' });
@@ -183,7 +229,6 @@ module.exports = function buildCardapioWebRouter({ requireJwt, assertTenantMembe
         return res.status(403).json({ error: 'tenant, merchant ou empresa fora da instalação autorizada' });
       }
       if (!bootstrapToken && !await assertTenantAdmin(req, res, input.tenant_id)) return;
-      cardapio.getConfig();
       if (bootstrapToken) {
         const existing = await sbFetch(
           `cardapio_web_installations?tenant_id=eq.${encodeURIComponent(input.tenant_id)}` +
@@ -202,6 +247,7 @@ module.exports = function buildCardapioWebRouter({ requireJwt, assertTenantMembe
       }
       const state = crypto.randomBytes(32).toString('base64url');
       const pkce = cardapio.createPkce();
+      const redirect = cardapio.authorizationUrl({ state, challenge: pkce.challenge });
       await sbFetch('cardapio_web_oauth_states', {
         method: 'POST',
         body: {
@@ -216,7 +262,7 @@ module.exports = function buildCardapioWebRouter({ requireJwt, assertTenantMembe
           expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
         },
       });
-      return res.redirect(302, cardapio.authorizationUrl({ state, challenge: pkce.challenge }));
+      return res.redirect(302, redirect);
     } catch (err) {
       console.error('[cardapio-web/oauth/start]', err.message);
       if (bootstrapToken && String(err.message).includes('Supabase 409')) {
@@ -261,6 +307,7 @@ module.exports = function buildCardapioWebRouter({ requireJwt, assertTenantMembe
         body: {
           tenant_id: saved.tenant_id,
           merchant_id: saved.merchant_id,
+          auth_mode: 'oauth',
           access_token_ciphertext: cardapio.encryptSecret(tokens.access_token),
           refresh_token_ciphertext: cardapio.encryptSecret(tokens.refresh_token),
           token_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
@@ -287,7 +334,7 @@ module.exports = function buildCardapioWebRouter({ requireJwt, assertTenantMembe
       if (!await assertTenantMember(req, res, tenantId)) return;
       const rows = await sbFetch(
         `cardapio_web_installations?tenant_id=eq.${encodeURIComponent(tenantId)}` +
-        '&select=id,tenant_id,merchant_id,token_expires_at,scope,enabled,status,venda_empresa,' +
+        '&select=id,tenant_id,merchant_id,auth_mode,token_expires_at,scope,enabled,status,venda_empresa,' +
         'venda_deposito,venda_cliente_generico,venda_plano_conta,venda_forma_pagamento,' +
         'venda_payment_mapping,updated_at'
       );
@@ -314,20 +361,25 @@ module.exports = function buildCardapioWebRouter({ requireJwt, assertTenantMembe
         if (process.env.CARDAPIO_WEB_VENDA_WRITE_ENABLED !== 'true') {
           return res.status(503).json({ error: 'escrita Cardápio Web → Venda ERP desativada no servidor' });
         }
-        cardapio.getConfig();
         vendaerp.getVendaErpConfig(tenantId);
         if (!process.env.CARDAPIO_WEB_WEBHOOK_TOKEN) {
           return res.status(503).json({ error: 'CARDAPIO_WEB_WEBHOOK_TOKEN não configurado' });
         }
         const installations = await sbFetch(
           `cardapio_web_installations?tenant_id=eq.${encodeURIComponent(tenantId)}` +
-          `&merchant_id=eq.${merchantId}&status=eq.active&select=scope&limit=1`
+          `&merchant_id=eq.${merchantId}&status=eq.active&select=auth_mode,scope&limit=1`
         );
         if (!installations?.length) {
           return res.status(404).json({ error: 'Instalação Cardápio Web não encontrada' });
         }
-        if (!cardapio.hasRequiredScopes(installations[0].scope)) {
+        if (installations[0].auth_mode === 'static') {
+          if (!cardapio.getStaticAccessToken()) {
+            return res.status(409).json({ error: 'Access Token estático não configurado no servidor' });
+          }
+        } else if (!cardapio.hasRequiredScopes(installations[0].scope)) {
           return res.status(409).json({ error: 'reautorize o app com os escopos orders e store' });
+        } else {
+          cardapio.getOAuthConfig();
         }
       }
       const rows = await sbFetch(
@@ -471,11 +523,16 @@ module.exports = function buildCardapioWebRouter({ requireJwt, assertTenantMembe
     });
   }
 
-  router.startWorker = () => {
+  router.startWorker = async () => {
+    const staticInstallation = await bootstrapStaticInstallation();
+    const staticAccess = staticInstallation?.auth_mode === 'static';
+    const oauthAccess = Boolean(
+      process.env.CARDAPIO_WEB_CLIENT_ID &&
+      process.env.CARDAPIO_WEB_TOKEN_ENCRYPTION_KEY
+    );
     if (
-      !process.env.CARDAPIO_WEB_CLIENT_ID ||
+      (!staticAccess && !oauthAccess) ||
       !process.env.CARDAPIO_WEB_WEBHOOK_TOKEN ||
-      !process.env.CARDAPIO_WEB_TOKEN_ENCRYPTION_KEY ||
       process.env.CARDAPIO_WEB_VENDA_WRITE_ENABLED !== 'true'
     ) return null;
     const timer = setInterval(runWorker, 15_000);

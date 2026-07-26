@@ -1653,7 +1653,9 @@ const cardapioWebRouter = require('./routes/cardapio-web')({
   sbFetch,
 });
 app.use('/api', cardapioWebRouter);
-cardapioWebRouter.startWorker();
+cardapioWebRouter.startWorker().catch((err) => {
+  console.error('[cardapio-web/bootstrap]', err.message);
+});
 
 // Loop AI-First — despacho de especialista (regra única; Hermes via MCP + Trigger.dev).
 // POST /loop/despachar, protegido por x-internal-token. Substitui a regra que vivia
