@@ -137,6 +137,13 @@ const tolerant = (raw) => {
   return raw;
 };
 
+function requireBusinessSuccess(raw, validate, operation) {
+  if (!validate(raw)) {
+    throw new VendaErpApiError(`VendaERP rejeitou ${operation}`, 200, raw);
+  }
+  return raw;
+}
+
 // ---------------------------------------------------------------------------
 // Métodos de LEITURA (GET) — um conjunto por domínio do MVP.
 // Caminhos confirmados via swagger.json do VendaERP.
@@ -199,6 +206,32 @@ async function getFormasPagamento(tenantId) {
   return withRetry(() => erpFetch('/FormasPagamento/GetTodasFormasPagamento', {}, tenantId)).then(tolerant);
 }
 
+async function pesquisarPedidos({
+  dataInicial,
+  dataFinal,
+  pageSize = 100,
+  skip = 0,
+} = {}, tenantId) {
+  return withRetry(() => erpFetch(`/Pedidos/Pesquisar${qs({
+    dataInicial,
+    dataFinal,
+    filtrarPor: 0,
+    pageSize,
+    skip,
+  })}`, {}, tenantId)).then(tolerant);
+}
+
+async function pesquisarPessoas({ cpfcnpj, nomefantasia } = {}, tenantId) {
+  return withRetry(() => erpFetch(`/Pessoas/Pesquisar${qs({
+    cpfcnpj,
+    nomefantasia,
+    cliente: true,
+    fornecedor: false,
+    pageSize: 100,
+    skip: 0,
+  })}`, {}, tenantId)).then(tolerant);
+}
+
 // ---------------------------------------------------------------------------
 // Métodos de ESCRITA (POST) — Fase 2.
 // ⚠️ SEM withRetry: POST não-idempotente. Retry em 5xx/timeout duplicaria
@@ -252,6 +285,63 @@ async function ajustarEstoque(payload, tenantId) {
   }, tenantId).then(tolerant);
 }
 
+async function salvarEFaturarPedido(payload, tenantId) {
+  const raw = await erpFetch('/Pedidos/SalvarEFaturar?retornarPedido=true', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, tenantId);
+  return requireBusinessSuccess(
+    raw,
+    (body) => Boolean(body && typeof body === 'object' && (body.Pedido?.Codigo ?? body.pedido?.codigo)),
+    'o faturamento do pedido'
+  );
+}
+
+async function atualizarPedido(payload, tenantId) {
+  const raw = await erpFetch('/Pedidos/Salvar', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  }, tenantId);
+  return requireBusinessSuccess(
+    raw,
+    (body) => typeof body === 'string' &&
+      /modificad[oa].*sucesso|sucesso.*modificad[oa]/i.test(body),
+    'a atualização do pedido'
+  );
+}
+
+async function excluirPedido(codigo, tenantId) {
+  const raw = await erpFetch('/Pedidos/ExcluirPedido', {
+    method: 'DELETE',
+    body: JSON.stringify([codigo]),
+  }, tenantId);
+  return requireBusinessSuccess(
+    raw,
+    (body) => typeof body === 'string' && /sucesso/i.test(body),
+    'a exclusão do pedido'
+  );
+}
+
+async function salvarPessoa(payload, tenantId) {
+  const raw = await erpFetch('/Pessoas/Salvar', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, tenantId);
+  return requireBusinessSuccess(
+    raw,
+    (body) => (
+      (typeof body === 'string' && /sucesso/i.test(body)) ||
+      Boolean(body && typeof body === 'object' && (
+        Number.isInteger(body.Codigo) ||
+        Number.isInteger(body.codigo) ||
+        Number.isInteger(body.Pessoa?.Codigo) ||
+        Number.isInteger(body.pessoa?.codigo)
+      ))
+    ),
+    'o cadastro do cliente'
+  );
+}
+
 module.exports = {
   VendaErpApiError,
   getVendaErpConfig,
@@ -280,4 +370,11 @@ module.exports = {
   criarOportunidade,
   // pagamentos
   getFormasPagamento,
+  // pedidos Cardápio Web
+  pesquisarPedidos,
+  pesquisarPessoas,
+  salvarEFaturarPedido,
+  atualizarPedido,
+  excluirPedido,
+  salvarPessoa,
 };

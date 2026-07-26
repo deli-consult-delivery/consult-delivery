@@ -45,6 +45,10 @@ const realFetch = global.fetch;
     ['gerarBoleto', () => erp.gerarBoleto({ lancamento: 'L1' }), null],
     ['emitirNfe', () => erp.emitirNfe({ CodigoVenda: 42 }), null],
     ['ajustarEstoque', () => erp.ajustarEstoque({ produto: 'P1' }), null],
+    ['salvarEFaturarPedido', () => erp.salvarEFaturarPedido({ codigoPedidoCliente: 'CW-1' }), null],
+    ['atualizarPedido', () => erp.atualizarPedido({ Codigo: 1, Status: 'Pronto' }), null],
+    ['excluirPedido', () => erp.excluirPedido(1), null],
+    ['salvarPessoa', () => erp.salvarPessoa({ cnpJ_CPF: '00000000000' }), null],
   ]) {
     calls = 0;
     try {
@@ -70,6 +74,30 @@ const realFetch = global.fetch;
   } catch (e) {
     check('emitirNfe sem CodigoVenda lança VendaErpApiError', () => assert.strictEqual(e.name, 'VendaErpApiError'));
     check('emitirNfe sem CodigoVenda NÃO toca o ERP (0 chamadas)', () => assert.strictEqual(calls, 0));
+  }
+
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    text: async () => JSON.stringify({ erro: 'pedido não atualizado' }),
+  });
+  try {
+    await erp.atualizarPedido({ Codigo: 1, Status: 'Pronto' });
+    check('atualizarPedido deveria rejeitar objeto sem prova de sucesso', () => assert.fail('não lançou'));
+  } catch (e) {
+    check('atualizarPedido rejeita objeto HTTP 200 sem prova de sucesso', () => {
+      assert.strictEqual(e.name, 'VendaErpApiError');
+    });
+  }
+
+  try {
+    await erp.salvarPessoa({ cnpJ_CPF: '00000000000' });
+    check('salvarPessoa deveria rejeitar objeto sem prova de sucesso', () => assert.fail('não lançou'));
+  } catch (e) {
+    check('salvarPessoa rejeita objeto HTTP 200 sem prova de sucesso', () => {
+      assert.strictEqual(e.name, 'VendaErpApiError');
+    });
   }
 
   global.fetch = realFetch;
