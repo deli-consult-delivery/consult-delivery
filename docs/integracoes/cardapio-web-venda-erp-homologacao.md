@@ -1,8 +1,8 @@
 # Homologação — Cardápio Web → Venda ERP
 
-Data: 2026-07-23
-Ambiente: empresa de homologação da Consult Delivery
-Status: Gate 1 aprovado; integração implementada desligada
+Data: 2026-07-26
+Ambiente: Sandbox Cardápio Web + empresa de homologação Venda ERP
+Status: E2E aprovado; integração desligada em estado seguro
 
 ## Objetivo
 
@@ -77,16 +77,38 @@ O corpo vencedor não envia `categoria` nem `origemVenda`. Ele usa:
 `Consumidor Final`, depósito `PADRÃO`, plano `VENDA DE MERCADORIAS` e
 `À vista - Dinheiro`.
 
-### Atualização de status
-
-Prova adicional, também criada e excluída na homologação:
+### E2E Cardápio Web
 
 ```text
-{"create_http":200,"create_ok":true,"codigo":3,"initial_status":"Aguardando confirmação"}
-{"update_http":200,"update_type":"string","update_preview":"PEDIDO 3 MODIFICADO COM SUCESSO!"}
-{"search_http":200,"found":true}
-{"cleanup_http":200,"cleanup_ok":true}
+Loja Sandbox: 11973 — Teste Consult Delivery
+OAuth: ativo, scopes orders store
+Pedido Cardápio Web: 53385
+Correlação: CW-11973-53385
+Pedido Venda ERP: Codigo 3
+Item: CW-HML-001, quantidade 1, R$ 10,00
+Cliente: Consumidor Final
+Lançamento: Codigo 626, R$ 10,00, EhDespesa false
+Status Cardápio Web: confirmed
+Descrição Venda: CW-11973-53385 | catalog | Em preparação
 ```
+
+O evento `ORDER_CREATED` foi processado em uma tentativa. O evento
+`ORDER_STATUS_UPDATED` também foi processado em uma tentativa.
+
+### Atualização de status faturado
+
+`Pedidos/Salvar` alterou a descrição, mas devolveu o pedido com `Lancado=false`.
+O endpoint correto para preservar o faturamento é:
+
+```text
+PUT Pedidos/SalvarEFaturar?retornarPedido=true
+Finalizado: true
+Lancado: true
+```
+
+Dois PUTs controlados sobre o pedido `3` mantiveram o estoque em `8` e
+exatamente um lançamento financeiro, código `626`. A correlação persistida foi
+normalizada para o objeto `Pedido`, sem wrapper aninhado.
 
 ## Conclusões
 
@@ -96,20 +118,31 @@ Prova adicional, também criada e excluída na homologação:
 3. O pedido faturado exige plano de contas e um cliente já cadastrado.
 4. `SalvarEFaturar` baixa estoque e cria o lançamento financeiro.
 5. `ExcluirPedido` reverte pedido, estoque e financeiro.
-6. `Pedidos/Salvar` atualiza o status sem refaturar.
-7. POST, PUT e DELETE não podem ser repetidos após timeout; a correlação é
+6. `Pedidos/Salvar` não preserva `Lancado`; mudança de status usa
+   `PUT Pedidos/SalvarEFaturar` com `Finalizado=true` e `Lancado=true`.
+7. PUT e DELETE compartilham um fence atômico por pedido; concorrência e
+   `HTTP 429` seguem para reconciliação sem repetição automática.
+8. POST, PUT e DELETE não podem ser repetidos após timeout; a correlação é
    `codigoPedidoCliente` dentro da janela de criação.
 
-Consulta final de segurança:
+Estado final sanitizado:
 
 ```text
-Pedidos/Pesquisar (origem de homologação): HTTP 200, count 0
-Produtos/Pesquisar (CW-HML-001): HTTP 200, count 1
+Pedido Venda 3: Finalizado true, Lancado true
+Produtos/Pesquisar (CW-HML-001): estoque 8
+Lançamentos: somente Codigo 626 para o pedido controlado
+Instalação 11973: auth_mode oauth, scope orders store, status active, enabled false
+VPS: CARDAPIO_WEB_VENDA_WRITE_ENABLED=false, bridge health HTTP 200
+Produto Sandbox: pausado (EM FALTA; ação disponível Ativar)
 ```
 
-## Ativação pendente
+## Estado seguro
 
-- Receber `client_id` e `webhook_token` da Cardápio Web.
-- Guardar os segredos no ambiente seguro da VPS.
-- Aplicar a migration e concluir OAuth no Sandbox.
-- A integração permanece `enabled=false` até essa ativação explícita.
+- Segredos permanecem somente no `.env` modo `600`, fora do Git e deste
+  documento.
+- Migrations `20260723_001`, `20260726_001` e `20260726_002` foram aplicadas;
+  a última consta no banco como `cardapio_web_venda_write_fence`.
+- A instalação OAuth permanece `enabled=false` e a chave geral de escrita
+  permanece `false`.
+- A ativação para novos pedidos exige decisão operacional explícita após a
+  homologação.

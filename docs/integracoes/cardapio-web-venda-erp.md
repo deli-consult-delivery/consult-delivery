@@ -47,7 +47,7 @@ CARDAPIO_WEB_WEBHOOK_TOKEN=
 CARDAPIO_WEB_TOKEN_ENCRYPTION_KEY=
 CARDAPIO_WEB_REDIRECT_URI=https://bridge.consultdelivery.com.br/api/cardapio-web/oauth/callback
 CARDAPIO_WEB_BOOTSTRAP_TENANT_ID=
-CARDAPIO_WEB_BOOTSTRAP_MERCHANT_ID=1650
+CARDAPIO_WEB_BOOTSTRAP_MERCHANT_ID=11973
 CARDAPIO_WEB_BOOTSTRAP_VENDA_EMPRESA=
 CARDAPIO_WEB_BOOTSTRAP_TOKEN=
 CARDAPIO_WEB_VENDA_WRITE_ENABLED=false
@@ -89,13 +89,17 @@ vinculada não pode ser sobrescrita pelo bootstrap.
    cliente e só o cadastra quando ainda não existe.
 6. O pedido usa `codigoPedidoCliente = CW-{merchant_id}-{order_id}`.
 7. Antes de escrever, o Bridge pesquisa a correlação no Venda ERP.
-8. `SalvarEFaturar`, `Salvar` e `ExcluirPedido` nunca recebem retry automático.
-   Timeout/5xx dispara consulta de reconciliação; resultado não comprovado fica
-   com status `reconcile`.
+8. Criação e mudança de status usam `SalvarEFaturar`; cancelamento usa
+   `ExcluirPedido`. PUT e DELETE compartilham um fence atômico por pedido.
+9. Timeout/5xx de POST, PUT ou DELETE nunca é repetido automaticamente; o
+   Bridge reconcilia o resultado comprovável e deixa o restante como
+   `reconcile`. Em `429`, PUT/DELETE também seguem para reconciliação sem
+   repetição; a criação pode ser reagendada porque a rejeição é explícita e,
+   antes da nova tentativa, pesquisa a correlação no Venda.
 
 O Venda ERP pode devolver erro de negócio como string em HTTP 200. Sucesso de
-faturamento exige objeto com `Pedido.Codigo`; update/delete exigem mensagem de
-sucesso.
+faturamento exige objeto com `Pedido.Codigo`; update também exige o mesmo
+`Codigo`, `Finalizado=true` e `Lancado=true`. Delete exige mensagem de sucesso.
 
 ## Configuração financeira
 
@@ -116,9 +120,9 @@ rejeitados. Antes de qualquer write, a ponte exige:
 Qualquer diferença de um centavo falha fechado e não cria cliente, pedido,
 estoque ou lançamento financeiro.
 
-## Ativação
+## Ativação e homologação
 
-1. Aplicar `20260723_001_cardapio_web_venda_erp.sql`.
+1. Aplicar as migrations `20260723_001`, `20260726_001` e `20260726_002`.
 2. Configurar segredos, os três identificadores e o código de bootstrap sem
    imprimi-los em log. Cadastrar exatamente
    `https://bridge.consultdelivery.com.br/api/cardapio-web/oauth/start` como URL
@@ -127,12 +131,17 @@ estoque ou lançamento financeiro.
    alternativamente, iniciar OAuth pela rota `/oauth/start/admin` autenticada,
    informando tenant, merchant e empresa Venda ERP. Para o token estático do
    Sandbox, reiniciar o Bridge e confirmar o bootstrap automático desabilitado.
-4. Confirmar que a instalação retornada por `GET /integration` contém
-   `auth_mode=static`; em OAuth, confirmar também `orders` e `store` em `scope`.
+4. Confirmar que a instalação OAuth retornada por `GET /integration` contém
+   `orders` e `store` em `scope`.
 5. Configurar de-para financeiro, se necessário.
 6. Definir `CARDAPIO_WEB_VENDA_WRITE_ENABLED=true` e fazer
    `PATCH /integration` com `enabled=true`, usando usuário `admin` ou `owner`.
 7. Criar um pedido Sandbox e conferir evento, pedido, estoque e lançamento.
+
+O Sandbox da loja `11973` concluiu esse roteiro em 2026-07-26. O pedido
+`53385` foi correlacionado ao Venda `3`; mudança para `confirmed` preservou
+faturamento, estoque `8` e o único lançamento `626`. Ao final, a instalação,
+a chave geral de escrita e o produto de teste voltaram ao estado desativado.
 
 Evidência do contrato vivo:
 `docs/integracoes/cardapio-web-venda-erp-homologacao.md`.
