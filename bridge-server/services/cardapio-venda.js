@@ -354,6 +354,30 @@ async function saveCorrelation(row, patch, db) {
   return result?.[0] || { ...row, ...patch };
 }
 
+async function claimVendaMutation(correlation, db) {
+  const claimedAt = new Date().toISOString();
+  const claimed = await db(
+    `cardapio_web_orders?id=eq.${encodeURIComponent(correlation.id)}&venda_write_started_at=is.null`,
+    { method: 'PATCH', body: { venda_write_started_at: claimedAt } }
+  );
+  if (!claimed?.length) {
+    throw new ReconciliationRequiredError(
+      `${correlation.codigo_pedido_cliente}: mutação concorrente no Venda ERP; operação não repetida`
+    );
+  }
+  return { ...correlation, venda_write_started_at: claimedAt };
+}
+
+async function saveConfirmedVendaMutation(correlation, patch, db) {
+  try {
+    return await saveCorrelation(correlation, patch, db);
+  } catch {
+    throw new ReconciliationRequiredError(
+      `${correlation.codigo_pedido_cliente}: Venda ERP confirmou a mutação, mas a correlação não foi persistida`
+    );
+  }
+}
+
 async function createVendaOrder(order, installation, correlation, db, erp = vendaerp) {
   const alreadyThere = await findVendaOrder(order, installation.tenant_id, erp);
   if (alreadyThere) {
@@ -498,19 +522,18 @@ async function updateVendaStatus(order, installation, correlation, db, erp = ven
   const current = correlation.venda_order ||
     await findVendaOrder(order, installation.tenant_id, erp);
   if (!current) throw new ReconciliationRequiredError('Pedido Venda ERP não localizado para atualizar status');
+  correlation = await claimVendaMutation(correlation, db);
   const payload = {
     ...current,
     Codigo: correlation.venda_order_code || vendaCode(current),
     Status: mapped,
     Descricao: `${codigoPedidoCliente(order)} | ${order.sales_channel} | ${mapped}`,
+    Finalizado: true,
+    Lancado: true,
   };
+  let result;
   try {
-    const result = await erp.atualizarPedido(payload, installation.tenant_id);
-    return saveCorrelation(correlation, {
-      venda_order: typeof result === 'object' ? result : payload,
-      cw_status: order.status,
-      last_error: null,
-    }, db);
+    result = await erp.atualizarPedido(payload, installation.tenant_id);
   } catch (err) {
     if (err.status === 0 || err.status >= 500) {
       let reconciled;
@@ -522,16 +545,34 @@ async function updateVendaStatus(order, installation, correlation, db, erp = ven
         );
       }
       if (reconciled && vendaStatus(reconciled) === mapped) {
-        return saveCorrelation(correlation, {
+        return saveConfirmedVendaMutation(correlation, {
           venda_order: reconciled,
           cw_status: order.status,
+          venda_write_started_at: null,
           last_error: null,
         }, db);
       }
       throw new ReconciliationRequiredError('Atualização de status com resultado ambíguo; PUT não repetido');
     }
+    await saveCorrelation(correlation, {
+      venda_write_started_at: null,
+      last_error: err.message,
+    }, db);
+    if (err.status === 429) {
+      throw new ReconciliationRequiredError(
+        'Venda ERP limitou a atualização de status; PUT faturado não repetido automaticamente'
+      );
+    }
     throw err;
   }
+  const updatedOrder = result?.Pedido ?? result?.pedido ??
+    (typeof result === 'object' ? result : payload);
+  return saveConfirmedVendaMutation(correlation, {
+    venda_order: updatedOrder,
+    cw_status: order.status,
+    venda_write_started_at: null,
+    last_error: null,
+  }, db);
 }
 
 async function cancelVendaOrder(order, installation, correlation, db, erp = vendaerp) {
@@ -555,10 +596,22 @@ async function cancelVendaOrder(order, installation, correlation, db, erp = vend
       last_error: null,
     }, db);
   }
+  correlation = await claimVendaMutation(correlation, db);
   try {
     await erp.excluirPedido(correlation.venda_order_code, installation.tenant_id);
   } catch (err) {
-    if (err.status !== 0 && err.status < 500) throw err;
+    if (err.status !== 0 && err.status < 500) {
+      await saveCorrelation(correlation, {
+        venda_write_started_at: null,
+        last_error: err.message,
+      }, db);
+      if (err.status === 429) {
+        throw new ReconciliationRequiredError(
+          'Venda ERP limitou o cancelamento; DELETE não repetido automaticamente'
+        );
+      }
+      throw err;
+    }
     let stillThere;
     try {
       stillThere = await findVendaOrder(order, installation.tenant_id, erp);
@@ -571,8 +624,9 @@ async function cancelVendaOrder(order, installation, correlation, db, erp = vend
       throw new ReconciliationRequiredError('Cancelamento com resultado ambíguo; DELETE não repetido');
     }
   }
-  return saveCorrelation(correlation, {
+  return saveConfirmedVendaMutation(correlation, {
     cw_status: 'canceled',
+    venda_write_started_at: null,
     last_error: null,
   }, db);
 }
