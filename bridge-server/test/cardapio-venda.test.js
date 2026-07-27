@@ -295,6 +295,305 @@ const installation = {
     assert.strictEqual(writes, 0);
   });
 
+  await check('mudança de status preserva o faturamento do pedido', async () => {
+    const updatePayloads = [];
+    let savedOrder = null;
+    let correlation = {
+      id: 'corr-status',
+      codigo_pedido_cliente: 'CW-3268-237456',
+      venda_order_code: 3,
+      cw_status: 'waiting_confirmation',
+      venda_order: {
+        Codigo: 3,
+        CodigoPedidoCliente: 'CW-3268-237456',
+        Finalizado: false,
+        Lancado: false,
+      },
+    };
+    const db = async (path, opts) => {
+      if (opts?.method === 'PATCH') {
+        savedOrder = opts.body.venda_order;
+        correlation = { ...correlation, ...opts.body };
+        return [correlation];
+      }
+      if (path.startsWith('cardapio_web_orders?')) return [correlation];
+      return [];
+    };
+    const statuses = ['confirmed', 'ready'];
+    const cw = {
+      decryptSecret: () => 'access-token',
+      fetchOrder: async () => order({ status: statuses.shift() }),
+    };
+    const erp = {
+      atualizarPedido: async (payload) => {
+        updatePayloads.push(payload);
+        return { Pedido: payload };
+      },
+    };
+    const event = {
+      tenant_id: installation.tenant_id,
+      merchant_id: 3268,
+      order_id: 237456,
+    };
+    const activeInstallation = {
+      ...installation,
+      auth_mode: 'oauth',
+      merchant_id: 3268,
+      token_expires_at: '2099-01-01T00:00:00Z',
+      access_token_ciphertext: 'ciphertext',
+    };
+    assert.strictEqual(
+      await processEvent(event, activeInstallation, db, { cw, erp }),
+      'done'
+    );
+    assert.strictEqual(
+      await processEvent(event, activeInstallation, db, { cw, erp }),
+      'done'
+    );
+    assert.deepStrictEqual(updatePayloads.map((payload) => payload.Status), [
+      'Em preparação',
+      'Pronto',
+    ]);
+    for (const payload of updatePayloads) {
+      assert.strictEqual(payload.Finalizado, true);
+      assert.strictEqual(payload.Lancado, true);
+      assert.strictEqual(payload.Pedido, undefined);
+    }
+    assert.strictEqual(savedOrder.Codigo, 3);
+    assert.strictEqual(savedOrder.Pedido, undefined);
+  });
+
+  await check('mudanças concorrentes executam um único PUT faturado', async () => {
+    let writes = 0;
+    let releaseWrite;
+    const writeStarted = new Promise((resolve) => { releaseWrite = resolve; });
+    let correlation = {
+      id: 'corr-concurrent-status',
+      codigo_pedido_cliente: 'CW-3268-237456',
+      venda_order_code: 3,
+      cw_status: 'waiting_confirmation',
+      venda_write_started_at: null,
+      venda_order: {
+        Codigo: 3,
+        CodigoPedidoCliente: 'CW-3268-237456',
+        Finalizado: true,
+        Lancado: true,
+      },
+    };
+    const db = async (path, opts) => {
+      if (!opts) return [{ ...correlation }];
+      if (path.includes('venda_write_started_at=is.null')) {
+        if (correlation.venda_write_started_at) return [];
+        correlation = { ...correlation, ...opts.body };
+        return [{ ...correlation }];
+      }
+      correlation = { ...correlation, ...opts.body };
+      return [{ ...correlation }];
+    };
+    const cw = {
+      decryptSecret: () => 'access-token',
+      fetchOrder: async () => order({ status: 'confirmed' }),
+    };
+    const erp = {
+      atualizarPedido: async (payload) => {
+        writes++;
+        await writeStarted;
+        return { Pedido: payload };
+      },
+    };
+    const event = {
+      tenant_id: installation.tenant_id,
+      merchant_id: 3268,
+      order_id: 237456,
+    };
+    const activeInstallation = {
+      ...installation,
+      auth_mode: 'oauth',
+      merchant_id: 3268,
+      token_expires_at: '2099-01-01T00:00:00Z',
+      access_token_ciphertext: 'ciphertext',
+    };
+    const first = processEvent(event, activeInstallation, db, { cw, erp });
+    await new Promise((resolve) => setImmediate(resolve));
+    const second = processEvent(event, activeInstallation, db, { cw, erp });
+    await assert.rejects(second, ReconciliationRequiredError);
+    releaseWrite();
+    assert.strictEqual(await first, 'done');
+    assert.strictEqual(writes, 1);
+    assert.strictEqual(correlation.venda_write_started_at, null);
+  });
+
+  await check('429 no PUT faturado exige reconciliação e não libera retry do worker', async () => {
+    let writes = 0;
+    let correlation = {
+      id: 'corr-status-429',
+      codigo_pedido_cliente: 'CW-3268-237456',
+      venda_order_code: 3,
+      cw_status: 'waiting_confirmation',
+      venda_write_started_at: null,
+      venda_order: {
+        Codigo: 3,
+        CodigoPedidoCliente: 'CW-3268-237456',
+        Finalizado: true,
+        Lancado: true,
+      },
+    };
+    const db = async (path, opts) => {
+      if (!opts) return [{ ...correlation }];
+      if (path.includes('venda_write_started_at=is.null') &&
+          correlation.venda_write_started_at) return [];
+      correlation = { ...correlation, ...opts.body };
+      return [{ ...correlation }];
+    };
+    const rateLimit = new Error('limite');
+    rateLimit.name = 'VendaErpApiError';
+    rateLimit.status = 429;
+    const cw = {
+      decryptSecret: () => 'access-token',
+      fetchOrder: async () => order({ status: 'confirmed' }),
+    };
+    const erp = {
+      atualizarPedido: async () => {
+        writes++;
+        throw rateLimit;
+      },
+    };
+    await assert.rejects(
+      processEvent({
+        tenant_id: installation.tenant_id,
+        merchant_id: 3268,
+        order_id: 237456,
+      }, {
+        ...installation,
+        auth_mode: 'oauth',
+        merchant_id: 3268,
+        token_expires_at: '2099-01-01T00:00:00Z',
+        access_token_ciphertext: 'ciphertext',
+      }, db, { cw, erp }),
+      ReconciliationRequiredError
+    );
+    assert.strictEqual(writes, 1);
+    assert.strictEqual(correlation.venda_write_started_at, null);
+  });
+
+  await check('cancelamento concorrente não executa DELETE durante PUT faturado', async () => {
+    let updates = 0;
+    let deletes = 0;
+    let releaseWrite;
+    const writeStarted = new Promise((resolve) => { releaseWrite = resolve; });
+    let correlation = {
+      id: 'corr-status-cancel',
+      codigo_pedido_cliente: 'CW-3268-237456',
+      venda_order_code: 3,
+      cw_status: 'waiting_confirmation',
+      venda_write_started_at: null,
+      venda_order: {
+        Codigo: 3,
+        CodigoPedidoCliente: 'CW-3268-237456',
+        Finalizado: true,
+        Lancado: true,
+      },
+    };
+    const db = async (path, opts) => {
+      if (!opts) return [{ ...correlation }];
+      if (path.includes('venda_write_started_at=is.null')) {
+        if (correlation.venda_write_started_at) return [];
+        correlation = { ...correlation, ...opts.body };
+        return [{ ...correlation }];
+      }
+      correlation = { ...correlation, ...opts.body };
+      return [{ ...correlation }];
+    };
+    const activeInstallation = {
+      ...installation,
+      auth_mode: 'oauth',
+      merchant_id: 3268,
+      token_expires_at: '2099-01-01T00:00:00Z',
+      access_token_ciphertext: 'ciphertext',
+    };
+    const event = {
+      tenant_id: installation.tenant_id,
+      merchant_id: 3268,
+      order_id: 237456,
+    };
+    const updating = processEvent(event, activeInstallation, db, {
+      cw: {
+        decryptSecret: () => 'access-token',
+        fetchOrder: async () => order({ status: 'confirmed' }),
+      },
+      erp: {
+        atualizarPedido: async (payload) => {
+          updates++;
+          await writeStarted;
+          return { Pedido: payload };
+        },
+      },
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    const canceling = processEvent(event, activeInstallation, db, {
+      cw: {
+        decryptSecret: () => 'access-token',
+        fetchOrder: async () => order({ status: 'canceled' }),
+      },
+      erp: {
+        excluirPedido: async () => { deletes++; },
+      },
+    });
+    await assert.rejects(canceling, ReconciliationRequiredError);
+    releaseWrite();
+    assert.strictEqual(await updating, 'done');
+    assert.strictEqual(updates, 1);
+    assert.strictEqual(deletes, 0);
+  });
+
+  await check('429 no cancelamento exige reconciliação e não libera retry do worker', async () => {
+    let deletes = 0;
+    let correlation = {
+      id: 'corr-cancel-429',
+      codigo_pedido_cliente: 'CW-3268-237456',
+      venda_order_code: 3,
+      cw_status: 'confirmed',
+      venda_write_started_at: null,
+    };
+    const db = async (path, opts) => {
+      if (!opts) return [{ ...correlation }];
+      if (path.includes('venda_write_started_at=is.null') &&
+          correlation.venda_write_started_at) return [];
+      correlation = { ...correlation, ...opts.body };
+      return [{ ...correlation }];
+    };
+    const rateLimit = new Error('limite');
+    rateLimit.name = 'VendaErpApiError';
+    rateLimit.status = 429;
+    await assert.rejects(
+      processEvent({
+        tenant_id: installation.tenant_id,
+        merchant_id: 3268,
+        order_id: 237456,
+      }, {
+        ...installation,
+        auth_mode: 'oauth',
+        merchant_id: 3268,
+        token_expires_at: '2099-01-01T00:00:00Z',
+        access_token_ciphertext: 'ciphertext',
+      }, db, {
+        cw: {
+          decryptSecret: () => 'access-token',
+          fetchOrder: async () => order({ status: 'canceled' }),
+        },
+        erp: {
+          excluirPedido: async () => {
+            deletes++;
+            throw rateLimit;
+          },
+        },
+      }),
+      ReconciliationRequiredError
+    );
+    assert.strictEqual(deletes, 1);
+    assert.strictEqual(correlation.venda_write_started_at, null);
+  });
+
   await check('timeout ambíguo não repete POST e exige reconciliação', async () => {
     let writes = 0;
     const erp = {

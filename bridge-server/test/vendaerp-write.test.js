@@ -66,6 +66,60 @@ const realFetch = global.fetch;
   check('emitirNfe põe CodigoVenda na query string', () => assert.match(String(lastUrl), /CodigoVenda=4321/));
   check('emitirNfe NÃO manda CodigoVenda no body', () => assert.ok(!lastOpts || lastOpts.body == null));
 
+  global.fetch = async (url, opts) => {
+    calls++;
+    lastUrl = url;
+    lastOpts = opts;
+    return {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: async () => JSON.stringify({
+        Pedido: {
+          Codigo: 1,
+          CodigoPedidoCliente: 'CW-1',
+          Finalizado: true,
+          Lancado: true,
+        },
+      }),
+    };
+  };
+  await erp.atualizarPedido({
+    Codigo: 1,
+    Status: 'Pronto',
+    Finalizado: true,
+    Lancado: true,
+  });
+  check('atualizarPedido mantém o faturamento pela rota correta', () => {
+    assert.match(String(lastUrl), /\/Pedidos\/SalvarEFaturar\?retornarPedido=true$/);
+    assert.strictEqual(lastOpts.method, 'PUT');
+    assert.strictEqual(JSON.parse(lastOpts.body).Finalizado, true);
+    assert.strictEqual(JSON.parse(lastOpts.body).Lancado, true);
+  });
+
+  calls = 0;
+  global.fetch = async () => {
+    calls++;
+    return {
+      ok: false,
+      status: 429,
+      statusText: 'Too Many Requests',
+      text: async () => '{"erro":"limite"}',
+    };
+  };
+  await assert.rejects(
+    erp.atualizarPedido({
+      Codigo: 1,
+      Status: 'Pronto',
+      Finalizado: true,
+      Lancado: true,
+    }),
+    (error) => error.name === 'VendaErpApiError' && error.status === 429
+  );
+  check('atualizarPedido não retenta 429 dentro da mesma chamada', () => {
+    assert.strictEqual(calls, 1);
+  });
+
   // Defesa em profundidade: emitirNfe sem CodigoVenda falha fechada SEM tocar o ERP.
   calls = 0;
   try {

@@ -298,15 +298,22 @@ async function salvarEFaturarPedido(payload, tenantId) {
 }
 
 async function atualizarPedido(payload, tenantId) {
-  const raw = await erpFetch('/Pedidos/Salvar', {
+  const raw = await erpFetch('/Pedidos/SalvarEFaturar?retornarPedido=true', {
     method: 'PUT',
     body: JSON.stringify(payload),
   }, tenantId);
   return requireBusinessSuccess(
     raw,
-    (body) => typeof body === 'string' &&
-      /modificad[oa].*sucesso|sucesso.*modificad[oa]/i.test(body),
-    'a atualização do pedido'
+    (body) => {
+      const order = body?.Pedido ?? body?.pedido;
+      const returnedCode = order?.Codigo ?? order?.codigo;
+      const expectedCode = payload?.Codigo ?? payload?.codigo;
+      return returnedCode != null &&
+        String(returnedCode) === String(expectedCode) &&
+        (order?.Finalizado ?? order?.finalizado) === true &&
+        (order?.Lancado ?? order?.lancado) === true;
+    },
+    'a atualização faturada do pedido'
   );
 }
 
