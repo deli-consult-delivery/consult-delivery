@@ -107,7 +107,17 @@ Fix: `git fetch origin && git reset --hard origin/main`.
   (b) **ROTACIONAR o `VENDAERP_TOKEN`** (vazou em texto plano no chat): gerar chave nova no token
   "Hermes", trocar no `.env` do Bridge, `pm2 restart bridge-server`, revogar a antiga. Nunca ecoar o token bruto.
 
-## `npx trigger.dev deploy` quebra no Windows (path com espaço) — usar bin local
+## Deploy do Trigger.dev já é automático — não rodar manual por padrão
+
+`.github/workflows/deploy.yml` tem um job `deploy-trigger` que roda `npx trigger.dev@4.4.6
+deploy --native-build-server` em runner Linux hospedado pela GitHub, em TODO push em `main`
+— junto com `build-and-deploy` (frontend) e `deploy-bridge` (self-hosted). Confirmado ao vivo
+(PR #888, run 30297648517): versão `20260727.8` deployada com sucesso, ~1min30s.
+**Não precisa rodar `npm run deploy:trigger` manualmente depois de mergear em main — o CI já
+faz isso.** O workaround abaixo só serve pra um deploy ad-hoc a partir deste Windows, fora do
+fluxo normal (testar antes de commitar, por exemplo).
+
+### `npx trigger.dev deploy` quebra no Windows (path com espaço) — usar bin local
 
 Rodar `npx trigger.dev@4.4.6 deploy` direto (baixando pro cache global do npx) **falha
 sempre** neste ambiente Windows, no passo `[indexer 2/2]` do build, com
