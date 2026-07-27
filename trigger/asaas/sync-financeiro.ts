@@ -44,6 +44,28 @@ export function encontrarCobrancasOrfas<T extends { asaas_charge_id: string }>(
   return locais.filter((c) => !asaasIds.has(c.asaas_charge_id));
 }
 
+type DraftPendente = { id: string; metadata: { cobranca_v2_id?: string } | null };
+type CobrancaRef = { id: string; status: string; ignorar_cobranca: boolean };
+
+/**
+ * Drafts pending da CORA cuja cobrança de origem (metadata.cobranca_v2_id) não é
+ * mais elegível pra cobrança — paga, removida do Asaas ou marcada "não cobrar".
+ * Drafts sem cobranca_v2_id (fora do fluxo V2/Asaas) são ignorados aqui.
+ */
+export function encontrarDraftsObsoletos(
+  drafts: DraftPendente[],
+  cobrancasRef: CobrancaRef[]
+): DraftPendente[] {
+  const elegivel = new Map(
+    cobrancasRef.map((c) => [c.id, !c.ignorar_cobranca && ["pending", "overdue"].includes(c.status)])
+  );
+  return drafts.filter((d) => {
+    const id = d.metadata?.cobranca_v2_id;
+    if (!id) return false;
+    return !(elegivel.get(id) ?? false); // não encontrada = também obsoleto
+  });
+}
+
 export const asaasSyncFinanceiro = schedules.task({
   id: "asaas-sync-financeiro",
   cron: "*/30 * * * *",
@@ -153,13 +175,69 @@ export const asaasSyncFinanceiro = schedules.task({
       }
     }
 
+    // Invalida drafts da CORA ("Fila de aprovação") ainda pending cuja cobrança de
+    // origem deixou de ser cobrável entre a geração do draft (régua roda 1x/dia às 9h)
+    // e agora — paga, removida do Asaas ou marcada "não cobrar" nesse meio-tempo. Sem
+    // isso, o draft fica pendurado na fila até alguém aprovar/rejeitar manualmente,
+    // com risco real de reenviar cobrança pra quem já pagou.
+    let draftsInvalidados = 0;
+    const { data: draftsPendentes, error: draftsError } = await sb
+      .from("agent_drafts")
+      .select("id, metadata")
+      .eq("tenant_id", tenantId)
+      .eq("agent_name", "cora")
+      .eq("status", "pending");
+
+    if (draftsError) {
+      logger.warn(`[sync-financeiro] falha ao buscar drafts pendentes p/ invalidação: ${draftsError.message}`);
+    } else if (draftsPendentes?.length) {
+      const cobrancaIds = [...new Set(
+        draftsPendentes
+          .map((d) => (d.metadata as { cobranca_v2_id?: string } | null)?.cobranca_v2_id)
+          .filter((id): id is string => !!id)
+      )];
+
+      if (cobrancaIds.length) {
+        const { data: cobrancasRef, error: cobrancasRefError } = await sb
+          .from("cobrancas")
+          .select("id, status, ignorar_cobranca")
+          .in("id", cobrancaIds);
+
+        if (cobrancasRefError) {
+          logger.warn(`[sync-financeiro] falha ao buscar cobranças referenciadas por drafts: ${cobrancasRefError.message}`);
+        } else {
+          const draftsObsoletos = encontrarDraftsObsoletos(draftsPendentes, cobrancasRef ?? []);
+
+          for (let i = 0; i < draftsObsoletos.length; i += BATCH_SIZE) {
+            const batch = draftsObsoletos.slice(i, i + BATCH_SIZE);
+            const { error: rejectError } = await sb
+              .from("agent_drafts")
+              .update({ status: "rejected" })
+              .in("id", batch.map((d) => d.id));
+
+            if (rejectError) {
+              logger.warn(`[sync-financeiro] falha ao invalidar lote de ${batch.length} draft(s): ${rejectError.message}`);
+            } else {
+              draftsInvalidados += batch.length;
+            }
+          }
+          if (draftsInvalidados) {
+            logger.info(`[sync-financeiro] ${draftsInvalidados} draft(s) da fila de aprovação invalidado(s) — fatura não é mais cobrável`, {
+              ids: draftsObsoletos.map((d) => d.id),
+            });
+          }
+        }
+      }
+    }
+
     logger.info("asaas-sync-financeiro: concluído", {
       total: charges.length,
       upserted,
       errors,
       orfas,
+      draftsInvalidados,
     });
 
-    return { total: charges.length, upserted, errors, orfas };
+    return { total: charges.length, upserted, errors, orfas, draftsInvalidados };
   },
 });

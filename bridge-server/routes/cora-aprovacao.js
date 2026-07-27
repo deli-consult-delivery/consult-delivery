@@ -97,6 +97,33 @@ module.exports = function buildCoraAprovacaoRouter({ sbFetch, supabaseInsert }) 
       // cliente como ?test_phone NÃO contorna a guarda de horário legal.
       const isTestSend = rawTestPhone !== undefined && rawTestPhone !== phone;
 
+      // 1.5. Guarda crítica: a fatura ainda está ativa? O draft pode ter sido gerado pela
+      //      régua de manhã e o cliente já ter pago à tarde — sem checar de novo aqui,
+      //      aprovar cobraria alguém que já pagou. Vale mesmo pra ?test_phone (o teste
+      //      simula o envio real, não deve escapar dessa guarda).
+      if (cobrancaV2Id) {
+        const cobRows = await sbFetch(
+          `cobrancas?id=eq.${encodeURIComponent(cobrancaV2Id)}&tenant_id=eq.${encodeURIComponent(tenant_id)}&select=status,ignorar_cobranca&limit=1`
+        );
+        const cobAtual = cobRows?.[0];
+        const elegivel = cobAtual && !cobAtual.ignorar_cobranca && ['pending', 'overdue'].includes(cobAtual.status);
+        if (!elegivel) {
+          try {
+            await sbFetch(
+              `agent_drafts?id=eq.${encodeURIComponent(draft_id)}&tenant_id=eq.${encodeURIComponent(tenant_id)}`,
+              { method: 'PATCH', body: { status: 'rejected', metadata: { ...meta, motivo_rejeicao: 'fatura_nao_elegivel_no_envio' } } }
+            );
+          } catch (patchErr) {
+            console.error('[cora-aprovacao] falha ao rejeitar draft obsoleto:', patchErr.message);
+          }
+          console.warn(`[cora-aprovacao] bloqueado: fatura ${cobrancaV2Id} não elegível (status=${cobAtual?.status ?? 'nao_encontrada'}, ignorar=${cobAtual?.ignorar_cobranca})`);
+          return res.status(409).json({
+            error: 'Esta cobrança não está mais ativa no Asaas (paga, cancelada ou marcada como ignorada). O envio foi bloqueado e o rascunho foi descartado.',
+            code: 'CHARGE_NOT_ELIGIBLE',
+          });
+        }
+      }
+
       // 2. Guarda de horário legal (Seg–Sex 8–21h · Sáb 8–12h · Dom/feriado: proibido).
       //    Envio de teste para o próprio número é isento. Cobrança automática boleto/PIX
       //    (Asaas) não passa por aqui, então segue sem restrição — conforme o requisito.
