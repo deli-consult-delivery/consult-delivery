@@ -1686,3 +1686,47 @@ a loja autorizada. Regressões cobrem combo/grupo divergente, `10.075`,
 envio do e-mail e o cadastro do `Consumidor Final`; falta o suporte confirmar
 ambos os escopos e, se o app já tiver sido instalado, reinstalá-lo antes da
 ativação.
+
+---
+
+## 2026-07-29 — Verificação de estado da plataforma + reconciliação do Tracker
+
+**Pedido:** verificar o projeto para continuar o desenvolvimento — o que está em aberto,
+o que precisa ser terminado, o que dá pra fazer agora, o que está pendente.
+
+**Estado verificado (output bruto):** `origin/main` `019dbdc` · **0 PRs abertos** ·
+`npm run build` (vite) ✓ 2.35s · `npx tsc --noEmit` **exit 0** · `npx vitest run`
+**50/50 — mas o `include` do `vite.config.js` cobre só `src/**`, `__tests__/**` e
+`trigger/asaas/**`; ~10 suítes (`trigger/agents`, `trigger/lara`, `trigger/_shared`,
+`admin-mcp`, `vendaerp-mcp`) ficam fora e NÃO rodaram** · bridge-server **21/21**
+arquivos de teste offline verdes · Bridge VPS `GET /health` →
+`{"ok":true,"ts":"2026-07-29T17:39:40.531Z"}` · CI: checks verdes no PR #889
+(`PR Build Check` dispara só em `pull_request`, nunca em push; + `gitleaks`) e o
+workflow `Deploy to GitHub Pages` no push a `main` com seus 3 jobs
+(`build-and-deploy`, `deploy-trigger`, `deploy-bridge`) `success`.
+
+**Achado de processo:** o `PLANO-MESTRE — Tracker.md` estava **22 dias atrasado** —
+parou em #873 (07/07) com `main` já em #889 (27/07). As 16 entregas do intervalo
+(#874-#889: fechamento do QA C2, iFood App 3 smoke live, membership hierárquica,
+Cardápio Web → Venda ERP completo, 3 fixes da CORA, fix de deploy no Windows) só
+existiam no `.planning/STATE.md` e neste log. Reconciliado: 4 entradas novas no Log
+de sessões, nova linha `CARDAPIO-WEB` no Status por track, "Onde parou" e "Próxima
+ação" reescritos.
+
+**Reclassificação de pendência:** "fazer o deploy do Trigger.dev pra `cost_usd` entrar
+em vigor" **sai** da lista do Wandson — o job `deploy-trigger` do `deploy.yml` roda em
+todo push a `main`.
+
+**Limites honestos:** branch protection não verificável (conta gh ativa é read-only no
+repo — `gh auth switch -u deli-consult-delivery` antes de qualquer PR); estado do banco
+não verificável (sem Supabase MCP nesta sessão).
+
+**Backlog autônomo mapeado:** **(0) 🔴 M2 do iFood App 3 quebrado e bloqueante de ticket** —
+o smoke live de 07/07 (#880) provou que `unsellableItems` volta como `{"categories":[...]}`,
+não array; `CardapioIfood.jsx:249` (`Array.isArray(itens) ? itens : []`) cai no fallback e a
+tela diz "Nenhum item arquivado" sempre. Fix = achatar `categories[].items[]` espelhando
+`categoriasDe()` (`CardapioIfood.jsx:47-53`). Ref: `docs/integracoes/ifood/homologacao-matriz-catalogo.md` §2 ·
+(1) `controle-atendimentos` — última falha P6/P10 do QA C2,
+exige RPC/SUM server-side · (2) risco M9 do iFood App 3 (`pickContextModifier` fixo em
+`'DEFAULT'`) · (3) code-split do bundle (1.704 kB + heic2any 1.352 kB) · (4) TD#44/#57
+scheduler dinâmico · (5) TD#55 branches órfãs.
