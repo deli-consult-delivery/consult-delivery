@@ -6,6 +6,21 @@
 
 ---
 
+## 🔄 REVISÃO 2026-07-29 — o que mudou desde 05/07
+
+Verificação de estado da plataforma (sessão Cowork 29/07). Só o que foi **confirmado por output bruto** entra aqui:
+
+| Item | Estado em 29/07 | Evidência |
+|------|-----------------|-----------|
+| "Fazer o deploy do Trigger.dev pra `cost_usd` entrar em vigor" (pendência citada no Tracker de 06-07/07, não estava nesta tabela) | ✅ **SAI da lista — não é ação manual** | `.github/workflows/deploy.yml` tem o job `deploy-trigger` rodando `npx trigger.dev@4.4.6 deploy --native-build-server` **em todo push a `main`**; `gh run list` mostra `success`. Documentado em #889 |
+| #11 — branch `wandson/cora-situacao-dashboard` | 🧹 segue existindo em `origin/` | Recomendação de 05/07 mantida: **não mergear**, só `git push origin --delete` |
+| #4 — recarga OpenRouter · #2 — rotação `VENDAERP_TOKEN` · #3 — E2E de escrita no Telegram · #1 — Hermes GATE 0 (a) | 👤 sem mudança | nenhuma sessão entre 08/07 e 29/07 tocou nessas frentes |
+| **NOVO** — Cardápio Web → Venda ERP: decidir a **data operacional de ativação** | 👤 **DELE** | Integração homologada e em `main` (#884-#887), mas `enabled=false` + kill switch de escrita `false` **por design**. Ativar é decisão de negócio, não de código |
+| Branch protection de `main` (required check do `pr-build.yml`) | ⚠️ **não verificável** | `gh api .../branches/main/protection` → 404, mas a conta gh ativa (`metodorotadelivery-cloud`) tem `admin:false` — o 404 **não prova** ausência de proteção. Só o Wandson (admin) confirma |
+| Itens de estado de banco (#5 roster Hermes, #6 gatilhos DELI, 100 drafts CSAT) | ⚠️ **não verificável nesta sessão** | sem Supabase MCP carregado — requer uma sessão com o MCP ativo para confirmar por SQL |
+
+---
+
 ## ⚠️ RECLASSIFICAÇÃO 2026-07-05 (tarde) — pós-autorizações do dia
 
 Hoje o Wandson deu autorização ampla em sessão (squash da baseline, higienização, restart da VPS via SSH `root@187.127.25.24`, credenciais iFood no `.env` do bridge). Isso reabriu a pergunta: quais dos 12 itens abaixo dependiam só de acesso operacional (VPS/SQL) que a sessão de hoje já demonstrou ter, versus quais seguem exigindo o Wandson fisicamente (dinheiro, celular/2FA, decisão de conteúdo, sistema externo)?
