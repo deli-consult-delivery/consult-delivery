@@ -14,8 +14,12 @@
 - Sudo restrito só a `systemctl {status,start,stop,restart,show} hermes-gateway`
 - ACL de leitura concedida em `/root/consult-delivery/hermes/` (só essa subpasta) pro grupo `claudedev`
 
-## 🚨 Pendência de segurança — ainda não resolvida
-`SUPABASE_SERVICE_KEY` e `INTERNAL_BRIDGE_TOKEN` vazaram em texto puro no chat (output do `~/.hermes/config.yaml` antigo, colado pelo Wandson). **Precisam ser rotacionados** — Supabase Dashboard → Settings → API → Reset service_role key. Wandson: NÃO cole o valor novo em chat nenhum — só avise "troquei" e eu atualizo as referências sem precisar ver o valor.
+## 🚨 Pendência de segurança — investigada (CON-3, 2026-07-31), rotação NÃO autorizada
+`SUPABASE_SERVICE_KEY` e `INTERNAL_BRIDGE_TOKEN` vazaram em texto puro no chat (output do `~/.hermes/config.yaml` antigo, colado pelo Wandson). Decisão do Wandson (2026-07-31): **NÃO rotacionar agora** — mandato era eliminar exposição em arquivo/sistema, sem trocar a credencial.
+
+**Investigação completa (CON-3):** repo git (HEAD + histórico completo, 2538 commits) está limpo — nenhum `.env` real commitado, `hermes/config.yaml` versionado é config-como-código sem segredos por design. Na VPS, o valor real vive em `/home/claudedev/.hermes/.hermes/config.yaml` + 2 backups + `/root/.hermes/config.yaml` (original órfão), todos `600` em árvore `700` — acesso restrito a `claudedev`/root. Logs (`.hermes/logs/*.log`, PM2 `bridge-server-out.log`) não contêm o valor, só health-check `✓`. Único achado corrigível: `/root/hermes-backup-2026-07-30.tar.gz` estava `644` (mundo-legível, embora `/root` já fosse `750`) — corrigido para `600`.
+
+**Risco residual documentado (não corrigível sem rotacionar):** a exposição original é a transcrição da conversa em que o Wandson colou o config ao vivo — não é um arquivo do sistema que se possa "limpar". Fica registrado como risco aceito pela decisão explícita do Wandson de não rotacionar agora. Detalhe completo: comentário em [CON-3](nimbalyst://CON-3).
 
 ## Achado técnico do GATE 0 (auditoria real, via `claudedev`)
 - Processo do `hermes-gateway` ainda roda como **root** (não migrado)
@@ -103,7 +107,7 @@ $ ps -o pid,user,cmd -p 1526241
 - `/root/.hermes/` original **não foi apagado nem alterado** — segue intacto como fallback caso precise reverter (`User=root` + `WorkingDirectory=/root/.hermes` de volta, backup do unit em `/root/hermes-gateway.service.bak.20260731_024829`).
 
 ## Perguntas ainda em aberto (não bloqueiam a migração, mas ficam pendentes)
-- Rotação da SUPABASE_SERVICE_KEY/INTERNAL_BRIDGE_TOKEN (Wandson)
+- Rotação da SUPABASE_SERVICE_KEY/INTERNAL_BRIDGE_TOKEN — investigada em CON-3 (2026-07-31), Wandson decidiu NÃO rotacionar agora; risco residual documentado (ver seção acima)
 - Corrigir `cd-admin`/`vendaerp` (fora do escopo desta sessão)
 - Decisão de autenticação do `hermes-chat-mcp` (conta de serviço vs sessão)
 - Credenciais dos 4 sistemas pessoais da Ana
