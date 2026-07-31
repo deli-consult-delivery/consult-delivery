@@ -118,4 +118,16 @@ $ ps -o pid,user,cmd -p 1526241
 
 **Correção:** chave `sb_secret_...` do backup testada isolada (curl direto, sem tocar config/serviço) → `HTTP 200`, ainda válida. Restaurados só os campos faltantes de `cd-admin`/`vendaerp` a partir do backup (script cirúrgico, preservou o resto do config), `systemctl restart hermes-gateway`. Verificado: `ActiveState=active`, `NRestarts=0`, zero warnings "has no 'command'" no log pós-restart, 5 processos MCP filhos confirmados via `ps -ef` (`admin-mcp`, `vendaerp-mcp`, `ifood-mcp`, `asaas-mcp`, `evolution-mcp`).
 
+## ATUALIZAÇÃO — Composio (Gmail da Ana) instalado e conectado (2026-07-31, CON-7)
+
+**Contexto:** CON-5 (auditoria) confirmou incidente de segurança real na Composio (21/05/2026: token OAuth Gmail comprometido → RCE → vazamento de ~5.000 tokens de clientes; tokens ficam armazenados na nuvem da Composio). Wandson confirmou explicitamente, mais de uma vez, prosseguir mesmo assim, usando a caixa principal `@consultdelivery.com.br` (não uma isolada) — risco aceito conscientemente.
+
+**Instalação:** instalador oficial do Composio exige WSL, ausente no Windows local. Instalado na VPS (`vps-claudedev`) em vez disso — script oficial (mesma URL auditada no CON-5, checksum SHA-256 verificado), com um patch mínimo de 2 linhas (trocar `unzip` por `python3 -m zipfile`, já que `claudedev` não tem sudo/root para instalar o pacote `unzip`). `hermes-gateway` confirmado intacto antes/depois — instalação não tocou no serviço em produção.
+
+**⚠️ Escopo OAuth não ficou readonly puro:** o fluxo padrão de conexão do Gmail concedeu escopo `https://mail.google.com/` (acesso total: ler/enviar/modificar/excluir), não `gmail.readonly`, mais escopos de Contacts/dados pessoais — confirmado via `tokeninfo` do Google. Tentativa de forçar escopo customizado readonly via CLI falhou (limitação de plano). Parei e reportei ao Wandson com a evidência bruta; ele confirmou explicitamente aceitar o escopo amplo. **Mitigação real:** o recurso "Enhanced Control" (BETA) do Composio bloqueia as categorias Write (15 tools) e Destructive (7 tools) na camada da plataforma para esta conexão — só Read (28 tools) fica habilitado. É essa a garantia técnica de leitura-apenas em vigor, não o escopo OAuth em si.
+
+**MCP no Nimbalyst:** registrado como `composio-ana-gmail`, transporte HTTP remoto (Streamable HTTP), URL `https://connect.composio.dev/mcp` (endpoint universal "Composio Connect"). Autorização confirmada (`outcome: 'authorized'` no log do Nimbalyst).
+
+**Teste real:** `composio execute GMAIL_FETCH_EMAILS -d '{ max_results: 5 }' --account ca_XHEqVqSqFG8G` retornou 5 mensagens reais e atuais da caixa `wandson@consultdelivery.com.br` (5170 mensagens totais). Output bruto e detalhamento completo: comentário no CON-7.
+
 Detalhe completo com output bruto: comentários do CON-4 no tracker.
