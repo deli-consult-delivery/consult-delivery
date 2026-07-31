@@ -85,3 +85,24 @@ Fix: `git fetch origin && git reset --hard origin/main`.
   (a) teste E2E no Telegram em **sessão NOVA** do @DeliConsultBot ("qual o status do VendaERP?" → `erp_status`);
   (b) **ROTACIONAR o `VENDAERP_TOKEN`** (vazou em texto plano no chat): gerar chave nova no token
   "Hermes", trocar no `.env` do Bridge, `pm2 restart bridge-server`, revogar a antiga. Nunca ecoar o token bruto.
+
+## Sync `consult-delivery-os` (dados financeiros) — clone read-only + webhook (2026-07-31)
+
+Repo GitHub `deli-consult-delivery/consult-delivery-os` (separado deste repo `consult-delivery`)
+sincronizado para a VPS via clone git read-only + webhook, com cron de fallback.
+
+- **Clone:** `~claudedev/consult-delivery-os` (usuário `claudedev`, não-root, separado do bridge).
+  Deploy key SSH read-only em `~claudedev/.ssh/deli_consult_delivery_os_deploy`, alias no
+  `~claudedev/.ssh/config` (`Host github-consult-delivery-os`).
+- **Script de pull:** `~claudedev/bin/pull-consult-delivery-os.sh` (`git pull origin main`).
+- **Rota webhook:** `POST /webhooks/github` em `/root/consult-delivery/bridge-server/index.js`
+  (mesmo padrão HMAC de `/webhooks/asaas`/`/api/nexus-callback`: header `X-Hub-Signature-256`,
+  `crypto.timingSafeEqual` sobre `req.rawBody`). Só dispara pull se `event=push` e
+  `ref=refs/heads/main`. Bridge roda como root → dispara o pull como `claudedev` via
+  `exec('su - claudedev -c "~/bin/pull-consult-delivery-os.sh"')` (root já tem privilégio de `su`
+  sem senha para qualquer usuário — não precisou de sudoers novo).
+- **Secret:** env var `GITHUB_WEBHOOK_SECRET` no `.env` do Bridge (plaintext, mesmo formato das
+  demais — `.env` não está criptografado com dotenvx apesar do loader `dotenvx` estar em uso).
+- **Cron de fallback:** crontab do `claudedev`, `*/5 * * * * ~/bin/pull-consult-delivery-os.sh >> ~/consult-delivery-os-pull.log 2>&1`.
+- **Webhook GitHub:** configurado via `gh api repos/deli-consult-delivery/consult-delivery-os/hooks`,
+  evento `push` apenas, apontando para a URL pública do bridge + `/webhooks/github`.
