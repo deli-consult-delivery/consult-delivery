@@ -35,6 +35,20 @@ Migrar o serviço de root pra claudedev:
 
 Se algo quebrar no restart: serviço tem histórico de systemd, `systemctl status` mostra erro na hora. Backup do passo 1 permite reverter copiando de volta.
 
+## ATUALIZAÇÃO — migração pausada com segurança (2026-07-31 02:32 UTC)
+Progresso real: `/home/claudedev/.hermes/` já existe, com backup do original (`/root/hermes-backup-2026-07-30.tar.gz`), config.yaml versionado + 13 profiles já sincronizados via `deploy-hermes.sh --apply`.
+
+**Bloqueio novo, mais fundo:** o Python real do Hermes (`hermes` CLI) resolve, via cadeia de symlinks, para `/root/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/bin/python3.11` — fora de qualquer pasta já liberada pro `claudedev`. Sem isso, o serviço não sobe rodando como `claudedev` (viraria outage). Precisa de mais uma ACL (`setfacl -R -m g:claudedev:rx /root/.local/share/uv/`) OU decisão de dar ao claudedev seu próprio venv/Python em vez de reusar o de root.
+
+**Ação tomada:** parei a migração aí, **reiniciei o serviço original como root** pra não deixar produção fora do ar sem ninguém supervisionando. Zero mudança no `/root/.hermes` original — só existe uma cópia pronta esperando em `/home/claudedev/.hermes`.
+
+**Próxima sessão, retomar assim:**
+```bash
+ssh vps "setfacl -R -m g:claudedev:rx /root/.local/share/uv/"
+ssh vps-claudedev "hermes --version"   # confirma que resolveu
+# se OK: editar /etc/systemd/system/hermes-gateway.service (User=claudedev), daemon-reload, restart, verificar status
+```
+
 ## Perguntas ainda em aberto (não bloqueiam a migração, mas ficam pendentes)
 - Rotação da SUPABASE_SERVICE_KEY/INTERNAL_BRIDGE_TOKEN (Wandson)
 - Corrigir `cd-admin`/`vendaerp` (fora do escopo desta sessão)
