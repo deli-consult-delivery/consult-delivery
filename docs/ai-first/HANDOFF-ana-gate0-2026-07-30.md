@@ -49,8 +49,62 @@ ssh vps-claudedev "hermes --version"   # confirma que resolveu
 # se OK: editar /etc/systemd/system/hermes-gateway.service (User=claudedev), daemon-reload, restart, verificar status
 ```
 
+## ATUALIZAÇÃO — migração CONCLUÍDA (2026-07-31, worker CON-1)
+
+**Resultado: sucesso.** `hermes-gateway` roda como `claudedev` em produção, output bruto confirmado.
+
+### Correção ao diagnóstico da sessão anterior
+O handoff dizia que o bloqueio era `/root/.local/share/uv/...` como um todo. Investigação mais funda (`namei -l` + `stat` em cada nível da cadeia) achou que **só um diretório** na cadeia inteira estava fechado: `/root/.local/share` (modo `700`, sem ACL). Todo o resto (`/root`, `/root/.local`, `/root/.local/share/uv/...` até o binário `python3.11`) já era `755`/tinha ACL. Bastou:
+```bash
+setfacl -m g:claudedev:x /root/.local/share
+```
+(`--x` de travessia, não `r-x` — não precisa listar o conteúdo de `/root/.local/share`, só atravessar até o `uv/`.)
+
+### Segundo bloqueio achado (não estava no handoff): `WorkingDirectory`
+O `ExecStart` do systemd usa `WorkingDirectory=/root/.hermes`, que é `drwx------ root:root` — `claudedev` não conseguia nem entrar lá (`cd: Permission denied`), independente do Python. A cópia preparada pela sessão anterior (`deploy-hermes.sh --apply` com `$HOME=/home/claudedev`) ficou em **`/home/claudedev/.hermes/.hermes/`** (estrutura aninhada — o script escreveu em `$HOME/.hermes/`, um nível acima do esperado, mas o conteúdo interno replicou a estrutura original). `diff -rq` confirmou `config.yaml`, `.env` e `profiles/` **idênticos** entre `/root/.hermes/` e `/home/claudedev/.hermes/.hermes/`. Apontei `WorkingDirectory`/`HERMES_HOME` do novo unit pra esse path.
+
+### Mudança aplicada
+Backup do unit original: `/root/hermes-gateway.service.bak.20260731_024829` (na VPS, não versionado — é specific da VPS, mas o arquivo novo foi copiado pro repo, ver abaixo).
+
+Diff aplicado em `/etc/systemd/system/hermes-gateway.service`:
+```diff
+ User=root              → User=claudedev
+ Group=root              → Group=claudedev
+ WorkingDirectory=/root/.hermes → WorkingDirectory=/home/claudedev/.hermes/.hermes
+ HOME=/root               → HOME=/home/claudedev
+ USER=root                → USER=claudedev
+ LOGNAME=root              → LOGNAME=claudedev
+ HERMES_HOME=/root/.hermes → HERMES_HOME=/home/claudedev/.hermes/.hermes
+```
+`ExecStart` inalterado (continua usando `/root/hermes-agent/venv/bin/python`, que é `755` — leitura/execução liberada pra qualquer usuário, não precisa migrar o venv em si).
+
+### Output bruto de verificação
+Antes de aplicar, testei `gateway run --replace` como `claudedev` com `timeout 15` (processo separado, serviço root original intacto durante o teste) — subiu limpo, mesmos warnings pré-existentes de `cd-admin`/`vendaerp` (já conhecidos, fora de escopo), SIGTERM limpo no fim.
+
+Depois de `daemon-reload && systemctl restart hermes-gateway`:
+```
+$ systemctl show hermes-gateway -p User,MainPID,ActiveState,SubState,NRestarts
+MainPID=1526241
+NRestarts=0
+User=claudedev
+ActiveState=active
+SubState=running
+
+$ ps -o pid,user,cmd -p 1526241
+    PID USER     CMD
+1526241 clauded+ /root/hermes-agent/venv/bin/python -m hermes_cli.main gateway run --replace
+```
+3 MCPs de ação (`ifood-mcp`, `asaas-mcp`, `evolution-mcp`) subiram normalmente como processos filhos. Varredura de logs (90s) sem `error`/`traceback`/`permission denied`/`critical` novos além dos warnings já conhecidos (`cd-admin`/`vendaerp` — fora de escopo, pré-existente). `NRestarts=0` confirmado alguns minutos depois — sem crash-loop mascarado pelo `Restart=always`.
+
+`claudedev` já opera o serviço via sudo restrito sem depender de root: `sudo -n /usr/bin/systemctl status hermes-gateway` funciona (nota: precisa do path absoluto `/usr/bin/systemctl`, não `systemctl` cru — efeito do `secure_path` do sudoers, não é bug).
+
+### Não mexido (fora de escopo, como já era antes)
+- `cd-admin`/`vendaerp` continuam com o mesmo erro (`has no 'command' in config`) — idêntico a antes da migração, não é regressão.
+- `/root/.hermes/` original **não foi apagado nem alterado** — segue intacto como fallback caso precise reverter (`User=root` + `WorkingDirectory=/root/.hermes` de volta, backup do unit em `/root/hermes-gateway.service.bak.20260731_024829`).
+
 ## Perguntas ainda em aberto (não bloqueiam a migração, mas ficam pendentes)
 - Rotação da SUPABASE_SERVICE_KEY/INTERNAL_BRIDGE_TOKEN (Wandson)
 - Corrigir `cd-admin`/`vendaerp` (fora do escopo desta sessão)
 - Decisão de autenticação do `hermes-chat-mcp` (conta de serviço vs sessão)
 - Credenciais dos 4 sistemas pessoais da Ana
+- `/root/.hermes/` original ficou órfão (não mais usado pelo serviço) — decisão futura: apagar depois de um período de estabilidade observada, ou manter como backup frio indefinidamente. Não decidido nesta sessão (não é urgente, não ocupa recurso crítico).
