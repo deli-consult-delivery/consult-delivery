@@ -108,7 +108,14 @@ $ ps -o pid,user,cmd -p 1526241
 
 ## Perguntas ainda em aberto (não bloqueiam a migração, mas ficam pendentes)
 - Rotação da SUPABASE_SERVICE_KEY/INTERNAL_BRIDGE_TOKEN — investigada em CON-3 (2026-07-31), Wandson decidiu NÃO rotacionar agora; risco residual documentado (ver seção acima)
-- Corrigir `cd-admin`/`vendaerp` (fora do escopo desta sessão)
 - Decisão de autenticação do `hermes-chat-mcp` (conta de serviço vs sessão)
 - Credenciais dos 4 sistemas pessoais da Ana
 - `/root/.hermes/` original ficou órfão (não mais usado pelo serviço) — decisão futura: apagar depois de um período de estabilidade observada, ou manter como backup frio indefinidamente. Não decidido nesta sessão (não é urgente, não ocupa recurso crítico).
+
+## ATUALIZAÇÃO — `cd-admin`/`vendaerp` corrigido (2026-07-31, worker CON-4)
+
+**Causa raiz:** o bloco `mcp_servers` do `config.yaml` ativo tinha `cd-admin` e `vendaerp` com **só** `enabled/resources/prompts` — sem `command`/`args`/`env` (por isso `MCP server 'X' has no 'command' in config`). Não é feature nunca ativada: `config.yaml.bak.preerpwrite` (29/jun) prova que ambos tinham config completa antes; em algum momento entre 29/jun e 31/jul o bloco foi reescrito e perdeu os campos dessas duas entradas (processo exato não identificado — gap de investigação futura).
+
+**Correção:** chave `sb_secret_...` do backup testada isolada (curl direto, sem tocar config/serviço) → `HTTP 200`, ainda válida. Restaurados só os campos faltantes de `cd-admin`/`vendaerp` a partir do backup (script cirúrgico, preservou o resto do config), `systemctl restart hermes-gateway`. Verificado: `ActiveState=active`, `NRestarts=0`, zero warnings "has no 'command'" no log pós-restart, 5 processos MCP filhos confirmados via `ps -ef` (`admin-mcp`, `vendaerp-mcp`, `ifood-mcp`, `asaas-mcp`, `evolution-mcp`).
+
+Detalhe completo com output bruto: comentários do CON-4 no tracker.
