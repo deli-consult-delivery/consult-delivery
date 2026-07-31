@@ -1,0 +1,21 @@
+{
+  "name": "cd-hermes-chat-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "MCP ponte Nimbalyst <-> Hermes. Fala com DELI/Ana como conversa (não tool de ação): dispara /agents/<agente>-conversa/run no Bridge e escuta a resposta via Supabase Realtime (deli_messages). Autentica com sessão de uma conta de serviço dedicada, igual a um usuário logado no Console.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "smoke": "node test/smoke.js",
+    "live-smoke": "node test/live-smoke.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "@supabase/supabase-js": "^2.49.4",
+    "zod": "^3.23.8"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
