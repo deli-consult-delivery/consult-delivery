@@ -106,3 +106,62 @@ sincronizado para a VPS via clone git read-only + webhook, com cron de fallback.
 - **Cron de fallback:** crontab do `claudedev`, `*/5 * * * * ~/bin/pull-consult-delivery-os.sh >> ~/consult-delivery-os-pull.log 2>&1`.
 - **Webhook GitHub:** configurado via `gh api repos/deli-consult-delivery/consult-delivery-os/hooks`,
   evento `push` apenas, apontando para a URL pública do bridge + `/webhooks/github`.
+
+## Sync `consult-delivery-os` — upgrade pra escrita via MCP + aprovação Telegram (2026-07-31)
+
+O clone read-only acima virou insuficiente quando a DELI passou a precisar *escrever* de volta
+nesse repo (não só ler dados sincronizados do GitHub). Troca de deploy key + MCP novo, mantendo
+o clone/webhook/cron de leitura documentados na seção anterior intactos.
+
+- **Deploy key trocada para read-write:** id `158943385`, title
+  `hermes-gateway-vps-readwrite`, `read_only: false` no repo
+  `deli-consult-delivery/consult-delivery-os` (chave em si não documentada aqui — vive só no
+  `~claudedev/.ssh/`).
+- **MCP novo `consult-delivery-os-mcp`:**
+  - Path: `/home/claudedev/consult-delivery-os-mcp/` (processo Node, `src/server.js`).
+  - Roda **fora do Docker** — motivo: o gate `approvals:manual` nativo do Hermes ignora 100% dos
+    comandos executados dentro de container (`terminal_tool`), então o gate de commit/push só
+    funciona vivendo num processo host puro.
+  - Registrado em `/home/claudedev/.hermes/.hermes/config.yaml` (chave `consult-delivery-os` em
+    `mcpServers`, `command: node`, `enabled: true`) e ativo no `hermes-gateway.service`
+    (subprocesso confirmado via `systemctl status`, PID filho do gateway).
+  - **Tools expostas:** `consult_delivery_os_read_file`, `consult_delivery_os_list_files`,
+    `consult_delivery_os_write_file` (escreve só no working tree local, sem commit — sem
+    aprovação), `consult_delivery_os_commit_and_push` (propõe commit+push, exige confirmação),
+    `consult_delivery_os_confirm` (executa de fato, com `proposal_id` + código). Trava de path
+    (`pathGuard`) bloqueia qualquer caminho fora do repo e qualquer coisa em `.git/`.
+- **Mecanismo de confirmação:** estado **em memória do processo MCP** (não é tabela SQL — módulo
+  `src/proposals.js`). `commit_and_push` gera um código, manda resumo do diff + código pro
+  Telegram (`@DeliConsultBot`, `TELEGRAM_HOME_CHANNEL` — mesmas credenciais já usadas pelo
+  Hermes) e retorna só o `proposal_id` (o código nunca volta pra DELI). Confirmação real só
+  acontece quando o Wandson responde o código e alguém chama `confirm(proposal_id, codigo)`.
+  Expira em `CD_OS_PROPOSAL_TTL_MS` — default **10 min**; máx. 5 tentativas de código errado
+  (`CD_OS_MAX_CONFIRM_ATTEMPTS`).
+- ⚠️ **Nota ponytail:** aprovação em memória do processo — não sobrevive a restart do MCP (uma
+  proposta pendente se perde se o `hermes-gateway.service` reiniciar antes da confirmação).
+  Upgrade pra persistência (SQL) só se isso virar problema recorrente na prática — não
+  implementar antes disso.
+
+### Teste E2E feito nesta sessão (2026-07-31, ~23:00 UTC)
+
+Logs do `journalctl -u hermes-gateway` não continham nenhuma linha do MCP em si (o gateway só
+loga em WARNING falhas de conexão de outros MCPs — não há log de tool call bem-sucedida nem
+arquivo de log próprio do `consult-delivery-os-mcp`), então o commit `786f7bf` (limpeza de teste
+anterior) **não pôde ser confirmado via log**. Para confirmar o fluxo de verdade, rodei um
+cliente MCP manual (`@modelcontextprotocol/sdk` Client + `StdioClientTransport`, mesmo binário
+`src/server.js`, mesmas env vars do `config.yaml`) direto na VPS:
+
+1. `consult_delivery_os_write_file` em `_test_mcp_confirm/ping.txt` (arquivo isolado) → ok,
+   escrito no working tree, sem commit.
+2. `consult_delivery_os_commit_and_push` → resposta real:
+   `{"ok": true, "proposal_id": "e0263c21-c4cb-443a-9b86-f32f53afe446", "status":
+   "pending_confirmation", "delivered": true, "fileCount": 1}`. `delivered: true` vem do próprio
+   `telegram.js` só depois de receber `200 OK` da API do Telegram — ou seja, a mensagem com o
+   código chegou de fato no chat configurado.
+3. **Não confirmei a proposta** (não simulei ser o Wandson) — ela ficou `pending_confirmation`,
+   confirmando que a trava de aprovação funciona (a DELI sozinha não consegue commitar/dar push).
+   Deixei a proposta expirar sozinha (TTL 10 min, sem tool de cancelamento manual exposta).
+4. Limpeza pós-teste: removido o arquivo `_test_mcp_confirm/` **não commitado** do working tree
+   do clone (`git status --short` confirmou que nada tinha sido de fato commitado/pushado) e os
+   scripts de teste temporários em `/tmp` na VPS. Nenhum commit real foi criado, nenhum push
+   ocorreu, histórico do repo remoto intocado.
