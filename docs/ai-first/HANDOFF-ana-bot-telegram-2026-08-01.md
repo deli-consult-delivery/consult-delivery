@@ -19,6 +19,7 @@ Supervisor: systemd --user (não pm2 — ver "Armadilhas" abaixo)
 Unit: ~/.config/systemd/user/hermes-gateway-ana.service
 Comandos: systemctl --user {status,start,stop,restart} hermes-gateway-ana
 Linger: habilitado (loginctl enable-linger claudedev) — sobrevive a fim de sessão SSH
+Enable: systemctl --user is-enabled hermes-gateway-ana → enabled — sobrevive a reboot da VPS
 Bot Telegram: @ana_wandson_bot (criado pelo Wandson via @BotFather)
 ```
 
@@ -34,7 +35,8 @@ Como a unit criada se chama `hermes-gateway-ana.service`, os arquivos de configu
 - `TELEGRAM_BOT_TOKEN`/`TELEGRAM_ALLOWED_USERS`/`TELEGRAM_HOME_CHANNEL`: `profiles/ana/.env`, permissão `600`, nunca em arquivo commitado.
 - `OLLAMA_API_KEY`: mesma chave da conta usada pelo DELI (mesmo provider `ollama-cloud`), copiada para `profiles/ana/.env` — reutiliza a mesma conta/billing, não é uma credencial nova.
 - `auth.json` (sessão Nous Portal, se aplicável): copiado do DELI para reuso da mesma conta autenticada — sem novo login.
-- `config.yaml`: cópia do `config.yaml` do DELI (mesmo `model: {default: kimi-k2.6, provider: ollama-cloud}`), **sem** o bloco `mcp_servers` de negócio (`cd-admin`, `vendaerp`, `ifood`, `asaas`, `evolution`) — Ana não deve ter acesso a essas ferramentas (fora do seu escopo, conforme `SOUL.md`).
+- `config.yaml`: cópia do `config.yaml` do DELI (mesmo `model: {default: kimi-k2.6, provider: ollama-cloud}`), **sem** o bloco `mcp_servers` de negócio (`cd-admin`, `vendaerp`, `ifood`, `asaas`, `evolution`) — Ana não deve ter acesso a essas ferramentas (fora do seu escopo, conforme `SOUL.md`). O MCP `composio-ana-gmail` (CON-7) **não** está configurado nesta instância — só registrado no Nimbalyst (Claude Code), nunca conectado à Ana em produção (confirmado em `HANDOFF-ana-gate0-2026-07-30.md`).
+- `SOUL.md`: copiado de `hermes/profiles/ana/SOUL.md` (versionado neste repo) para `profiles/ana/SOUL.md` na VPS — cópia manual, pontual, feita nesta sessão.
 
 ## Teste E2E (output bruto no comentário do CON-9)
 Mensagem real enviada pelo Wandson no Telegram → resposta real da Ana, multi-turno, coerente com as fronteiras do `SOUL.md` (reconhece que GATE 0/credenciais pessoais ainda não estão ativos, não inventa acesso).
@@ -42,6 +44,9 @@ Mensagem real enviada pelo Wandson no Telegram → resposta real da Ana, multi-t
 ## Incidente durante a investigação
 Um comando de diagnóstico (`pkill -9 -f 'hermes_cli.main gateway run'`, sem escopar por PID) matou também o processo de produção do DELI, que o systemd religou automaticamente (~5-10s de downtime não planejado). DELI confirmado saudável depois (mesmo `NRestarts=1`, sem novos erros). Detalhe completo: comentário no CON-9.
 
+**Lição para não repetir:** nunca usar `pkill`/`kill` por pattern-match genérico num host com múltiplos processos `hermes_cli.main gateway run` (produção + instâncias isoladas). Sempre: (a) `ps -ef | grep 'hermes_cli.main.*gateway'` primeiro pra identificar o PID exato, e matar só esse PID; ou (b) preferir sempre `systemctl {--user,} status/stop/restart <unit>` (escopado por unit, nunca por processo) em vez de sinal direto.
+
 ## Pendências / follow-ups (fora de escopo do CON-9)
 - `claudedev` não está no grupo `docker` na VPS → tool `execute_code` da Ana falha (permission denied no `docker.sock`). Não bloqueia conversas normais; bloqueia qualquer tarefa que precise rodar código. Registrar como TD se a Ana precisar disso.
 - `deploy-hermes.sh` (repo) não sincroniza a instância isolada da Ana (ela não está no `hermes/profiles/*/describe.txt` scaneado por esse script, e nem deveria — instância separada, gerenciada manualmente na VPS).
+- **Risco de drift silencioso:** `hermes/profiles/ana/SOUL.md` (versionado em git) e `.hermes-ana/.hermes/profiles/ana/SOUL.md` (VPS, vivo) são cópias independentes — não há sync automático. Se o `SOUL.md` do repo for atualizado no futuro, a instância isolada da Ana **não** atualiza sozinha (fora do escopo do `deploy-hermes.sh`, ver item acima). Processo de re-sync manual até hoje: `scp` do arquivo do repo pro path da VPS + `systemctl --user restart hermes-gateway-ana`. Vale automatizar se a Ana entrar em uso frequente.
