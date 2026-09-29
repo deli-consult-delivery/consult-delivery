@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  PUBLISH: "false"  # fase 2 = "false" (build sem publicar); fase 3 = "true"
+  PUBLISH: "false"   # fase 2 = "false" (build sem publicar); fase 3 = "true"
   BASE_SHA: ad6fea06f18ba1d3ef293776282ea2434eb40fc6
   GHP_PARENT: f90f36b148cc13fe508052c66df4617c930f23c8
   CTRL_JS: assets/index-CZBKkkqE.js
