@@ -106,14 +106,30 @@ jobs:
           if [ "$old" != 0 ] || [ "$new" -lt 1 ] || [ "$ref" -lt 1 ]; then echo "::error::marcadores do bundle"; exit 1; fi
           (cd dist && find . -type f | sed 's|^\./||' | sort | while read -r f; do echo "$(git hash-object "$f") $f"; done) | sort -k2 > /tmp/cand
           changed=$(diff /tmp/expected /tmp/cand | grep '^[<>]' | awk '{print $3}' | sort -u | grep -vxF -e index.html -e aprovacao-avaliacao.html -e "$CTRL_JS" -e "$js" || true)
-          [ -z "$changed" ] || { echo "::error::arquivos inesperados mudaram:"; echo "$changed"; exit 1; }
+          # Chunk dinamico renomeado so porque importa o bundle principal: aceito somente se o chunk
+          # de controle, com o nome do bundle trocado, tiver exatamente o mesmo hash do novo.
+          ctrl_base=${CTRL_JS#assets/}; cand_base=${js#assets/}
+          extra=""; replaced=""
+          for f in $changed; do
+            [[ "$f" == assets/*.js ]] && [ -f "dist/$f" ] || continue
+            awk '{print $2}' /tmp/expected | grep -qxF "$f" && continue
+            oldf=$(awk '{print $2}' /tmp/expected | grep -xE "${f%-*}-[A-Za-z0-9_]+\.js" || true)
+            [ -n "$oldf" ] && [ "$(echo "$oldf" | wc -l)" = 1 ] && [ ! -f "dist/$oldf" ] || continue
+            [ "$(git show "$GHP_PARENT:$oldf" | sed "s#${ctrl_base//./\\.}#${cand_base}#g" | git hash-object --stdin)" = "$(git hash-object "dist/$f")" ] || continue
+            echo "chunk renomeado equivalente: $oldf -> $f"; extra="$extra $f"; replaced="$replaced $oldf"
+          done
+          unexpected=""
+          for f in $changed; do case " $extra $replaced " in *" $f "*) ;; *) unexpected="$unexpected $f" ;; esac; done
+          [ -z "$unexpected" ] || { echo "::error::arquivos inesperados mudaram:$unexpected"; exit 1; }
           echo "js=$js" >> "$GITHUB_OUTPUT"
-          echo "DIST CANDIDATO OK (mudam so index.html, aprovacao-avaliacao.html, $js)"
+          echo "extra=${extra# }" >> "$GITHUB_OUTPUT"
+          echo "DIST CANDIDATO OK (mudam so index.html, aprovacao-avaliacao.html, $js; chunks renomeados equivalentes:${extra:- nenhum})"
 
       - name: G5 publicar commit unico em gh-pages (pai f90f36b, sem force)
         if: steps.mode.outputs.mode == 'candidate' && env.PUBLISH == 'true'
         env:
           JS: ${{ steps.cand.outputs.js }}
+          EXTRA: ${{ steps.cand.outputs.extra }}
         run: |
           set -euo pipefail
           git fetch origin gh-pages
@@ -121,9 +137,10 @@ jobs:
           git worktree add ../ghp origin/gh-pages
           cp dist/index.html dist/aprovacao-avaliacao.html ../ghp/
           cp "dist/$JS" ../ghp/assets/
+          for f in $EXTRA; do cp "dist/$f" "../ghp/$f"; done
           cd ../ghp
-          git add index.html aprovacao-avaliacao.html "$JS"
-          [ "$(git diff --cached --name-only | sort | tr '\n' ' ')" = "$(printf '%s\n' "$JS" aprovacao-avaliacao.html index.html | sort | tr '\n' ' ')" ]
+          git add index.html aprovacao-avaliacao.html "$JS" $EXTRA
+          [ "$(git diff --cached --name-only | sort | tr '\n' ' ')" = "$(printf '%s\n' "$JS" aprovacao-avaliacao.html index.html $EXTRA | sort | tr '\n' ' ')" ]
           git -c "user.name=github-actions[bot]" -c "user.email=41898282+github-actions[bot]@users.noreply.github.com" \
             commit -q -m "s2c: contencao Painel+aprovacao (src $GITHUB_SHA)"
           git push origin HEAD:gh-pages
