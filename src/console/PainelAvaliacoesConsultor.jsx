@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { listLojasConsultoria, enviarWhatsAppAvaliacao, listEvoGroups, updateLojaWaGroup } from '../lib/api';
 
-const CLIENT_PAGE = 'https://app.consultdelivery.com.br/aprovacao-avaliacao.html';
+const PUBLIC_APPROVAL_UNAVAILABLE = 'Aprovação pública temporariamente indisponível.';
 
 async function sbSelect() {
   const { data, error } = await supabase
@@ -148,27 +148,11 @@ function buildWaMsgStore(reviews) {
   if (reviews.length === 1 && reviews[0].orderId === 'PARABENS') {
     return reviews[0].suggestedResponse || '';
   }
-  const storeName = reviews[0]?.store || '';
-  const tokens = reviews.map(r => r.token).filter(Boolean).join(',');
-  const link = `${CLIENT_PAGE}?tokens=${tokens}`;
-  let msg = `📋 *Avaliações para aprovação — ${storeName}*\n\n`;
-  reviews.forEach((rev, i) => {
-    const stars = '⭐'.repeat(rev.rating || 0);
-    msg += `*${i + 1}. ${stars} — Pedido ${rev.orderId}*\n`;
-    if (rev.clientComment) msg += `_"${rev.clientComment}"_\n`;
-    const resp = rev.suggestedResponse || rev.finalResponse || '';
-    if (resp) msg += `💬 ${resp}\n`;
-    msg += '\n';
-  });
-  msg += `🔗 *Link para aprovar ou editar todas:*\n${link}\n\n`;
-  msg += `_(Sem retorno até as 9h do dia seguinte, publicamos as respostas no iFood.)_`;
-  return msg;
+  throw new Error(PUBLIC_APPROVAL_UNAVAILABLE);
 }
 
 function buildWaMsg(review, resp) {
-  const stars = '⭐'.repeat(review.rating || 0);
-  const link = `${CLIENT_PAGE}?token=${review.token}`;
-  return `📋 *Avaliação para aprovação — ${review.store}*\n\n${stars} — Pedido ${review.orderId}\n\n*Comentário do cliente:*\n_"${review.clientComment}"_\n\n*Sugestão de resposta:*\n${resp}\n\n🔗 *Link para aprovar ou editar:*\n${link}\n\n_(Sem retorno até as 9h do dia seguinte, publicamos essa resposta no iFood.)_`;
+  throw new Error(PUBLIC_APPROVAL_UNAVAILABLE);
 }
 
 function copiar(t) { try { navigator.clipboard?.writeText(t || ''); } catch {} }
@@ -433,7 +417,6 @@ function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSen
   const [draft, setDraft]           = useState(review.finalResponse || review.suggestedResponse || '');
   const [notes, setNotes]           = useState(review.notes || '');
   const [notesSaved, setNotesSaved] = useState(false);
-  const [copied, setCopied]         = useState(false);
 
   const st         = STATUS_CFG[review.status] || { label: review.status, cls: 'mut' };
   const isApproved = review.status === 'approved' || review.status === 'modified';
@@ -443,9 +426,7 @@ function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSen
   const notesChanged = notes !== (review.notes || '');
 
   const effectiveGroup = review.whatsappGroup || resolvedGroup || null;
-  const singleLink = `${CLIENT_PAGE}?token=${review.token}`;
 
-  function handleCopyLink() { copiar(singleLink); setCopied(true); setTimeout(() => setCopied(false), 2000); }
 
   async function handleSaveNoteLocal() {
     await onSaveNote(review.id, notes);
@@ -559,8 +540,8 @@ function CardReview({ review, resolvedGroup, busy, onPublish, onSaveDraft, onSen
                 {busy ? '…' : 'Reenviar esta individualmente'}
               </button>
             )}
-            <button className="cv2-btn sec" style={{ fontSize: 11.5 }} onClick={handleCopyLink}>
-              {copied ? '✓ Copiado!' : 'Copiar link'}
+            <button className="cv2-btn sec" style={{ fontSize: 11.5 }} disabled title={PUBLIC_APPROVAL_UNAVAILABLE}>
+              Link indisponível
             </button>
             <button className="cv2-btn sec" style={{ fontSize: 11.5 }} onClick={() => copiar(draft)}>Copiar resposta</button>
             {draft !== (review.finalResponse || review.suggestedResponse || '') && (
@@ -1005,6 +986,10 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
 
   async function handleSendStore(storeName, pendingReviews) {
     if (!pendingReviews.length) return;
+    if (!(pendingReviews.length === 1 && pendingReviews[0].orderId === 'PARABENS')) {
+      setError(PUBLIC_APPROVAL_UNAVAILABLE);
+      return;
+    }
     // Busca grupo: 1) lojas (por nome exato), 2) qualquer review já enviada desta loja
     const groupId = storeGroups[storeName]
       || reviews.find(r => r.store === storeName && r.whatsappGroup)?.whatsappGroup;
@@ -1030,20 +1015,7 @@ export default function PainelAvaliacoesConsultor({ tenantDbId, userId: _u }) {
   }
 
   async function handleSendSingle(id, draft) {
-    const rev = reviews.find(r => r.id === id);
-    if (!rev) return;
-    const groupId = storeGroups[rev.store]
-      || reviews.find(r => r.store === rev.store && r.whatsappGroup)?.whatsappGroup;
-    if (!groupId) { setError(`Loja "${rev.store}" sem grupo WhatsApp cadastrado.`); return; }
-    setBusyId(id); setError(null);
-    try {
-      const msg = buildWaMsg(rev, draft);
-      await enviarWhatsAppAvaliacao({ tenantId: tenantDbId, chatId: groupId, texto: msg });
-      await sbUpdate({ id }, { status: 'sent_to_client', suggested_response: draft, sent_at: new Date().toISOString(), whatsapp_group: groupId });
-      flash('Reenvio individual feito ✓');
-      await load();
-    } catch (e) { setError('Erro ao reenviar: ' + e.message); }
-    setBusyId(null);
+    setError(PUBLIC_APPROVAL_UNAVAILABLE);
   }
 
   async function handlePublish(id, finalText) {
