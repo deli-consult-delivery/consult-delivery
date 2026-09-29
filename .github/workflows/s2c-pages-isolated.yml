@@ -1,0 +1,130 @@
+# PROPOSTO — destino no repo legado: .github/workflows/s2c-pages-isolated.yml
+# Vive SÓ na branch s2c-pages-isolated (criada de ad6fea0). Nunca mergear em main nem abrir PR.
+# Publica apenas no gh-pages; sem Trigger, SSH, reset --hard ou pm2. Ver README.md ao lado.
+name: S2C pages isolated
+
+on:
+  push:
+    branches: [s2c-pages-isolated]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: s2c-pages-isolated
+  cancel-in-progress: false
+
+env:
+  PUBLISH: "false"   # fase 2 = "false" (build sem publicar); fase 3 = "true"
+  BASE_SHA: ad6fea06f18ba1d3ef293776282ea2434eb40fc6
+  GHP_PARENT: f90f36b148cc13fe508052c66df4617c930f23c8
+  CTRL_JS: assets/index-CZBKkkqE.js
+  PANEL: src/console/PainelAvaliacoesConsultor.jsx
+  HTML: public/aprovacao-avaliacao.html
+  CAND_PANEL_SHA256: d482a03940cc98be421a8c1133a9ac557ed648021b21629fadcc4aca2922a848
+  CAND_HTML_SHA256: c0b1ffddffd8eabff1eceb1343a0d6d5270b4458452b478679056aa6c9469089
+  WF: .github/workflows/s2c-pages-isolated.yml
+
+jobs:
+  pages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: G1 escopo da branch (so workflow + 2 candidatos sobre ad6fea0)
+        id: mode
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$BASE_SHA" HEAD
+          extra=$(git diff --name-only "$BASE_SHA" HEAD | grep -vxF -e "$WF" -e "$PANEL" -e "$HTML" || true)
+          [ -z "$extra" ] || { echo "::error::paths fora do escopo:"; echo "$extra"; exit 1; }
+          p=$(sha256sum "$PANEL" | cut -d' ' -f1); h=$(sha256sum "$HTML" | cut -d' ' -f1)
+          if git diff --quiet "$BASE_SHA" HEAD -- "$PANEL" "$HTML"; then mode=control
+          elif [ "$p" = "$CAND_PANEL_SHA256" ] && [ "$h" = "$CAND_HTML_SHA256" ]; then mode=candidate
+          else echo "::error::candidatos com hash nao aprovado"; exit 1; fi
+          echo "mode=$mode" | tee -a "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: G2 build de controle (fontes originais de ad6fea0)
+        run: |
+          set -euo pipefail
+          git checkout "$BASE_SHA" -- "$PANEL" "$HTML"
+          rm -rf dist && npm run build > /dev/null
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_EVOLUTION_URL: ${{ secrets.VITE_EVOLUTION_URL }}
+          VITE_EVOLUTION_KEY: ${{ secrets.VITE_EVOLUTION_KEY }}
+          VITE_BRIDGE_URL: ${{ secrets.VITE_BRIDGE_URL }}
+          VITE_VAPID_PUBLIC_KEY: ${{ secrets.VITE_VAPID_PUBLIC_KEY }}
+
+      - name: G2 dist de controle == arvore gh-pages f90f36b (so hashes)
+        run: |
+          set -euo pipefail
+          git ls-tree -r "$GHP_PARENT" | awk '$4!="CNAME" && $4!=".nojekyll" {print $3" "$4}' | sort -k2 > /tmp/expected
+          (cd dist && find . -type f | sed 's|^\./||' | sort | while read -r f; do echo "$(git hash-object "$f") $f"; done) | sort -k2 > /tmp/built
+          if ! diff /tmp/expected /tmp/built; then echo "::error::CONTROLE DIVERGIU - nao publicar"; exit 1; fi
+          echo "CONTROLE OK: $(wc -l < /tmp/built) arquivos identicos a $GHP_PARENT (inclui $CTRL_JS)"
+
+      - name: G3 build candidato
+        if: steps.mode.outputs.mode == 'candidate'
+        run: |
+          set -euo pipefail
+          git checkout HEAD -- "$PANEL" "$HTML"
+          echo "$CAND_PANEL_SHA256  $PANEL" | sha256sum -c
+          echo "$CAND_HTML_SHA256  $HTML" | sha256sum -c
+          rm -rf dist && npm run build > /dev/null
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_EVOLUTION_URL: ${{ secrets.VITE_EVOLUTION_URL }}
+          VITE_EVOLUTION_KEY: ${{ secrets.VITE_EVOLUTION_KEY }}
+          VITE_BRIDGE_URL: ${{ secrets.VITE_BRIDGE_URL }}
+          VITE_VAPID_PUBLIC_KEY: ${{ secrets.VITE_VAPID_PUBLIC_KEY }}
+
+      - name: G4 verificacao do dist candidato (so hashes e contagens)
+        if: steps.mode.outputs.mode == 'candidate'
+        id: cand
+        run: |
+          set -euo pipefail
+          echo "$CAND_HTML_SHA256  dist/aprovacao-avaliacao.html" | sha256sum -c
+          if grep -qiE '<script|supabase' dist/aprovacao-avaliacao.html; then echo "::error::html com script/supabase"; exit 1; fi
+          js=$(cd dist && ls assets/index-*.js); [ "$(echo "$js" | wc -l)" = 1 ]; [ "$js" != "$CTRL_JS" ]
+          old=$({ grep -o 'app.consultdelivery.com.br/aprovacao-avaliacao.html' "dist/$js" || true; } | wc -l)
+          new=$({ grep -o 'temporariamente indispon' "dist/$js" || true; } | wc -l)
+          ref=$({ grep -o "/$js" dist/index.html || true; } | wc -l)
+          echo "bundle=$js url_aprovacao=$old marcador_contencao=$new index_ref=$ref"
+          if [ "$old" != 0 ] || [ "$new" -lt 1 ] || [ "$ref" -lt 1 ]; then echo "::error::marcadores do bundle"; exit 1; fi
+          (cd dist && find . -type f | sed 's|^\./||' | sort | while read -r f; do echo "$(git hash-object "$f") $f"; done) | sort -k2 > /tmp/cand
+          changed=$(diff /tmp/expected /tmp/cand | grep '^[<>]' | awk '{print $3}' | sort -u | grep -vxF -e index.html -e aprovacao-avaliacao.html -e "$CTRL_JS" -e "$js" || true)
+          [ -z "$changed" ] || { echo "::error::arquivos inesperados mudaram:"; echo "$changed"; exit 1; }
+          echo "js=$js" >> "$GITHUB_OUTPUT"
+          echo "DIST CANDIDATO OK (mudam so index.html, aprovacao-avaliacao.html, $js)"
+
+      - name: G5 publicar commit unico em gh-pages (pai f90f36b, sem force)
+        if: steps.mode.outputs.mode == 'candidate' && env.PUBLISH == 'true'
+        env:
+          JS: ${{ steps.cand.outputs.js }}
+        run: |
+          set -euo pipefail
+          git fetch origin gh-pages
+          [ "$(git rev-parse origin/gh-pages)" = "$GHP_PARENT" ] || { echo "::error::gh-pages moveu"; exit 1; }
+          git worktree add ../ghp origin/gh-pages
+          cp dist/index.html dist/aprovacao-avaliacao.html ../ghp/
+          cp "dist/$JS" ../ghp/assets/
+          cd ../ghp
+          git add index.html aprovacao-avaliacao.html "$JS"
+          [ "$(git diff --cached --name-only | sort | tr '\n' ' ')" = "$(printf '%s\n' "$JS" aprovacao-avaliacao.html index.html | sort | tr '\n' ' ')" ]
+          git -c "user.name=github-actions[bot]" -c "user.email=41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "s2c: contencao Painel+aprovacao (src $GITHUB_SHA)"
+          git push origin HEAD:gh-pages
+          echo "PUBLICADO gh-pages=$(git rev-parse HEAD) pai=$(git rev-parse HEAD~1)"
