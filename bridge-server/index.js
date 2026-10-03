@@ -3,6 +3,7 @@ require('dotenv').config();
 
 const express  = require('express');
 const crypto   = require('crypto');
+const { exec } = require('child_process');
 const { analisarMensagem } = require('./routes/mia');
 const {
   safeTokenEqual,
@@ -38,6 +39,7 @@ const NEXUS_TICKET_TOKEN     = process.env.NEXUS_TICKET_TOKEN;
 const TRIGGER_SECRET_KEY     = process.env.TRIGGER_SECRET_KEY;
 const TRIGGER_API_URL        = 'https://api.trigger.dev';
 const ASAAS_WEBHOOK_SECRET   = process.env.ASAAS_WEBHOOK_SECRET;
+const GITHUB_WEBHOOK_SECRET   = process.env.GITHUB_WEBHOOK_SECRET;
 const ASAAS_API_KEY          = process.env.ASAAS_API_KEY;
 const ANTHROPIC_API_KEY      = process.env.ANTHROPIC_API_KEY;
 const ANTHROPIC_MODEL        = process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001';
@@ -802,6 +804,53 @@ app.post('/webhooks/asaas', webhooksAsaasRateLimit, async (req, res) => {
     } catch (err) {
       console.error('[webhooks/asaas] erro no processamento assíncrono:', err.message);
     }
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// POST /webhooks/github — GitHub push webhook (consult-delivery-os) → git pull na VPS
+// Valida X-Hub-Signature-256 (HMAC SHA256 sobre o rawBody) com GITHUB_WEBHOOK_SECRET.
+// Ver memory/vps-infra.md — clone read-only vive em ~claudedev/consult-delivery-os.
+// ════════════════════════════════════════════════════════════════════════════
+
+app.post('/webhooks/github', (req, res) => {
+  const sig     = req.headers['x-hub-signature-256'] || '';
+  const rawBody = req.rawBody;
+
+  if (!sig || !GITHUB_WEBHOOK_SECRET) {
+    console.warn('[webhooks/github] assinatura ou secret ausente');
+    return res.status(401).json({ error: 'Assinatura ou segredo ausente' });
+  }
+
+  const expected = 'sha256=' + crypto
+    .createHmac('sha256', GITHUB_WEBHOOK_SECRET)
+    .update(rawBody)
+    .digest('hex');
+
+  const sigBuf = Buffer.from(sig);
+  const expBuf = Buffer.from(expected);
+  if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+    console.warn('[webhooks/github] assinatura inválida');
+    return res.status(401).json({ error: 'Assinatura inválida' });
+  }
+
+  const event = req.headers['x-github-event'] || '';
+  const ref   = req.body?.ref || '';
+  console.log(`[webhooks/github] evento=${event} ref=${ref}`);
+
+  res.json({ ok: true, received: event });
+
+  if (event !== 'push' || ref !== 'refs/heads/main') {
+    console.log(`[webhooks/github] ignorado (event=${event} ref=${ref})`);
+    return;
+  }
+
+  exec('su - claudedev -c "~/bin/pull-consult-delivery-os.sh"', (err, stdout, stderr) => {
+    if (err) {
+      console.error('[webhooks/github] git pull falhou:', err.message, stderr);
+      return;
+    }
+    console.log('[webhooks/github] git pull ok:', stdout.trim());
   });
 });
 
