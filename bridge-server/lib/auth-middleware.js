@@ -32,23 +32,45 @@ function requireInternalToken(req, res, next) {
 async function requireJwt(req, res, next) {
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
-  const auth = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '').trim();
+  const authorization = req.headers['authorization'];
+  const auth = typeof authorization === 'string'
+    ? authorization.replace(/^Bearer\s+/i, '').trim() : '';
   if (!auth) return res.status(401).json({ error: 'missing token' });
-  if (!SUPABASE_ANON_KEY) {
-    req.user = { id: 'dev' };
-    return next();
-  }
+  if (!SUPABASE_URL?.trim() || !SUPABASE_ANON_KEY?.trim())
+    return res.status(503).json({ error: 'auth not configured' });
+
+  let user;
   try {
-    const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-      headers: { Authorization: `Bearer ${auth}`, apikey: SUPABASE_ANON_KEY },
+    // One deadline includes Auth, admission and both response bodies.
+    const signal = AbortSignal.timeout(5000);
+    const headers = { Authorization: `Bearer ${auth}`, apikey: SUPABASE_ANON_KEY };
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers, signal });
+    if (!r.ok) {
+      if (r.status === 401 || r.status === 403)
+        return res.status(401).json({ error: 'invalid token' });
+      return res.status(503).json({ error: 'auth unavailable' });
+    }
+    user = await r.json();
+    if (!user || typeof user.id !== 'string' || !user.id.trim())
+      return res.status(401).json({ error: 'invalid token' });
+
+    // S1 resolves auth.uid() itself; never accept an actor ID or use service_role.
+    const admission = await fetch(`${SUPABASE_URL}/rest/v1/rpc/legacy_admission_status`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json', 'Content-Profile': 'public' },
+      body: '{}',
+      signal,
     });
-    if (!r.ok) return res.status(401).json({ error: 'invalid token' });
-    req.user = await r.json();
-    req.jwt = auth;
-    next();
-  } catch (err) {
-    res.status(401).json({ error: 'auth error', detail: err.message });
+    if (!admission.ok)
+      return res.status(503).json({ error: 'legacy admission unavailable' });
+    if (await admission.json() !== true)
+      return res.status(403).json({ error: 'legacy access forbidden' });
+  } catch {
+    return res.status(503).json({ error: 'auth unavailable' });
   }
+  req.user = user;
+  req.jwt = auth;
+  return next();
 }
 
 // ── Middleware: JWT or internal token (endpoints chamados por Trigger.dev) ──

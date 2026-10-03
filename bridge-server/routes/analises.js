@@ -203,7 +203,10 @@ module.exports = function buildAnalisesRouter({
   //    Envia análise formatada ao cliente via WhatsApp e abre sessão de aprovação.
   //    Pré-condição: analise.status === 'processada'
   // ══════════════════════════════════════════════════════════════════════════
-  router.post('/lojas/:id/analises/:aid/enviar-whatsapp', requireJwt, async (req, res) => {
+  router.post('/lojas/:id/analises/:aid/enviar-whatsapp', requireJwt, (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    return res.status(410).json({ error: 'Aprovação pública temporariamente indisponível.', code: 'PUBLIC_CAPABILITY_SUSPENDED' });
+  }, async (req, res) => {
     const { id: lojaId, aid } = req.params;
 
     const body = validate(EnviarWhatsappSchema, req.body, res);

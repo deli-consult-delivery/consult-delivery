@@ -50,6 +50,13 @@ setInterval(() => {
 module.exports = function buildPublicoAprovacaoRouter({ sbFetch, supabaseInsert }) {
   const router = express.Router();
 
+  // Contenção precede os handlers preservados; não consulta tokens nem registros.
+  router.use('/publico/aprovacao', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    if (req.method === 'OPTIONS') return res.status(204).end();
+    return res.status(410).json({ error: 'Aprovação pública temporariamente indisponível.', code: 'PUBLIC_CAPABILITY_SUSPENDED' });
+  });
+
   // ── Helper: busca analise pelo public_token e verifica expiração ────────────
   async function getAnaliseByToken(token) {
     const rows = await sbFetch(
