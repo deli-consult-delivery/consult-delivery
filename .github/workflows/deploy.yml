@@ -71,10 +71,47 @@ jobs:
     steps:
       - name: Deploy bridge-server na VPS
         run: |
-          set -e
+          set -euo pipefail
           cd /root/consult-delivery
+
+          # GUARD 1: árvore rastreada suja => ABORTA. O reset forçado apagaria, sem aviso, o que foi publicado direto na VPS
+          # (ex.: S2A/Bridge e o caller de push, que viviam só no checkout). Itens não rastreados (probes, .env.bak) não contam.
+          if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+            echo "::error::Checkout da VPS tem alterações rastreadas não commitadas; deploy abortado para não reverter publicações locais."
+            git status --short --untracked-files=no
+            echo "Guarde o estado (git diff > backup fora do checkout), commite no repositório e rode o deploy de novo."
+            exit 1
+          fi
+
           git fetch origin main
-          git reset --hard origin/main
+          # GUARD 2: commit local à frente do origin/main também seria descartado => ABORTA.
+          if [ "$(git rev-list --count origin/main..HEAD)" != "0" ]; then
+            echo "::error::Checkout da VPS tem commit(s) local(is) que não estão no origin/main; deploy abortado."
+            git log --oneline origin/main..HEAD
+            exit 1
+          fi
+
+          PREV="$(git rev-parse HEAD)"
+          git merge --ff-only origin/main          # sem reset forçado: árvore limpa e sem commits locais, só avança
+
+          # GUARD 3: dependências instaladas ANTES do restart (episódios de 17/06 e 21/06: Cannot find module 'express'/'node-fetch').
+          (cd bridge-server && npm ci --omit=dev)
+
           pm2 restart bridge-server || pm2 start bridge-server
-          echo "✅ Deploy concluído"
+
+          # GUARD 4: /health precisa responder 200 depois do restart; senão volta ao commit anterior e reinicia.
+          code=000
+          for i in $(seq 1 30); do
+            code="$(curl -s -o /dev/null -m 5 -w '%{http_code}' http://127.0.0.1:3001/health || true)"
+            [ "$code" = "200" ] && break
+            sleep 2
+          done
+          if [ "$code" != "200" ]; then
+            echo "::error::bridge-server sem /health 200 depois do deploy (último código $code); voltando para $PREV."
+            git reset --hard "$PREV"                # seguro aqui: a árvore estava limpa (GUARD 1)
+            (cd bridge-server && npm ci --omit=dev)
+            pm2 restart bridge-server || true
+            exit 1
+          fi
+          echo "✅ Deploy concluído (health 200)"
           pm2 list
